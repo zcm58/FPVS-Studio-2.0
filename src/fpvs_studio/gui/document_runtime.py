@@ -14,7 +14,7 @@ from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.data_sharing import protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata
-from fpvs_studio.core.models import ProjectFile, ProjectValidationReport
+from fpvs_studio.core.models import ProjectFile, ProjectRecordingSettings, ProjectValidationReport
 from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
@@ -58,7 +58,13 @@ def _sharing_protocol(project: ProjectFile, project_root: Path) -> str | None:
 
 def _toolbox_handoff_config(
     project: ProjectFile, project_root: Path, protocol_sha256: str | None,
+    recording_configuration: dict[str, object],
 ) -> dict[str, object]:
+    project = project.model_copy(update={
+        "settings": project.settings.model_copy(update={
+            "recording": ProjectRecordingSettings.model_validate(recording_configuration),
+        }),
+    })
     config = export_project_config(project, project_root)
     protocol_sha256 = protocol_sha256 or protocol_fingerprint(project, project_root)
     config.toolbox = config.toolbox.model_copy(update={"protocol_sha256": protocol_sha256})
@@ -105,12 +111,14 @@ class DocumentRuntimeMixin:
         def local_testing_enabled(self) -> bool: ...
         @property
         def recording_configuration(self) -> dict[str, object]: ...
+        @property
+        def uses_default_recording_configuration(self) -> bool: ...
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
 
     def recording_launch_options(self) -> dict[str, object]:
-        """Resolve the saved project device into runtime-only launch options."""
+        """Resolve the effective recording device into runtime-only launch options."""
 
         return {
             **self.recording_configuration,
@@ -269,6 +277,7 @@ class DocumentRuntimeMixin:
                     )
                 participant_session_number = 1
             self.validate_recording_launch()
+            recording_configuration = self.recording_configuration
             trigger_settings = self._project.settings.triggers
             sharing_protocol = (
                 _sharing_protocol(self._project, self._project_root)
@@ -283,18 +292,28 @@ class DocumentRuntimeMixin:
                     # Persisted legacy flags cannot disable EEG recording output.
                     serial_enabled=not self.local_testing_enabled,
                     recording_backend=cast(
-                        str | None, self.recording_configuration.get("recording_backend"),
+                        str | None, recording_configuration.get("recording_backend"),
                     ),
                     unicorn_udp_port=cast(
-                        int, self.recording_configuration.get("unicorn_udp_port", 1000),
+                        int, recording_configuration.get("unicorn_udp_port", 1000),
                     ),
                     brainproducts_serial_port=cast(
-                        str, self.recording_configuration.get("brainproducts_serial_port", "COM3"),
+                        str, recording_configuration.get("brainproducts_serial_port", "COM3"),
                     ),
                     brainproducts_pulse_width_ms=cast(
-                        int, self.recording_configuration.get("brainproducts_pulse_width_ms", 10),
+                        int, recording_configuration.get("brainproducts_pulse_width_ms", 10),
                     ),
-                    recording_selection_source="project_settings",
+                    brainproducts_amplifier=cast(
+                        str | None, recording_configuration.get("brainproducts_amplifier"),
+                    ),
+                    brainproducts_sampling_rate_hz=cast(
+                        int | None,
+                        recording_configuration.get("brainproducts_sampling_rate_hz"),
+                    ),
+                    recording_selection_source=(
+                        "local_settings" if self.uses_default_recording_configuration
+                        else "project_settings"
+                    ),
                     recording_operator_confirmed=recording_operator_confirmed,
                     recording_association=recording_association,
                     recorder_version=recorder_version,
@@ -311,7 +330,12 @@ class DocumentRuntimeMixin:
                     export_mode=self._session_export_mode,
                     sharing_protocol_sha256=sharing_protocol,
                     toolbox_handoff_config=(
-                        _toolbox_handoff_config(self._project, self._project_root, sharing_protocol)
+                        _toolbox_handoff_config(
+                            self._project,
+                            self._project_root,
+                            sharing_protocol,
+                            recording_configuration,
+                        )
                         if session_plan is self._last_session_plan else None
                     ),
                 ),

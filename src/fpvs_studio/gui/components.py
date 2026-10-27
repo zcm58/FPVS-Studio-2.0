@@ -2319,6 +2319,9 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
         color: {theme.selected_text};
         font-weight: 600;
     }}
+    QWidget#welcome_action_container[compactActions="true"] QPushButton {{
+        padding: 6px 10px;
+    }}
     QPushButton[welcomeRole="primary"]:hover {{
         background-color: {theme.primary_hover};
     }}

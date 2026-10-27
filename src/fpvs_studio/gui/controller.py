@@ -38,7 +38,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.library_origin import LibraryProjectOrigin
-from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
+from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile, ProjectRecordingSettings
 from fpvs_studio.core.paths import (
     condition_template_library_path,
     filesystem_path,
@@ -66,6 +66,7 @@ from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.import_display_settings_dialog import ImportDisplaySettingsDialog
 from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, ProjectManagementEntry
+from fpvs_studio.gui.recording_dialog import DefaultRecordingHardwareDialog
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
@@ -104,6 +105,7 @@ if TYPE_CHECKING:
 _SETTINGS_ORGANIZATION = "FPVS Studio"
 _SETTINGS_APPLICATION = "FPVS Studio"
 _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
+_DEFAULT_RECORDING_CONFIGURATION_KEY = "recording/default_configuration"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
@@ -267,6 +269,7 @@ class StudioController(QObject):
             self.welcome_window.root_folder_setup_requested.connect(
                 self.show_root_folder_setup
             )
+            self.welcome_window.settings_requested.connect(self.show_settings_dialog)
         self.welcome_window.show()
         self.welcome_window.raise_()
         self.welcome_window.activateWindow()
@@ -489,11 +492,81 @@ class StudioController(QObject):
         return self.load_run_export_mode() == EXPORT_MODE_FULL
 
     def load_recording_configuration(self) -> dict[str, object]:
-        """Read the open project's selection, never the obsolete global override."""
+        """Read effective project output, or the computer default without a project."""
 
         if self.main_window is not None:
             return self.main_window.document.recording_configuration
-        return {"recording_backend": "serial", "unicorn_udp_port": 1000}
+        return self.load_default_recording_configuration() or ProjectRecordingSettings().model_dump(
+            mode="json",
+        )
+
+    def load_default_recording_configuration(self) -> dict[str, object] | None:
+        """Read the reviewed computer default; obsolete transport keys stay ignored."""
+
+        raw = self._settings.value(_DEFAULT_RECORDING_CONFIGURATION_KEY)
+        if raw is None:
+            return None
+        if not isinstance(raw, str):
+            raise ValueError("Saved default EEG hardware is invalid.")
+        return ProjectRecordingSettings.model_validate_json(raw).model_dump(mode="json")
+
+    def save_default_recording_configuration(self, configuration: dict[str, object]) -> None:
+        """Save this computer's default without overwriting project overrides."""
+
+        recording = ProjectRecordingSettings.model_validate(configuration)
+        previous = self._settings.value(_DEFAULT_RECORDING_CONFIGURATION_KEY)
+        self._settings.setValue(_DEFAULT_RECORDING_CONFIGURATION_KEY, recording.model_dump_json())
+        self._settings.sync()
+        if self._settings.status() != QSettings.Status.NoError:
+            if previous is None:
+                self._settings.remove(_DEFAULT_RECORDING_CONFIGURATION_KEY)
+            else:
+                self._settings.setValue(_DEFAULT_RECORDING_CONFIGURATION_KEY, previous)
+            self._settings.sync()
+            raise OSError(
+                "Could not save the default EEG hardware. Check Settings access and retry.",
+            )
+        if self.main_window is not None:
+            self.main_window.document.set_default_recording_configuration(
+                recording.model_dump(mode="json"),
+            )
+
+    def use_default_recording_configuration(self) -> None:
+        """Clear only the open project's recording override."""
+
+        if self.main_window is None:
+            raise ValueError("Open a project before changing its recording setup.")
+        self.main_window.document.use_default_recording_configuration()
+
+    def ensure_default_recording_configured(self) -> bool:
+        """Require an explicit hardware choice after Root Folder setup."""
+
+        error_message = ""
+        try:
+            if self.load_default_recording_configuration() is not None:
+                return True
+        except ValueError:
+            _LOGGER.warning("Saved default recording configuration is invalid")
+            error_message = (
+                "The saved default could not be read. Please select your EEG hardware again."
+            )
+        parent = self.main_window if self.main_window is not None else self.welcome_window
+        while True:
+            dialog = DefaultRecordingHardwareDialog(parent=parent, error_message=error_message)
+            if dialog.exec() != dialog.DialogCode.Accepted:
+                self._app.quit()
+                return False
+            try:
+                self.save_default_recording_configuration({
+                    "recording_backend": dialog.selected_backend,
+                })
+            except (ValueError, OSError) as exc:
+                _LOGGER.warning("Could not save default recording configuration: %s", exc)
+                error_message = (
+                    "The default could not be saved. Check Settings access and try again."
+                )
+                continue
+            return True
 
     def save_recording_configuration(self, configuration: dict[str, object]) -> None:
         """Persist the reviewed selection in the currently open project."""
@@ -603,7 +676,7 @@ class StudioController(QObject):
 
         loaded_root_dir = self.load_fpvs_root_dir()
         if loaded_root_dir is not None and self._normalize_fpvs_root_layout():
-            return True
+            return self.ensure_default_recording_configured()
 
         parent = self.main_window if self.main_window is not None else self.welcome_window
         while True:
@@ -621,7 +694,7 @@ class StudioController(QObject):
                 continue
             self.save_fpvs_root_dir(selected_path)
             if self._normalize_fpvs_root_layout():
-                return True
+                return self.ensure_default_recording_configured()
 
     def show_root_folder_setup(self, parent: QWidget | None = None) -> Path | None:
         """Show root-folder guidance and optionally choose a different root folder."""
@@ -924,7 +997,16 @@ class StudioController(QObject):
         automatic_reports = crash_report_controller()
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
+            default_recording_configuration=self.load_default_recording_configuration(),
+            on_default_recording_configuration_changed=self.save_default_recording_configuration,
             recording_configuration=self.load_recording_configuration(),
+            recording_uses_default=(
+                self.main_window is not None
+                and self.main_window.document.uses_default_recording_configuration
+            ),
+            on_use_default_recording_configuration=(
+                self.use_default_recording_configuration if self.main_window is not None else None
+            ),
             on_recording_configuration_changed=(
                 self.save_recording_configuration if self.main_window is not None else None
             ),
@@ -1111,6 +1193,9 @@ class StudioController(QObject):
         )
 
     def _open_document(self, document: ProjectDocument) -> None:
+        default_recording = self.load_default_recording_configuration()
+        if default_recording is not None:
+            document.set_default_recording_configuration(default_recording)
         document.set_session_export_mode(self.load_run_export_mode())
         document.set_require_biosemi_recording_confirmation(
             self.require_biosemi_recording_confirmation()

@@ -505,6 +505,7 @@ def test_triggerbox_factory_uses_project_endpoint_and_fixed_protocol(monkeypatch
     options = {
         "recording_backend": "brainproducts_triggerbox",
         "brainproducts_serial_port": " COM9 ", "brainproducts_pulse_width_ms": 20,
+        "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 100,
         "serial_port": "COM99", "serial_baudrate": 9600, "serial_enabled": False,
     }
     backend, _ = triggers.build_trigger_backend(options)
@@ -514,6 +515,8 @@ def test_triggerbox_factory_uses_project_endpoint_and_fixed_protocol(monkeypatch
     assert snapshot.serial_port == "COM9"
     assert snapshot.serial_baudrate == 2_000_000
     assert snapshot.trigger_pulse_width_ms == 20
+    assert snapshot.brainproducts_amplifier == "actichamp"
+    assert snapshot.brainproducts_sampling_rate_hz == 100
     assert snapshot.acquisition_profile is None
 
 
@@ -527,6 +530,8 @@ def test_triggerbox_test_modes_never_construct_hardware(monkeypatch, mode):
     snapshot = recording_snapshot(options)
     assert snapshot.selected_backend == "brainproducts_triggerbox"
     assert snapshot.serial_port is None
+    assert snapshot.brainproducts_amplifier is None
+    assert snapshot.brainproducts_sampling_rate_hz is None
     adapter.assert_not_called()
 
 
@@ -535,6 +540,9 @@ def test_triggerbox_test_modes_never_construct_hardware(monkeypatch, mode):
     ("brainproducts_serial_port", 9), ("brainproducts_pulse_width_ms", True),
     ("brainproducts_pulse_width_ms", 0), ("brainproducts_pulse_width_ms", 1001),
     ("brainproducts_pulse_width_ms", "10"),
+    ("brainproducts_amplifier", "unknown"), ("brainproducts_amplifier", []),
+    ("brainproducts_sampling_rate_hz", True), ("brainproducts_sampling_rate_hz", "500"),
+    ("brainproducts_sampling_rate_hz", 500.0), ("brainproducts_sampling_rate_hz", 0),
 ])
 def test_invalid_triggerbox_configuration_rejected_even_in_test(field, value):
     with pytest.raises(RecordingConfigurationError, match="Brain Products"):
@@ -544,6 +552,80 @@ def test_invalid_triggerbox_configuration_rejected_even_in_test(field, value):
         })
 
 
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+@pytest.mark.parametrize("configuration", [
+    {}, {"brainproducts_amplifier": "liveamp"}, {"brainproducts_sampling_rate_hz": 500},
+])
+def test_triggerbox_incomplete_hardware_information_only_allowed_for_test_pilot(
+    mode, configuration,
+):
+    options = {"recording_backend": "brainproducts_triggerbox", **configuration}
+    with pytest.raises(RecordingConfigurationError, match="amplifier family and EEG sampling rate"):
+        validate_production_recording(options)
+    assert validate_production_recording({**options, mode: True}) == "null"
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_triggerbox_test_pilot_snapshots_preserve_explicit_amplifier_settings(mode):
+    snapshot = recording_snapshot({
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": "liveamp",
+        "brainproducts_sampling_rate_hz": 500, mode: True,
+    })
+    assert snapshot.effective_backend == "null"
+    assert snapshot.brainproducts_amplifier == "liveamp"
+    assert snapshot.brainproducts_sampling_rate_hz == 500
+    assert snapshot.recorded_marker_integrity == "unknown"
+
+
+@pytest.mark.parametrize("amplifier,rate,pulse,minimum", [
+    ("actichamp", 100, 19, 20), ("brainamp", 100, 9, 10), ("liveamp", 250, 7, 8),
+])
+def test_triggerbox_rejects_pulse_below_amplifier_minimum(amplifier, rate, pulse, minimum):
+    options = {
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": amplifier,
+        "brainproducts_sampling_rate_hz": rate, "brainproducts_pulse_width_ms": pulse,
+    }
+    with pytest.raises(RecordingConfigurationError, match=f"at least {minimum} ms"):
+        validate_production_recording(options)
+    assert validate_production_recording({**options, "brainproducts_pulse_width_ms": minimum}) == (
+        "brainproducts_triggerbox"
+    )
+
+
+@pytest.mark.parametrize("amplifier,rate", [
+    ("actichamp", 300), ("brainamp", 10000), ("liveamp", 100),
+])
+def test_triggerbox_rejects_unsupported_amplifier_rate_even_in_test(amplifier, rate):
+    with pytest.raises(RecordingConfigurationError, match="EEG sampling rates"):
+        validate_recording_configuration({
+            "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": amplifier,
+            "brainproducts_sampling_rate_hz": rate, "experiment_test_mode": True,
+        })
+
+
+def test_triggerbox_compiled_six_hz_at_sixty_hz_uses_one_point_two_hz_oddball_markers(execution):
+    _, plan = execution
+    spec = plan.ordered_entries()[0].run_spec
+    assert spec.condition.base_hz == 6
+    assert spec.condition.oddball_every_n == 5
+    assert spec.condition.oddball_hz == pytest.approx(1.2)
+    assert spec.display.refresh_hz == 60
+    assert spec.display.frames_per_stimulus == 10
+    frames = [event.frame_index for event in spec.trigger_events if event.label == "oddball_onset"]
+    assert len(frames) > 1
+    assert {
+        current - previous for previous, current in zip(frames, frames[1:], strict=False)
+    } == {50}
+    assert 50 * 1000 / spec.display.refresh_hz == pytest.approx(833.333333)
+    assert spec.trigger_events[0].label == "condition_start"
+    assert spec.trigger_events[0].frame_index == 0
+    assert frames[0] == 40
+    validate_recording_trigger_schedule(spec, {
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": "actichamp",
+        "brainproducts_sampling_rate_hz": 500, "brainproducts_pulse_width_ms": 10,
+    })
+
+
 def test_triggerbox_schedule_checks_high_and_low_intervals_including_frame_minus_one(execution):
     _, plan = execution
     spec = plan.ordered_entries()[0].run_spec
@@ -551,11 +633,54 @@ def test_triggerbox_schedule_checks_high_and_low_intervals_including_frame_minus
         TriggerEvent(frame_index=-1, code=1, label="condition_start"),
         TriggerEvent(frame_index=0, code=55, label="distractor_onset"),
     ]})
-    options = {"recording_backend": "brainproducts_triggerbox"}
+    options = {
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": "actichamp",
+        "brainproducts_sampling_rate_hz": 1000,
+    }
     with pytest.raises(RecordingConfigurationError, match="frames -1 and 0"):
         validate_recording_trigger_schedule(spec, options)
     validate_recording_trigger_schedule(spec, {**options, "brainproducts_pulse_width_ms": 2})
     validate_recording_trigger_schedule(spec, {**options, "experiment_test_mode": True})
+
+
+@pytest.mark.parametrize("pulse", [10, 11])
+def test_triggerbox_schedule_requires_gap_strictly_greater_than_twice_pulse(execution, pulse):
+    _, plan = execution
+    spec = plan.ordered_entries()[0].run_spec.model_copy(deep=True)
+    spec.display.refresh_hz = 100
+    spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=1, label="condition_start"),
+        TriggerEvent(frame_index=2, code=55, label="oddball_onset"),
+    ]
+    with pytest.raises(RecordingConfigurationError, match="20 ms apart"):
+        validate_recording_trigger_schedule(spec, {
+            "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": "brainamp",
+            "brainproducts_sampling_rate_hz": 1000, "brainproducts_pulse_width_ms": pulse,
+        })
+
+
+@pytest.mark.parametrize("launch_kind", ["run", "session"])
+@pytest.mark.parametrize("configuration", [
+    {},
+    {"brainproducts_amplifier": "actichamp"},
+    {"brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 100},
+])
+def test_triggerbox_missing_hardware_or_short_pulse_fails_before_visit_or_output(
+    execution, monkeypatch, launch_kind, configuration,
+):
+    root, plan = execution
+    reserve = Mock(side_effect=AssertionError("visit must not be reserved"))
+    monkeypatch.setattr(launcher, "reserve_participant_session", reserve)
+    adapter = Mock(side_effect=AssertionError("hardware must not be opened"))
+    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", adapter)
+    with pytest.raises(LaunchSettingsError, match="Settings > Recording"):
+        _launch_at_boundary(root, plan, launch_kind, LaunchSettings(
+            recording_backend="brainproducts_triggerbox", verify_refresh_rate=False,
+            **configuration,
+        ))
+    reserve.assert_not_called()
+    adapter.assert_not_called()
+    assert not (root / "logs" / "acquisition").exists()
 
 
 @pytest.mark.parametrize("launch_kind", ["run", "session"])
@@ -571,6 +696,7 @@ def test_triggerbox_impossible_schedule_fails_before_visit_or_output(
     with pytest.raises(PreflightError, match="TriggerBox needs more than"):
         _launch_at_boundary(root, plan, launch_kind, LaunchSettings(
             recording_backend="brainproducts_triggerbox", brainproducts_pulse_width_ms=1000,
+            brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=1000,
             verify_refresh_rate=False,
         ))
     reserve.assert_not_called()
@@ -584,6 +710,7 @@ def test_triggerbox_reset_failure_retains_interrupted_acquisition_without_comple
     root, plan = execution
     sample_project.settings.recording = ProjectRecordingSettings(
         recording_backend="brainproducts_triggerbox",
+        brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
     )
     config = export_project_config(sample_project, root)
     output = FakeTriggerBox()
@@ -591,6 +718,7 @@ def test_triggerbox_reset_failure_retains_interrupted_acquisition_without_comple
     monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", lambda **_kwargs: output)
     summary = _execute(root, plan, RuntimeWorker(StubEngine({})),
                        recording_backend="brainproducts_triggerbox",
+                       brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
                        toolbox_handoff_config=config.model_dump(mode="json"))
     assert summary.aborted
     assert "pulse reset failed" in summary.abort_reason
@@ -609,7 +737,13 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     execution, sample_project, monkeypatch, export_mode, backend,
 ):
     root, plan = execution
-    sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+    amplifier_options = (
+        {"brainproducts_amplifier": "liveamp", "brainproducts_sampling_rate_hz": 250}
+        if backend == "brainproducts_triggerbox" else {}
+    )
+    sample_project.settings.recording = ProjectRecordingSettings(
+        recording_backend=backend, **amplifier_options,
+    )
     config = export_project_config(sample_project, root)
     output = FakeSerial() if backend in ("serial", "biosemi_active_three") else FakeUnicorn()
     if backend in ("serial", "biosemi_active_three"):
@@ -623,6 +757,7 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     summary = _execute(
         root, plan, RuntimeWorker(StubEngine({})), export_mode=export_mode,
         recording_backend=backend, toolbox_handoff_config=config.model_dump(mode="json"),
+        **amplifier_options,
     )
     assert not summary.aborted
     evidence = _evidence(root)
@@ -632,6 +767,11 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     assert completed.toolbox.acquisition_profile == evidence.acquisition_profile
     assert completed.recording.recording_backend == backend
     assert evidence.recording.selected_backend == backend
+    if backend == "brainproducts_triggerbox":
+        assert completed.recording.brainproducts_amplifier == "liveamp"
+        assert completed.recording.brainproducts_sampling_rate_hz == 250
+        assert evidence.recording.brainproducts_amplifier == "liveamp"
+        assert evidence.recording.brainproducts_sampling_rate_hz == 250
     if backend in ("biosemi_active_three", "brainproducts_triggerbox"):
         assert evidence.acquisition_profile is None
         assert evidence.recording.receiver_validation == "pending"
@@ -741,3 +881,80 @@ def test_completed_helper_rejects_wrong_session_association(execution, sample_pr
     evidence.session_id = "wrong-session"
     with pytest.raises(ProjectConfigError, match="session or run identity does not match"):
         completed_toolbox_config(config, root, plan, evidence)
+
+
+@pytest.mark.parametrize("selection", [
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+])
+def test_inherited_default_handoff_matches_recording_evidence_without_project_edits(
+    sample_project, sample_project_root, selection,
+):
+    from fpvs_studio.core.data_sharing import protocol_fingerprint
+    from fpvs_studio.core.project_config import ProjectConfigFile
+    from fpvs_studio.core.serialization import save_project_file
+    from fpvs_studio.gui.document_runtime import _toolbox_handoff_config
+
+    assert sample_project.settings.recording is None
+    project_path = sample_project_root / "project.json"
+    save_project_file(sample_project, project_path)
+    project_before = sample_project.model_dump(mode="json")
+    files_before = {
+        path.relative_to(sample_project_root): path.read_bytes()
+        for path in sample_project_root.rglob("*") if path.is_file()
+    }
+    protocol_before = protocol_fingerprint(sample_project, sample_project_root)
+    effective_recording = ProjectRecordingSettings(
+        recording_backend=selection, unicorn_udp_port=4567,
+        brainproducts_serial_port="COM123", brainproducts_pulse_width_ms=20,
+        brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+    )
+    options = {
+        **effective_recording.model_dump(mode="json"),
+        "recording_selection_source": "local_settings", "serial_port": "COM87",
+    }
+    snapshot = recording_snapshot(options)
+
+    handoff = _toolbox_handoff_config(
+        sample_project, sample_project_root, None,
+        effective_recording.model_dump(mode="json"),
+    )
+
+    config = ProjectConfigFile.model_validate(handoff)
+    assert config.recording == effective_recording
+    assert config.recording.recording_backend == snapshot.selected_backend == selection
+    assert config.toolbox.acquisition_profile == snapshot.acquisition_profile
+    assert snapshot.selection_source == "local_settings"
+    assert config.toolbox.protocol_sha256 == protocol_before
+    assert protocol_fingerprint(sample_project, sample_project_root) == protocol_before
+    assert sample_project.model_dump(mode="json") == project_before
+    assert sample_project.settings.recording is None
+    assert {
+        path.relative_to(sample_project_root): path.read_bytes()
+        for path in sample_project_root.rglob("*") if path.is_file()
+    } == files_before
+    if selection == "unicorn_udp":
+        assert snapshot.udp_port == 4567
+    elif selection == "brainproducts_triggerbox":
+        assert snapshot.serial_port == "COM123"
+        assert snapshot.trigger_pulse_width_ms == 20
+        assert snapshot.brainproducts_amplifier == "actichamp"
+        assert snapshot.brainproducts_sampling_rate_hz == 500
+    else:
+        assert snapshot.serial_port == "COM87"
+
+    plan = compile_session_plan(
+        sample_project, project_root=sample_project_root, refresh_hz=60.0, random_seed=12,
+    )
+    recorder = AcquisitionEvidenceRecorder(
+        sample_project_root, [entry.run_spec for entry in plan.ordered_entries()],
+        project_id=plan.project_id, session_id=plan.session_id,
+        participant_number="007", participant_session_number=1,
+        runtime_options={**options, "toolbox_handoff_config": handoff},
+    )
+    assert recorder.evidence.recording == snapshot
+    assert _evidence(sample_project_root).recording == snapshot
+    assert sample_project.model_dump(mode="json") == project_before
+    assert all(
+        (sample_project_root / relative_path).read_bytes() == contents
+        for relative_path, contents in files_before.items()
+    )

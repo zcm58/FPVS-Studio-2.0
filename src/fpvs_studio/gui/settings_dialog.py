@@ -28,20 +28,29 @@ from fpvs_studio.gui.components import (
     apply_dialog_theme,
     mark_secondary_action,
 )
-from fpvs_studio.gui.recording_dialog import RecordingSetupDialog, recording_preference_summary
+from fpvs_studio.gui.recording_dialog import (
+    RECORDING_HARDWARE_CHOICES,
+    RecordingSetupDialog,
+    recording_preference_summary,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 
 class AppSettingsDialog(QDialog):
-    """Expose app preferences and explicitly project-scoped recording setup."""
+    """Expose computer defaults and project recording overrides."""
 
     def __init__(
         self,
         *,
         fpvs_root_dir: Path,
+        default_recording_configuration: dict[str, object] | None = None,
+        on_default_recording_configuration_changed: Callable[[dict[str, object]], None]
+        | None = None,
         recording_configuration: dict[str, object] | None = None,
         on_recording_configuration_changed: Callable[[dict[str, object]], None] | None = None,
+        recording_uses_default: bool = False,
+        on_use_default_recording_configuration: Callable[[], None] | None = None,
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
         on_show_library: Callable[[], None] | None = None,
@@ -77,6 +86,14 @@ class AppSettingsDialog(QDialog):
 
         self._developer_mode_active = developer_mode_active
         self._on_automatic_crash_reports_changed = on_automatic_crash_reports_changed
+        self._default_recording_configuration = dict(default_recording_configuration or {
+            "recording_backend": "serial", "unicorn_udp_port": 1000,
+        })
+        self._on_default_recording_configuration_changed = (
+            on_default_recording_configuration_changed
+        )
+        self._recording_uses_default = recording_uses_default
+        self._on_use_default_recording_configuration = on_use_default_recording_configuration
         self._recording_configuration = dict(recording_configuration or {
             "recording_backend": None, "unicorn_udp_port": 1000,
         })
@@ -281,6 +298,18 @@ class AppSettingsDialog(QDialog):
         recording_layout = QVBoxLayout(recording)
         recording_layout.setContentsMargins(16, 16, 16, 16)
         recording_layout.setSpacing(12)
+        self.default_recording_summary = QLabel(recording)
+        self.default_recording_summary.setWordWrap(True)
+        self.default_recording_summary.setObjectName("settings_default_recording_summary")
+        recording_layout.addWidget(self.default_recording_summary)
+        self.default_recording_setup_button = QPushButton("Change Default…", recording)
+        self.default_recording_setup_button.setObjectName("settings_default_recording_setup")
+        mark_secondary_action(self.default_recording_setup_button)
+        self.default_recording_setup_button.setEnabled(
+            on_default_recording_configuration_changed is not None,
+        )
+        self.default_recording_setup_button.clicked.connect(self._show_default_recording_setup)
+        recording_layout.addWidget(self.default_recording_setup_button)
         self.recording_summary = QLabel(recording_preference_summary(
             self._recording_configuration,
         ), recording)
@@ -292,17 +321,25 @@ class AppSettingsDialog(QDialog):
         mark_secondary_action(self.recording_setup_button)
         self.recording_setup_button.setEnabled(on_recording_configuration_changed is not None)
         self.recording_setup_button.clicked.connect(self._show_recording_setup)
-        recording_layout.addWidget(self.recording_setup_button)
+        self.use_default_recording_button = QPushButton("Use Computer Default", recording)
+        self.use_default_recording_button.setObjectName("settings_use_default_recording")
+        mark_secondary_action(self.use_default_recording_button)
+        self.use_default_recording_button.clicked.connect(self._use_default_recording_setup)
+        project_recording_buttons = QHBoxLayout()
+        project_recording_buttons.addWidget(self.recording_setup_button)
+        project_recording_buttons.addWidget(self.use_default_recording_button)
+        recording_layout.addLayout(project_recording_buttons)
         recording_help = QLabel(
             "Choose BioSemi ActiveTwo/ActiveThree, Brain Products TriggerBox, "
             "or Unicorn Recorder UDP. "
             "Unicorn launches require Recorder to be open and recording. "
-            "The device and port are saved for the open project only. "
-            "Open a project to change its recording setup.", recording,
+            "The computer default applies to projects without an override. "
+            "Recording Setup saves an override for the open project.", recording,
         )
         recording_help.setObjectName("settings_recording_help")
         recording_help.setWordWrap(True)
         recording_layout.addWidget(recording_help)
+        self._refresh_recording_summaries()
         recording_layout.addStretch(1)
         advanced = QWidget(self.tabs)
         advanced_layout = QVBoxLayout(advanced)
@@ -418,7 +455,62 @@ class AppSettingsDialog(QDialog):
                 )
                 return
         self._recording_configuration = configuration
-        self.recording_summary.setText(recording_preference_summary(configuration))
+        self._recording_uses_default = False
+        self._refresh_recording_summaries()
+
+    def _refresh_recording_summaries(self) -> None:
+        backend = self._default_recording_configuration.get("recording_backend")
+        label = next(
+            (label for label, value in RECORDING_HARDWARE_CHOICES if value == backend),
+            "Choose EEG hardware",
+        )
+        self.default_recording_summary.setText(f"Default for this computer: {label}")
+        if self._on_recording_configuration_changed is None:
+            text = "Open a project to override the computer default."
+        else:
+            summary = recording_preference_summary(self._recording_configuration)
+            scope = "Using computer default" if self._recording_uses_default else "Project override"
+            text = f"{scope}: {summary}"
+        self.recording_summary.setText(text)
+        self.use_default_recording_button.setEnabled(
+            self._on_use_default_recording_configuration is not None
+            and not self._recording_uses_default,
+        )
+
+    def _show_default_recording_setup(self) -> None:
+        dialog = RecordingSetupDialog(
+            self._default_recording_configuration, self, computer_default=True,
+        )
+        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+            return
+        configuration = dialog.configuration
+        if self._on_default_recording_configuration_changed is None:
+            return
+        try:
+            self._on_default_recording_configuration_changed(configuration)
+        except (ValueError, OSError) as exc:
+            _LOGGER.exception("Could not save computer recording default")
+            self.default_recording_summary.setText(
+                f"Default was not saved. Previous choice retained. {exc}",
+            )
+            return
+        self._default_recording_configuration = configuration
+        if self._recording_uses_default:
+            self._recording_configuration = dict(configuration)
+        self._refresh_recording_summaries()
+
+    def _use_default_recording_setup(self) -> None:
+        if self._on_use_default_recording_configuration is None:
+            return
+        try:
+            self._on_use_default_recording_configuration()
+        except (ValueError, OSError) as exc:
+            _LOGGER.exception("Could not reset project recording choice")
+            self.recording_summary.setText(f"Project choice was not changed. {exc}")
+            return
+        self._recording_uses_default = True
+        self._recording_configuration = dict(self._default_recording_configuration)
+        self._refresh_recording_summaries()
 
     def _refresh_developer_status(self) -> None:
         if self._developer_mode_requested != self._developer_mode_active:

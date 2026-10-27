@@ -10,6 +10,7 @@ from typing import Literal
 
 from pydantic import ConfigDict, Field, StrictBool, StrictInt, field_validator, model_validator
 
+from fpvs_studio.core.brainproducts import BrainProductsAmplifier
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import (
     FPVSBaseModel,
@@ -119,6 +120,8 @@ class RecordingSnapshot(FPVSBaseModel):
     serial_port: str | None = None
     serial_baudrate: StrictInt | None = Field(default=None, gt=0)
     trigger_pulse_width_ms: StrictInt | None = Field(default=None, ge=1, le=1000)
+    brainproducts_amplifier: BrainProductsAmplifier | None = None
+    brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)
     operator_confirmed_raw_bdf_recording: bool = False
     recording_association: str | None = None
     recorder_version: str | None = None

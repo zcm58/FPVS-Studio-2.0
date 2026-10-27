@@ -4,10 +4,16 @@ Status: Planned
 
 ## Decision And Purpose
 
-The user accepted this future direction on 2026-09-05. Implementation has not started.
+The user accepted this future direction on 2026-09-05. Named profiles and selected-display
+verification have not started.
 This document records a separate future project; it does not authorize changing the
 current setup redesign or weakening existing recording checks. Move it to `active/`
 when implementation becomes the selected task.
+
+The separately authorized [computer default EEG hardware work](../completed/default-eeg-hardware.md)
+implements first-time hardware selection and project inheritance only. It does not
+implement the named profiles or display identity work below. The evidence below
+records the original proposal; current recording behavior is in `docs/GUI_WORKFLOW.md`.
 
 The narrower [Unicorn recording plan](../active/unicorn-hybrid-black-support.md) now
 implements a local BioSemi/Unicorn transport choice through the existing preferences.

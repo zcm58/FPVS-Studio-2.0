@@ -34,6 +34,14 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Computer default EEG hardware](exec-plans/completed/default-eeg-hardware.md)
+(first-run hardware choice, computer defaults, project overrides/reset and captured
+completed-session export; safe precommit passed, visible GUI acceptance remains).
+
+Recent completion: [TriggerBox discovery and pulse validation](exec-plans/completed/triggerbox-recording-setup.md)
+(editable detected COM ports, amplifier/rate pulse limits and verified compiled
+6 Hz / 60 Hz marker spacing; visible GUI and physical hardware acceptance remain).
+
 Recent completion: [Studio 2.4.8 minor bug fixes release](exec-plans/completed/release-2.4.8.md)
 (full installer, direct 2.4.7 patch, public updater checks, downloaded bytes and
 signed release attestations verified; installed 2.4.7 retained).

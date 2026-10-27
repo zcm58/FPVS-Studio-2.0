@@ -25,6 +25,7 @@ from pydantic import (
     model_validator,
 )
 
+from fpvs_studio.core.brainproducts import BrainProductsAmplifier
 from fpvs_studio.core.condition_modifiers import ConditionModifier, validate_condition_modifiers
 from fpvs_studio.core.display_geometry import scaled_visual_angle_degrees
 from fpvs_studio.core.enums import (
@@ -600,6 +601,8 @@ class ProjectRecordingSettings(FPVSBaseModel):
     unicorn_udp_port: StrictInt = Field(default=1000, ge=1, le=65535)
     brainproducts_serial_port: StrictStr = "COM3"
     brainproducts_pulse_width_ms: StrictInt = Field(default=10, ge=1, le=1000)
+    brainproducts_amplifier: BrainProductsAmplifier | None = None
+    brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)
     acquisition_profile: AcquisitionProfile | None = None
 
     @field_validator("brainproducts_serial_port")

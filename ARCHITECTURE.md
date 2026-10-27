@@ -338,8 +338,13 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   The trigger backend contract declares external-marker capability; playback rejects
   log-only backends outside explicit test/pilot launches and empty trigger schedules.
 - `ProjectSettings.recording` persists each project's BioSemi ActiveTwo/ActiveThree,
-  Brain Products TriggerBox or Unicorn choice and relevant endpoint/pulse settings;
-  core's `recording_hardware.py` supplies the selected versioned acquisition/montage/
+  Brain Products TriggerBox or Unicorn override and relevant endpoint/pulse settings;
+  unset native projects inherit the computer default injected by `gui/controller.py`
+  into `gui/document.py`. First setup chooses it after the Root Folder; Settings can
+  edit it without a project. QSettings stores the separate typed local preference,
+  and project override reset uses the existing targeted atomic writer. Handoff configs
+  snapshot effective hardware without rewriting portable authoring state.
+  Core's `recording_hardware.py` supplies the selected versioned acquisition/montage/
   decoder declaration, exported to Toolbox without claiming measured wiring.
   `project_service.py` atomically saves only those fields. `runtime/recording.py` resolves
   that choice independently of project trigger fields and compiled timing. Unicorn's loopback UDP adapter uses prepared ASCII markers;
@@ -353,6 +358,10 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   levels; see [Runtime execution](docs/RUNTIME_EXECUTION.md#trigger-behavior).
   ActiveThree reuses the BioSemi serial adapter; TriggerBox uses a dedicated adapter
   with synchronous event writes and worker-owned zero reset outside frame scheduling.
+  `triggers/brainproducts_discovery.py` enumerates named COM-port candidates without
+  opening them; Recording Setup runs discovery through the app-owned worker lifecycle
+  and retains manual entry. Core's `brainproducts.py` owns the vendor amplifier/rate
+  pulse table. Runtime validates the explicit selection and compiled marker spacing.
   New devices retain selected identity without inventing Toolbox montage profiles.
 - Full export mode writes each numbered visit under `runs/P<PID>_session<NN>/`.
   Current native session launches also write a completed Toolbox config under

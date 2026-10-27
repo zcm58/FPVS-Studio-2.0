@@ -195,12 +195,28 @@ If no valid FPVS Studio Root Folder is configured, FPVS Studio first shows a
 folder picker. Canceling the picker returns to the setup dialog; choosing
 `Exit FPVS Studio` quits without configuring a root.
 
+After the root is configured, a `Default EEG Hardware` picker asks: "Please select
+your default EEG hardware. You can change this choice later." It lists BioSemi
+ActiveTwo, BioSemi ActiveThree (128 electrodes), Brain Products TriggerBox / Plus,
+and Unicorn Hybrid Black. Continue requires an explicit choice. The picker is
+`640x300` at minimum/default size and uses no hardware probes. Existing installations
+without this preference also see it once, after their saved root is validated.
+Exit retains the root but leaves hardware unset, so setup resumes on next launch.
+An unreadable preference requires a new choice; a failed save offers retry without
+applying it to an open document. Welcome and Library enrollment follow this step.
+
 The welcome window provides:
 
 - `Create Project`
 - `Import New Project`
 - `Open Existing Project`
 - `Change Root Folder...`
+- `Settings…`, including the computer's default EEG hardware
+
+Welcome retains `760x520` minimum and `1120x720` default sizes. Settings is a
+centered secondary action beneath the four existing entry actions. Its responsive
+single-column layout uses compact controls so all five actions remain within the
+same minimum size; import-busy state disables Settings with the other actions.
 
 `Change Root Folder...` reopens the guided root-folder setup and native folder picker
 without requiring a project to be open. Canceling either step leaves the configured
@@ -750,11 +766,27 @@ to FPVS Studio without starting the experiment.
 Project recording configuration is validated before participant collection. **Settings > Recording >
 Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree
 (128 electrodes), Brain Products TriggerBox / TriggerBox Plus, or Unicorn Recorder
-UDP choice. Unicorn exposes its loopback port; Brain Products exposes its COM port
-and pulse width. Apply atomically saves only `settings.recording` in that project's
+UDP choice. Unicorn exposes its loopback port; Brain Products exposes an editable
+detected-port list, amplifier, EEG sampling rate and pulse width. Apply atomically
+saves only `settings.recording` in that project's
 `project.json`; Cancel keeps the saved choice, and failed saves retain the accepted device.
-Other unsaved setup edits remain pending. Recording Setup is disabled without an open
-project. The obsolete computer-wide recording preference is ignored.
+Other unsaved setup edits remain pending. Project Recording Setup is disabled without
+an open project. The obsolete `recording/backend` and `recording/unicorn_udp_port`
+preferences remain ignored.
+
+The same Recording tab shows **Default for this computer** and **Change Default…**,
+available without an open project. Its editor uses the existing recording fields
+and saves a typed JSON preference at `recording/default_configuration` in the app's
+local user-profile QSettings store. Root-folder changes do not reset this preference.
+The first-time picker chooses hardware only; configure required device details,
+including Brain Products amplifier/rate, through Change Default before normal launch.
+
+An explicit project's `settings.recording` overrides the computer default. An unset
+field inherits it dynamically; changing the default updates an inheriting open
+document and projects opened later without saving or dirtying them. **Recording
+Setup…** creates an override, and **Use Computer Default** clears only that field
+on disk while preserving other saved values and open drafts. Summaries distinguish
+inheritance from an override. Cancel and failed saves retain the previous choice.
 Home shows a centered `Recording Device: <selected device>` immediately above Launch
 Experiment, including the ActiveThree 128-electrode and TriggerBox/Plus identities.
 Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
@@ -763,13 +795,25 @@ details remain in the label's tooltip and accessible description; Run retains it
 full output summary. Home and Run preserve the no-marker Test/Pilot text and
 actionable invalid-setting messages. The device label identifies the configuration,
 not a detected connection or recording-readiness result.
-Projects without `settings.recording` use BioSemi. Save/reopen and project switching
-restore each project's choice; `.fpvsconfig` and `.fpvsbundle` transfers preserve it.
+Projects without `settings.recording` inherit the computer default in the native app.
+Save/reopen and project switching preserve overrides and inheritance; `.fpvsconfig`
+and `.fpvsbundle` authoring transfers retain that distinction. Standalone document/API
+callers without an injected computer preference retain the legacy BioSemi default.
+Runtime Toolbox handoffs use a detached effective recording snapshot, so local
+hardware is recorded accurately without inserting an override into the source project.
+Manual completed-config export prefers the retained completed `.fpvsconfig` snapshot,
+including compact sessions. Changing the PC default afterward does not relabel earlier
+recordings. Invalid newest snapshots or acquisition-era evidence without a completed
+handoff surface an error. Only sessions without acquisition artifacts retain the
+legacy full-run plan-only export path. Authoring-only exports remain unchanged.
 The optional typed settings contain `recording_backend` (`serial`,
 `biosemi_active_three`, `brainproducts_triggerbox`, or `unicorn_udp`),
 `unicorn_udp_port` (integer 1-65535, default 1000), `brainproducts_serial_port`
 (nonblank text, default COM3) and `brainproducts_pulse_width_ms` (integer 1-1000,
-default 10). Malformed saved configurations
+default 10), plus optional `brainproducts_amplifier` (`actichamp`, `brainamp`, `liveamp`)
+and `brainproducts_sampling_rate_hz` (positive integer or unset). Existing projects
+with unset amplifier/rate remain readable; select both before normal TriggerBox launch.
+Malformed saved configurations
 are rejected on load. Recording choice does not alter existing project serial fields
 or compiled experiment timing.
 
@@ -786,8 +830,17 @@ Test/Pilot uses null output and skips Recorder checks. Runtime validation remain
 authority if callers bypass the GUI; see
 [Runtime execution](RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
 
-Recording setup has a `640x560` minimum/default size.
+Recording setup has a `700x640` minimum/default size.
 ActiveThree retains project serial settings and the BioSemi Sophia prompt.
+TriggerBox discovery starts when its setup is first shown and Detect refreshes it.
+It reads device metadata on an app-owned worker without opening ports or sending
+triggers. A single match fills the default COM3; custom ports and manual edits survive
+discovery. Multiple matches require a choice; empty/error states retain manual entry.
+Cancel/Apply cancels outstanding discovery without waiting on the GUI thread; late
+results cannot modify the accepted or dismissed draft. Detected names are available
+in port-list tooltips, and detection is not a marker-receipt or recording check.
+The amplifier/rate dropdowns use the vendor table and show the minimum pulse. Invalid
+pulse settings disable Apply; runtime rechecks them and compiled marker spacing.
 TriggerBox uses its own port and fixed vendor baudrate; its guidance describes
 Recorder startup, and tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
 Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
@@ -798,10 +851,28 @@ owns pulse/low-interval scheduling, errors and hardware acceptance.
 The additional Settings tab preserves the existing parent size budgets documented
 above; Home and Run retain the `1120x720` main-window minimum. Registered
 `tests/gui/test_recording_setup.py` covers Apply/Cancel, project reopen/switch, failed saves, invalid saved
-choices/ports and wrapping in both themes. It also checks that both launch surfaces
+choices/ports, fake asynchronous discovery, manual overrides, amplifier/rate pulse
+validation and wrapping in both themes. It also checks that both launch surfaces
 queue Recorder checks off the GUI thread, surface failures, restore controls, and
 never create the presentation engine or reserve a visit after a failed check. This coverage is
 registered for a safe visible environment and is not run by ordinary local checks.
+
+Visible TriggerBox acceptance: inspect Recording Setup at `700x640` in both themes.
+Exercise Detect with no device, one device and synthetic multiple/error results;
+enter a manual port while a scan is pending and confirm it survives completion.
+Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
+Switch devices, Cancel and reopen to check staged fields. With lab equipment,
+confirm normal-run saved markers separately from port discovery and check that
+Test/Pilot sends none.
+
+Visible computer-default acceptance: start with an isolated preference profile,
+choose a Root Folder and then each hardware option at `640x300`. Restart and confirm
+the picker stays closed. Use Welcome > Settings > Recording to change the default
+without a project. Open an inheriting project, create an override, change the PC
+default and then Use Computer Default; check the Home label and preserved drafts.
+Inspect Settings at its existing minimum size and Welcome at `760x520` / `1120x720`,
+both themes and both responsive layouts. Registered Qt checks are not executed by
+ordinary local verification.
 
 Visible acceptance: open Settings > Recording, choose Unicorn, enter port `65535`,
 Apply and reopen. Check Home's full device name above Launch Experiment, its transport

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 
 import pytest
@@ -33,6 +34,7 @@ from fpvs_studio.core.project_config import (
     completed_toolbox_config,
     create_project_from_config,
     export_project_config,
+    find_latest_completed_toolbox_config,
     project_config_filename,
     read_project_config,
     write_project_config,
@@ -41,7 +43,7 @@ from fpvs_studio.core.recording_hardware import (
     acquisition_profile_for_recording,
     recording_hardware_definitions,
 )
-from fpvs_studio.core.serialization import load_project_file, write_json_file
+from fpvs_studio.core.serialization import load_project_file, save_project_file, write_json_file
 from fpvs_studio.preprocessing.models import (
     DerivedImageRecord,
     SourceImageRecord,
@@ -169,6 +171,163 @@ def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
     )
     with pytest.raises(ProjectConfigError, match="hardware does not match"):
         completed_toolbox_config(config, sample_project_root, plan, evidence)
+
+
+@pytest.fixture
+def captured_completed_config(sample_project, sample_project_root):
+    save_project_file(sample_project, sample_project_root / "project.json")
+    recording_project = sample_project.model_copy(deep=True)
+    recording_project.settings.recording = ProjectRecordingSettings(
+        recording_backend="unicorn_udp", unicorn_udp_port=4567,
+    )
+    config = export_project_config(recording_project, sample_project_root)
+    plan = compile_session_plan(
+        sample_project, project_root=sample_project_root, refresh_hz=60.0, random_seed=12,
+    )
+    profile = acquisition_profile_for_recording("unicorn_udp")
+    snapshot = RecordingSnapshot(
+        selected_backend="unicorn_udp", effective_backend="unicorn_udp",
+        acquisition_profile=profile, selection_source="local_settings", udp_port=4567,
+        receiver_validation="pending",
+    )
+    now = datetime.now(timezone.utc)
+    evidence = AcquisitionEvidence(
+        studio_version="test", execution_id="captured-execution",
+        project_id=plan.project_id, participant_number="007", session_id=plan.session_id,
+        recording=snapshot, acquisition_profile=profile, state="completed",
+        created_at_utc=now, updated_at_utc=now,
+        runs=[
+            AcquisitionRunEvidence(
+                run_id=entry.run_id, condition_id=entry.condition_id,
+                condition_name=entry.condition_name, planned_event_count=0, state="completed",
+            )
+            for entry in plan.ordered_entries()
+        ],
+    )
+    return completed_toolbox_config(config, sample_project_root, plan, evidence)
+
+
+def test_latest_completed_toolbox_config_keeps_captured_hardware_and_source_files(
+    captured_completed_config, sample_project, sample_project_root,
+):
+    path = sample_project_root / "logs/acquisition/captured-execution-completed.fpvsconfig"
+    write_project_config(path, captured_completed_config)
+    before = path.read_bytes()
+    project_before = (sample_project_root / "project.json").read_bytes()
+
+    config = find_latest_completed_toolbox_config(sample_project_root)
+
+    assert config == captured_completed_config
+    assert config.recording.recording_backend == "unicorn_udp"
+    assert config.recording.unicorn_udp_port == 4567
+    assert config.completed_session.acquisition_evidence.recording.selection_source == (
+        "local_settings"
+    )
+    assert sample_project.settings.recording is None
+    assert path.read_bytes() == before
+    assert (sample_project_root / "project.json").read_bytes() == project_before
+    assert export_project_config(sample_project, sample_project_root).recording is None
+    assert not (sample_project_root / "runs").exists()
+
+
+def test_latest_completed_toolbox_config_reads_only_newest_artifact(
+    captured_completed_config, sample_project_root,
+):
+    root = sample_project_root / "logs/acquisition"
+    path = root / "a-newest-completed.fpvsconfig"
+    write_project_config(path, captured_completed_config)
+    older = root / "z-older-completed.fpvsconfig"
+    older.write_text("invalid older config", encoding="utf-8")
+    (root / "not-a-completed-snapshot.fpvsconfig").write_text("ignore", encoding="utf-8")
+    os.utime(older, ns=(1_000_000, 1_000_000))
+    os.utime(path, ns=(2_000_000, 2_000_000))
+
+    assert find_latest_completed_toolbox_config(sample_project_root) == captured_completed_config
+
+
+def test_latest_completed_toolbox_config_breaks_equal_mtime_ties_by_name(
+    captured_completed_config, sample_project_root,
+):
+    root = sample_project_root / "logs/acquisition"
+    older = root / "a-completed.fpvsconfig"
+    write_project_config(older, captured_completed_config)
+    newer = captured_completed_config.model_copy(deep=True)
+    newer.project.name = "Selected captured snapshot"
+    path = root / "z-completed.fpvsconfig"
+    write_project_config(path, newer)
+    for candidate in (older, path):
+        os.utime(candidate, ns=(2_000_000, 2_000_000))
+
+    assert find_latest_completed_toolbox_config(sample_project_root) == newer
+
+
+@pytest.mark.parametrize("failure,expected", [
+    ("corrupt", "not valid JSON"),
+    ("project", "different project"),
+    ("setup", "missing captured session evidence"),
+    ("session", "session association"),
+    ("state", "not successfully completed"),
+    ("hardware", "recording identity"),
+])
+def test_latest_completed_toolbox_config_rejects_invalid_newest_without_fallback(
+    captured_completed_config, sample_project_root, failure, expected,
+):
+    root = sample_project_root / "logs/acquisition"
+    older = root / "older-completed.fpvsconfig"
+    write_project_config(older, captured_completed_config)
+    payload = captured_completed_config.model_dump(mode="json")
+    if failure == "project":
+        payload["project"]["project_id"] = "different-project"
+    elif failure == "setup":
+        payload["completed_session"] = None
+    elif failure == "session":
+        payload["completed_session"]["session_id"] = "different-session"
+    elif failure == "state":
+        payload["completed_session"]["acquisition_evidence"]["state"] = "aborted"
+    elif failure == "hardware":
+        payload["toolbox"]["acquisition_profile"] = None
+    path = root / "newest-completed.fpvsconfig"
+    path.write_text(
+        "invalid JSON" if failure == "corrupt" else json.dumps(payload), encoding="utf-8",
+    )
+    os.utime(older, ns=(1_000_000, 1_000_000))
+    os.utime(path, ns=(2_000_000, 2_000_000))
+
+    with pytest.raises(ProjectConfigError, match=expected):
+        find_latest_completed_toolbox_config(sample_project_root)
+
+
+def test_latest_completed_toolbox_config_reports_unreadable_newest(
+    captured_completed_config, sample_project_root, monkeypatch,
+):
+    from pathlib import Path
+
+    path = sample_project_root / "logs/acquisition/captured-completed.fpvsconfig"
+    write_project_config(path, captured_completed_config)
+    read_text = Path.read_text
+
+    def locked_snapshot(candidate, *args, **kwargs):
+        if candidate.name == path.name:
+            raise PermissionError("captured snapshot locked")
+        return read_text(candidate, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", locked_snapshot)
+    with pytest.raises(ProjectConfigError, match="Unable to read project config"):
+        find_latest_completed_toolbox_config(sample_project_root)
+
+
+def test_latest_completed_toolbox_config_without_acquisition_artifacts_allows_legacy_export(
+    tmp_path,
+):
+    assert find_latest_completed_toolbox_config(tmp_path) is None
+
+
+def test_latest_completed_toolbox_config_with_evidence_requires_completed_artifact(tmp_path):
+    path = tmp_path / "logs/acquisition/aborted.acquisition-v1.json"
+    path.parent.mkdir(parents=True)
+    path.write_text("{}", encoding="utf-8")
+    with pytest.raises(ProjectConfigError, match="No completed recording handoff"):
+        find_latest_completed_toolbox_config(tmp_path)
 
 
 def test_config_export_rejects_nonstandard_oddball_without_explicit_override(
@@ -475,6 +634,7 @@ def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample
     {
         "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": "COM18",
         "brainproducts_pulse_width_ms": 20,
+        "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 100,
     },
 ])
 def test_recording_device_and_port_survive_config_interchange(

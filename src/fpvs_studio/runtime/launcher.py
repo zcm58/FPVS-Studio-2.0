@@ -57,6 +57,8 @@ class LaunchSettings:
     unicorn_udp_port: int = 1000
     brainproducts_serial_port: str = "COM3"
     brainproducts_pulse_width_ms: int = 10
+    brainproducts_amplifier: str | None = None
+    brainproducts_sampling_rate_hz: int | None = None
     recording_operator_confirmed: bool = False
     recording_association: str | None = None
     recorder_version: str | None = None

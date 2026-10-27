@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import cast
 
+from fpvs_studio.core.brainproducts import AMPLIFIER_LABELS, minimum_pulse_width_ms
 from fpvs_studio.core.execution import RecordingSnapshot
 from fpvs_studio.core.recording_hardware import acquisition_profile_for_recording
 from fpvs_studio.core.run_spec import RunSpec
@@ -70,6 +71,37 @@ def validate_recording_configuration(options: Mapping[str, object] | None = None
             raise RecordingConfigurationError(
                 "Brain Products pulse width must be an integer from 1 to 1000 ms."
             )
+        amplifier = values.get("brainproducts_amplifier")
+        if amplifier is not None and (
+            not isinstance(amplifier, str) or amplifier not in AMPLIFIER_LABELS
+        ):
+            raise RecordingConfigurationError(
+                "Choose a supported Brain Products amplifier family in Settings > Recording."
+            )
+        sampling_rate = values.get("brainproducts_sampling_rate_hz")
+        if sampling_rate is not None and (
+            isinstance(sampling_rate, bool) or not isinstance(sampling_rate, int)
+            or sampling_rate < 1
+        ):
+            raise RecordingConfigurationError(
+                "Brain Products EEG sampling rate must be a positive integer in Hz."
+            )
+        if effective != "null" and (amplifier is None or sampling_rate is None):
+            raise RecordingConfigurationError(
+                "Open Settings > Recording and select the Brain Products amplifier family "
+                "and EEG sampling rate configured in Recorder before recording."
+            )
+        if amplifier is not None and sampling_rate is not None:
+            try:
+                minimum_ms = minimum_pulse_width_ms(amplifier, sampling_rate)
+            except ValueError as exc:
+                raise RecordingConfigurationError(str(exc)) from exc
+            if pulse < minimum_ms:
+                raise RecordingConfigurationError(
+                    f"{AMPLIFIER_LABELS[amplifier]} at {sampling_rate} Hz requires "
+                    f"a Brain Products pulse of at least {minimum_ms:g} ms. "
+                    "Increase the pulse width in Settings > Recording."
+                )
     if not isinstance(values.get("recording_operator_confirmed", False), bool):
         raise RecordingConfigurationError("recording_operator_confirmed must be a boolean.")
     for key in ("recording_association", "recorder_version"):
@@ -170,6 +202,14 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
             ),
             "trigger_pulse_width_ms": (
                 values.get("brainproducts_pulse_width_ms", 10) if brainproducts else None
+            ),
+            "brainproducts_amplifier": (
+                values.get("brainproducts_amplifier")
+                if selected == "brainproducts_triggerbox" else None
+            ),
+            "brainproducts_sampling_rate_hz": (
+                values.get("brainproducts_sampling_rate_hz")
+                if selected == "brainproducts_triggerbox" else None
             ),
             "operator_confirmed_raw_bdf_recording": (
                 bool(values.get("recording_operator_confirmed", False))

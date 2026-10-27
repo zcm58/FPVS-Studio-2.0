@@ -36,13 +36,14 @@ manual_smoke = []
 [scopes.gui]
 checks = []
 tests = [
+  "tests/unit/test_default_recording_preferences.py",
   "tests/unit/test_preprocessing_import.py",
   "tests/unit/test_bundle_open_setup.py",
   "tests/unit/test_gui_launch_lifecycle.py",
   "tests/unit/test_persistent_worker_routing.py",
 ]
 full_tests = ["tests/gui"]
-include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py", "tests/unit/test_gui_launch_lifecycle.py", "tests/unit/test_persistent_worker_routing.py"]
+include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py", "tests/unit/test_gui_launch_lifecycle.py", "tests/unit/test_persistent_worker_routing.py", "tests/unit/test_default_recording_preferences.py"]
 manual_smoke = [
   "Launch FPVS Studio normally in a visible Windows session.",
   "Exercise the changed surface at its documented minimum/default size and check for clipping.",
@@ -51,6 +52,7 @@ manual_smoke = [
 [scopes.core]
 checks = []
 tests = [
+  "tests/unit/test_brainproducts_timing.py",
   "tests/unit/test_models.py",
   "tests/unit/test_masking_catch_conditions.py",
   "tests/unit/test_validation.py",
@@ -73,7 +75,7 @@ full_tests = [
   "tests/unit/test_document_conditions.py",
   "tests/unit/test_document_summary_refresh.py",
 ]
-include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py"]
+include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py", "tests/unit/test_brainproducts_timing.py"]
 manual_smoke = []
 
 [scopes.compiler]
@@ -270,9 +272,9 @@ manual_smoke = ["Run a short experiment on the intended presentation machine whe
 
 [scopes.triggers]
 checks = []
-tests = ["tests/unit/test_serial_trigger_backend.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py"]
+tests = ["tests/unit/test_serial_trigger_backend.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py", "tests/unit/test_brainproducts_discovery.py"]
 full_tests = []
-include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py"]
+include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py", "tests/unit/test_brainproducts_discovery.py"]
 manual_smoke = ["Select each recording device in Settings; verify Test/Pilot sends no markers. With the configured vendor interface and acquisition software, inspect saved boundary/repeated markers separately from COM or Recorder readiness and measure physical timing. See docs/RUNTIME_EXECUTION.md for ActiveThree and TriggerBox setup."]
 
 [scopes.updates]

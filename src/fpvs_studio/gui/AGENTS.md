@@ -136,13 +136,18 @@ launch settings alone select local hardware checks. See `docs/GUI_WORKFLOW.md`.
 Settings > Recording edits the active project's BioSemi ActiveTwo/ActiveThree,
 Brain Products TriggerBox or Unicorn choice through a staged
 Recording Setup dialog; Apply saves only project recording fields and Cancel preserves
-the previous choice. Ignore obsolete global overrides and retain unrelated drafts.
+the previous choice. A separate typed computer default is chosen after Root Folder
+setup; unset projects inherit it, while saved project choices take precedence.
+Settings can edit the default without a project or reset only a project's override.
+Ignore obsolete global transport keys and retain unrelated drafts. Snapshot effective
+hardware for runtime handoff without inserting it into portable authoring state.
 Home and Run validate configuration before participant collection, then run automatic
 Recorder readiness in the existing launch worker before presentation.
 Do not ask for a manual Unicorn recording checkbox or run OS probes on the GUI thread.
 Successful readiness allows normal Unicorn marker output; full receiver/timing
 validation remains pending metadata. Test/Pilot sends no markers and skips Recorder
 checks. Sophia confirmation remains specific to the two BioSemi selections.
-TriggerBox exposes project COM port/pulse settings; ActiveThree shares existing serial
-settings. Preserve selected hardware identity on Home independently of transport.
+TriggerBox exposes detected/manual COM ports and project amplifier/rate/pulse settings;
+ActiveThree shares existing serial settings. Preserve selected hardware identity on
+Home independently of transport.
 See `docs/GUI_WORKFLOW.md`.

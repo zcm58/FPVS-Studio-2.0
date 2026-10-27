@@ -214,6 +214,7 @@ def test_project_scaffolding_applies_sinusoidal_profile_background(tmp_path) -> 
     {
         "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": " COM18 ",
         "brainproducts_pulse_width_ms": 20,
+        "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 100,
     },
 ])
 def test_recording_device_save_changes_only_recording_and_failure_keeps_file(
@@ -243,6 +244,51 @@ def test_recording_device_save_changes_only_recording_and_failure_keeps_file(
         save_project_recording_settings(scaffold.project_root, ProjectRecordingSettings())
     assert path.read_bytes() == before
     assert not list(scaffold.project_root.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize("recording", [
+    None,
+    {"recording_backend": "unicorn_udp", "unicorn_udp_port": 2345},
+])
+def test_recording_reset_preserves_saved_project_data_and_failed_write(
+    tmp_path, monkeypatch, recording,
+):
+    from fpvs_studio.core.project_service import save_project_recording_settings
+
+    scaffold = create_project(tmp_path, "Reset recording")
+    path = scaffold.project_root / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["schema_version"] = "1.3.0"
+    payload.pop("experiment_category")
+    payload["settings"]["recording"] = recording
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    marker = scaffold.project_root / "runs" / "keep.txt"
+    marker.write_bytes(b"historical results")
+
+    save_project_recording_settings(scaffold.project_root, None)
+
+    payload["settings"]["recording"] = None
+    assert json.loads(path.read_text(encoding="utf-8")) == payload
+    assert load_project_file(path).settings.recording is None
+    assert marker.read_bytes() == b"historical results"
+    before = path.read_bytes()
+    monkeypatch.setattr(
+        "fpvs_studio.core.serialization.os.replace",
+        lambda *_: (_ for _ in ()).throw(PermissionError("locked")),
+    )
+    with pytest.raises(PermissionError):
+        save_project_recording_settings(scaffold.project_root, None)
+    assert path.read_bytes() == before
+    assert not list(scaffold.project_root.glob(".*.tmp"))
+
+
+def test_recording_reset_does_not_create_a_missing_project(tmp_path):
+    from fpvs_studio.core.project_service import save_project_recording_settings
+
+    missing = tmp_path / "missing"
+    with pytest.raises(FileNotFoundError):
+        save_project_recording_settings(missing, None)
+    assert not missing.exists()
 
 
 @pytest.mark.parametrize(

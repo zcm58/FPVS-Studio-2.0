@@ -32,6 +32,7 @@ from fpvs_studio.core.project_config import (
     ProjectConfigError,
     export_project_config,
     find_latest_completed_session_dir,
+    find_latest_completed_toolbox_config,
     write_project_config,
 )
 from fpvs_studio.core.project_service import (
@@ -129,6 +130,7 @@ class ProjectDocument(
         self._manifest = manifest
         self._dirty = False
         self._session_export_mode = EXPORT_MODE_FULL
+        self._default_recording_configuration = ProjectRecordingSettings()
         self._require_biosemi_recording_confirmation = True
         self._show_sophia_mode_ticker = False
         self._experiment_test_mode_enabled = False
@@ -436,10 +438,26 @@ class ProjectDocument(
 
     @property
     def recording_configuration(self) -> dict[str, object]:
-        """Return this project's selection; older projects default to BioSemi."""
+        """Resolve this project's override or the injected computer default."""
 
-        recording = self._project.settings.recording or ProjectRecordingSettings()
+        recording = self._project.settings.recording or self._default_recording_configuration
         return recording.model_dump(mode="json")
+
+    @property
+    def uses_default_recording_configuration(self) -> bool:
+        """Return whether this project inherits the computer's recording choice."""
+
+        return self._project.settings.recording is None
+
+    def set_default_recording_configuration(self, configuration: dict[str, object]) -> None:
+        """Update the injected computer preference without editing project state."""
+
+        recording = ProjectRecordingSettings.model_validate(configuration)
+        if self._default_recording_configuration == recording:
+            return
+        self._default_recording_configuration = recording
+        if self.uses_default_recording_configuration:
+            self.project_changed.emit()
 
     def save_recording_configuration(self, configuration: dict[str, object]) -> None:
         """Apply only recording settings on disk and retain unrelated unsaved edits."""
@@ -447,6 +465,16 @@ class ProjectDocument(
         recording = ProjectRecordingSettings.model_validate(configuration)
         save_project_recording_settings(self.project_root, recording)
         settings = _validated_copy(self._project.settings, recording=recording)
+        self._project = _validated_copy(self._project, settings=settings)
+        self.project_changed.emit()
+
+    def use_default_recording_configuration(self) -> None:
+        """Save inheritance while retaining unrelated saved data and open drafts."""
+
+        if self.uses_default_recording_configuration:
+            return
+        save_project_recording_settings(self.project_root, None)
+        settings = _validated_copy(self._project.settings, recording=None)
         self._project = _validated_copy(self._project, settings=settings)
         self.project_changed.emit()
 
@@ -544,6 +572,10 @@ class ProjectDocument(
 
         completed_session_dir = None
         if include_completed:
+            captured_config = find_latest_completed_toolbox_config(self._project_root)
+            if captured_config is not None:
+                write_project_config(path, captured_config)
+                return
             completed_session_dir = find_latest_completed_session_dir(self._project_root)
             if completed_session_dir is None:
                 raise DocumentError("No completed session exports were found for this project.")

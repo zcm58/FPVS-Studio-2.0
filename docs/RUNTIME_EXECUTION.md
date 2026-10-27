@@ -244,8 +244,8 @@ The PsychoPy implementation:
 - the `oddball_onset` marker code is locked to `55`; a nonstandard oddball marker code
   is only valid when the project or `.fpvsconfig` explicitly records
   `allow_nonstandard_oddball_trigger_code=true` in response to user direction
-- normal GUI launches resolve the active project's saved recording selection. With no
-  selection, or with BioSemi selected, serial output remains enabled regardless of legacy
+- normal GUI launches resolve an explicit project recording selection before the
+  injected computer default. With BioSemi selected, serial output remains enabled regardless of legacy
   project `triggers.enabled` or `triggers.backend` values; the project port and baudrate
   remain in use. Unicorn selects a separate loopback UDP endpoint and never inherits COM3
 - runtime launch settings default to serial output. Explicit boolean
@@ -310,6 +310,14 @@ eight Recorder bits as high-active Stimulus inputs so codes remain 1–255.
 See the vendor [programming examples](https://www.brainproducts.com/download/triggerbox-programming-examples/)
 and [setup diagram](https://www.brainproducts.com/download/how-to-set-up-the-triggerbox-plus/).
 
+Recording Setup automatically enumerates explicitly named TriggerBox COM ports on an
+app-owned worker, without opening ports or sending probe bytes. One candidate fills
+the default port; an explicit custom port or a manual edit is retained. Multiple
+candidates require selection or manual entry. Detect refreshes the list. No match or
+enumeration failure leaves manual entry available. Metadata is not connection proof:
+the rev.02 virtual port can remain listed when unplugged. Both models use the same
+serial settings, so driver/model detection never changes baudrate or pulse width.
+
 The dedicated adapter always opens at 2,000,000 baud, 8N1, without flow control.
 `brainproducts_serial_port` defaults to COM3 and must be nonblank text;
 `brainproducts_pulse_width_ms` is a strict integer 1–1000, default 10 ms. It writes
@@ -319,6 +327,15 @@ requires a low interval of the same duration before the next event. Send never
 sleeps, retries or queues events. Reset/close finish the final pulse outside timed
 presentation; runtime also drains it between conditions before tasks/feedback.
 Code zero is electrical idle, never a normal logged event; 255 remains a valid event.
+
+The saved optional `brainproducts_amplifier` selects `actichamp` (including Plus),
+`brainamp`, or `liveamp`; `brainproducts_sampling_rate_hz` records the positive integer
+EEG sampling rate configured in Recorder. Existing projects remain readable with
+unset fields. Normal TriggerBox launch requires both, rejects unlisted rate/family
+pairs and pulses below the vendor minimum. Test/Pilot permits unset hardware details
+and sends no markers; malformed supplied details still fail validation. No amplifier
+or sampling rate is inferred from a driver, COM port or display refresh rate.
+`core/brainproducts.py` owns the January 2025 vendor guide's tables 1, 4 and 6.
 
 Preflight rejects adjacent scheduled events whose gap is at most twice the pulse
 width, including the optional AB condition marker at frame -1. The adapter separately
@@ -333,10 +350,20 @@ successful completed handoff. A successful event write alone does not qualify th
 later electrical reset or recorded marker timing.
 
 Snapshots record the actual COM port, fixed baudrate and requested pulse width;
-new-device receiver validation remains `pending`, physical timing `uncharacterized`.
+optional amplifier/rate declarations are retained in project/config transfers and
+recording snapshots without assigning a Toolbox montage or claiming observed settings.
+New-device receiver validation remains `pending`, physical timing `uncharacterized`.
 Inspect saved markers for boundary values, repeated codes, counts/order and the
 shortest event spacing, then characterize physical onset timing on the actual
 amplifier/display. Fake-serial tests verify software behavior only.
+
+At exactly 60 Hz, 6 Hz FPVS uses ten display frames per image (166.667 ms). With the
+default oddball every fifth image, compiled oddball markers recur every fifty frames
+(833.333 ms, 1.2 Hz). The first oddball at frame 40 follows the condition marker at
+frame 0 by 666.667 ms. A 10 ms pulse plus its required 10 ms low interval fits all
+these gaps. The reset worker is independent of display flips, so the pulse need not
+equal a display-frame duration. This establishes planned compatibility, not measured
+USB, amplifier, recorded-marker or screen-light timing.
 
 ### Unicorn Recorder UDP: receiver validation pending
 
@@ -356,12 +383,27 @@ plan tracks those remaining checks, and exported receiver-validation metadata st
 `pending`.
 
 The project selection is `serial`, `biosemi_active_three`, `brainproducts_triggerbox`
-or `unicorn_udp`; projects without saved recording
-settings use BioSemi. Invalid persisted values are rejected on load. The UDP port is a
+or `unicorn_udp`; native GUI projects without saved recording settings inherit the
+reviewed computer default. Callers without an injected preference keep the legacy
+BioSemi default. Invalid persisted values are rejected on load. The UDP port is a
 strict integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there
 is no remote host option. `ProjectSettings.recording` persists the choice independently
 of serial COM fields. GUI launch settings carry it to runtime outside `RunSpec` and
 `SessionPlan`, so Library COM3 normalization does not overwrite the selected device.
+
+The GUI injects computer preferences without changing the authored project. Runtime
+launch options resolve their hardware/endpoint fields and retain `selection_source`
+as `local_settings` for inheritance or `project_settings` for an override. The native
+Toolbox handoff config is built from an in-memory project copy containing the
+effective recording selection, preventing config/evidence identity mismatches.
+Portable authoring exports keep the original override/inheritance state. No local
+preference enters `RunSpec`, `SessionPlan`, protocol timing or a guessed montage.
+`core/project_config.py::find_latest_completed_toolbox_config` reads and validates
+the retained completed handoff for manual completed export. It checks project,
+session, participant, run association and selected hardware against captured
+acquisition evidence. A changed current default never substitutes for historical
+recording hardware. Only histories with no acquisition artifacts use the legacy
+full-run plan-only path; invalid/missing captured handoffs surface an error.
 
 The standard-library UDP adapter prepares decimal ASCII payloads for codes 1–255 before
 presentation. Code 55 is `b"55"`. Each compiled flip callback makes one nonblocking

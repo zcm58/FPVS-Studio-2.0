@@ -258,6 +258,7 @@ def test_project_recording_selection_preserves_protocol_and_test_output(
     document.set_recording_configuration({
         "recording_backend": selection, "unicorn_udp_port": 4567,
         "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
+        "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 500,
     })
     document.set_experiment_test_mode_enabled(test_mode)
     changed = document.project.model_dump(mode="json")
@@ -301,9 +302,12 @@ def test_project_recording_selection_preserves_protocol_and_test_output(
     )
     settings = captured[0]
     assert settings.recording_backend == selection
+    assert settings.recording_selection_source == "project_settings"
     assert settings.unicorn_udp_port == 4567
     assert settings.brainproducts_serial_port == "COM123"
     assert settings.brainproducts_pulse_width_ms == 20
+    assert settings.brainproducts_amplifier == "actichamp"
+    assert settings.brainproducts_sampling_rate_hz == 500
     assert settings.serial_port == original["settings"]["triggers"]["serial_port"]
     assert settings.serial_enabled is not test_mode
     assert settings.recording_operator_confirmed is confirmed
@@ -341,8 +345,9 @@ def test_invalid_local_recording_selection_is_actionable_not_repaired(
 @pytest.mark.parametrize("selection", [
     "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
 ])
+@pytest.mark.parametrize("inherit", [False, True])
 def test_recording_selection_preserves_attentional_blink_pilot_null_mode(
-    tmp_path, selection,
+    tmp_path, selection, inherit,
 ) -> None:
     from fpvs_studio.core.enums import ExperimentCategory
 
@@ -350,7 +355,11 @@ def test_recording_selection_preserves_attentional_blink_pilot_null_mode(
         parent_dir=tmp_path, project_name="EEG pilot preparation",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
-    document.set_recording_configuration({
+    configure = (
+        document.set_default_recording_configuration if inherit
+        else document.set_recording_configuration
+    )
+    configure({
         "recording_backend": selection, "unicorn_udp_port": 1000,
     })
     document.set_attentional_blink_pilot_mode_enabled(True)
@@ -464,8 +473,9 @@ def _read_summary_rows(path: Path) -> list[dict[str, str]]:
 
 @pytest.mark.parametrize("category", ["attentional_blink", "fpvs_oddball"])
 @pytest.mark.parametrize("test_mode", [False, True])
+@pytest.mark.parametrize("default_selection", ["serial", "unicorn_udp"])
 def test_pilot_launch_is_ab_only_and_keeps_participant_details(
-    tmp_path, monkeypatch, category, test_mode
+    tmp_path, monkeypatch, category, test_mode, default_selection,
 ):
     from fpvs_studio.core.enums import ExperimentCategory
     from fpvs_studio.core.execution import ParticipantMetadata
@@ -474,13 +484,16 @@ def test_pilot_launch_is_ab_only_and_keeps_participant_details(
     project = build_starter_project("Pilot mode", experiment_category=ExperimentCategory(category))
     document = ProjectDocument(project_root=tmp_path, project=project)
     original = project.model_dump(mode="json")
+    document.set_default_recording_configuration({"recording_backend": default_selection})
     document.set_experiment_test_mode_enabled(test_mode)
     document.set_attentional_blink_pilot_mode_enabled(True)
     pilot = category == "attentional_blink"
     assert document.attentional_blink_pilot_mode_enabled is pilot
     assert document.experiment_test_mode_enabled is (test_mode and not pilot)
     assert document.local_testing_enabled is (test_mode or pilot)
-    assert document.require_biosemi_recording_confirmation is (not (test_mode or pilot))
+    assert document.require_biosemi_recording_confirmation is (
+        default_selection == "serial" and not (test_mode or pilot)
+    )
     assert not document.dirty
     assert project.model_dump(mode="json") == original
     # Launch settings are independent of compilation; use the existing compiled fixture shape.
@@ -510,6 +523,8 @@ def test_pilot_launch_is_ab_only_and_keeps_participant_details(
         )
         settings = captured["launch_settings"]
         assert settings.pilot_mode is True
+        assert settings.recording_backend == default_selection
+        assert settings.recording_selection_source == "local_settings"
         assert (
             settings.serial_enabled
             is settings.verify_refresh_rate
@@ -563,3 +578,210 @@ def test_recording_apply_failed_save_retains_document_and_disk(tmp_path, monkeyp
     assert document.validate_recording_launch() == "serial"
     assert not document.dirty
     assert document.project_file_path.read_bytes() == before
+
+
+def test_computer_recording_default_updates_only_inheriting_projects(tmp_path):
+    inherited = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Inherited device")
+    explicit = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Explicit device")
+    explicit.save_recording_configuration({"recording_backend": "serial"})
+    inherited_before = inherited.project.model_dump(mode="json")
+    explicit_before = explicit.project.model_dump(mode="json")
+    saved_before = inherited.project_file_path.read_bytes()
+    inherited_changed = Mock()
+    explicit_changed = Mock()
+    inherited.project_changed.connect(inherited_changed)
+    explicit.project_changed.connect(explicit_changed)
+
+    for document in (inherited, explicit):
+        document.set_default_recording_configuration({
+            "recording_backend": "unicorn_udp", "unicorn_udp_port": 2345,
+        })
+    assert inherited.uses_default_recording_configuration
+    assert inherited.validate_recording_launch() == "unicorn_udp"
+    assert not inherited.require_biosemi_recording_confirmation
+    assert not explicit.uses_default_recording_configuration
+    assert explicit.validate_recording_launch() == "serial"
+    assert explicit.require_biosemi_recording_confirmation
+    inherited_changed.assert_called_once_with()
+    explicit_changed.assert_not_called()
+
+    inherited.set_default_recording_configuration({"recording_backend": "biosemi_active_three"})
+    assert inherited.validate_recording_launch() == "serial"
+    assert inherited.require_biosemi_recording_confirmation
+    assert "ActiveThree" in inherited.recording_setup_summary()
+    assert inherited.project.model_dump(mode="json") == inherited_before
+    assert explicit.project.model_dump(mode="json") == explicit_before
+    assert not inherited.dirty
+    assert not explicit.dirty
+    assert inherited.project_file_path.read_bytes() == saved_before
+
+    reopened = ProjectDocument.open_existing(inherited.project_root)
+    reopened.set_default_recording_configuration({"recording_backend": "unicorn_udp"})
+    assert reopened.validate_recording_launch() == "unicorn_udp"
+    assert reopened.project.settings.recording is None
+
+
+@pytest.mark.parametrize("selection", [
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+])
+@pytest.mark.parametrize("test_mode", [False, True])
+def test_inherited_recording_launch_and_handoff_share_effective_device(
+    multi_condition_project, multi_condition_project_root, monkeypatch, selection, test_mode,
+):
+    from fpvs_studio.runtime.recording import validate_recording_configuration
+
+    document = ProjectDocument(
+        project_root=multi_condition_project_root,
+        project=multi_condition_project.model_copy(deep=True),
+    )
+    document.save()
+    plan = document.compile_session(refresh_hz=60.0)
+    before = document.project.model_dump(mode="json")
+    saved_before = document.project_file_path.read_bytes()
+    document.set_default_recording_configuration({
+        "recording_backend": selection, "unicorn_udp_port": 2345,
+        "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
+        "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 500,
+    })
+    document.set_experiment_test_mode_enabled(test_mode)
+    launch = Mock(return_value=SessionExecutionSummary(
+        project_id=plan.project_id, session_id=plan.session_id, engine_name="stub",
+        run_mode=RunMode.SESSION, participant_number="7",
+        total_condition_count=plan.total_runs, completed_condition_count=plan.total_runs,
+    ))
+    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", launch)
+    monkeypatch.setattr(document, "refresh_participant_summary_if_stale", lambda: None)
+
+    document.launch_compiled_session(plan, participant_number="7", display_index=None)
+
+    settings = launch.call_args.kwargs["launch_settings"]
+    assert settings.recording_backend == selection
+    assert settings.recording_selection_source == "local_settings"
+    assert settings.unicorn_udp_port == 2345
+    assert settings.brainproducts_serial_port == "COM123"
+    assert settings.brainproducts_pulse_width_ms == 20
+    assert settings.brainproducts_amplifier == "actichamp"
+    assert settings.brainproducts_sampling_rate_hz == 500
+    effective = "serial" if selection == "biosemi_active_three" else selection
+    assert validate_recording_configuration(settings.as_runtime_options()) == (
+        "null" if test_mode else effective
+    )
+    handoff = settings.toolbox_handoff_config
+    assert handoff["recording"] == document.recording_configuration
+    assert handoff["toolbox"]["acquisition_profile"] == (
+        document.recording_configuration["acquisition_profile"]
+    )
+    assert document.last_session_plan is plan
+    assert document.project.model_dump(mode="json") == before
+    assert document.project_file_path.read_bytes() == saved_before
+    assert not document.dirty
+
+
+def test_use_computer_recording_default_persists_only_inheritance_and_retains_drafts(tmp_path):
+    from fpvs_studio.core.serialization import load_project_file
+
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Reset device")
+    document.set_default_recording_configuration({"recording_backend": "unicorn_udp"})
+    document.save_recording_configuration({"recording_backend": "serial"})
+    saved_hz = load_project_file(document.project_file_path).settings.protocol.base_hz
+    document.update_protocol_settings(base_hz=5.0)
+
+    document.use_default_recording_configuration()
+
+    assert document.uses_default_recording_configuration
+    assert document.validate_recording_launch() == "unicorn_udp"
+    assert document.project.settings.protocol.base_hz == 5.0
+    assert document.dirty
+    saved = load_project_file(document.project_file_path)
+    assert saved.settings.recording is None
+    assert saved.settings.protocol.base_hz == saved_hz
+    reopened = ProjectDocument.open_existing(document.project_root)
+    reopened.set_default_recording_configuration({"recording_backend": "biosemi_active_three"})
+    assert reopened.recording_configuration["recording_backend"] == "biosemi_active_three"
+    document.save()
+    assert load_project_file(document.project_file_path).settings.recording is None
+
+
+def test_failed_recording_default_reset_and_invalid_default_preserve_existing_choice(
+    tmp_path, monkeypatch,
+):
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Failed device reset")
+    document.set_default_recording_configuration({"recording_backend": "unicorn_udp"})
+    document.save_recording_configuration({"recording_backend": "serial"})
+    before = document.project_file_path.read_bytes()
+    with pytest.raises(ValueError):
+        document.set_default_recording_configuration({"recording_backend": "invalid"})
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.save_project_recording_settings",
+        Mock(side_effect=PermissionError("locked project")),
+    )
+
+    with pytest.raises(PermissionError):
+        document.use_default_recording_configuration()
+
+    assert not document.uses_default_recording_configuration
+    assert document.validate_recording_launch() == "serial"
+    assert not document.dirty
+    assert document.project_file_path.read_bytes() == before
+
+
+def test_completed_config_export_uses_captured_recording_after_computer_default_changes(
+    sample_project, sample_project_root, tmp_path, monkeypatch,
+):
+    from fpvs_studio.core.project_config import (
+        ProjectConfigFile,
+        completed_toolbox_config,
+        read_project_config,
+        write_project_config,
+    )
+    from fpvs_studio.gui.document_runtime import _toolbox_handoff_config
+    from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
+
+    document = ProjectDocument(project_root=sample_project_root, project=sample_project)
+    document.save()
+    document.set_default_recording_configuration({
+        "recording_backend": "unicorn_udp", "unicorn_udp_port": 4567,
+    })
+    plan = document.compile_session(refresh_hz=60.0)
+    handoff = _toolbox_handoff_config(
+        document.project, sample_project_root, None, document.recording_configuration,
+    )
+    recorder = AcquisitionEvidenceRecorder(
+        sample_project_root, [entry.run_spec for entry in plan.ordered_entries()],
+        project_id=plan.project_id, session_id=plan.session_id, participant_number="007",
+        runtime_options={
+            **document.recording_configuration, "recording_selection_source": "local_settings",
+            "toolbox_handoff_config": handoff,
+        },
+    )
+    for run in recorder.evidence.runs:
+        run.state = "completed"
+    recorder.finish()
+    captured = completed_toolbox_config(
+        ProjectConfigFile.model_validate(handoff), sample_project_root, plan, recorder.evidence,
+    )
+    captured_path = sample_project_root / "logs/acquisition/captured-completed.fpvsconfig"
+    write_project_config(captured_path, captured)
+    captured_before = captured_path.read_bytes()
+    saved_before = document.project_file_path.read_bytes()
+    document.set_default_recording_configuration({"recording_backend": "biosemi_active_three"})
+    legacy_discovery = Mock(side_effect=AssertionError(
+        "Captured compact handoff needs no runs folder",
+    ))
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.find_latest_completed_session_dir", legacy_discovery,
+    )
+
+    completed_path = tmp_path / "manual-completed.fpvsconfig"
+    document.export_config_file(completed_path, include_completed=True)
+    setup_path = tmp_path / "authoring.fpvsconfig"
+    document.export_config_file(setup_path)
+
+    assert read_project_config(completed_path) == captured
+    assert read_project_config(setup_path).recording is None
+    assert document.recording_configuration["recording_backend"] == "biosemi_active_three"
+    assert document.project.settings.recording is None
+    assert not document.dirty
+    assert document.project_file_path.read_bytes() == saved_before
+    assert captured_path.read_bytes() == captured_before
+    legacy_discovery.assert_not_called()

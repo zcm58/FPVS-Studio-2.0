@@ -84,7 +84,12 @@ from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
     acquisition_profile_for_recording,
 )
-from fpvs_studio.core.serialization import atomic_text_write, read_json_file, save_project_file
+from fpvs_studio.core.serialization import (
+    atomic_text_write,
+    load_project_file,
+    read_json_file,
+    save_project_file,
+)
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_assets import owned_image_references
 from fpvs_studio.core.task_models import (
@@ -904,6 +909,64 @@ def _decoded_task_assets(config: ProjectConfigFile) -> list[tuple[str, bytes]]:
             )
         decoded.append((asset.relative_path, payload))
     return decoded
+
+
+def find_latest_completed_toolbox_config(project_root: Path) -> ProjectConfigFile | None:
+    """Read the newest captured handoff without inferring hardware from today's setup.
+
+    Only projects without acquisition-era artifacts may use the legacy plan-only
+    export. A missing completed handoff after recording evidence exists is an error.
+    """
+
+    try:
+        root = resolve_project_relative_path(project_root, "logs/acquisition")
+        candidates = [path for path in root.glob("*-completed.fpvsconfig") if path.is_file()]
+        if not candidates:
+            if any(path.is_file() for path in root.glob("*.acquisition-v1.json")):
+                raise ProjectConfigError(
+                    "No completed recording handoff is available. Complete a recording "
+                    "session successfully before exporting its completed config."
+                )
+            return None
+        latest = max(candidates, key=lambda path: (path.stat().st_mtime_ns, path.name))
+        path = resolve_project_relative_path(
+            project_root, f"logs/acquisition/{latest.name}",
+        )
+        project = load_project_file(project_json_path(project_root))
+    except (OSError, ValueError) as exc:
+        raise ProjectConfigError(str(exc)) from exc
+    config = read_project_config(path)
+    completed = config.completed_session
+    evidence = completed.acquisition_evidence if completed is not None else None
+    if completed is None or evidence is None:
+        raise ProjectConfigError("Retained completed handoff is missing captured session evidence.")
+    if config.project.project_id != project.meta.project_id or (
+        evidence.project_id != project.meta.project_id
+    ):
+        raise ProjectConfigError("Retained completed handoff belongs to a different project.")
+    if (
+        evidence.session_id != completed.session_id
+        or evidence.execution_id != completed.execution_id
+        or evidence.participant_number != completed.participant_number
+        or evidence.participant_session_number != completed.participant_session_number
+        or [run.run_id for run in evidence.runs] != [run.run_id for run in completed.ordered_runs]
+    ):
+        raise ProjectConfigError("Retained completed handoff session association does not match.")
+    if evidence.state != "completed" or evidence.export_error or any(
+        run.state != "completed" for run in evidence.runs
+    ):
+        raise ProjectConfigError("Retained recording handoff was not successfully completed.")
+    selected = config.recording.recording_backend if config.recording is not None else "serial"
+    profile = acquisition_profile_for_recording(selected)
+    if (
+        evidence.recording.effective_backend == "null"
+        or evidence.recording.selected_backend != selected
+        or evidence.recording.acquisition_profile != profile
+        or evidence.acquisition_profile != profile
+        or config.toolbox.acquisition_profile != profile
+    ):
+        raise ProjectConfigError("Retained completed handoff recording identity does not match.")
+    return config
 
 
 def find_latest_completed_session_dir(project_root: Path) -> Path | None:

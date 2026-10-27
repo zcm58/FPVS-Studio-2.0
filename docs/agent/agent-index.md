@@ -118,6 +118,16 @@ and `gui/recording_dialog.py`. Runtime owns pulse-spacing preflight and conditio
 draining; no sleeps or reset scheduling enter compiled timing. Use triggers/runtime/gui
 focused routes and repo precommit. Setup and unprofiled Toolbox handoff limits are in
 [Runtime execution](../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox).
+TriggerBox COM discovery lives in `triggers/brainproducts_discovery.py`; it reads only
+device metadata on an app-owned GUI worker and preserves manual entry. Amplifier/rate
+pulse limits live in `core/brainproducts.py`; use the core route for its vendor table.
+For first-run/default EEG hardware, start with `gui/controller.py`,
+`gui/recording_dialog.py`, `gui/settings_dialog.py`, `gui/document.py` and
+`gui/document_runtime.py`. Explicit project recording settings override the injected
+computer default. See the GUI workflow for preference storage and targeted reset;
+use GUI focused plus project-service and inherited-handoff tests, then repo precommit.
+Manual completed export reuses `core/project_config.py::find_latest_completed_toolbox_config`;
+keep captured historical hardware distinct from today's default and authoring exports.
 
 For Studio/Toolbox completed handoff, start with `core/recording_hardware.py`,
 `core/project_config.py`, `runtime/acquisition_evidence.py` and

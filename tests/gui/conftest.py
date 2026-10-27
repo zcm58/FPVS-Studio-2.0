@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QFileDialog, QMessageBox
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
+from fpvs_studio.gui.recording_dialog import DefaultRecordingHardwareDialog
 from fpvs_studio.gui.run_page import RunPage
 
 
@@ -21,6 +22,7 @@ def controller(qtbot, qapp, tmp_path: Path) -> StudioController:
     fpvs_root_dir = tmp_path / "fpvs-root"
     fpvs_root_dir.mkdir(parents=True, exist_ok=True)
     controller.save_fpvs_root_dir(fpvs_root_dir)
+    controller.save_default_recording_configuration({"recording_backend": "serial"})
     controller.show_welcome()
     assert controller.welcome_window is not None
     qtbot.addWidget(controller.welcome_window)
@@ -50,6 +52,7 @@ def _clear_fpvs_root_setting() -> None:
     )
     settings.remove("developer/enabled")
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._DEFAULT_RECORDING_CONFIGURATION_KEY)
     settings.remove(controller_module._BIOSEMI_RECORDING_CONFIRMATION_KEY)
     settings.remove(controller_module._SOPHIA_MODE_TICKER_KEY)
     settings.remove(controller_module._EXPERIMENT_TEST_MODE_KEY)
@@ -61,6 +64,7 @@ def _clear_fpvs_root_setting() -> None:
     yield
     settings.remove("developer/enabled")
     settings.remove("paths/fpvs_root_dir")
+    settings.remove(controller_module._DEFAULT_RECORDING_CONFIGURATION_KEY)
     settings.remove(controller_module._BIOSEMI_RECORDING_CONFIRMATION_KEY)
     settings.remove(controller_module._SOPHIA_MODE_TICKER_KEY)
     settings.remove(controller_module._EXPERIMENT_TEST_MODE_KEY)
@@ -74,6 +78,12 @@ def _clear_fpvs_root_setting() -> None:
 @pytest.fixture(autouse=True)
 def _stub_modal_dialogs(monkeypatch) -> None:
     """Prevent GUI tests from opening real blocking dialogs."""
+
+    def _accept_default_hardware(dialog: DefaultRecordingHardwareDialog) -> int:
+        dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData("serial"))
+        return int(DefaultRecordingHardwareDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(DefaultRecordingHardwareDialog, "exec", _accept_default_hardware)
 
     monkeypatch.setattr(
         CreateProjectDialog,

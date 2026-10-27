@@ -11,6 +11,7 @@ tests/gui/test_conditions_session_fixation.py
 tests/gui/test_crash_reporting.py
 tests/gui/test_create_project_dialog.py
 tests/gui/test_data_sharing_dialog.py
+tests/gui/test_default_recording_setup.py
 tests/gui/test_design_setup_step.py
 tests/gui/test_error_dialogs.py
 tests/gui/test_experiment_categories_gui.py

@@ -28,6 +28,7 @@ from fpvs_studio.core.models import (
     ImageGeometrySettings,
     ProjectFile,
     ProjectPresentationSettings,
+    ProjectRecordingSettings,
     SessionSettings,
     StimulusSet,
     TextHeightScheduleSettings,
@@ -52,6 +53,39 @@ def test_project_model_round_trip(tmp_path, sample_project) -> None:
 
     assert loaded == sample_project
     assert loaded.schema_version.value == "1.4.0"
+
+
+def test_old_triggerbox_settings_load_without_inventing_amplifier_or_sampling_rate() -> None:
+    recording = ProjectRecordingSettings.model_validate({
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": "COM7",
+        "brainproducts_pulse_width_ms": 10,
+    })
+    assert recording.brainproducts_amplifier is None
+    assert recording.brainproducts_sampling_rate_hz is None
+    assert recording.acquisition_profile is None
+
+
+def test_triggerbox_amplifier_and_sampling_rate_survive_project_json(
+    tmp_path, sample_project,
+) -> None:
+    recording = ProjectRecordingSettings(
+        recording_backend="brainproducts_triggerbox", brainproducts_amplifier="liveamp",
+        brainproducts_sampling_rate_hz=500,
+    )
+    sample_project.settings.recording = recording
+    project_path = tmp_path / "project.json"
+    save_project_file(sample_project, project_path)
+    assert load_project_file(project_path).settings.recording == recording
+
+
+@pytest.mark.parametrize("configuration", [
+    {"brainproducts_amplifier": "unknown"}, {"brainproducts_amplifier": 1},
+    {"brainproducts_sampling_rate_hz": True}, {"brainproducts_sampling_rate_hz": "500"},
+    {"brainproducts_sampling_rate_hz": 500.0}, {"brainproducts_sampling_rate_hz": 0},
+])
+def test_recording_models_reject_malformed_amplifier_or_sampling_rate(configuration) -> None:
+    with pytest.raises(ValidationError):
+        ProjectRecordingSettings.model_validate(configuration)
 
 
 def test_repeated_participant_sessions_setting_round_trips(tmp_path, sample_project) -> None:

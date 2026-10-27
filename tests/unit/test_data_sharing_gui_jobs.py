@@ -17,6 +17,7 @@ from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings, protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
+from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.project_service import discover_project_roots
@@ -879,10 +880,14 @@ def _completed_handoff_config(project, project_root):
         "SharingStorageError": SharingStorageError,
         "DataSharingError": DataSharingError,
         "validate_library_scope": validate_library_scope,
+        "ProjectRecordingSettings": ProjectRecordingSettings,
         "logging": logging,
     }
     exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
-    return namespace["_toolbox_handoff_config"](project, project_root, None)
+    recording = project.settings.recording or ProjectRecordingSettings()
+    return namespace["_toolbox_handoff_config"](
+        project, project_root, None, recording.model_dump(mode="json"),
+    )
 
 
 @pytest.mark.parametrize("matching_enrollment", [False, True])
@@ -992,6 +997,7 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         _project=sample_project, _project_root=sample_project_root, _last_session_plan=None,
         experiment_test_mode_enabled=False, local_testing_enabled=False,
         recording_configuration={"recording_backend": "serial"},
+        uses_default_recording_configuration=sample_project.settings.recording is None,
         attentional_blink_pilot_mode_enabled=False, _session_export_mode="full",
         validate_recording_launch=lambda: None, refresh_participant_summary_if_stale=lambda: None,
         ensure_unused_session_seed_for_launch=lambda: None,

@@ -119,17 +119,20 @@ def rename_project(project_root: Path, name: str) -> ProjectMeta:
 
 
 def save_project_recording_settings(
-    project_root: Path, recording: ProjectRecordingSettings,
+    project_root: Path, recording: ProjectRecordingSettings | None,
 ) -> None:
-    """Atomically save only device settings, preserving all other saved project data."""
+    """Atomically save a device override or reset it, preserving other project data."""
 
-    recording = ProjectRecordingSettings.model_validate(recording.model_dump())
+    if recording is not None:
+        recording = ProjectRecordingSettings.model_validate(recording.model_dump())
     path = filesystem_path(project_json_path(project_root))
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
         raise ValueError("Project file must contain a JSON object.")
     migrate_project_payload(payload)
-    payload.setdefault("settings", {})["recording"] = recording.model_dump(mode="json")
+    payload.setdefault("settings", {})["recording"] = (
+        recording.model_dump(mode="json") if recording is not None else None
+    )
     atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 

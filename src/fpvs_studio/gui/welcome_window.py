@@ -36,6 +36,7 @@ class WelcomeWindow(QWidget):
     project_bundle_dropped = Signal(object)
     manage_projects_requested = Signal()
     root_folder_setup_requested = Signal()
+    settings_requested = Signal()
 
     def __init__(self) -> None:
         super().__init__()
@@ -130,6 +131,12 @@ class WelcomeWindow(QWidget):
             self.root_folder_setup_requested.emit
         )
         self.action_layout.addWidget(self.root_folder_setup_button, 1, 1)
+        self.settings_button = QPushButton("Settings…", self.hero_container)
+        self.settings_button.setObjectName("welcome_settings_button")
+        mark_welcome_action(self.settings_button, "secondary")
+        self.settings_button.setMinimumHeight(38)
+        self.settings_button.clicked.connect(self.settings_requested.emit)
+        self.action_layout.addWidget(self.settings_button, 2, 0, 1, 2)
         hero_layout.addWidget(
             self.action_container,
             0,
@@ -168,6 +175,7 @@ class WelcomeWindow(QWidget):
             self.import_project_button,
             self.manage_projects_button,
             self.root_folder_setup_button,
+            self.settings_button,
         ):
             button.setEnabled(not self._import_busy)
         self.bundle_drop_hint_label.setText(
@@ -210,6 +218,7 @@ class WelcomeWindow(QWidget):
             self.import_project_button,
             self.manage_projects_button,
             self.root_folder_setup_button,
+            self.settings_button,
         )
         for button in action_buttons:
             refresh_widget_style(button)
@@ -255,6 +264,13 @@ class WelcomeWindow(QWidget):
             )
             for button in buttons:
                 self.action_layout.removeWidget(button)
+            self.action_layout.removeWidget(self.settings_button)
+            self.action_container.setProperty("compactActions", columns == 1)
+            for button in (*buttons, self.settings_button):
+                button.setMinimumHeight(
+                    38 if columns == 1 or button is self.settings_button else 52,
+                )
+                refresh_widget_style(button)
             if columns == 2:
                 positions = ((0, 0), (0, 1), (1, 0), (1, 1))
                 self.action_layout.setVerticalSpacing(12)
@@ -265,6 +281,10 @@ class WelcomeWindow(QWidget):
                 self.action_layout.setContentsMargins(0, 4, 0, 0)
             for button, (row, column) in zip(buttons, positions, strict=True):
                 self.action_layout.addWidget(button, row, column)
+            self.action_layout.addWidget(
+                self.settings_button, 2 if columns == 2 else 4, 0, 1, columns,
+                Qt.AlignmentFlag.AlignHCenter,
+            )
             self._action_columns = columns
 
         margins = self.action_layout.contentsMargins()
