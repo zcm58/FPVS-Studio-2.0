@@ -366,6 +366,12 @@ in light/dark palettes at 100% scaling without clipping. Synthetic capture scrip
 images and logs are retained under ignored `build/welcome-report-attention*` paths.
 The full precommit gate passed Ruff, compilation, mypy and repository audits, plus
 3,611 non-Qt tests and 24 subtests, with 12 Windows symlink-permission skips.
+Concurrent upstream BioSemi/verification changes (`a7836ca`, `ca60591`) merged
+without conflicts after the full gate. Post-merge checks passed harness config,
+Ruff, mypy for all 245 source files, GUI focused (83), docs focused (10), targeted
+reporting/serial/project/harness units (233 passed, one symlink skip), and visible
+Welcome/report/BioSemi GUI checks (191 passed, the same clipboard case excluded).
+No real hardware, participant presentation or research-report upload was used.
 
 Manual smoke path: start with synthetic pending/error reports in two project folders,
 wait for the startup pass, verify both full paths in the modal, and dismiss it with
