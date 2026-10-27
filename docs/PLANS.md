@@ -35,6 +35,10 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [BioSemi project serial-port selector](exec-plans/completed/biosemi-port-selector.md)
+(editable ActiveTwo/ActiveThree port selection, selected-port availability checks
+without marker bytes, and atomic saves to existing project trigger settings).
+
 Recent completion: [TriggerBox serial-port access checks](exec-plans/completed/triggerbox-port-access-check.md)
 (explicit Detect opens/closes recognized candidates without marker bytes; automatic
 discovery stays metadata-only, with fake serial and registered GUI coverage).

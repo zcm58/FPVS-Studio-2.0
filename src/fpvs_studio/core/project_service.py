@@ -120,11 +120,20 @@ def rename_project(project_root: Path, name: str) -> ProjectMeta:
 
 def save_project_recording_settings(
     project_root: Path, recording: ProjectRecordingSettings | None,
+    *, serial_port: str | None = None,
 ) -> None:
-    """Atomically save a device override or reset it, preserving other project data."""
+    """Save a device and optional BioSemi port together, preserving other project data."""
 
     if recording is not None:
         recording = ProjectRecordingSettings.model_validate(recording.model_dump())
+    if serial_port is not None:
+        if not isinstance(serial_port, str) or not serial_port.strip():
+            raise ValueError("BioSemi serial port must be nonblank text.")
+        if recording is None or recording.recording_backend not in (
+            "serial", "biosemi_active_three",
+        ):
+            raise ValueError("Only a BioSemi recording device can change its serial port.")
+        serial_port = serial_port.strip()
     path = filesystem_path(project_json_path(project_root))
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
@@ -133,6 +142,8 @@ def save_project_recording_settings(
     payload.setdefault("settings", {})["recording"] = (
         recording.model_dump(mode="json") if recording is not None else None
     )
+    if serial_port is not None:
+        payload["settings"].setdefault("triggers", {})["serial_port"] = serial_port
     atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 

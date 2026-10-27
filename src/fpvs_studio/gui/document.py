@@ -103,6 +103,23 @@ __all__ = [
 ]
 
 
+def _recording_configuration_parts(
+    configuration: dict[str, object],
+) -> tuple[ProjectRecordingSettings, str | None]:
+    """Separate a project BioSemi port edit from the typed recording-device draft."""
+
+    fields = dict(configuration)
+    serial_port = fields.pop("serial_port", None)
+    recording = ProjectRecordingSettings.model_validate(fields)
+    if "serial_port" in configuration:
+        if not isinstance(serial_port, str) or not serial_port.strip():
+            raise ValueError("BioSemi serial port must be nonblank text.")
+        if recording.recording_backend not in ("serial", "biosemi_active_three"):
+            raise ValueError("Only a BioSemi recording device can change its serial port.")
+        return recording, serial_port.strip()
+    return recording, None
+
+
 class ProjectDocument(
     QObject,
     DocumentConditionMixin,
@@ -432,8 +449,11 @@ class ProjectDocument(
     def set_recording_configuration(self, configuration: dict[str, object]) -> None:
         """Edit the project's device choice through the normal document save flow."""
 
-        recording = ProjectRecordingSettings.model_validate(configuration)
-        settings = _validated_copy(self._project.settings, recording=recording)
+        recording, serial_port = _recording_configuration_parts(configuration)
+        triggers = self._project.settings.triggers
+        if serial_port is not None:
+            triggers = _validated_copy(triggers, serial_port=serial_port)
+        settings = _validated_copy(self._project.settings, recording=recording, triggers=triggers)
         self._apply_project_update(settings=settings)
 
     @property
@@ -462,10 +482,17 @@ class ProjectDocument(
     def save_recording_configuration(self, configuration: dict[str, object]) -> None:
         """Apply only recording settings on disk and retain unrelated unsaved edits."""
 
-        recording = ProjectRecordingSettings.model_validate(configuration)
-        save_project_recording_settings(self.project_root, recording)
-        settings = _validated_copy(self._project.settings, recording=recording)
-        self._project = _validated_copy(self._project, settings=settings)
+        recording, serial_port = _recording_configuration_parts(configuration)
+        triggers = self._project.settings.triggers
+        if serial_port is not None:
+            triggers = _validated_copy(triggers, serial_port=serial_port)
+        settings = _validated_copy(self._project.settings, recording=recording, triggers=triggers)
+        project = _validated_copy(self._project, settings=settings)
+        if serial_port is None:
+            save_project_recording_settings(self.project_root, recording)
+        else:
+            save_project_recording_settings(self.project_root, recording, serial_port=serial_port)
+        self._project = project
         self.project_changed.emit()
 
     def use_default_recording_configuration(self) -> None:

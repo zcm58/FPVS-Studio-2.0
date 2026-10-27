@@ -48,6 +48,8 @@ class AppSettingsDialog(QDialog):
         on_default_recording_configuration_changed: Callable[[dict[str, object]], None]
         | None = None,
         recording_configuration: dict[str, object] | None = None,
+        biosemi_serial_port: str | None = "COM3",
+        biosemi_serial_baudrate: int = 115200,
         on_recording_configuration_changed: Callable[[dict[str, object]], None] | None = None,
         recording_uses_default: bool = False,
         on_use_default_recording_configuration: Callable[[], None] | None = None,
@@ -97,6 +99,8 @@ class AppSettingsDialog(QDialog):
         self._recording_configuration = dict(recording_configuration or {
             "recording_backend": None, "unicorn_udp_port": 1000,
         })
+        self._biosemi_serial_port = biosemi_serial_port
+        self._biosemi_serial_baudrate = biosemi_serial_baudrate
         self._on_recording_configuration_changed = on_recording_configuration_changed
         self._developer_mode_requested = developer_mode_requested
         self._on_developer_mode_changed = on_developer_mode_changed
@@ -441,13 +445,22 @@ class AppSettingsDialog(QDialog):
         self.crash_reports_status.setText(status)
 
     def _show_recording_setup(self) -> None:
-        dialog = RecordingSetupDialog(self._recording_configuration, self)
+        dialog = RecordingSetupDialog(
+            self._recording_configuration, self,
+            biosemi_serial_port=self._biosemi_serial_port,
+            biosemi_serial_baudrate=self._biosemi_serial_baudrate,
+        )
         if dialog.exec() != int(QDialog.DialogCode.Accepted):
             return
         configuration = dialog.configuration
+        port = self._biosemi_serial_port
+        payload = dict(configuration)
+        if configuration.get("recording_backend") in ("serial", "biosemi_active_three"):
+            port = dialog.biosemi_serial_port
+            payload["serial_port"] = port
         if self._on_recording_configuration_changed is not None:
             try:
-                self._on_recording_configuration_changed(configuration)
+                self._on_recording_configuration_changed(payload)
             except (ValueError, OSError) as exc:
                 _LOGGER.exception("Could not save project recording settings")
                 self.recording_summary.setText(
@@ -455,6 +468,7 @@ class AppSettingsDialog(QDialog):
                 )
                 return
         self._recording_configuration = configuration
+        self._biosemi_serial_port = port
         self._recording_uses_default = False
         self._refresh_recording_summaries()
 
@@ -468,7 +482,9 @@ class AppSettingsDialog(QDialog):
         if self._on_recording_configuration_changed is None:
             text = "Open a project to override the computer default."
         else:
-            summary = recording_preference_summary(self._recording_configuration)
+            summary = recording_preference_summary({
+                **self._recording_configuration, "serial_port": self._biosemi_serial_port,
+            })
             scope = "Using computer default" if self._recording_uses_default else "Project override"
             text = f"{scope}: {summary}"
         self.recording_summary.setText(text)

@@ -291,6 +291,82 @@ def test_recording_reset_does_not_create_a_missing_project(tmp_path):
     assert not missing.exists()
 
 
+@pytest.mark.parametrize("backend", ["serial", "biosemi_active_three"])
+def test_biosemi_port_save_preserves_other_trigger_fields_and_saved_data(tmp_path, backend):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+    from fpvs_studio.core.project_service import save_project_recording_settings
+
+    scaffold = create_project(tmp_path, "BioSemi port")
+    path = scaffold.project_root / "project.json"
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["settings"]["triggers"].update(
+        serial_port="COM7", baudrate=57600, pulse_width_ms=17,
+        reset_code=0, reset_delay_ms=9,
+    )
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    recording = ProjectRecordingSettings(recording_backend=backend)
+
+    save_project_recording_settings(scaffold.project_root, recording, serial_port=" COM193 ")
+
+    payload["settings"]["recording"] = recording.model_dump(mode="json")
+    payload["settings"]["triggers"]["serial_port"] = "COM193"
+    assert json.loads(path.read_text(encoding="utf-8")) == payload
+    assert load_project_file(path).settings.triggers.serial_port == "COM193"
+    save_project_recording_settings(scaffold.project_root, None)
+    payload["settings"]["recording"] = None
+    assert json.loads(path.read_text(encoding="utf-8")) == payload
+
+
+def test_biosemi_port_and_device_save_failure_keeps_both_previous_values(tmp_path, monkeypatch):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+    from fpvs_studio.core.project_service import save_project_recording_settings
+
+    scaffold = create_project(tmp_path, "Failed BioSemi port")
+    path = scaffold.project_root / "project.json"
+    original = path.read_bytes()
+    monkeypatch.setattr(
+        "fpvs_studio.core.serialization.os.replace",
+        lambda *_: (_ for _ in ()).throw(PermissionError("locked")),
+    )
+    with pytest.raises(PermissionError, match="locked"):
+        save_project_recording_settings(
+            scaffold.project_root,
+            ProjectRecordingSettings(recording_backend="biosemi_active_three"),
+            serial_port="COM193",
+        )
+    assert path.read_bytes() == original
+    assert not list(scaffold.project_root.glob(".project.json.*.tmp"))
+
+
+@pytest.mark.parametrize("port", ["", " \t ", 3, False])
+def test_biosemi_port_save_rejects_invalid_port_without_writing(tmp_path, port):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+    from fpvs_studio.core.project_service import save_project_recording_settings
+
+    scaffold = create_project(tmp_path, "Invalid BioSemi port")
+    path = scaffold.project_root / "project.json"
+    original = path.read_bytes()
+    with pytest.raises(ValueError, match="BioSemi serial port must be nonblank text"):
+        save_project_recording_settings(
+            scaffold.project_root, ProjectRecordingSettings(), serial_port=port,
+        )
+    assert path.read_bytes() == original
+
+
+@pytest.mark.parametrize("backend", [None, "unicorn_udp", "brainproducts_triggerbox"])
+def test_biosemi_port_save_cannot_edit_another_recording_device(tmp_path, backend):
+    from fpvs_studio.core.models import ProjectRecordingSettings
+    from fpvs_studio.core.project_service import save_project_recording_settings
+
+    scaffold = create_project(tmp_path, "Unchanged BioSemi port")
+    path = scaffold.project_root / "project.json"
+    original = path.read_bytes()
+    recording = ProjectRecordingSettings(recording_backend=backend) if backend else None
+    with pytest.raises(ValueError, match="Only a BioSemi recording device"):
+        save_project_recording_settings(scaffold.project_root, recording, serial_port="COM193")
+    assert path.read_bytes() == original
+
+
 @pytest.mark.parametrize(
     "configuration",
     [

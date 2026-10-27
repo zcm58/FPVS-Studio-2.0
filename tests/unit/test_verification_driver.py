@@ -103,6 +103,46 @@ def test_precommit_lints_changed_python_and_runs_only_safe_unit_tests() -> None:
     )
     assert "--allow-qt-tests" not in pytest_command
     assert plugin_name not in pytest_command
+    assert "xdist.plugin" not in pytest_command
+    assert "-n" not in pytest_command
+    assert "--durations=20" in pytest_command
+
+
+@pytest.mark.parametrize("tier", ["focused", "precommit"])
+def test_non_qt_tiers_can_distribute_tests_by_file(tier: str) -> None:
+    commands = verify.build_commands(
+        _scope(tests=("tests/unit/test_verification_driver.py",)),
+        tier=tier,
+        python=Path("python.exe"),
+        powershell="pwsh",
+        changed=(),
+        workers=4,
+        durations=7,
+    )
+
+    command = next(command for command in commands if "pytest" in command)
+    assert command[command.index("xdist.plugin") - 1] == "-p"
+    assert command[command.index("-n") + 1] == "4"
+    assert "--dist=loadfile" in command
+    assert "--durations=7" in command
+    assert "--disable-plugin-autoload" in command
+    assert "--allow-qt-tests" not in command
+
+
+def test_run_commands_stops_after_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    observed: list[object] = []
+
+    class _Result:
+        returncode = 3
+
+    def _fail(command: object, **_kwargs: object) -> _Result:
+        observed.append(command)
+        return _Result()
+
+    monkeypatch.setattr(verify.subprocess, "run", _fail)
+
+    assert verify.run_commands([["first"], ["second"]], list_only=False) == 3
+    assert observed == [["first"]]
 
 
 def test_safe_commands_do_not_inherit_qt_opt_in(
@@ -220,6 +260,100 @@ def test_parser_accepts_full_and_rejects_legacy_full_ci() -> None:
     ).tier == "full"
     with pytest.raises(SystemExit):
         verify.parse_args(scopes, ["--scope", "repo", "--tier", "full-ci"])
+
+
+@pytest.mark.parametrize(
+    "arguments", [["--workers", "0"], ["--workers", "-1"], ["--durations", "-1"]],
+)
+def test_parser_rejects_invalid_test_run_limits(arguments: list[str]) -> None:
+    with pytest.raises(SystemExit):
+        verify.parse_args({"repo": _scope()}, ["--scope", "repo", *arguments])
+
+
+def test_parser_accepts_workers_and_all_durations() -> None:
+    args = verify.parse_args(
+        {"repo": _scope()}, ["--scope", "repo", "--workers", "4", "--durations", "0"],
+    )
+
+    assert args.workers == 4
+    assert args.durations == 0
+
+
+@pytest.mark.parametrize("list_arguments", [[], ["--list"]])
+def test_full_rejects_parallel_workers_before_building_commands(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    list_arguments: list[str],
+) -> None:
+    def _unexpected_build(*_args: object, **_kwargs: object) -> None:
+        pytest.fail("parallel full runs must fail before constructing commands")
+
+    monkeypatch.setattr(verify, "build_commands", _unexpected_build)
+
+    assert verify.main(
+        ["--scope", "repo", "--tier", "full", "--workers", "2", *list_arguments]
+    ) == 2
+    assert "full requires --workers=1" in capsys.readouterr().err
+
+
+def test_parallel_dependency_error_names_selected_interpreter_requirement(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Result:
+        returncode = 1
+
+    observed: list[object] = []
+
+    def _missing(command: object, **_kwargs: object) -> _Result:
+        observed.append(command)
+        return _Result()
+
+    monkeypatch.setattr(verify.subprocess, "run", _missing)
+
+    with pytest.raises(RuntimeError, match="parallel tests require pytest-xdist"):
+        verify._require_parallel_dependency(Path("selected-python.exe"))
+    assert observed == [["selected-python.exe", "-c", "import xdist.plugin"]]
+
+
+@pytest.mark.parametrize("list_only", [False, True])
+def test_parallel_dependency_checked_only_for_actual_runs(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    list_only: bool,
+) -> None:
+    checked: list[Path] = []
+    ran: list[object] = []
+
+    def _missing(python: Path) -> None:
+        checked.append(python)
+        raise RuntimeError("parallel tests require pytest-xdist")
+
+    def _record(commands: object, **_kwargs: object) -> int:
+        ran.append(commands)
+        return 0
+
+    monkeypatch.setattr(verify, "resolve_repo_python", lambda: Path("python.exe"))
+    monkeypatch.setattr(verify, "resolve_powershell", lambda: "pwsh")
+    monkeypatch.setattr(verify, "changed_files", lambda: ())
+    monkeypatch.setattr(verify, "_require_parallel_dependency", _missing)
+    monkeypatch.setattr(verify, "run_commands", _record)
+    arguments = ["--scope", "repo", "--workers", "2"]
+    if list_only:
+        arguments.append("--list")
+
+    assert verify.main(arguments) == (0 if list_only else 2)
+    assert checked == ([] if list_only else [Path("python.exe")])
+    assert bool(ran) is list_only
+    if not list_only:
+        assert "parallel tests require pytest-xdist" in capsys.readouterr().err
+
+
+def test_powershell_wrapper_forwards_worker_and_duration_options() -> None:
+    wrapper = (PROJECT_ROOT / "scripts/verify.ps1").read_text(encoding="utf-8")
+
+    assert "[int]$Workers = 1" in wrapper
+    assert "[int]$Durations = 20" in wrapper
+    assert '@("--workers", $Workers.ToString(), "--durations", $Durations.ToString())' in wrapper
 
 
 def test_full_requires_explicit_visible_qt_environment(

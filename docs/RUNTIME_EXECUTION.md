@@ -301,6 +301,17 @@ automatically after 8 ms. Electrode count does not change the marker protocol.
 See [BioSemi compatibility](https://www.biosemi.com/faq/prices.htm) and the
 [USB Trigger Interface protocol](https://www.biosemi.com/faq/USB%20Trigger%20interface%20cable.htm).
 
+Project Recording Setup exposes the shared ActiveTwo/ActiveThree serial port while
+retaining `settings.triggers.serial_port` as its persisted owner and preserving the
+configured baudrate. COM3 is only the unset default. Generic port metadata fills
+choices without identifying or automatically selecting BioSemi hardware. An explicit
+Check Port uses `triggers/serial_port_access.py` on an app-owned worker to open/close
+only the selection with the same project baudrate and 8N1/no-flow settings. It sends
+no marker/read bytes and calls no explicit reset/flush; requested low RTS/DTR cannot
+prevent OS/driver control-line transitions. Access success does not verify identity,
+wiring, EEG recording or marker receipt. Computer-default hardware preferences do
+not store this project port, and runtime preflight still checks the saved selection.
+
 Brain Products support uses USB TriggerBox rev.02 or TriggerBox Plus with the
 amplifier-specific output cable. It does not connect directly to an amplifier or
 control BrainVision Recorder. Install the vendor driver, select the actual COM

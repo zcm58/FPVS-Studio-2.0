@@ -1000,6 +1000,14 @@ class StudioController(QObject):
             default_recording_configuration=self.load_default_recording_configuration(),
             on_default_recording_configuration_changed=self.save_default_recording_configuration,
             recording_configuration=self.load_recording_configuration(),
+            biosemi_serial_port=(
+                self.main_window.document.project.settings.triggers.serial_port
+                if self.main_window is not None else "COM3"
+            ),
+            biosemi_serial_baudrate=(
+                self.main_window.document.project.settings.triggers.baudrate
+                if self.main_window is not None else 115200
+            ),
             recording_uses_default=(
                 self.main_window is not None
                 and self.main_window.document.uses_default_recording_configuration
