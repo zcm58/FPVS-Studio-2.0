@@ -511,7 +511,7 @@ images. Limits fail explicitly; content is never truncated or rewritten.
 
 | Resource | Limit |
 | --- | --- |
-| `project.json` / `stimuli/manifest.json` | 8 MiB / 32 MiB, bounded before parsing |
+| `project.json` / `stimuli/manifest.json` | 8 MiB / 16 MiB effective archive limits, bounded before parsing |
 | Encoded image | 64 MiB per file |
 | Image dimensions / pixel count | 8,192 per axis / 16,777,216 pixels |
 | Estimated decoded pixel buffer | 64 MiB per image (four bytes per pixel) |

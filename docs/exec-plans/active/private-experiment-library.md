@@ -8,8 +8,10 @@ Date: 2026-09-16
 
 The branch audit found that the local bundle security work below had not reached
 primary Studio master. Its integration and final verification are tracked in the
-[branch consolidation plan](branch-consolidation-2026-10-26.md), preserving newer
+[branch consolidation record](../completed/branch-consolidation-2026-10-26.md), preserving newer
 provenance, Windows path, publishing and compilation behavior.
+The existing 16 MiB overall bundle-JSON guard remains stricter than the new
+32 MiB standalone stimulus-manifest cap; the effective archive ceiling is preserved.
 
 ## Startup recovery follow-up (October 8, 2026)
 

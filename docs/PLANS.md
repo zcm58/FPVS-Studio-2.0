@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Branch feature consolidation and cleanup](exec-plans/active/branch-consolidation-2026-10-26.md)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -39,6 +38,10 @@ the current contracts do not explain why a landed decision exists.
 Recent completion: [Computer default EEG hardware](exec-plans/completed/default-eeg-hardware.md)
 (first-run hardware choice, computer defaults, project overrides/reset and captured
 completed-session export; source and visible GUI checks passed in 2.5.0).
+
+Recent completion: [Branch feature consolidation and cleanup](exec-plans/completed/branch-consolidation-2026-10-26.md)
+(missing Library cleanup and bundle/compiler safeguards integrated; 11 local and two
+remote branches deleted after ancestry/equivalence checks and verified backup).
 
 Recent completion: [TriggerBox discovery and pulse validation](exec-plans/completed/triggerbox-recording-setup.md)
 (editable detected COM ports, amplifier/rate pulse limits and verified compiled
