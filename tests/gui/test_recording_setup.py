@@ -140,6 +140,9 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert "operator responsibilities" in dialog.guidance_label.text()
         assert dialog.apply_button.isEnabled() == isinstance(port, int)
     elif backend == "brainproducts_triggerbox":
+        assert dialog.backend_combo.currentText() == (
+            "Brain Products / BrainVision (TriggerBox/Plus)"
+        )
         assert dialog.brainproducts_port_edit.isVisible()
         assert dialog.brainproducts_pulse_edit.isVisible()
         assert "Start recording in BrainVision Recorder" in dialog.guidance_label.text()
@@ -763,7 +766,7 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
         ("biosemi_active_three", 1000, "Recording Device: BioSemi ActiveThree (128 electrodes)"),
         (
             "brainproducts_triggerbox", 1000,
-            "Recording Device: Brain Products TriggerBox / TriggerBox Plus",
+            "Recording Device: Brain Products / BrainVision (TriggerBox/Plus)",
         ),
         ("unicorn_udp", 65535, "Recording Device: Unicorn Black Mobile Headset"),
         (

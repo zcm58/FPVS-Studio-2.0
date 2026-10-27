@@ -330,7 +330,7 @@ class AppSettingsDialog(QDialog):
         project_recording_buttons.addWidget(self.use_default_recording_button)
         recording_layout.addLayout(project_recording_buttons)
         recording_help = QLabel(
-            "Choose BioSemi ActiveTwo/ActiveThree, Brain Products TriggerBox, "
+            "Choose BioSemi ActiveTwo/ActiveThree, Brain Products / BrainVision, "
             "or Unicorn Recorder UDP. "
             "Unicorn launches require Recorder to be open and recording. "
             "The computer default applies to projects without an override. "

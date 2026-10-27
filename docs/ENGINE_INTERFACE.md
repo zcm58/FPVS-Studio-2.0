@@ -202,6 +202,16 @@ Submit control. Task clocks and keyboard clocks reset and carried events clear o
 first task flip, without altering the FPVS run clock, compiled frame sequence, or
 flip-locked trigger schedule.
 
+Pyglet task screens retain native mouse presses and their pixel positions until the
+renderer consumes them, including a press and release delivered between polls. Capture
+starts after the first visible flip, passes events through to PsychoPy controls, and
+is removed on every exit. Recognition selectability and submission rules stay authored.
+Capture uses the presentation window's native event pump without reading PsychoPy's
+separate legacy mouse state. Each press uses current window dimensions and content
+scaling so its hit-test coordinates match the visible choice after a resize or DPI change.
+This path is shared by image/text single choice, multiple choice and rating screens
+from any condition modifier, plus editable-text submit controls.
+
 Each task screen reuses its text and controls across frames, updating them when the
 response, selection or validation state changes. Task graphics use the same
 deterministic texture, pixel-buffer and display-list cleanup as condition stimuli.
