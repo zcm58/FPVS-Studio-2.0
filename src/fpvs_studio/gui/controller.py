@@ -96,6 +96,7 @@ from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.data_sharing_controller import DataSharingController
+    from fpvs_studio.gui.data_sharing_dialog import SavedReportsDialog, StartupReportNotice
     from fpvs_studio.gui.library_access_dialog import LibraryAccessController
     from fpvs_studio.gui.library_controller import LibraryController
     from fpvs_studio.gui.library_publisher_controller import LibraryPublisherController
@@ -234,6 +235,7 @@ class StudioController(QObject):
         self._library_access_controller: LibraryAccessController | None = None
         self._project_update_controller: ProjectUpdateController | None = None
         self._data_sharing_controller: DataSharingController | None = None
+        self._saved_reports_dialog: SavedReportsDialog | None = None
         self._library_publisher_controller: LibraryPublisherController | None = None
         self._library_submission_controller: LibrarySubmissionController | None = None
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
@@ -1128,18 +1130,30 @@ class StudioController(QObject):
 
             self._data_sharing_controller = DataSharingController(
                 self._app, current_window=lambda: self.main_window,
-                startup_status=self._show_startup_sharing_status,
+                startup_notice=self._show_startup_sharing_notice,
             )
         return self._data_sharing_controller
 
-    def _show_startup_sharing_status(self, message: str) -> None:
-        if self.welcome_window is not None and isValid(self.welcome_window):
-            self.welcome_window.set_sharing_status(message)
-        if (
-            self.main_window is not None and isValid(self.main_window)
-            and not self.main_window.is_launch_busy()
-        ):
-            self.main_window.statusBar().showMessage(message, 10000)
+    def _show_startup_sharing_notice(self, notices: tuple[StartupReportNotice, ...]) -> None:
+        from fpvs_studio.gui.data_sharing_dialog import SavedReportsDialog
+
+        if self._update_lifecycle.is_shutting_down or not notices:
+            return
+        parent: QWidget | None = self.main_window
+        if parent is None or not isValid(parent) or not parent.isVisible():
+            parent = self.welcome_window
+        if parent is None or not isValid(parent) or not parent.isVisible():
+            return
+        dialog = SavedReportsDialog(notices, parent=parent)
+        self._saved_reports_dialog = dialog
+
+        def finished(_result: int) -> None:
+            if self._saved_reports_dialog is dialog:
+                self._saved_reports_dialog = None
+            dialog.deleteLater()
+
+        dialog.finished.connect(finished)
+        dialog.show()
 
     def show_data_sharing(self) -> None:
         window = self.main_window

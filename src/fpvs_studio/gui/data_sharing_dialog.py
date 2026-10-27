@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, Signal
 from PySide6.QtGui import QCloseEvent
@@ -16,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSizePolicy,
     QTableWidget,
@@ -42,6 +44,68 @@ class ComparisonRow:
     condition_id: str
     local: str
     shared: str
+
+
+@dataclass(frozen=True)
+class StartupReportNotice:
+    project_root: Path
+    message: str
+
+
+class SavedReportsDialog(QDialog):
+    """Dismissible startup summary; report state remains owned by the backend."""
+
+    def __init__(
+        self, notices: tuple[StartupReportNotice, ...], *, parent: QWidget,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("saved_reports_dialog")
+        self.setWindowTitle("Saved reports need attention")
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setMinimumSize(560, 360)
+        self.resize(680, 440)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(12)
+        self.header = DialogHeader("Saved reports need attention", "", parent=self)
+        self.header.subtitle_label.hide()
+        layout.addWidget(self.header)
+        self.guidance_label = QLabel(
+            "Open View > Data Sharing & Comparison in the listed projects to review their reports.",
+            self,
+        )
+        self.guidance_label.setWordWrap(True)
+        layout.addWidget(self.guidance_label)
+        self.projects_edit = QPlainTextEdit(self)
+        self.projects_edit.setObjectName("saved_reports_projects")
+        self.projects_edit.setReadOnly(True)
+        self.projects_edit.setAccessibleName("Projects with saved reports needing attention")
+        self.projects_edit.setPlainText("\n\n".join(
+            f"{notice.project_root.name}\n{notice.project_root}\n{notice.message}"
+            for notice in notices
+        ))
+        layout.addWidget(self.projects_edit, 1)
+        footer = QHBoxLayout()
+        footer.addStretch(1)
+        self.dismiss_button = QPushButton("Dismiss", self)
+        self.dismiss_button.setDefault(True)
+        mark_primary_action(self.dismiss_button)
+        self.dismiss_button.clicked.connect(self.accept)
+        footer.addWidget(self.dismiss_button)
+        layout.addLayout(footer)
+        apply_dialog_theme(self)
+        self.dismiss_button.setFocus()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
+            if getattr(self, "_theme_refreshing", False):
+                return
+            self._theme_refreshing = True
+            try:
+                apply_dialog_theme(self)
+            finally:
+                self._theme_refreshing = False
 
 
 class DataSharingDialog(QDialog):

@@ -71,6 +71,12 @@ them before importing Qt.
 
 ## Skill Routing
 
+For startup saved-report notices, start with `gui/data_sharing_controller.py`,
+`gui/data_sharing_dialog.py` and the callback in `gui/controller.py`. Issues aggregate
+once per startup pass with full project paths; Welcome carries no report-status line.
+Use GUI focused, `tests/unit/test_data_sharing_gui_jobs.py`, and registered sharing,
+Welcome and late-result GUI checks. Delivery and presentation gating remain unchanged.
+
 For native AB all-character markers, start with `core/compiler_schedules.py`,
 `engines/psychopy_triggers.py`, and `runtime/preflight.py`. Frame -1 is the explicit
 neutral condition-marker flip for opted-in streams; see the TriggerEvent contract

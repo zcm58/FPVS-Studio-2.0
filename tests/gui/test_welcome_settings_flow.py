@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QMimeData, QObject, QPoint, QPointF, QRect, Qt, QUrl, Signal
-from PySide6.QtGui import QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QColor, QDragEnterEvent, QDropEvent, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -149,9 +149,10 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert import_project_button.text() == "Import New Project"
     assert open_projects_button.text() == "Open Existing Project"
     assert root_folder_button.text() == "Change Root Folder..."
-    assert create_button.property("welcomeRole") == "primary"
+    assert create_button.property("welcomeRole") == "secondary"
     assert import_project_button.property("welcomeRole") != "primary"
-    assert open_projects_button.property("welcomeRole") != "primary"
+    assert open_projects_button.property("welcomeRole") == "primary"
+    assert open_projects_button.isDefault()
     assert root_folder_button.property("welcomeRole") != "primary"
 
 
@@ -219,26 +220,87 @@ def test_welcome_window_actions_fit_minimum_and_default_sizes(
 
 
 @pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
-@pytest.mark.parametrize("message", [
-    "Checking saved reports…",
-    "Saved reports are waiting for connection. Studio will retry on its next launch.",
-    "Saved reports need attention. Open Data Sharing & Comparison in the affected project.",
-])
-def test_welcome_startup_sharing_status_fits_and_keeps_actions_enabled(qtbot, size, message):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("busy", [False, True])
+def test_welcome_primary_open_action_fits_and_stays_first(qtbot, size, background, busy):
     welcome = WelcomeWindow()
     qtbot.addWidget(welcome)
-    welcome.set_sharing_status(message)
+    palette = welcome.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    welcome.setPalette(palette)
+    welcome.set_import_busy(busy)
     welcome.resize(*size)
     welcome.show()
     qtbot.wait(10)
     assert welcome.size().toTuple() == size
     assert_visible_children_within_parent(welcome)
-    label = welcome.sharing_status_label
-    assert label.text() == message and label.isVisible()
-    assert label.height() >= label.heightForWidth(label.width())
-    assert all(button.isEnabled() for button in welcome.findChildren(QPushButton))
-    welcome.set_sharing_status("")
-    assert label.isHidden()
+    assert welcome.findChild(QLabel, "welcome_sharing_status") is None
+    assert welcome.action_layout.itemAtPosition(0, 0).widget() is welcome.manage_projects_button
+    buttons = (
+        welcome.manage_projects_button, welcome.create_button, welcome.import_project_button,
+        welcome.root_folder_setup_button, welcome.settings_button,
+    )
+    assert [button.property("welcomeRole") for button in buttons] == [
+        "primary", "secondary", "secondary", "secondary", "secondary",
+    ]
+    for button in buttons:
+        assert button.isEnabled() is not busy
+        text_width = button.fontMetrics().horizontalAdvance(button.text())
+        assert button.contentsRect().width() >= text_width
+    assert welcome.bundle_drop_hint_label.isVisible() is busy
+
+
+def test_welcome_compact_actions_keep_open_first(qtbot):
+    welcome = WelcomeWindow()
+    qtbot.addWidget(welcome)
+    welcome.hero_container.setMaximumWidth(300)
+    welcome.resize(760, 520)
+    welcome.show()
+    QApplication.processEvents()
+    assert welcome._action_columns == 1
+    for row, button in enumerate((
+        welcome.manage_projects_button, welcome.create_button, welcome.import_project_button,
+        welcome.root_folder_setup_button, welcome.settings_button,
+    )):
+        assert welcome.action_layout.itemAtPosition(row, 0).widget() is button
+    assert_visible_children_within_parent(welcome)
+
+
+@pytest.mark.parametrize("key", [Qt.Key.Key_Return, Qt.Key.Key_Enter])
+def test_welcome_primary_open_action_has_keyboard_priority(qtbot, key):
+    welcome = WelcomeWindow()
+    qtbot.addWidget(welcome)
+    opened = []
+    created = []
+    welcome.manage_projects_requested.connect(lambda: opened.append(True))
+    welcome.create_requested.connect(lambda: created.append(True))
+    welcome.show()
+    QApplication.processEvents()
+    assert welcome.focusWidget() is welcome.manage_projects_button
+
+    qtbot.keyClick(welcome.manage_projects_button, key)
+    assert opened == [True]
+    assert created == []
+    qtbot.keyClick(welcome.manage_projects_button, Qt.Key.Key_Tab)
+    assert welcome.focusWidget() is welcome.create_button
+    qtbot.keyClick(welcome.create_button, key)
+    assert opened == [True]
+    assert created == [True]
+    qtbot.keyClick(welcome.create_button, Qt.Key.Key_Tab)
+    assert welcome.focusWidget() is welcome.import_project_button
+    qtbot.keyClick(welcome.import_project_button, Qt.Key.Key_Tab)
+    assert welcome.focusWidget() is welcome.root_folder_setup_button
+    qtbot.keyClick(welcome.root_folder_setup_button, Qt.Key.Key_Tab)
+    assert welcome.focusWidget() is welcome.settings_button
+
+    welcome.set_import_busy(True)
+    qtbot.keyClick(welcome, key)
+    assert opened == [True]
+    assert created == [True]
+    welcome.set_import_busy(False)
+    welcome.manage_projects_button.setFocus()
+    qtbot.keyClick(welcome, key)
+    assert opened == [True, True]
 
 
 def test_welcome_window_accepts_fpvsbundle_drop(

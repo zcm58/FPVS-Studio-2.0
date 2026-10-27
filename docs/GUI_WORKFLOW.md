@@ -42,7 +42,7 @@ Project switches ask once for Save/Discard/Cancel and retain the current draft u
 the replacement loads. New edits invalidate that approval. If closing is declined,
 the replacement is disposed and the controller restores the original window.
 Failed reads and canceled pickers leave ordinary close/save checks intact. Late
-startup sharing status ignores disposed Welcome and project windows.
+startup report notices ignore disposed Welcome and project windows.
 
 ## Private experiment sharing
 
@@ -61,8 +61,13 @@ delivery and descriptive comparison after
 completed sessions, with opt-out/backlog release and cancel/shutdown guards.
 Accepted uploads automatically archive older local history, keeping the latest
 comparison and exact receipts/mappings. Startup retries eligible pending reports
-for known projects without reopening them; waiting-for-connection status is passive
-and presentation cancels reporting across projects. Retained uploaded counts the
+for known projects without reopening them. After the pass, one dismissible modal
+lists affected project folders, full paths and report issues. It uses `560x360`
+minimum / `680x440` default with scrollable, selectable plain-text details; Dismiss,
+Escape and window close leave report state intact. Successful checks stay silent,
+and presentation defers the summary until reporting resumes. Welcome no longer
+contains a saved-report status line. Presentation cancels reporting across projects.
+Retained uploaded counts the
 active local cache. Archive uploaded history remains a local retry without HTTP.
 Active capture capacity is visible; Review captures offers confirmed local archival
 of unchanged terminal excluded evidence when capacity needs recovery.
@@ -1112,6 +1117,9 @@ preprocessing services but must not silently mutate the active project.
   `src/fpvs_studio/gui/components.py`.
 - Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
   launch card, border styling, and first-paint background.
+  Welcome places Open Existing Project first, styles it as the primary blue action,
+  and gives it initial focus/default Enter activation. Create, Import and Root Folder
+  remain secondary; compact layouts preserve the same order.
 - Shared Setup Wizard presentation components include the connected progress stepper,
   shared setup step surface, metric strips, and source cards used by compact guided
   pages.

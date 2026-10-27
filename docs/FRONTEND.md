@@ -95,8 +95,10 @@ interaction.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
-- Open Existing Project is the welcome entry point for the Manage Projects surface,
-  which opens known projects or moves project folders to the Windows Recycle Bin with
+- Open Existing Project is the welcome entry point for Manage Projects
+  and the first, primary blue action with initial focus and Enter activation.
+  Create Project, Import New Project and Change Root Folder remain secondary actions.
+  Manage Projects opens known projects or moves project folders to the Windows Recycle Bin with
   confirmation. Import New Project uses the same reviewed `.fpvsbundle` import workflow
   exposed in the File menu, and Welcome accepts dropped local `.fpvsbundle` files while
   keeping modal staged progress visible. Successful bundle exports remain on a persistent

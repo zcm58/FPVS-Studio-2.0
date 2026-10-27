@@ -73,6 +73,12 @@ class _Result:
     cancelled: bool = False
 
 
+@dataclass(frozen=True)
+class _StartupReportNotice:
+    project_root: Path
+    message: str
+
+
 class _Job:
     def __init__(self, callback):
         self.callback = callback
@@ -191,6 +197,7 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "filesystem_path": filesystem_path, "project_json_path": project_json_path,
         "Path": Path,
         "CaptureArchiveReview": CaptureArchiveReview,
+        "StartupReportNotice": _StartupReportNotice,
     }
     exec(compile(ast.fix_missing_locations(module), str(path), "exec"), namespace)
     return namespace["DataSharingController"]
@@ -241,6 +248,8 @@ def test_startup_discovers_and_drains_unopened_projects_once(state):
     for root in (first, second, remembered):
         root.mkdir(parents=True)
         (root / "project.json").write_text("{}")
+    notices = []
+    state.controller._startup_notice = notices.append
     state.controller.startup(state.root, (first, remembered, state.root / "missing"))
     assert not state.backend.calls and state.controller._window is None
     _finish_jobs(state)
@@ -250,6 +259,7 @@ def test_startup_discovers_and_drains_unopened_projects_once(state):
     count = len(state.lifecycle.jobs)
     state.controller.startup(state.root, ())
     assert len(state.lifecycle.jobs) == count
+    assert notices == []
 
 
 def test_open_project_takes_priority_and_startup_resumes_after_run(state):
@@ -302,6 +312,8 @@ def test_startup_for_open_project_hashes_unsaved_snapshot_without_comparison(sta
 
 
 def test_shutdown_cancels_startup_and_never_starts_more_jobs(state):
+    notices = []
+    state.controller._startup_notice = notices.append
     (state.root / "project.json").write_text("{}")
     state.controller.startup(state.root, ())
     state.lifecycle.is_shutting_down = True
@@ -310,15 +322,16 @@ def test_shutdown_cancels_startup_and_never_starts_more_jobs(state):
     assert job.cancel_event.is_set()
     job.run()
     assert len(state.lifecycle.jobs) == 1 and not state.backend.calls
+    assert notices == []
 
 
-def test_startup_error_is_nonmodal_and_other_projects_continue(state):
+def test_startup_aggregates_project_issues_after_all_other_projects_continue(state):
     for name in ("study1", "study2"):
         folder = state.root / name
         folder.mkdir()
         (folder / "project.json").write_text("{}")
     notices, calls = [], []
-    state.controller._startup_status = notices.append
+    state.controller._startup_notice = notices.append
 
     def startup(root, cancel):
         calls.append(root)
@@ -328,11 +341,119 @@ def test_startup_error_is_nonmodal_and_other_projects_continue(state):
 
     state.backend.sync_startup_project = startup
     state.controller.startup(state.root, ())
+    state.lifecycle.jobs[-1].run()  # Discovery.
+    state.lifecycle.jobs[-1].run()  # The first issue must not interrupt the pass.
+    assert notices == []
     _finish_jobs(state)
     assert [root.name for root in calls] == ["study1", "study2"]
-    assert any("need attention" in notice for notice in notices)
-    assert "need attention" in notices[-1]  # An offline project cannot hide a repair issue.
+    assert len(notices) == 1
+    assert [(notice.project_root, notice.message) for notice in notices[0]] == [
+        (state.root / "study1", "Could not check saved reports. See the Studio log for details."),
+        (state.root / "study2", "Waiting for connection. Studio will retry on its next launch."),
+    ]
+    state.controller._run_pending()
+    state.controller.startup(state.root, ())
+    assert len(notices) == 1
     assert state.controller.dialog is None
+
+
+def test_startup_notice_distinguishes_same_named_project_folders(state):
+    first = state.root / "lab-a" / "Repeated study"
+    second = state.root / "lab-b" / "Repeated study"
+    for root in (first, second):
+        root.mkdir(parents=True)
+        (root / "project.json").write_text("{}")
+    state.backend.view = SharingView(SharingSettings(), error="Review saved report identity.")
+    notices = []
+    state.controller._startup_notice = notices.append
+    state.controller.startup(state.root, ())
+    _finish_jobs(state)
+    assert len(notices) == 1
+    assert {notice.project_root for notice in notices[0]} == {first, second}
+    assert len(notices[0]) == 2
+    assert all(notice.message == "Review saved report identity." for notice in notices[0])
+
+
+def test_startup_pending_notice_retains_its_project_identity(state):
+    project_root = state.root / "Pending study"
+    project_root.mkdir()
+    (project_root / "project.json").write_text("{}")
+    state.backend.view = SharingView(SharingSettings(), pending_count=2)
+    notices = []
+    state.controller._startup_notice = notices.append
+    state.controller.startup(state.root, ())
+    _finish_jobs(state)
+    assert notices == [(_StartupReportNotice(
+        project_root, "Saved reports are pending. Studio will retry on its next launch.",
+    ),)]
+
+
+def test_startup_discovery_error_identifies_the_root_folder(state, monkeypatch):
+    def fail_discovery(*_args, **_kwargs):
+        raise OSError("Project root is unavailable")
+
+    monkeypatch.setitem(
+        state.controller._resume_startup.__globals__, "discover_project_roots", fail_discovery,
+    )
+    notices = []
+    state.controller._startup_notice = notices.append
+    state.controller.startup(state.root, ())
+    _finish_jobs(state)
+    assert notices == [(_StartupReportNotice(
+        state.root,
+        "Could not check projects under this root folder. See the Studio log for details.",
+    ),)]
+    assert not state.backend.calls
+
+
+def test_startup_notice_waits_until_canceled_project_resumes_after_presentation(state):
+    for name in ("study1", "study2"):
+        project_root = state.root / name
+        project_root.mkdir()
+        (project_root / "project.json").write_text("{}")
+    state.controller._window = state.window
+    state.backend.view = SharingView(SharingSettings(), error="Saved report needs review.")
+    notices = []
+    state.controller._startup_notice = notices.append
+    state.controller.startup(state.root, ())
+    state.lifecycle.jobs[-1].run()  # Discovery.
+    state.lifecycle.jobs[-1].run()  # First project has an issue; second is queued.
+    pending_project = state.lifecycle.jobs[-1]
+    state.window.busy = True
+    launched = []
+    state.controller.session_started(state.window, lambda: launched.append(True))
+    assert pending_project.cancel_event.is_set() and not launched
+    pending_project.run()
+    assert launched == [True]
+    assert notices == [] and state.controller._job is None
+    state.window.busy = False
+    state.controller.session_completed(state.window)
+    _finish_jobs(state)
+    assert len(notices) == 1
+    assert {notice.project_root for notice in notices[0]} == {
+        state.root / "study1", state.root / "study2",
+    }
+    state.controller._run_pending()
+    assert len(notices) == 1
+
+
+def test_startup_error_for_open_project_keeps_its_project_identity(state):
+    state.backend.view = SharingView(SharingSettings(enabled=True, profile=_profile()))
+    (state.root / "project.json").write_text("{}")
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+
+    def fail_sync(*_args, **_kwargs):
+        raise SharingStorageError("Saved report metadata is malformed")
+
+    state.backend.sync_project = fail_sync
+    notices = []
+    state.controller._startup_notice = notices.append
+    state.controller.startup(state.root, ())
+    _finish_jobs(state)
+    assert notices == [(_StartupReportNotice(
+        state.root, "Could not check saved reports. See the Studio log for details.",
+    ),)]
 
 
 def test_opening_unenrolled_experiment_reads_without_activation(state):

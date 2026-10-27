@@ -8,7 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, Qt, Signal
-from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QResizeEvent
+from PySide6.QtGui import QCloseEvent, QDragEnterEvent, QDropEvent, QKeyEvent, QResizeEvent
 from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
@@ -71,14 +71,6 @@ class WelcomeWindow(QWidget):
         self.bundle_drop_hint_label.hide()
         hero_layout.addWidget(self.bundle_drop_hint_label)
 
-        self.sharing_status_label = QLabel("", self.hero_container)
-        self.sharing_status_label.setObjectName("welcome_sharing_status")
-        self.sharing_status_label.setProperty("bundleWorkflowRole", "meta")
-        self.sharing_status_label.setWordWrap(True)
-        self.sharing_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.sharing_status_label.hide()
-        hero_layout.addWidget(self.sharing_status_label)
-
         self.action_container = QWidget(self.hero_container)
         self.action_container.setObjectName("welcome_action_container")
         self.action_layout = QGridLayout(self.action_container)
@@ -88,7 +80,7 @@ class WelcomeWindow(QWidget):
 
         self.create_button = QPushButton("Create Project", self.hero_container)
         self.create_button.setObjectName("create_project_button")
-        mark_welcome_action(self.create_button, "primary")
+        mark_welcome_action(self.create_button, "secondary")
         self.create_button.setMinimumHeight(52)
         self.create_button.clicked.connect(self.create_requested.emit)
         self.action_layout.addWidget(self.create_button, 0, 0)
@@ -104,7 +96,8 @@ class WelcomeWindow(QWidget):
 
         self.manage_projects_button = QPushButton("Open Existing Project", self.hero_container)
         self.manage_projects_button.setObjectName("open_projects_button")
-        mark_welcome_action(self.manage_projects_button, "secondary")
+        mark_welcome_action(self.manage_projects_button, "primary")
+        self.manage_projects_button.setDefault(True)
         self.manage_projects_button.setMinimumHeight(52)
         self.manage_projects_button.clicked.connect(self.manage_projects_requested.emit)
         self.action_layout.addWidget(self.manage_projects_button, 1, 0)
@@ -133,6 +126,11 @@ class WelcomeWindow(QWidget):
         )
 
         self._apply_theme_styles()
+        self.setTabOrder(self.manage_projects_button, self.create_button)
+        self.setTabOrder(self.create_button, self.import_project_button)
+        self.setTabOrder(self.import_project_button, self.root_folder_setup_button)
+        self.setTabOrder(self.root_folder_setup_button, self.settings_button)
+        self.manage_projects_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
         if self._import_busy:
@@ -174,10 +172,19 @@ class WelcomeWindow(QWidget):
         )
         self.bundle_drop_hint_label.setVisible(self._import_busy)
 
-    def set_sharing_status(self, message: str) -> None:
-        """Display passive startup delivery status without blocking project actions."""
-        self.sharing_status_label.setText(message)
-        self.sharing_status_label.setVisible(bool(message))
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802
+        if (
+            event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and event.modifiers() == Qt.KeyboardModifier.NoModifier
+        ):
+            button = self.focusWidget()
+            if not isinstance(button, QPushButton):
+                button = self.manage_projects_button
+            if button.isEnabled() and not event.isAutoRepeat():
+                button.click()
+            event.accept()
+            return
+        super().keyPressEvent(event)
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self._import_busy:
@@ -247,9 +254,9 @@ class WelcomeWindow(QWidget):
         columns = 2 if two_column_width <= available_width else 1
         if getattr(self, "_action_columns", None) != columns:
             buttons = (
+                self.manage_projects_button,
                 self.create_button,
                 self.import_project_button,
-                self.manage_projects_button,
                 self.root_folder_setup_button,
             )
             for button in buttons:

@@ -52,8 +52,11 @@ pending deliveries without reopening projects or retrieving their comparison
 snapshots. Projects without pending/recoverable work skip hashing and HTTP. Saved
 the enabled preference, Library scope, authored protocol and OS credentials are rechecked before
 delivery. Held reports still require explicit Retry. Missing/moved projects are
-skipped; malformed metadata remains intact and produces non-modal attention status
-and a log identifying the affected project. Startup shares the same job ownership
+skipped; malformed metadata remains intact and is logged. After the pass finishes,
+one dismissible modal lists affected project folders, full paths and report issues,
+including waiting/pending delivery. Successful checks stay silent. Dismiss, Escape
+and window close leave all reports and sharing settings unchanged; the dialog does
+not recur during that startup pass. Startup shares the same job ownership
 and launch/shutdown gate as project-open and after-run work, and resumes interrupted
 projects after the presentation cycle.
 

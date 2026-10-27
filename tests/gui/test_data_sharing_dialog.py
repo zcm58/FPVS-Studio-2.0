@@ -5,11 +5,108 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QMessageBox, QPushButton
+from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QMessageBox, QPushButton, QWidget
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.data_sharing.storage import CaptureArchiveReview, ReviewedCapture
-from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
+from fpvs_studio.gui.data_sharing_dialog import (
+    ComparisonRow,
+    DataSharingDialog,
+    SavedReportsDialog,
+    StartupReportNotice,
+)
+
+
+@pytest.mark.parametrize("size", [(560, 360), (680, 440)])
+@pytest.mark.parametrize("background", ["#202124", "#f4f7fb"])
+@pytest.mark.parametrize("count", [1, 20])
+def test_saved_reports_notice_lists_full_project_paths_without_clipping(
+    qtbot, tmp_path, size, background, count,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+    notices = tuple(StartupReportNotice(
+        tmp_path / f"Lab {index}" / ("Long experimental project folder " * 5),
+        "The saved report needs review. <Study details> are shown as plain text.",
+    ) for index in range(count))
+    dialog = SavedReportsDialog(notices, parent=parent)
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    qtbot.wait(10)
+
+    assert dialog.size().toTuple() == size
+    assert_visible_children_within_parent(dialog)
+    assert dialog.isModal()
+    assert dialog.windowModality() == Qt.WindowModality.ApplicationModal
+    assert dialog.projects_edit.isReadOnly()
+    text = dialog.projects_edit.toPlainText()
+    for notice in notices:
+        assert str(notice.project_root) in text
+        assert notice.message in text
+    assert dialog.projects_edit.accessibleName()
+    if count > 1:
+        assert dialog.projects_edit.verticalScrollBar().maximum() > 0
+    for label in (dialog.header.title_label, dialog.guidance_label):
+        required = label.fontMetrics().boundingRect(
+            QRect(0, 0, label.contentsRect().width(), 10000),
+            Qt.TextFlag.TextWordWrap, label.text(),
+        )
+        assert label.contentsRect().height() >= required.height() - 2
+    assert dialog.dismiss_button.contentsRect().width() >= (
+        dialog.dismiss_button.fontMetrics().horizontalAdvance("Dismiss")
+    )
+
+
+@pytest.mark.parametrize("dismissal", ["button", "escape", "close"])
+def test_saved_reports_notice_dismissal_preserves_report_notice(qtbot, tmp_path, dismissal):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+    notice = StartupReportNotice(tmp_path / "Study", "A saved report needs review.")
+    dialog = SavedReportsDialog((notice,), parent=parent)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    if dismissal == "button":
+        dialog.dismiss_button.click()
+    elif dismissal == "escape":
+        qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    else:
+        dialog.close()
+    assert not dialog.isVisible()
+    assert notice == StartupReportNotice(tmp_path / "Study", "A saved report needs review.")
+
+
+@pytest.mark.parametrize("project_open", [False, True])
+def test_controller_shows_dismissible_report_notice_on_visible_window(
+    qtbot, controller, tmp_path, project_open,
+):
+    if project_open:
+        host = QWidget()
+        qtbot.addWidget(host)
+        host.show()
+        controller.main_window = host
+    else:
+        host = controller.welcome_window
+    assert host is not None
+    notices = (StartupReportNotice(tmp_path / "Affected Study", "Enrollment needs review."),)
+    controller._show_startup_sharing_notice(notices)
+    dialog = controller._saved_reports_dialog
+    assert dialog is not None
+    qtbot.addWidget(dialog)
+    assert dialog.parentWidget() is host
+    assert dialog.isVisible() and dialog.isModal()
+    assert "Affected Study" in dialog.projects_edit.toPlainText()
+    assert controller.welcome_window.findChild(QLabel, "welcome_sharing_status") is None
+    dialog.dismiss_button.click()
+    assert controller._saved_reports_dialog is None
+    assert not dialog.isVisible()
+    controller._show_startup_sharing_notice(())
+    assert controller._saved_reports_dialog is None
 
 
 @pytest.mark.parametrize("size", [(820, 480), (880, 540)])

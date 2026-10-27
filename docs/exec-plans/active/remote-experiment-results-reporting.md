@@ -337,6 +337,43 @@ gate also drains local opt-out persistence before runtime starts. See
 canonical storage protections and archive workflow. Visible synthetic qualification
 and the complete non-Qt gate are recorded in the 2.4.4 release plan.
 
+## October 27 startup notice and Welcome follow-up
+
+The user requested a dismissible modal identifying projects with saved-report issues,
+replacing the vague persistent Welcome status line. The sequential startup pass now
+collects project roots and reasons and emits one summary after it finishes, outside
+presentation. The summary displays selectable full paths in a scrollable plain-text
+area, at minimum `560x360` / default `680x440`, and closes with Dismiss, Escape or X.
+Dismissal does not alter reports, retry/consent settings or stored research data.
+Successful startup checks remain silent. Notice delivery is once per application
+startup, not a persistent acknowledgement across future launches.
+
+Open Existing Project becomes Welcome's first primary blue action, with initial
+focus, Enter activation and first Tab order; Create/Import/Root remain secondary.
+Both `760x520` minimum and `1120x720` default retain all actions without clipping.
+The existing reporting worker, launch/shutdown gating and service contracts remain
+the owners. Verification covers aggregated multi-project errors, same-named folders,
+cancellation/resume, once-only callback, dismissal, modality, full-path access,
+light/dark layout and keyboard/busy states. Verification results follow below.
+
+Visible Windows verification passed 137 checks across the sharing dialog, Welcome
+and disposed-window callback; one existing clipboard-dependent Manage Projects case
+was excluded after the previously recorded Windows clipboard-access failure. The
+new affected-state/geometry subset passed 25 checks. Safe reporting-job tests passed
+62, the GUI focused route passed 83, documentation focused passed 10, and source
+mypy passed all 243 files. Actual renders were inspected at both documented sizes
+in light/dark palettes at 100% scaling without clipping. Synthetic capture scripts,
+images and logs are retained under ignored `build/welcome-report-attention*` paths.
+The full precommit gate passed Ruff, compilation, mypy and repository audits, plus
+3,611 non-Qt tests and 24 subtests, with 12 Windows symlink-permission skips.
+
+Manual smoke path: start with synthetic pending/error reports in two project folders,
+wait for the startup pass, verify both full paths in the modal, and dismiss it with
+Dismiss/Escape/X. Reopening Welcome during the same launch must stay quiet. Verify
+Open Existing Project is blue/first and initial Enter opens Manage Projects, while
+Tab/Enter can still reach the secondary actions. Do not use real participant records
+or transmit research reports for this verification.
+
 ## Future work
 
 Public dataset publication, raw EEG/files, task-specific result schemas, longitudinal

@@ -95,6 +95,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   outside presentation. The same controller runs one sequential startup pass over
   configured-root/remembered projects, reusing neutral `core/project_service.py`
   discovery and `data_sharing/service.py` delivery without comparison requests.
+  Startup issues are collected per project and delivered once to a dismissible
+  modal in `gui/data_sharing_dialog.py`, with full project paths; successful passes
+  stay silent and Welcome has no report-status banner.
   Receipt-first cleanup archives older acknowledged local evidence after uploads.
   Reviewed local archival of terminal excluded captures restores bounded capacity;
   launch waits for reporting and local opt-out persistence to drain.

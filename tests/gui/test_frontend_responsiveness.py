@@ -13,17 +13,21 @@ from shiboken6 import delete
 from tests.gui.helpers import _open_created_project, assert_visible_children_within_parent
 
 from fpvs_studio.gui import document as document_module
+from fpvs_studio.gui.data_sharing_dialog import StartupReportNotice
 from fpvs_studio.gui.document import ProjectDocument
 
 
-def test_late_startup_sharing_status_ignores_destroyed_windows(controller):
+def test_late_startup_sharing_notice_ignores_destroyed_windows(controller, tmp_path):
     previous_welcome, previous_main = controller.welcome_window, controller.main_window
     disposed_welcome, disposed_main = QWidget(), QWidget()
     delete(disposed_welcome)
     delete(disposed_main)
     controller.welcome_window, controller.main_window = disposed_welcome, disposed_main
     try:
-        controller._show_startup_sharing_status("Checking saved captures")
+        controller._show_startup_sharing_notice((StartupReportNotice(
+            tmp_path / "Affected study", "Saved reports need review.",
+        ),))
+        assert controller._saved_reports_dialog is None
     finally:
         controller.welcome_window, controller.main_window = previous_welcome, previous_main
 

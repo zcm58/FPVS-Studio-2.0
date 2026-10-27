@@ -23,7 +23,11 @@ from fpvs_studio.data_sharing.client import DataSharingClient
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.service import ConditionAggregate, SharingView
 from fpvs_studio.data_sharing.storage import CaptureArchiveReview, load_settings
-from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
+from fpvs_studio.gui.data_sharing_dialog import (
+    ComparisonRow,
+    DataSharingDialog,
+    StartupReportNotice,
+)
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateJob,
@@ -45,7 +49,7 @@ class DataSharingController(QObject):
         self, app: QApplication, *,
         current_window: Callable[[], StudioMainWindow | None],
         backend: ModuleType | None = None,
-        startup_status: Callable[[str], None] = lambda _message: None,
+        startup_notice: Callable[[tuple[StartupReportNotice, ...]], None] = lambda _notices: None,
     ) -> None:
         super().__init__(app)
         self._backend = backend or service
@@ -57,8 +61,9 @@ class DataSharingController(QObject):
         self._job: UpdateJob | None = None
         self._startup_source: tuple[Path, tuple[Path, ...]] | None = None
         self._startup_roots: list[Path] | None = None
-        self._startup_problem = False
-        self._startup_status = startup_status
+        self._startup_notices: dict[Path, StartupReportNotice] = {}
+        self._startup_notified = False
+        self._startup_notice = startup_notice
         self._off_job: UpdateJob | None = None
         self._off_error = ""
         self._launch_waiter: tuple[StudioMainWindow, Callable[[], None]] | None = None
@@ -77,7 +82,6 @@ class DataSharingController(QObject):
         if self._startup_source is not None or self._lifecycle.is_shutting_down:
             return
         self._startup_source = (root, recent_roots)
-        self._startup_status("Checking saved reports…")
         self._resume_startup()
 
     def _resume_startup(self) -> None:
@@ -91,8 +95,10 @@ class DataSharingController(QObject):
         source = self._startup_source
         discovering = self._startup_roots is None
         if not discovering and not self._startup_roots:
-            if not self._startup_problem:
-                self._startup_status("")
+            if not self._startup_notified:
+                self._startup_notified = True
+                if self._startup_notices:
+                    self._startup_notice(tuple(self._startup_notices.values()))
             return
         root = None
         if not discovering:
@@ -132,15 +138,21 @@ class DataSharingController(QObject):
                     assert self._startup_roots is not None
                     self._startup_roots.insert(0, root)
             elif outcome.error is not None:
-                self._startup_problem = True
                 _LOGGER.warning(
                     "Startup reporting needs attention for %s: %s",
                     root or source[0], outcome.error,
                 )
                 if discovering:
                     self._startup_roots = []
-                self._startup_status(
-                    "Saved reports need attention. See the Studio log for details."
+                affected_root = root or source[0]
+                self._startup_notices[affected_root] = StartupReportNotice(
+                    affected_root,
+                    (
+                        "Could not check projects under this root folder. "
+                        "See the Studio log for details."
+                    ) if discovering else (
+                        "Could not check saved reports. See the Studio log for details."
+                    ),
                 )
             elif discovering:
                 self._startup_roots = cast(list[Path], outcome.value)
@@ -153,25 +165,16 @@ class DataSharingController(QObject):
 
     def _report_startup_view(self, root: Path, view: SharingView) -> None:
         if view.status == "waiting_connection":
-            if not self._startup_problem:
-                self._startup_status(
-                    "Saved reports are waiting for connection. "
-                    "Studio will retry on its next launch."
-                )
-            self._startup_problem = True
-        elif view.error:
-            self._startup_problem = True
-            _LOGGER.warning("Startup reporting needs attention for %s: %s", root, view.error)
-            self._startup_status(
-                "Saved reports need attention. "
-                "Open Data Sharing & Comparison in the affected project."
+            self._startup_notices[root] = StartupReportNotice(
+                root, "Waiting for connection. Studio will retry on its next launch.",
             )
+        elif view.error:
+            _LOGGER.warning("Startup reporting needs attention for %s: %s", root, view.error)
+            self._startup_notices[root] = StartupReportNotice(root, view.error)
         elif view.pending_count:
-            if not self._startup_problem:
-                self._startup_status(
-                    "Saved reports are pending. Studio will retry on its next launch."
-                )
-            self._startup_problem = True
+            self._startup_notices[root] = StartupReportNotice(
+                root, "Saved reports are pending. Studio will retry on its next launch.",
+            )
 
     def _current(self, window: StudioMainWindow) -> bool:
         return (
@@ -396,11 +399,10 @@ class DataSharingController(QObject):
                     assert self._startup_roots is not None
                     self._startup_roots.insert(0, root)
                 elif outcome.error is not None:
-                    self._startup_problem = True
                     _LOGGER.warning("Startup reporting needs attention for %s: %s",
                                     root, outcome.error)
-                    self._startup_status(
-                        "Saved reports need attention. See the Studio log for details."
+                    self._startup_notices[root] = StartupReportNotice(
+                        root, "Could not check saved reports. See the Studio log for details.",
                     )
                 elif self._view is not None:
                     self._report_startup_view(root, self._view)
