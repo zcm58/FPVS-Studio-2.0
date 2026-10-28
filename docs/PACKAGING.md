@@ -59,7 +59,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.5.0`.
+For the current release package, use the PEP 440-compatible package version `2.5.1`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -67,6 +67,8 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
+The [2.5.1 local build record](exec-plans/completed/release-2.5.1.md) tracks the current
+candidate; visible packaged acceptance and publication remain separate.
 The [v2.5.0 release record](exec-plans/completed/release-2.5.0.md) tracks Brain Products
 setup, computer default EEG hardware and visible GUI acceptance.
 The [v2.4.8 release record](exec-plans/completed/release-2.4.8.md) tracks the minor bug
@@ -305,7 +307,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.4.8.exe
+dist\installer\FPVS-Studio-Setup-2.5.1.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
