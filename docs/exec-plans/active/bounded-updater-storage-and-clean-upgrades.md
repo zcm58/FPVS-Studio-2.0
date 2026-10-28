@@ -17,6 +17,7 @@ both palettes and existing busy/error states. Safe verification passed: 52 updat
 unit cases, GUI focused (95), docs focused (10), changed-file Ruff/compilation and
 mypy over 245 source files. Registered Qt and visible verification remain unrun.
 The manual smoke path is in [GUI workflow](../../GUI_WORKFLOW.md#gui-test-guidance).
+The fix is published in [Studio 2.5.3](../completed/release-2.5.3.md).
 
 ## Installed 2.4.7 handoff failure (October 26, 2026)
 

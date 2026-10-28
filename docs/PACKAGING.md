@@ -69,7 +69,7 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
-The [2.5.3 release record](exec-plans/active/release-2.5.3.md) tracks the updater
+The [2.5.3 release record](exec-plans/completed/release-2.5.3.md) tracks the updater
 release-note bullet formatting fix and compact notes.
 The [2.5.2 release record](exec-plans/completed/release-2.5.2.md) tracks the Library GUI
 cleanup, restored report versions and simplified ActiveThree labels.
