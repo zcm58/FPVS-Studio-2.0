@@ -151,7 +151,8 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert "eight output switches to PC" in dialog.guidance_label.toolTip()
         assert dialog.apply_button.isEnabled()
     elif backend == "biosemi_active_three":
-        assert "128-electrode" in dialog.guidance_label.toolTip()
+        assert dialog.backend_combo.currentText() == "BioSemi ActiveThree"
+        assert "USB Trigger Interface" in dialog.guidance_label.toolTip()
         assert dialog.apply_button.isEnabled()
     elif backend not in (None, "serial"):
         assert dialog.backend_combo.currentData() == backend
@@ -970,7 +971,7 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
     [
         (None, 1000, "Recording Device: BioSemi ActiveTwo"),
         ("serial", 1000, "Recording Device: BioSemi ActiveTwo"),
-        ("biosemi_active_three", 1000, "Recording Device: BioSemi ActiveThree (128 electrodes)"),
+        ("biosemi_active_three", 1000, "Recording Device: BioSemi ActiveThree"),
         (
             "brainproducts_triggerbox", 1000,
             "Recording Device: Brain Products / BrainVision (TriggerBox/Plus)",

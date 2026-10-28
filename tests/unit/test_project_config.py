@@ -120,7 +120,7 @@ def test_hardware_registry_does_not_allow_mapping_mutation_or_unknown_choices():
 
 
 @pytest.mark.parametrize("backend,label", [
-    ("biosemi_active_three", "BioSemi ActiveThree (128 channels)"),
+    ("biosemi_active_three", "BioSemi ActiveThree"),
     ("brainproducts_triggerbox", "Brain Products / BrainVision (TriggerBox/Plus)"),
 ])
 def test_new_hardware_declares_selection_without_inventing_toolbox_profile(backend, label):

@@ -163,7 +163,7 @@ def recording_backend_label(options: Mapping[str, object] | None = None) -> str:
             f"({values.get('brainproducts_pulse_width_ms', 10)} ms pulse)"
         )
     name = (
-        "BioSemi ActiveThree (128 electrodes) serial"
+        "BioSemi ActiveThree serial"
         if (options or {}).get("recording_backend") == "biosemi_active_three"
         else "BioSemi serial"
     )

@@ -93,7 +93,7 @@ Recent completion: [GUI responsiveness during authoring and project discovery](e
 reuse; safe verification passed, with visible GUI acceptance still documented).
 
 Recent completion: [ActiveThree and Brain Products recording support](exec-plans/completed/additional-eeg-hardware.md)
-(ActiveThree 128 via BioSemi serial and TriggerBox/Plus via pulse/reset adapter;
+(ActiveThree via BioSemi serial and TriggerBox/Plus via pulse/reset adapter;
 hardware/visible qualification and unprofiled Toolbox montage support remain separate).
 
 Recent completion: [UI action discovery and condition navigation](exec-plans/completed/ui-action-discovery.md)

@@ -47,7 +47,7 @@ _HOME_HERO_MIN_HEIGHT = 328
 # Add display names here as new recording backends become supported.
 _HOME_RECORDING_DEVICE_NAMES = {
     "serial": "BioSemi ActiveTwo",
-    "biosemi_active_three": "BioSemi ActiveThree (128 electrodes)",
+    "biosemi_active_three": "BioSemi ActiveThree",
     "brainproducts_triggerbox": "Brain Products / BrainVision (TriggerBox/Plus)",
     "unicorn_udp": "Unicorn Black Mobile Headset",
 }

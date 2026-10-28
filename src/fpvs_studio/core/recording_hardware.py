@@ -56,7 +56,7 @@ _HARDWARE = (
         ),
     ),
     RecordingHardwareDefinition(
-        label="BioSemi ActiveThree (128 channels)", recording_backend="biosemi_active_three",
+        label="BioSemi ActiveThree", recording_backend="biosemi_active_three",
     ),
     RecordingHardwareDefinition(
         label="Brain Products / BrainVision (TriggerBox/Plus)",

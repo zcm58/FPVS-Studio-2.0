@@ -49,7 +49,7 @@ _LOGGER = logging.getLogger(__name__)
 
 RECORDING_HARDWARE_CHOICES = (
     ("BioSemi ActiveTwo", "serial"),
-    ("BioSemi ActiveThree (128 electrodes)", "biosemi_active_three"),
+    ("BioSemi ActiveThree", "biosemi_active_three"),
     ("Brain Products / BrainVision (TriggerBox/Plus)", "brainproducts_triggerbox"),
     ("Unicorn Hybrid Black", "unicorn_udp"),
 )
@@ -181,7 +181,7 @@ class RecordingSetupDialog(QDialog):
         self.backend_combo = QComboBox(self)
         self.backend_combo.setObjectName("recording_backend_combo")
         self.backend_combo.addItem("BioSemi ActiveTwo (serial)", "serial")
-        self.backend_combo.addItem("BioSemi ActiveThree (128 electrodes)", "biosemi_active_three")
+        self.backend_combo.addItem("BioSemi ActiveThree", "biosemi_active_three")
         self.backend_combo.addItem(
             "Brain Products / BrainVision (TriggerBox/Plus)", "brainproducts_triggerbox",
         )
@@ -601,7 +601,7 @@ class RecordingSetupDialog(QDialog):
             detail = (
                 "ActiveThree uses BioSemi's compatible USB Trigger Interface and the "
                 "current project's serial port/baud settings. Verify interface wiring, "
-                "recorded markers and physical timing with the 128-electrode system. "
+                "recorded markers and physical timing with your system. "
                 "Studio sends triggers; BioSemi software owns EEG recording."
                 if selected == "biosemi_active_three" else ""
             )

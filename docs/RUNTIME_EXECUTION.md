@@ -288,7 +288,7 @@ that downstream EEG/status-channel cabling is physically correct.
 
 ### BioSemi ActiveThree and Brain Products TriggerBox
 
-Settings > Recording also offers BioSemi ActiveThree (128 electrodes) and Brain
+Settings > Recording also offers BioSemi ActiveThree and Brain
 Products TriggerBox / TriggerBox Plus. The selected identities are
 `biosemi_active_three` and `brainproducts_triggerbox`; Test/Pilot always resolves
 either to null output. No adapter starts or stops vendor EEG acquisition.
@@ -556,7 +556,7 @@ optional metadata. `toolbox.handoff_schema_version` is `"1.0"`.
 | BioSemi ActiveTwo 64 | `biosemi_active_two_64` / `biosemi64` / `biosemi_edge` | `biosemi_exg_pair_then_average` |
 | Unicorn Hybrid Black | `unicorn_hybrid_black` / `unicorn8` / `unicorn_sample` | `average_scalp` |
 
-ActiveThree 128 and Brain Products TriggerBox selections currently declare no
+ActiveThree and Brain Products TriggerBox selections currently declare no
 Toolbox acquisition profile. Completed configs preserve their exact selected hardware
 and marker evidence with an absent profile; Toolbox must support/configure the actual
 montage and decoder before analysis. Studio never substitutes ActiveTwo 64 metadata

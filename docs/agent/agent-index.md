@@ -132,7 +132,7 @@ engine consumers remain in `runtime/task_runner.py` and `engines/psychopy_tasks.
 Use runtime/engine focused checks and `tests/unit/test_runtime_tasks.py` when changing
 its integer precision or step tolerance; schema validation remains separate.
 
-For ActiveThree 128 and Brain Products TriggerBox support, start with
+For ActiveThree and Brain Products TriggerBox support, start with
 `core/recording_hardware.py`, `runtime/recording.py`, `triggers/brainproducts_backend.py`
 and `gui/recording_dialog.py`. Runtime owns pulse-spacing preflight and condition-boundary
 draining; no sleeps or reset scheduling enter compiled timing. Use triggers/runtime/gui

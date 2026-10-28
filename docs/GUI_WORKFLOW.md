@@ -221,7 +221,7 @@ folder picker. Canceling the picker returns to the setup dialog; choosing
 
 After the root is configured, a `Default EEG Hardware` picker asks: "Please select
 your default EEG hardware. You can change this choice later." It lists BioSemi
-ActiveTwo, BioSemi ActiveThree (128 electrodes), Brain Products TriggerBox / Plus,
+ActiveTwo, BioSemi ActiveThree, Brain Products TriggerBox / Plus,
 and Unicorn Hybrid Black. Continue requires an explicit choice. The picker is
 `640x300` at minimum/default size and uses no hardware probes. Existing installations
 without this preference also see it once, after their saved root is validated.
@@ -788,8 +788,8 @@ requires typing `Confirm` before the runtime task starts; cancelling that check 
 to FPVS Studio without starting the experiment.
 
 Project recording configuration is validated before participant collection. **Settings > Recording >
-Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree
-(128 electrodes), Brain Products / BrainVision (TriggerBox/Plus), or Unicorn Recorder
+Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree,
+Brain Products / BrainVision (TriggerBox/Plus), or Unicorn Recorder
 UDP choice. Unicorn exposes its loopback port; BioSemi exposes an editable serial-port
 selector; Brain Products exposes an editable detected-port list, amplifier, EEG
 sampling rate and pulse width. Apply atomically saves `settings.recording` and, for
@@ -813,7 +813,7 @@ Setup…** creates an override, and **Use Computer Default** clears only that fi
 on disk while preserving other saved values and open drafts. Summaries distinguish
 inheritance from an override. Cancel and failed saves retain the previous choice.
 Home shows a centered `Recording Device: <selected device>` immediately above Launch
-Experiment, including the ActiveThree 128-electrode and TriggerBox/Plus identities.
+Experiment, including the ActiveThree and TriggerBox/Plus identities.
 Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
 backends are added. The existing effective transport, endpoint and Recorder-check
 details remain in the label's tooltip and accessible description; Run retains its
