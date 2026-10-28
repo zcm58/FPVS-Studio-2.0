@@ -113,6 +113,47 @@ def test_feature_controller_never_collects_logs(qtbot, qapp, tmp_path, monkeypat
     controller.deleteLater()
 
 
+@pytest.mark.parametrize("kind", ["bug", "feature"])
+@pytest.mark.parametrize("delivery", ["editing", "uncertain", "received", "submitted"])
+def test_restored_report_version_matches_editability(
+    qtbot, qapp, tmp_path, monkeypatch, kind, delivery,
+):
+    monkeypatch.setattr(module, "__version__", "2.5.1")
+    monkeypatch.setattr(module, "update_lifecycle", lambda _app: FakeLifecycle())
+    monkeypatch.setattr(module, "collect_diagnostics", lambda _root: pytest.fail("Replaced logs"))
+    saved = Draft(
+        report=Report(
+            kind=kind, app_version="2.4.8", title="Saved report", happened="Original text",
+            diagnostics="Reviewed logs", os_version="Windows 11",
+        ),
+        delivery=delivery,
+        include_logs=kind == "bug",
+    )
+    DraftStore(tmp_path, kind=kind).save(saved)
+    controller = module.BugReportController(
+        qapp, root=tmp_path, kind=kind, client=ReportClient(),
+    )
+    controller.show()
+    qtbot.addWidget(controller.dialog)
+    controller._job.complete()
+    dialog = controller.dialog
+    expected_version = "2.5.1" if delivery == "editing" else "2.4.8"
+    assert dialog.metadata_label.text() == f"FPVS Studio {expected_version} · Windows 11"
+    restored = dialog.snapshot()
+    expected = saved.model_copy(deep=True)
+    expected.report.app_version = expected_version
+    assert restored.report.payload() == expected.report.payload()
+    assert restored.receipt_token == saved.receipt_token
+    assert restored.delivery == delivery
+    controller._autosave.stop()
+    controller._save_draft()
+    controller._job.complete()
+    assert controller.store().load_latest().report.app_version == expected_version
+    controller._dirty = False
+    dialog.close()
+    controller.deleteLater()
+
+
 @pytest.fixture
 def reporter(qtbot, qapp, tmp_path, monkeypatch):
     monkeypatch.setattr(module, "update_lifecycle", lambda _app: FakeLifecycle())

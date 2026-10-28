@@ -131,6 +131,9 @@ existing reporter with its full error details attached. A fresh report has its
 summary and description filled in; a quick note about reproduction is optional.
 Opening either entry point collects locally and never submits automatically.
 Repeated menu clicks raise the same dialog and preserve its existing draft.
+After an upgrade, restored editable drafts use the running Studio version in the
+dialog, copied/saved text, and submitted payload. Receipt-locked reports retain
+their recorded version and exact payload for status recovery.
 
 Required fields: summary and what happened. Reproduction steps, expected behavior,
 and reply email are optional. Unknown reproduction steps have an explicit option.

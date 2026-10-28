@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import logging
 import os
 import stat
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +22,119 @@ from fpvs_studio.support.diagnostics import (
 )
 from fpvs_studio.support.models import MAX_LOG_BYTES, Draft, Report
 from fpvs_studio.support.storage import DraftStore, export_report
+
+
+@pytest.fixture
+def load_report_draft():
+    """Run the real controller load path without importing Qt or a transport."""
+    source = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/bug_report_controller.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    controller = next(
+        node for node in tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "BugReportController"
+    )
+    method = next(
+        node for node in controller.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_load"
+    )
+    module = ast.Module(body=[
+        ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+        method,
+    ], type_ignores=[])
+    collections = []
+    namespace = {
+        "__version__": "2.5.1",
+        "collect_diagnostics": lambda root: collections.append(root) or "Synthetic logs",
+    }
+    exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
+
+    def load(store, kind):
+        context = SimpleNamespace(
+            store=lambda: store,
+            kind=kind,
+            _empty_draft=lambda: Draft(
+                report=Report(kind=kind, app_version="2.5.1"), include_logs=kind == "bug"
+            ),
+        )
+        return namespace["_load"](context, Event())
+
+    return load, collections
+
+
+@pytest.mark.parametrize("kind", ["bug", "feature"])
+@pytest.mark.parametrize("include_logs", [False, True])
+def test_editable_saved_report_uses_current_version_without_losing_draft(
+    tmp_path, load_report_draft, kind, include_logs,
+):
+    load, collections = load_report_draft
+    store = DraftStore(tmp_path, kind=kind)
+    store.save(Draft(
+        report=Report(
+            kind=kind, app_version="2.4.8", os_version="Synthetic OS",
+            title="Saved summary", happened="Saved description", steps="Saved steps",
+            expected="Saved expectation", email="reporter@example.test",
+            diagnostics="Previously reviewed logs",
+        ),
+        include_logs=include_logs, service_url="https://reports.example.test",
+    ))
+    before = store.load_latest()
+    loaded, fresh = load(store, kind)
+
+    expected = before.model_dump()
+    expected["report"]["app_version"] = "2.5.1"
+    assert not fresh
+    assert loaded.model_dump() == expected
+    assert json.loads(loaded.report.payload())["app_version"] == "2.5.1"
+    assert "Application\n2.5.1" in loaded.report.as_text()
+    assert collections == []
+    store.save(loaded)
+    persisted = store.load_latest()
+    assert persisted.model_dump(exclude={"updated_at"}) == loaded.model_dump(
+        exclude={"updated_at"}
+    )
+
+
+@pytest.mark.parametrize("kind", ["bug", "feature"])
+@pytest.mark.parametrize("delivery", ["uncertain", "received", "submitted"])
+def test_locked_saved_report_preserves_version_payload_and_receipt(
+    tmp_path, load_report_draft, kind, delivery,
+):
+    load, collections = load_report_draft
+    store = DraftStore(tmp_path, kind=kind)
+    store.save(Draft(
+        report=Report(
+            kind=kind, app_version="2.4.8", title="Saved summary",
+            happened="Submitted description", diagnostics="Reviewed logs",
+        ),
+        delivery=delivery, include_logs=False, service_url="https://reports.example.test",
+    ))
+    before = store.load_latest()
+    loaded, fresh = load(store, kind)
+
+    assert not fresh
+    assert loaded.model_dump() == before.model_dump()
+    assert loaded.report.payload() == before.report.payload()
+    assert loaded.report.digest(include_logs=False) == before.report.digest(include_logs=False)
+    assert collections == []
+    assert store.load_latest().model_dump() == before.model_dump()
+
+
+@pytest.mark.parametrize("kind", ["bug", "feature"])
+def test_fresh_report_keeps_current_version_and_collects_only_bug_logs(
+    tmp_path, load_report_draft, kind,
+):
+    load, collections = load_report_draft
+    store = DraftStore(tmp_path, kind=kind)
+    loaded, fresh = load(store, kind)
+
+    assert fresh
+    assert loaded.report.app_version == "2.5.1"
+    assert loaded.report.kind == kind
+    assert loaded.delivery == "editing"
+    assert loaded.report.diagnostics == ("Synthetic logs" if kind == "bug" else "")
+    assert loaded.include_logs == (kind == "bug")
+    assert collections == ([tmp_path] if kind == "bug" else [])
+    assert store.load_latest() is None
 
 
 @pytest.mark.parametrize(

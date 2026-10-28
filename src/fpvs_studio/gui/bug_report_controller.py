@@ -12,6 +12,7 @@ from PySide6.QtCore import QObject, Qt, QTimer, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication
 
+from fpvs_studio import __version__
 from fpvs_studio.gui.report_bug_dialog import ReportBugDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.support.client import Receipt, ReportClient, ReportServiceError
@@ -114,6 +115,9 @@ class BugReportController(QObject):
             draft = self._empty_draft()
             if self.kind == "bug":
                 draft.report.diagnostics = collect_diagnostics(store.root)
+        if not draft.locked:
+            # Resumed drafts describe this app; receipt-bound payloads must stay exact.
+            draft.report.app_version = str(__version__)
         return draft, fresh
 
     def _loaded_result(self, value: object) -> None:
