@@ -67,7 +67,7 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [2.5.2 release record](exec-plans/active/release-2.5.2.md) tracks the Library GUI
+The [2.5.2 release record](exec-plans/completed/release-2.5.2.md) tracks the Library GUI
 cleanup, restored report versions and simplified ActiveThree labels.
 The [2.5.1 release record](exec-plans/completed/release-2.5.1.md) tracks the previous
 published full installer, signed assets and updater checks; visible packaged
