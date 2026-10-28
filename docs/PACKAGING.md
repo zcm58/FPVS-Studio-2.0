@@ -67,8 +67,9 @@ Write release notes as bullet points, with one or two sentences per major change
 Keep verification summaries and installer instructions out of the release notes;
 retain audit evidence and check boundaries in the release record instead.
 
-The [2.5.1 local build record](exec-plans/completed/release-2.5.1.md) tracks the current
-candidate; visible packaged acceptance and publication remain separate.
+The [2.5.1 release record](exec-plans/completed/release-2.5.1.md) tracks the current
+published full installer, signed assets and updater checks; visible packaged
+acceptance remains separately documented.
 The [v2.5.0 release record](exec-plans/completed/release-2.5.0.md) tracks Brain Products
 setup, computer default EEG hardware and visible GUI acceptance.
 The [v2.4.8 release record](exec-plans/completed/release-2.4.8.md) tracks the minor bug
