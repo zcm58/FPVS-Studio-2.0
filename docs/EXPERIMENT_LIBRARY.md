@@ -240,18 +240,24 @@ or unavailable service states do not block project opening or claim the project 
 
 The dialog shows the installed and latest versions, release description and minimum
 Studio version. **Keep current version** closes review without downloading, changing
-the experiment or turning off future checks. **Download new version separately** uses
+the experiment or turning off future checks. **Download separately** uses
 the existing verified download,
 bundle review, Save/Discard/Cancel guards and display-settings review. The current
 project's setup, local edits, logs and participant data stay in its existing folder;
 the imported project gets its own collision-safe folder and version record. A newer
 release requiring a newer Studio build remains visible with installation disabled.
-The review always shows this conditional warning, without scanning participant data:
+When a download is available, the review shows concise guidance without scanning
+participant data:
 
-> Warning: updating this experiment after data collection has already begun may not
-> be advised. If you're considering updating, please first download this experiment
-> under a different folder and investigate its changes before using this in your
-> ongoing study.
+> If data collection has started, review changes before switching versions.
+> Downloads open as separate projects; current edits and participant data stay here.
+
+Detailed review/preservation guidance is available through the download control's
+tooltip and accessible description. Unlinked projects show the linking fields without
+disabled automatic-check settings or an instructional release-notes box. Actual
+release details appear after selection or checking; empty status rows stay hidden.
+The Library browser keeps experiment descriptions, metadata, access restrictions,
+installation state and errors, with routine explanations moved to control help.
 
 Condition changes are reviewed as part of the whole experiment version, with its
 settings and assets. The user decides whether to adopt the separate project after
@@ -777,7 +783,7 @@ In an approved visible session, check both themes, display scaling, long titles 
 descriptions, empty/error/disconnected/busy states, keyboard navigation, and all controls
 at these sizes. Exercise root-picker and Save cancellation, download Cancel/Close/Escape,
 Already installed, Review update and Review existing project with long installed paths,
-the collection warning and **Keep current version** / **Download new version separately**,
+the collection warning and **Keep current version** / **Download separately**,
 refresh after an external import, and an older project with the latest version already
 installed beside it. Confirm all duplicate paths transfer no payload bytes. Exercise
 extraction cancellation, late commit, app quit and a revoked credential. Existing local

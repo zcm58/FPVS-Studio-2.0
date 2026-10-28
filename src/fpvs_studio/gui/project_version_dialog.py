@@ -22,6 +22,16 @@ from PySide6.QtWidgets import (
 from fpvs_studio.gui.components import DialogHeader, apply_dialog_theme, mark_primary_action
 from fpvs_studio.library.models import LibraryItem
 
+_UPDATE_GUIDANCE = (
+    "If data collection has started, review changes before switching versions.\n"
+    "Downloads open as separate projects; current edits and participant data stay here."
+)
+_UPDATE_DETAILS = (
+    "Download the new version into a separate folder and review its changes before "
+    "using it in an ongoing study. Your current project's edits and participant data "
+    "stay in the existing folder."
+)
+
 
 class ProjectVersionDialog(QDialog):
     """Collect explicit user actions; the app-owned controller performs all work."""
@@ -43,8 +53,8 @@ class ProjectVersionDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(6)
-        self.header = DialogHeader("Project versions", project_name, parent=self)
-        self.header.subtitle_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.header = DialogHeader(project_name, "", parent=self)
+        self.header.subtitle_label.hide()
         layout.addWidget(self.header)
         self.versions_label = QLabel(self)
         self.versions_label.setObjectName("project_version_summary")
@@ -53,7 +63,7 @@ class ProjectVersionDialog(QDialog):
         self.versions_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.versions_label)
         self.auto_check_checkbox = QCheckBox(
-            "Check for library updates when this project opens", self,
+            "Check for updates on open", self,
         )
         self.auto_check_checkbox.setObjectName("project_version_auto_check")
         self.auto_check_checkbox.clicked.connect(
@@ -72,12 +82,6 @@ class ProjectVersionDialog(QDialog):
         form = QFormLayout(self.link_panel)
         form.setContentsMargins(0, 0, 0, 0)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        self.link_help = QLabel(
-            "Choose the library experiment this project came from. Enter its installed version "
-            "only if you know it; a blank version is recorded as unknown.", self.link_panel,
-        )
-        self.link_help.setWordWrap(True)
-        form.addRow(self.link_help)
         self.link_combo = QComboBox(self.link_panel)
         self.link_combo.setObjectName("project_version_link_item")
         self.link_combo.setMinimumWidth(0)
@@ -87,7 +91,10 @@ class ProjectVersionDialog(QDialog):
         form.addRow("Library experiment", self.link_combo)
         self.installed_version_edit = QLineEdit(self.link_panel)
         self.installed_version_edit.setObjectName("project_version_installed_version")
-        self.installed_version_edit.setPlaceholderText("Unknown — leave blank")
+        self.installed_version_edit.setPlaceholderText("Unknown")
+        version_help = "Leave blank if the installed Library version is unknown."
+        self.installed_version_edit.setToolTip(version_help)
+        self.installed_version_edit.setAccessibleDescription(version_help)
         self.installed_version_edit.setMaxLength(64)
         self.link_button = QPushButton("Link this project", self.link_panel)
         self.link_button.setObjectName("project_version_link_button")
@@ -100,17 +107,16 @@ class ProjectVersionDialog(QDialog):
 
         self.details = QTextEdit(self)
         self.details.setObjectName("project_version_details")
+        self.details.setAccessibleName("Library version details")
         self.details.setReadOnly(True)
         self.details.setMinimumHeight(72)
         layout.addWidget(self.details, 1)
-        self.preservation_label = QLabel(
-            "Warning: updating this experiment after data collection has already begun may not be "
-            "advised. If you’re considering updating, please first download this experiment under "
-            "a different folder and investigate its changes before using this in your ongoing "
-            "study.\n"
-            "The new version opens as a separate project. Your current project's edits and "
-            "participant data stay in the existing folder.", self,
-        )
+        self._details_layout = layout
+        self._empty_details_index = layout.count()
+        layout.addStretch(1)
+        self.preservation_label = QLabel(_UPDATE_GUIDANCE, self)
+        self.preservation_label.setToolTip(_UPDATE_DETAILS)
+        self.preservation_label.setAccessibleDescription(_UPDATE_DETAILS)
         self.preservation_label.setTextFormat(Qt.TextFormat.PlainText)
         self.preservation_label.setWordWrap(True)
         self.preservation_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
@@ -119,14 +125,15 @@ class ProjectVersionDialog(QDialog):
         self.status_label.setObjectName("project_version_status")
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_label.setWordWrap(True)
-        self.status_label.setMinimumHeight(24)
         layout.addWidget(self.status_label)
         buttons = QHBoxLayout()
-        self.check_button = QPushButton("Check for new version", self)
+        self.check_button = QPushButton("Check for updates", self)
         self.check_button.setObjectName("project_version_check_button")
         self.check_button.clicked.connect(lambda: self.action_requested.emit("check"))
-        self.install_button = QPushButton("Download new version separately", self)
+        self.install_button = QPushButton("Download separately", self)
         self.install_button.setObjectName("project_version_install_button")
+        self.install_button.setToolTip(_UPDATE_DETAILS)
+        self.install_button.setAccessibleDescription(_UPDATE_DETAILS)
         self.install_button.clicked.connect(lambda: self.action_requested.emit("install"))
         mark_primary_action(self.install_button)
         self.cancel_button = QPushButton("Cancel", self)
@@ -155,15 +162,15 @@ class ProjectVersionDialog(QDialog):
         current = installed_version or ("Unknown" if linked else "Not linked")
         newest = latest.version if latest is not None else "Not checked"
         self.versions_label.setText(
-            f"Installed library version: {current}\nLatest version: {newest}"
+            f"Installed: {current}\nLatest: {newest}"
         )
         self.auto_check_checkbox.setChecked(auto_check)
         self.link_panel.setVisible(not linked or installed_version is None)
         self.details.setPlainText(
-            f"{latest.title}\nVersion {latest.version}\n"
+            f"{latest.title}\n"
             f"Requires FPVS Studio {latest.min_studio_version} or later.\n\n{latest.description}"
             if latest is not None else
-            "Check the library to see the newest available version and its description."
+            ""
         )
         self.status_label.setText(status)
         self._update_controls()
@@ -174,13 +181,13 @@ class ProjectVersionDialog(QDialog):
         self.link_panel.show()
         self.installed_version_edit.clear()
         self.link_combo.setCurrentIndex(0)
-        self.details.setPlainText("Choose the library experiment to link to this project.")
-        self.status_label.setText("Choose the correct experiment, then link this project.")
+        self.details.clear()
+        self.status_label.clear()
         self._update_controls()
 
     def set_link_items(self, items: Sequence[LibraryItem]) -> None:
         self.link_combo.clear()
-        self.link_combo.addItem("Choose a library experiment", None)
+        self.link_combo.addItem("Select experiment", None)
         for item in items:
             label = f"{item.title} — {item.version} ({item.item_id})"
             self.link_combo.addItem(label, item)
@@ -213,18 +220,27 @@ class ProjectVersionDialog(QDialog):
 
     def _link_selection_changed(self, *_args: object) -> None:
         item = self.selected_link_item()
-        self.link_combo.setToolTip(f"{item.title} ({item.item_id})" if item else "")
-        if (not self._linked or self._linking) and item is not None:
+        link_help = "Choose the Library experiment this project came from."
+        self.link_combo.setToolTip(f"{item.title} ({item.item_id})" if item else link_help)
+        self.link_combo.setAccessibleDescription(link_help)
+        if not self._linked or self._linking:
             self.details.setPlainText(
                 f"{item.title}\nLibrary version {item.version}\n\n{item.description}"
+                if item is not None else ""
             )
         self._update_controls()
 
     def _update_controls(self) -> None:
+        has_details = bool(self.details.toPlainText())
+        self.details.setVisible(has_details)
+        self._details_layout.setStretch(self._empty_details_index, 0 if has_details else 1)
+        self.preservation_label.setVisible(self._can_install and not self._linking)
+        self.status_label.setVisible(bool(self.status_label.text()))
         self.check_button.setEnabled(not self._busy)
         self.install_button.setEnabled(not self._busy and self._can_install and not self._linking)
         self.auto_check_checkbox.setEnabled(not self._busy and self._linked)
-        self.relink_button.setVisible(self._linked)
+        self.auto_check_checkbox.setVisible(self._linked and not self._linking)
+        self.relink_button.setVisible(self._linked and not self._linking)
         self.relink_button.setEnabled(not self._busy)
         self.link_combo.setEnabled(not self._busy)
         self.installed_version_edit.setEnabled(not self._busy)

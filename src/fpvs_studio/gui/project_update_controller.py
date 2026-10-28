@@ -372,7 +372,7 @@ class ProjectUpdateController(QObject):
         if result.status == "unlinked":
             return (
                 (result.message or "This project has no Library version record.")
-                + " Connect through View > Experiment Library if needed, then link it below."
+                + " Connect in View > Experiment Library if needed."
             )
         if result.status == "disabled":
             return "Automatic project version checks are off."

@@ -157,10 +157,7 @@ class LibraryController(QObject):
         self._view().set_installations(projects, self.client.service_url)
         self._view().set_catalog(catalog)
         self._view().status_label.setText(
-            "View-only access. Browse experiment details; downloads are not permitted."
-            if catalog.access_level == "view"
-            else "Select an experiment to review its contents."
-            if catalog.items
+            "" if catalog.items
             else "Your lab has not published any experiments yet."
         )
 

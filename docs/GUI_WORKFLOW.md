@@ -194,8 +194,11 @@ Home notice. **File > Update Project Version...** also checks manually, controls
 checks on open, and links earlier downloads explicitly. Installing a newer version
 opens a separate project through ordinary import review; local edits and participant
 data stay in the current project. Review explains the risk of changing an experiment
-after collection begins and offers **Keep current version** or **Download new version
-separately**. Keeping the version leaves automatic checks enabled according to the
+after collection begins and offers **Keep current version** or **Download separately**.
+The warning is concise and shown with an eligible download; detailed preservation
+guidance remains in control help. Linking and empty states avoid instructional
+release-note text and disabled automatic-check controls. Keeping the version leaves
+automatic checks enabled according to the
 existing preference. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
 
 Library jobs use the application-owned coordinator. Close/Escape/cancel drain transfers;

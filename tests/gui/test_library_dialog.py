@@ -114,6 +114,7 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     QApplication.processEvents()
     assert (dialog.width(), dialog.height()) == size
     assert_visible_children_within_parent(dialog)
+    assert not dialog.header.subtitle_label.isVisible()
     for button in dialog.findChildren(QPushButton):
         if button.isVisible():
             assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
@@ -123,6 +124,13 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     if state in ("ready", "busy", "error"):
         assert item.title in dialog.details.toPlainText()
         assert item.description in dialog.item_list.item(0).toolTip()
+        assert "Project files: 3" in dialog.details.toPlainText()
+        assert "Minimum FPVS Studio: 1.0.0" in dialog.details.toPlainText()
+        assert "Compatible with this Studio version" not in dialog.details.toPlainText()
+        assert "This experiment is not installed" not in dialog.details.toPlainText()
+        assert "Review display, timing and triggers" not in dialog.details.toPlainText()
+        assert "Creates a separate project" in dialog.install_button.toolTip()
+        assert dialog.install_button.accessibleDescription() == dialog.install_button.toolTip()
     if state == "busy":
         assert dialog.progress_bar.value() == 50
         assert not dialog.install_button.isEnabled()
@@ -139,12 +147,18 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
         assert "not permitted" in dialog.install_button.toolTip()
         assert "View-only" in dialog.connection_label.text()
         assert "Research laboratory name " * 4 in dialog.connection_label.text()
-        assert "View-only" in dialog.details.toPlainText()
+        assert "View-only" not in dialog.details.toPlainText()
         assert dialog.refresh_button.isEnabled()
         assert dialog.search_edit.isEnabled()
     elif state == "disconnected":
-        assert "reusable lab code" in dialog.connection_label.text()
-        assert "No account or email" in dialog.connection_label.text()
+        assert dialog.connection_label.text() == "Enter your lab code to connect."
+        assert "reusable lab code" in dialog.code_edit.toolTip()
+        assert "No account or email" in dialog.code_edit.toolTip()
+        assert dialog.code_edit.accessibleDescription() == dialog.code_edit.toolTip()
+    if state in {"installed", "update", "review"}:
+        installed = dialog.selected_installation()
+        assert installed is not None
+        assert installed.message in dialog.details.toPlainText()
 
 
 def test_catalog_permission_overrides_saved_access_and_refreshes_actions(qtbot) -> None:
@@ -168,7 +182,22 @@ def test_catalog_permission_overrides_saved_access_and_refreshes_actions(qtbot) 
     assert dialog.can_download
     assert "Download access" in dialog.connection_label.text()
     assert "View-only" not in dialog.details.toPlainText()
-    assert dialog.install_button.toolTip() == ""
+    assert "Creates a separate project" in dialog.install_button.toolTip()
+
+
+def test_library_details_keep_installation_check_until_it_finishes(qtbot) -> None:
+    dialog = LibraryDialog()
+    qtbot.addWidget(dialog)
+    dialog.set_connection(_connection())
+    dialog.set_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Research", items=[_item()],
+    ))
+    assert "Checking installed experiments" in dialog.details.toPlainText()
+    assert not dialog.install_button.isEnabled()
+    dialog.set_installations((), "https://library.example.test")
+    assert "Checking installed experiments" not in dialog.details.toPlainText()
+    assert "This experiment is not installed" not in dialog.details.toPlainText()
+    assert dialog.install_button.isEnabled()
 
 
 def test_library_rechecks_installation_before_any_download(qapp, qtbot, monkeypatch, tmp_path):
@@ -374,7 +403,8 @@ def test_view_only_catalog_blocks_programmatic_install(qapp, qtbot, monkeypatch,
     )
     client.access_level = "view"
     _enroll(controller, qtbot)
-    assert "View-only" in controller.dialog.status_label.text()
+    assert "View-only" in controller.dialog.connection_label.text()
+    assert controller.dialog.status_label.text() == ""
     assert not controller.dialog.install_button.isEnabled()
     assert controller.dialog.refresh_button.isEnabled()
     controller._action("install")

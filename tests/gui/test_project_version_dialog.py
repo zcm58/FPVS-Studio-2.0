@@ -13,10 +13,9 @@ from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
 from fpvs_studio.library.models import LibraryItem
 
-_UPDATE_WARNING = (
-    "Warning: updating this experiment after data collection has already begun may not be "
-    "advised. If you’re considering updating, please first download this experiment under "
-    "a different folder and investigate its changes before using this in your ongoing study."
+_SHORT_UPDATE_WARNING = (
+    "If data collection has started, review changes before switching versions.\n"
+    "Downloads open as separate projects; current edits and participant data stay here."
 )
 
 
@@ -50,9 +49,8 @@ def _fit(widget) -> None:
     ],
 )
 def test_project_version_states_fit_and_preserve_full_description(qtbot, size, state):
-    dialog = ProjectVersionDialog(
-        "Long local project name with individually authored settings " * 2,
-    )
+    project_name = "Long local project name with individually authored settings " * 2
+    dialog = ProjectVersionDialog(project_name)
     qtbot.addWidget(dialog)
     item = _item(title="Long experiment name " * 7, description="Protocol details. " * 200)
     dialog.set_link_items([item])
@@ -83,31 +81,113 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     assert (dialog.width(), dialog.height()) == size
     assert not dialog.isModal()
     assert dialog.install_button.isEnabled() == (state in {"unknown", "update"})
-    assert dialog.status_label.text() == status
-    assert dialog.preservation_label.text().startswith(_UPDATE_WARNING + "\n")
+    assert dialog.header.title_label.text() == project_name
+    assert not dialog.header.subtitle_label.isVisible()
+    assert dialog.status_label.text() == ("" if state == "relink" else status)
+    assert dialog.status_label.isVisible() == (state != "relink")
+    assert dialog.preservation_label.text() == _SHORT_UPDATE_WARNING
     assert dialog.preservation_label.textFormat() == Qt.TextFormat.PlainText
     assert dialog.preservation_label.wordWrap()
-    assert dialog.preservation_label.isVisible()
-    assert dialog.install_button.text() == "Download new version separately"
+    assert dialog.preservation_label.isVisible() == (state in {"unknown", "update", "busy"})
+    for control in (dialog.preservation_label, dialog.install_button):
+        assert control.accessibleDescription() == control.toolTip()
+        assert "separate folder" in control.toolTip()
+        assert "review its changes" in control.toolTip()
+        assert "ongoing study" in control.toolTip()
+        assert "participant data" in control.toolTip()
+    assert dialog.install_button.text() == "Download separately"
+    assert dialog.check_button.text() == "Check for updates"
+    assert dialog.auto_check_checkbox.text() == "Check for updates on open"
+    assert dialog.auto_check_checkbox.isVisible() == (state not in {"unlinked", "relink"})
     assert dialog.close_button.text() == "Keep current version"
     assert dialog.close_button.isVisible() == (state != "busy")
     assert dialog.cancel_button.isVisible() == (state == "busy")
-    assert "separate project" in dialog.preservation_label.text()
+    assert "separate projects" in dialog.preservation_label.text()
     assert "participant data" in dialog.preservation_label.text()
+    assert dialog.details.isReadOnly()
+    assert dialog.details.isVisible() == (state not in {"unlinked", "offline"})
     if state == "relink":
         assert item.description in dialog.details.toPlainText()
         assert dialog.link_panel.isVisible()
-        assert dialog.relink_button.isVisible()
+        assert not dialog.relink_button.isVisible()
     elif state == "unknown":
-        assert "Installed library version: Unknown" in dialog.versions_label.text()
+        assert "Installed: Unknown" in dialog.versions_label.text()
         assert dialog.link_panel.isVisible()
         assert item.description in dialog.details.toPlainText()
     elif state not in {"unlinked", "offline"}:
         assert item.description in dialog.details.toPlainText()
         assert item.min_studio_version in dialog.details.toPlainText()
     else:
+        assert dialog.details.toPlainText() == ""
         dialog.link_combo.setCurrentIndex(1)
         assert item.title in dialog.link_combo.toolTip()
+
+
+def test_unlinked_review_shows_only_link_inputs_until_an_experiment_is_selected(qtbot):
+    dialog = ProjectVersionDialog("Masking")
+    qtbot.addWidget(dialog)
+    item = _item()
+    dialog.set_link_items([item])
+    dialog.show()
+    _fit(dialog)
+
+    assert dialog.versions_label.text() == "Installed: Not linked\nLatest: Not checked"
+    assert dialog.link_panel.isVisible()
+    assert not dialog.auto_check_checkbox.isVisible()
+    assert not dialog.details.isVisible()
+    assert dialog.details.toPlainText() == ""
+    assert not dialog.status_label.isVisible()
+    assert not dialog.preservation_label.isVisible()
+    assert not dialog.link_button.isEnabled()
+    assert dialog.installed_version_edit.placeholderText() == "Unknown"
+    assert dialog.installed_version_edit.accessibleDescription() == (
+        "Leave blank if the installed Library version is unknown."
+    )
+    assert dialog.installed_version_edit.toolTip() == (
+        dialog.installed_version_edit.accessibleDescription()
+    )
+
+    dialog.link_combo.setCurrentIndex(1)
+    _fit(dialog)
+    assert dialog.details.isVisible()
+    assert item.title in dialog.details.toPlainText()
+    assert item.version in dialog.details.toPlainText()
+    assert item.description in dialog.details.toPlainText()
+    assert dialog.link_button.isEnabled()
+
+    dialog.link_combo.setCurrentIndex(0)
+    _fit(dialog)
+    assert not dialog.details.isVisible()
+    assert dialog.details.toPlainText() == ""
+    assert not dialog.link_button.isEnabled()
+
+
+def test_review_retains_error_feedback_and_hides_empty_status_after_refresh(qtbot):
+    dialog = ProjectVersionDialog("Masking")
+    qtbot.addWidget(dialog)
+    dialog.show()
+    error = "Could not contact the Library. Reconnect and check again."
+    dialog.set_state(
+        installed_version="1.0.0", latest=None, linked=True, auto_check=True, status=error,
+    )
+    _fit(dialog)
+    assert dialog.status_label.isVisible()
+    assert dialog.status_label.text() == error
+    assert "Installed: 1.0.0\nLatest: Not checked" == dialog.versions_label.text()
+    assert not dialog.details.isVisible()
+
+    dialog.set_state(
+        installed_version="1.0.0", latest=_item(), linked=True, auto_check=True,
+        can_install=True,
+    )
+    _fit(dialog)
+    assert not dialog.status_label.isVisible()
+    assert dialog.details.isVisible()
+    assert dialog.preservation_label.isVisible()
+    assert dialog.install_button.isEnabled()
+    dialog.clear_install_candidate()
+    assert not dialog.preservation_label.isVisible()
+    assert not dialog.install_button.isEnabled()
 
 
 def test_user_actions_and_unknown_installed_version_are_explicit(qtbot):
@@ -192,7 +272,12 @@ def test_existing_library_link_can_be_replaced_without_guessing(qtbot):
     dialog.set_busy(False)
     dialog.begin_linking()
     assert dialog.link_panel.isVisible()
-    assert "Loading" not in dialog.status_label.text()
+    assert dialog.status_label.text() == ""
+    assert not dialog.status_label.isVisible()
+    assert dialog.details.toPlainText() == ""
+    assert not dialog.details.isVisible()
+    assert not dialog.auto_check_checkbox.isVisible()
+    assert not dialog.relink_button.isVisible()
     assert dialog.selected_link_item() is None
     assert dialog.link_installed_version() is None
     assert not dialog.link_button.isEnabled()

@@ -57,13 +57,9 @@ class LibraryDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(12)
-        layout.addWidget(
-            DialogHeader(
-                "Experiment Library",
-                "Browse experiments and, when permitted, download a copy to review in Setup.",
-                parent=self,
-            )
-        )
+        self.header = DialogHeader("Experiment Library", "", parent=self)
+        self.header.subtitle_label.hide()
+        layout.addWidget(self.header)
         self.connection_label = QLabel("", self)
         self.connection_label.setWordWrap(True)
         self.connection_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -75,7 +71,13 @@ class LibraryDialog(QDialog):
         self.code_edit.setObjectName("library_access_code")
         self.code_edit.setMaxLength(128)
         self.code_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.code_edit.setPlaceholderText("Reusable lab code from your PI")
+        self.code_edit.setPlaceholderText("Lab code")
+        code_guidance = (
+            "Use the reusable lab code shared by your PI or lab manager. "
+            "No account or email is required."
+        )
+        self.code_edit.setToolTip(code_guidance)
+        self.code_edit.setAccessibleDescription(code_guidance)
         self.device_edit = QLineEdit(socket.gethostname()[:80], self.connection_fields)
         self.device_edit.setObjectName("library_device_name")
         self.device_edit.setMaxLength(80)
@@ -186,15 +188,12 @@ class LibraryDialog(QDialog):
     def _sync_connection_label(self) -> None:
         connection = self._connection
         if connection is None:
-            self.connection_label.setText(
-                "Enter the reusable lab code shared by your PI once on this computer. "
-                "No account or email is required."
-            )
+            self.connection_label.setText("Enter your lab code to connect.")
             return
         metadata = self._catalog or connection
         lab = f"\nLab: {metadata.lab_name}" if metadata.lab_name else ""
         permission = (
-            "View-only access: browse experiment details; downloads are not permitted."
+            "View-only access."
             if metadata.access_level == "view"
             else "Download access."
         )
@@ -262,27 +261,21 @@ class LibraryDialog(QDialog):
         item = self.selected_item()
         if item is not None:
             category = experiment_category_label(ExperimentCategory(item.experiment_category))
-            compatibility = item.compatibility_message or "Compatible with this Studio version."
             installed = self.selected_installation()
-            installation = installed.message if installed else "Checking installed experiments…"
-            permission = (
-                "View-only access. Your lab can browse this experiment, but cannot download it.\n\n"
-                if self._catalog is not None and self._catalog.access_level == "view"
-                else ""
-            )
-            self.details.setPlainText(
-                f"{item.title}\n\n{item.description}\n\n"
+            installation = "Checking installed experiments…"
+            if installed is not None:
+                installation = installed.message if installed.state != "new" else ""
+            sections = (
+                f"{item.title}\n\n{item.description}",
                 f"Version: {item.version}\nCategory: {category}\n"
                 f"Download: {item.size_bytes / 1048576:.1f} MB\n"
                 f"Project files: {item.file_count:,} · "
                 f"{item.uncompressed_size_bytes / 1048576:.1f} MB\n"
-                f"Minimum FPVS Studio: {item.min_studio_version}\n\n"
-                f"{compatibility}\n\n"
-                f"{permission}{installation}\n\n"
-                "Creates an independent, editable project in your Studio Root Folder. "
-                "Existing projects stay in place. "
-                "Review display, timing and triggers in Setup before use."
+                f"Minimum FPVS Studio: {item.min_studio_version}",
+                item.compatibility_message,
+                installation,
             )
+            self.details.setPlainText("\n\n".join(section for section in sections if section))
         self._sync_actions()
 
     def _sync_actions(self, *_args: object) -> None:
@@ -295,12 +288,19 @@ class LibraryDialog(QDialog):
             "review": "Review existing project…",
         }[installed.state] if installed else "Checking installation…")
         view_only = self._catalog is not None and self._catalog.access_level == "view"
+        install_guidance = ""
         if view_only:
             self.install_button.setText("View-only access")
-        self.install_button.setToolTip(
-            "Your lab has view-only access; downloading experiments is not permitted."
-            if view_only else ""
-        )
+            install_guidance = (
+                "Your lab has view-only access; downloading experiments is not permitted."
+            )
+        elif installed is not None and installed.state == "new":
+            install_guidance = (
+                "Creates a separate project in your Studio Root Folder. "
+                "Review display, timing and triggers in Setup before use."
+            )
+        self.install_button.setToolTip(install_guidance)
+        self.install_button.setAccessibleDescription(install_guidance)
         self.connect_button.setEnabled(
             not self._busy
             and bool(self.code_edit.text().strip())

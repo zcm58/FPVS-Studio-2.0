@@ -4,6 +4,32 @@ Status: Active
 
 Date: 2026-09-16
 
+## Library GUI copy follow-up (October 28, 2026)
+
+The user's project-version screenshot showed repeated linking instructions, an
+instruction-filled details box, a long warning and another status explanation.
+The task is to identify/link the Library experiment, compare versions and explicitly
+download a separate project. Keep descriptions, unknown/not-checked versions,
+incompatibility, access restrictions, errors and the collection-change consequence.
+
+The project-version surface retains its `760x680` minimum / `820x720` default sizes.
+It uses the project name as its heading, shorter control labels, control help for
+optional linking details and a short warning only with an eligible download. Empty
+details/status and irrelevant automatic-check controls are hidden. Browse retains
+`900x640` / `1040x760`, removes routine success/instruction paragraphs and preserves
+metadata, permission states and installation paths. Workers, credentials, download
+guards, origin persistence and the separate-project workflow remain unchanged.
+
+Registered Qt coverage includes long descriptions, state changes, accessible help,
+selection/reset, preserved user actions and no-op Keep current version. Local
+verification passed: GUI focused (95), Library focused (386 with three Windows
+symlink-permission skips), docs focused (10), changed-file Ruff/compilation and mypy
+over all 245 source files. Qt execution is not authorized for this follow-up.
+Manual smoke: open both dialogs at the minimum/default sizes in both themes;
+exercise unlinked, selected, relink, current, update, incompatible, view-only,
+busy/cancel and error states, with long names/descriptions. Verify no clipping and
+that the full help remains available without restoring routine paragraphs.
+
 ## Branch consolidation follow-up (October 26, 2026)
 
 The branch audit found that the local bundle security work below had not reached
