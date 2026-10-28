@@ -2,6 +2,22 @@
 
 Status: Active
 
+## Release-note preview follow-up (October 28, 2026)
+
+The updater preserves release-note bullet line breaks instead of joining all words
+into one paragraph. Whitespace is normalized within each nonempty line; previews
+retain at most four lines and 240 characters, with individual line elision and an
+ellipsis for omitted lines. The full supplied summary remains available in the
+tooltip and accessible description, and the GitHub release-page action is unchanged.
+Release, download, verification, installation and shutdown behavior are unchanged.
+
+Non-Qt regressions execute the real formatting method with a fake label; registered
+Qt coverage checks short bullets and long/many-line notes at `680x600` / `760x620`,
+both palettes and existing busy/error states. Safe verification passed: 52 updater
+unit cases, GUI focused (95), docs focused (10), changed-file Ruff/compilation and
+mypy over 245 source files. Registered Qt and visible verification remain unrun.
+The manual smoke path is in [GUI workflow](../../GUI_WORKFLOW.md#gui-test-guidance).
+
 ## Installed 2.4.7 handoff failure (October 26, 2026)
 
 The installed 2.4.7 app reports a GitHub timeout while preparing the 2.4.8 updater,

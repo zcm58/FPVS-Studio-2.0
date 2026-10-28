@@ -575,9 +575,17 @@ class UpdateDialog(QDialog):
     def _set_notes_text(self, text: str) -> None:
         # A compact preview keeps every action visible at the minimum size. The full
         # release/error value remains available by tooltip and release-page action.
-        words = (elide_middle(word, 64) for word in text.split())
-        self.notes_label.setText(elide_middle(" ".join(words), 240))
+        lines = [
+            " ".join(elide_middle(word, 64) for word in line.split())
+            for line in text.splitlines() if line.strip()
+        ]
+        if len(lines) > 4:
+            lines = lines[:4]
+            lines[-1] += "..."
+        line_budget = (240 - (len(lines) - 1)) // len(lines) if lines else 240
+        self.notes_label.setText("\n".join(elide_middle(line, line_budget) for line in lines))
         self.notes_label.setToolTip(text)
+        self.notes_label.setAccessibleDescription(text)
 
     def _open_release_notes(self) -> None:
         if self._result is None or self._result.release_url is None:

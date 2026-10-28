@@ -63,9 +63,11 @@ For the current release package, use the PEP 440-compatible package version `2.5
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
-Write release notes as bullet points, with one or two sentences per major change.
-Keep verification summaries and installer instructions out of the release notes;
-retain audit evidence and check boundaries in the release record instead.
+Write release notes only as short Markdown bullet points, with one brief user-facing
+change per bullet. Prefer 2–3 short phrases totaling at most 240 characters when
+possible so the notes fit Studio's What's New preview. Do not add headings,
+paragraphs, nested bullets, verification summaries or installer instructions.
+Retain detailed audit evidence and check boundaries in the release record instead.
 
 The [2.5.2 release record](exec-plans/completed/release-2.5.2.md) tracks the Library GUI
 cleanup, restored report versions and simplified ActiveThree labels.

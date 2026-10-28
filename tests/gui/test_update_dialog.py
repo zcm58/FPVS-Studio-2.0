@@ -12,6 +12,7 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import QByteArray, QCoreApplication, QEvent, Qt, QThread, QTimer
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
 from shiboken6 import isValid
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
@@ -1030,6 +1031,47 @@ def test_failed_update_stays_recoverable_and_does_not_quit(
 
 
 @pytest.mark.parametrize("size", [(680, 600), (760, 620)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_update_dialog_preserves_release_note_bullet_lines(
+    qtbot, deferred_updates, monkeypatch, size, background,
+) -> None:
+    lifecycle, _jobs, _quit_calls = deferred_updates
+    notes = (
+        "- Simplify the Experiment Library.\n"
+        "- Show the current version in restored reports.\n"
+        "- Clarify BioSemi hardware labels."
+    )
+    result = replace(_available_update(), release_notes_summary=notes)
+    dialog = UpdateDialog(auto_check=False, initial_result=result, lifecycle=lifecycle)
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
+    qtbot.wait(1)
+
+    assert dialog.notes_label.text() == notes
+    assert dialog.notes_label.textFormat() == Qt.TextFormat.PlainText
+    assert dialog.notes_label.toolTip() == notes
+    assert dialog.notes_label.accessibleDescription() == notes
+    assert dialog.notes_label.height() + 1 >= dialog.notes_label.heightForWidth(
+        dialog.notes_label.width()
+    )
+    assert (dialog.width(), dialog.height()) == size
+    assert_visible_children_within_parent(dialog)
+    opened: list[str] = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.update_dialog.QDesktopServices.openUrl",
+        lambda url: opened.append(url.toString()),
+    )
+    assert dialog.release_notes_button.isEnabled()
+    dialog.release_notes_button.click()
+    assert opened == [result.release_url]
+
+
+@pytest.mark.parametrize("size", [(680, 600), (760, 620)])
 @pytest.mark.parametrize(
     "state",
     [
@@ -1052,10 +1094,14 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     state,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
-    full_notes = (
-        "Improved update integrity, recoverable interrupted transfers, and compatible upgrade "
-        "history. " * 12
-    ) + str(tmp_path / ("very-long-installer-folder-" * 12))
+    full_notes = "\n".join([
+        "- Improved update integrity and compatible upgrade history.",
+        "- Recover interrupted transfers: " + str(tmp_path / ("long-installer-folder-" * 12)),
+        "- Preserve installation settings and projects.",
+        "- Keep updater recovery actions available.",
+        "- Show complete release notes on GitHub.",
+        "- Retain verified hashes for downloaded installers.",
+    ])
     result = replace(
         _available_update(),
         current_version="2026.123.456rc987654321",
@@ -1134,7 +1180,10 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     assert dialog.notes_label.toolTip() == full_notes
+    assert dialog.notes_label.accessibleDescription() == full_notes
     assert len(dialog.notes_label.text()) <= 240
+    assert len(dialog.notes_label.text().splitlines()) == 4
+    assert dialog.notes_label.text().endswith("...")
     assert dialog.notes_label.text() != full_notes
 
 

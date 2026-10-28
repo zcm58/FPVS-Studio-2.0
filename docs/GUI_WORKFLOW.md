@@ -1107,8 +1107,11 @@ or failed handoff keeps Studio open; setup failure opens the repair path without
 
 The update dialog has a `680x600` minimum and `760x620` default size. Its action grid
 keeps long button labels visible at both sizes. Versions and status text wrap; release
-notes and error details use an intentionally bounded, selectable preview with the full
-value in a tooltip, and the full release page remains available by button.
+notes and error details use an intentionally bounded, selectable preview. Each
+nonempty source line remains on its own line, preserving release-note bullets.
+The preview retains at most four lines and 240 characters, shortening individual
+lines without joining bullets. The full value remains in the tooltip and accessible
+description, and the full release page remains available by button.
 
 The bundled **FPVS Studio Update & Repair** Start Menu entry uses the same dialog in a
 separate process, at a `680x660` minimum and `760x680` default. Its full-installer repair
@@ -1362,8 +1365,10 @@ visible environment.
 Updater visible/manual smoke (run only in an approved visible Windows session):
 
 1. Open `File > Check for Updates` and inspect the `680x600` minimum and `760x620`
-   default sizes with long versions, release notes, and error details. Check every action
-   label, wrapped status, the full-detail tooltip, and release-page action without resizing.
+   default sizes with long versions, three short release-note bullets, long/many-line
+   notes, and error details. Confirm separate bullet lines and bounded long previews.
+   Check every action label, wrapped status, full-detail tooltip, accessible description,
+   and release-page action without resizing.
 2. Using controlled offline callbacks (as in `tests/gui/test_update_dialog.py`), exercise
    current, newer/trusted, newer/missing-digest, busy, canceled, and failed states. A
    missing digest must disable Download/Install while preserving the newer-version copy.

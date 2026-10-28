@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import ast
 import io
 import json
+from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 from urllib.error import HTTPError, URLError
 
 import pytest
@@ -124,6 +127,136 @@ def test_release_notes_summary_is_compact() -> None:
     assert summary.startswith("Change 0")
     assert len(summary) <= 600
     assert summary.endswith("...")
+
+
+@pytest.fixture
+def notes_preview() -> SimpleNamespace:
+    """Run the real label formatter without importing or constructing Qt."""
+
+    gui = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui"
+    design_tree = ast.parse((gui / "design_system.py").read_text(encoding="utf-8"))
+    elide = next(
+        node for node in design_tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "elide_middle"
+    )
+    source = gui / "update_dialog.py"
+    dialog_tree = ast.parse(source.read_text(encoding="utf-8"))
+    dialog = next(
+        node for node in dialog_tree.body
+        if isinstance(node, ast.ClassDef) and node.name == "UpdateDialog"
+    )
+    method = next(
+        node for node in dialog.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_set_notes_text"
+    )
+    module = ast.Module(body=[
+        ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+        elide,
+        method,
+    ], type_ignores=[])
+    namespace: dict[str, object] = {}
+    exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
+    label = SimpleNamespace(text="", tooltip="", accessible_description="")
+    label.setText = lambda text: setattr(label, "text", text)
+    label.setToolTip = lambda text: setattr(label, "tooltip", text)
+    label.setAccessibleDescription = lambda text: setattr(label, "accessible_description", text)
+    value = SimpleNamespace(notes_label=label)
+    return SimpleNamespace(
+        set_text=lambda text: namespace["_set_notes_text"](value, text),
+        label=label,
+    )
+
+
+def test_release_notes_preview_preserves_three_short_bullets(
+    notes_preview: SimpleNamespace,
+) -> None:
+    notes = "- Faster startup\n- Clearer update progress\n- Fixed project imports"
+
+    notes_preview.set_text(notes)
+
+    assert notes_preview.label.text == notes
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
+
+
+def test_release_notes_preview_keeps_each_long_bullet_on_its_own_line(
+    notes_preview: SimpleNamespace,
+) -> None:
+    notes = "\n".join(f"- Change {index}: " + "Useful release detail " * 10 for index in range(3))
+
+    notes_preview.set_text(notes)
+
+    lines = notes_preview.label.text.splitlines()
+    assert len(lines) == 3
+    assert all(line.startswith(f"- Change {index}:") for index, line in enumerate(lines))
+    assert all("..." in line for line in lines)
+    assert len(notes_preview.label.text) <= 240
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
+
+
+def test_release_notes_preview_normalizes_whitespace_within_lines(
+    notes_preview: SimpleNamespace,
+) -> None:
+    notes = " \r\n\t-  Faster\t startup \r\n\r\n - Clearer   progress\t\r\n\t"
+
+    notes_preview.set_text(notes)
+
+    assert notes_preview.label.text == "- Faster startup\n- Clearer progress"
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
+
+
+def test_release_notes_preview_bounds_many_lines_and_signals_omission(
+    notes_preview: SimpleNamespace,
+) -> None:
+    notes = "\n".join(f"- Change {index}: " + "Release detail " * 10 for index in range(10))
+
+    notes_preview.set_text(notes)
+
+    lines = notes_preview.label.text.splitlines()
+    assert len(lines) == 4
+    assert all(line.startswith(f"- Change {index}:") for index, line in enumerate(lines))
+    assert lines[-1].endswith("...")
+    assert len(notes_preview.label.text) <= 240
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
+
+
+def test_release_notes_preview_bounds_an_unbroken_word(notes_preview: SimpleNamespace) -> None:
+    notes = "- Asset " + "a" * 300 + " fixed"
+
+    notes_preview.set_text(notes)
+
+    assert notes_preview.label.text.startswith("- Asset ")
+    assert notes_preview.label.text.endswith(" fixed")
+    assert "..." in notes_preview.label.text
+    assert max(map(len, notes_preview.label.text.split())) <= 64
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
+
+
+@pytest.mark.parametrize("notes", ["", " \t\r\n\n "])
+def test_release_notes_preview_handles_empty_content(
+    notes_preview: SimpleNamespace, notes: str,
+) -> None:
+    notes_preview.set_text(notes)
+
+    assert notes_preview.label.text == ""
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
+
+
+def test_release_notes_preview_keeps_single_line_bounded(notes_preview: SimpleNamespace) -> None:
+    notes = "Release detail " * 100
+
+    notes_preview.set_text(notes)
+
+    assert "\n" not in notes_preview.label.text
+    assert len(notes_preview.label.text) <= 240
+    assert "..." in notes_preview.label.text
+    assert notes_preview.label.tooltip == notes
+    assert notes_preview.label.accessible_description == notes
 
 
 def test_selected_asset_carries_normalized_digest_release_version_and_id() -> None:
