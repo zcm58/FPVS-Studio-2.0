@@ -120,9 +120,10 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   licensed Open Sans face used by authored modular tasks.
 - `src/fpvs_studio/gui/`: PySide6 windows, dialogs, controllers, document binding,
   Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
-  starts with manual creation or Library download. Manual creation asks for category,
-  then project details; Library downloads reuse bundle import. Setup composes eight
-  model-backed pages (Project, Conditions, Design, Timing & Session, Image Size, Fixation,
+  starts with manual creation or Library download. Manual creation offers FPVS Oddball
+  Paradigm and disabled Standard FPVS, then project details; Library downloads reuse
+  bundle import. Setup composes eight model-backed pages (Project, Conditions, Design,
+  Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
   discovery consumes path snapshots and canceled/stale results cannot update a closed dialog.

@@ -259,9 +259,9 @@ root unchanged.
 
 Creating an experiment first offers **Create manually** or **Download from library**.
 Downloading opens the Library without creating a blank project. Manual creation next
-asks for a category: FPVS Oddball Paradigm, Attentional-Blink, or Cognitive Load FPVS.
-Standard FPVS is a disabled Coming soon choice. Name, parent folder and compatible
-template follow on the details page. Back returns through category to the source choice
+offers FPVS Oddball Paradigm and a disabled Standard FPVS Coming soon choice.
+Name, parent folder and compatible template follow on the details page. Back returns
+through category to the source choice
 while retaining the manual draft. Category is locked when the experiment
 is created; changing it requires a new experiment. See
 [Experiment categories](EXPERIMENT_CATEGORIES.md) for persistence and legacy separation.

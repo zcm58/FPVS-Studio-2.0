@@ -462,6 +462,10 @@ focused route for edits and the repo precommit tier for shared component changes
 Current category and Design contracts are documented in
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md); implementation history is
 in the completed plans directory.
+For the manual-creation category screen, start with `gui/create_project_dialog.py` and
+`tests/gui/test_experiment_categories_gui.py`: only FPVS Oddball Paradigm and disabled
+Standard FPVS are shown. Use GUI focused verification and the registered category and
+Welcome flow tests for approved visible acceptance at `760x500` and `800x500`.
 
 For the 1120x820 Setup default and its oddball image editor, read
 `tests/gui/test_design_setup_step.py` for full-window and source-choice coverage.

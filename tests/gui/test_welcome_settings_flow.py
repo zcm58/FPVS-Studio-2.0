@@ -2257,24 +2257,27 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     assert_visible_children_within_parent(dialog)
 
     qtbot.mouseClick(
-        dialog.category_buttons[ExperimentCategory.ATTENTIONAL_BLINK], Qt.MouseButton.LeftButton
+        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton
     )
-    assert dialog.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+    assert dialog.experiment_category == ExperimentCategory.FPVS_ODDBALL
     qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
     assert dialog.project_name_edit.isVisible()
     assert dialog.category_stack.currentWidget() is dialog.details_page
-    assert dialog.condition_profile_combo.count() == 1
-    assert dialog.condition_profile_combo.currentData() == "attentional-blink-letter-stream-v1"
-    assert dialog.category_summary_label.text() == "Attentional-Blink"
+    assert dialog.condition_profile_combo.count() == 3
+    assert dialog.condition_profile_combo.currentData() == "studio-default-v1"
+    assert dialog.category_summary_label.text() == "FPVS Oddball Paradigm"
     assert_visible_children_within_parent(dialog)
 
     qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
+    assert dialog.category_stack.currentWidget() is dialog.category_page
+    assert dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL].isChecked()
     qtbot.mouseClick(
         dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton
     )
     qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
     assert dialog.condition_profile_combo.count() == 3
     assert dialog.condition_profile_combo.findData("attentional-blink-v1") == -1
+    assert dialog.condition_profile_combo.findData("attentional-blink-letter-stream-v1") == -1
     dialog.reject()
     assert dialog.result() == QDialog.DialogCode.Rejected
 

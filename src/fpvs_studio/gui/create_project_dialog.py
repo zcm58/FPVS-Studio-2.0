@@ -107,7 +107,7 @@ class CreateProjectDialog(QDialog):
         category_layout.addWidget(category_heading)
         category_layout.addStretch(1)
         self.category_cards = QWidget(self.category_page)
-        self.category_cards.setFixedHeight(252)
+        self.category_cards.setFixedHeight(118)
         category_row = QGridLayout(self.category_cards)
         category_row.setContentsMargins(0, 0, 0, 0)
         category_row.setSpacing(16)
@@ -117,11 +117,6 @@ class CreateProjectDialog(QDialog):
         choices = (
             (ExperimentCategory.FPVS, "Standard FPVS\nComing soon"),
             (ExperimentCategory.FPVS_ODDBALL, "FPVS Oddball Paradigm\nBase images and oddballs"),
-            (ExperimentCategory.ATTENTIONAL_BLINK, "Attentional-Blink\nTwo targets in a stream"),
-            (
-                ExperimentCategory.COGNITIVE_LOAD_FPVS,
-                "Cognitive Load FPVS\nImages with backward counting",
-            ),
         )
         for index, (category, text) in enumerate(choices):
             button = QPushButton(text, self.category_page)

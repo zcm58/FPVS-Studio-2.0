@@ -30,8 +30,9 @@ backend-driven.
   expose `Complete Setup`, and first-time setup opens at the earliest incomplete step
   without enabling arbitrary step jumps.
 - New-experiment Setup offers manual creation or Library download. Manual creation asks
-  for category, then name/folder/template; Library downloads reuse bundle import. Category
-  is locked after creation. FPVS is disabled Coming soon. Reuse the visual editor in
+  for category, then name/folder/template; Library downloads reuse bundle import. Manual
+  category choices are FPVS Oddball Paradigm and disabled Standard FPVS Coming soon.
+  Category is locked after creation. Reuse the visual editor in
   Design; image-pair AB and its ISI editor are retired. Attentional-Blink letter
   streams expose a shared presentation rate, character pools and onset-to-onset SOAs.
   New burst studies expose Bursts per SOA in Design and Timing & Session, with EEG time

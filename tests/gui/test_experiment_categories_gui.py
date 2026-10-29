@@ -167,8 +167,9 @@ def test_changing_experiments_waits_for_image_workers(
     monkeypatch.setattr(owner, method, lambda: False)
 
 
+@pytest.mark.parametrize("size", [(760, 500), (800, 500)])
 @pytest.mark.parametrize("dark", [False, True])
-def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot, dark):
+def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot, dark, size):
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QApplication
     from tests.gui.helpers import assert_visible_children_within_parent
@@ -185,19 +186,28 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     )
     qtbot.addWidget(dialog)
     dialog.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
-    dialog.resize(760, 500)
+    dialog.resize(*size)
     dialog.show()
     dialog.manual_button.click()
     QApplication.processEvents()
+    assert (dialog.width(), dialog.height()) == size
+    assert set(dialog.category_buttons) == {
+        ExperimentCategory.FPVS, ExperimentCategory.FPVS_ODDBALL,
+    }
     assert dialog.category_buttons[ExperimentCategory.FPVS].text() == "Standard FPVS\nComing soon"
     assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
     oddball = dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL]
     assert oddball.text().splitlines()[0] == "FPVS Oddball Paradigm"
-    cognitive_load = dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS]
-    assert cognitive_load.isEnabled()
-    assert cognitive_load.text().splitlines()[0] == "Cognitive Load FPVS"
+    assert oddball.isEnabled()
+    standard = dialog.category_buttons[ExperimentCategory.FPVS]
+    assert standard.geometry().right() < oddball.geometry().left()
+    assert standard.y() == oddball.y()
+    assert standard.height() == oddball.height()
     assert_visible_children_within_parent(dialog)
     for button in dialog.category_buttons.values():
+        assert button.isVisible()
+        assert button.height() >= button.minimumSizeHint().height()
+        assert button.height() >= button.fontMetrics().height() * len(button.text().splitlines())
         assert max(button.fontMetrics().horizontalAdvance(line)
                    for line in button.text().splitlines()) + 12 <= button.width()
     dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)

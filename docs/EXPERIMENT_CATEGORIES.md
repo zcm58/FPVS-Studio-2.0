@@ -12,9 +12,10 @@ experiment. Supported values and behavior are:
 
 ## Creation and shared Setup
 
-The first page of new-experiment Setup asks only for the category. Nothing is
-selected initially. Name, folder and compatible experiment-template choices follow
-on the next page; Cancel creates no project. Category becomes locked when the
+After choosing manual creation, new-experiment Setup offers only FPVS Oddball Paradigm
+and the disabled Standard FPVS Coming soon choice. Nothing is selected initially.
+Name, folder and compatible experiment-template choices follow on the next page;
+Cancel creates no project. Category becomes locked when the
 experiment is created and appears read-only on Project. Changing category requires
 creating a new experiment. Templates carry their own category and cannot change an
 experiment's category. Editing a template preserves that category and its cadence.
