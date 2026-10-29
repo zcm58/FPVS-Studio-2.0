@@ -54,7 +54,17 @@ empty/rejected states, and no clipped controls at either size.
 - Existing 2.5.4 release is complete; this feature is a new cross-layer change.
 - Studio has an unrelated untracked `engines/standalone_contrast_example.py`; leave
   it untouched and outside this feature's commits/build inventory.
-- Focused baseline and implementation are in progress. Production deployment and
-  new compiled distribution are not yet verified.
+- Implementation and focused checks passed: Library 399 plus 24 subtests (three
+  Windows symlink skips), affected sharing 146, coordinator 76, GUI-safe 95,
+  packaging 183 and backend 461. Source Qt execution remains unrun.
+- Backend commit `b9c0be8` is deployed as
+  `ea526bbd-f19f-484e-8212-eac2abbfc148`; no migration was needed. Live anonymous
+  website/catalog/new-route checks passed. An offline cross-repository roundtrip
+  used real client and Worker code with two permitted synthetic labs and a third
+  ungranted lab; discovery, approval, upload/retry and revocation checks passed.
+  No real research data or credentials were used.
+- The first compiled sweep passed structural checks but visual inspection found
+  that its synthetic light palette retained dark text roles. Correct that fixture
+  and repeat visible acceptance before publication; this is not a product theme fix.
 - The requested compiled release continues as version 2.5.5. A clean build checkout
   will exclude the unrelated untracked script without moving or changing it.

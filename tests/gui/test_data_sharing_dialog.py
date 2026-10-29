@@ -16,6 +16,7 @@ from fpvs_studio.gui.data_sharing_dialog import (
     SavedReportsDialog,
     StartupReportNotice,
 )
+from fpvs_studio.gui.packaged_smoke import _verification_palette
 
 
 def _study(number=1):
@@ -25,6 +26,17 @@ def _study(number=1):
         experiment_id=f"shared-study-{number}", experiment_version="2026.10.29+reviewed",
         protocol_sha256="a" * 64,
     )
+
+
+@pytest.fixture
+def sharing_palette(qapp, background):
+    original = qapp.palette()
+    palette = _verification_palette(dark=background == "#202124")
+    qapp.setPalette(palette)
+    try:
+        yield
+    finally:
+        qapp.setPalette(original)
 
 
 @pytest.mark.parametrize("size", [(560, 360), (680, 440)])
@@ -127,10 +139,9 @@ def test_controller_shows_dismissible_report_notice_on_visible_window(
     ],
 )
 @pytest.mark.parametrize("background", ["#202124", "#f4f7fb"])
-def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, background):
+def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, sharing_palette):
     dialog = DataSharingDialog(configured=True)
     qtbot.addWidget(dialog)
-    dialog.setPalette(QPalette(QColor(background)))
     profile = (
         "A registered experimental protocol with a long but realistic study title " * 2
         + "\nExperiment: " + "study-" * 12 + "\nVersion: " + "2026.10.05+reviewed-" * 3
