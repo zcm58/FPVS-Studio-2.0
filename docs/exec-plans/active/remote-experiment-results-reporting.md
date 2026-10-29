@@ -2,6 +2,8 @@
 
 Status: Active
 
+Date: 2026-10-07
+
 ## Pending connection recovery (2026-10-29)
 
 An exact OpenFPVS `credential_scope_conflict` now offers explicit replacement
@@ -12,9 +14,9 @@ off choices and reports stay intact. The previous server request remains for
 administrator review. Ordinary same-scope approval retries preserve their token.
 Malformed bounded error JSON, including excessive nesting, becomes an actionable
 protocol error. Regression and compiled evidence are recorded in the
-[2.5.4 release plan](interlab-reliability-release-2.5.4.md).
+[2.5.4 release plan](../completed/interlab-reliability-release-2.5.4.md).
 
-Date: 2026-10-07
+## Reporting implementation
 
 Implementation approved on 2026-10-05 on `codex/experiment-data-sharing`.
 The source feature is integrated with OpenFPVS lab-code/project administration on

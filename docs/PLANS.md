@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Inter-lab reliability and Studio 2.5.4](exec-plans/active/interlab-reliability-release-2.5.4.md)
 
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
@@ -191,3 +190,7 @@ cross-cutting.
 - Architecture map: `../ARCHITECTURE.md`
 - Current technical debt: `exec-plans/tech-debt-tracker.md`
 - [Streamlined project review uploads](exec-plans/active/streamlined-project-submission.md)
+
+Recent completion: [Inter-lab reliability and Studio 2.5.4](exec-plans/completed/interlab-reliability-release-2.5.4.md)
+(Library permissions, retained canceled submissions, guarded pending enrollment recovery;
+compiled screens, full installer and public updater/asset verification passed).
