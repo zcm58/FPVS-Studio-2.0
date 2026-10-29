@@ -84,3 +84,27 @@ preserve drafts. Detection does not identify an attached amplifier or prove rece
   `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md`, `docs/RUNTIME_EXECUTION.md`,
   `docs/PACKAGING.md`, `docs/agent/agent-index.md`, `docs/PLANS.md`,
   `src/fpvs_studio/gui/AGENTS.md`, `src/fpvs_studio/triggers/AGENTS.md`, and this plan.
+
+## Parallel-driver reminder follow-up
+
+Normal parallel-port launches now surface a specific driver-setup reminder when
+the existing InpOut device cannot be opened. A typed availability error retains
+the native diagnostic; the standard popup asks users to ensure their parallel
+interface and compatible InpOut drivers are installed/running and close other apps
+using the port. This does not claim that unavailable means uninstalled. Serialized
+runtime failures retain the same guidance. Other recording choices and Test/Pilot
+do not show this reminder; driver packaging and installation remain external.
+
+Changed files: `triggers/parallel_backend.py`, `support/error_explanations.py`,
+`tests/unit/test_parallel_backend.py`, `tests/unit/test_error_explanations.py`,
+registered `tests/gui/test_error_dialogs.py`, `docs/RUNTIME_EXECUTION.md`, and this plan.
+Verification: 252 trigger tests, 57 explanation/parallel-runtime cases and 98 safe GUI
+scope tests passed;
+Ruff and compilation pass for changed Python files, and mypy passes all 250 sources.
+The standard precommit entry point was attempted and remains blocked by unrelated
+untracked example/helper-file lint errors; those files were preserved.
+Registered popup cases cover typed/serialized failures, light/dark, expanded/collapsed
+details, geometry and other-device exclusions, but were not run under the existing
+visible-environment approval rule. Manual check: attempt a normal parallel recording
+with an unavailable driver and dismiss its setup reminder; other devices retain their
+existing errors and Test/Pilot must open no output driver.

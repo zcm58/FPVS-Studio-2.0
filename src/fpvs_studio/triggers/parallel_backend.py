@@ -16,6 +16,10 @@ class ParallelPortError(RuntimeError):
     """Native LPT initialization, trigger output or reset failed."""
 
 
+class ParallelPortDriverUnavailableError(ParallelPortError):
+    """The selected parallel transport cannot access its required driver."""
+
+
 class ParallelDriver(Protocol):
     """Installed-driver boundary, injectable without touching hardware in tests."""
 
@@ -287,7 +291,7 @@ class _InpOutDriver:
         device = r"\\.\inpoutx64" if is_64 else r"\\.\inpout32"
         handle = api.CreateFileW(device, 0xC0000000, 0, None, 3, 0x80, None)
         if handle in (None, ctypes.c_void_p(-1).value):
-            raise ParallelPortError(
+            raise ParallelPortDriverUnavailableError(
                 "An already installed, running InpOut driver is required for native LPT output "
                 f"(Windows error {ctypes.get_last_error()}). "
                 "Studio does not install or start kernel drivers. Select TriggerBox/Plus when "

@@ -10,7 +10,11 @@ from types import SimpleNamespace
 import pytest
 
 from fpvs_studio.triggers import parallel_backend as backend_module
-from fpvs_studio.triggers.parallel_backend import ParallelPortBackend, ParallelPortError
+from fpvs_studio.triggers.parallel_backend import (
+    ParallelPortBackend,
+    ParallelPortDriverUnavailableError,
+    ParallelPortError,
+)
 
 
 class FakeDriver:
@@ -294,7 +298,9 @@ def test_native_driver_uses_existing_device_and_checked_write_protocol(monkeypat
 def test_native_driver_missing_platform_and_device_fail_without_port_writes(monkeypatch) -> None:
     calls, _api = _windows_api(monkeypatch, open_result=ctypes.c_void_p(-1).value)
     driver = backend_module._InpOutDriver()
-    with pytest.raises(ParallelPortError, match="already installed, running InpOut"):
+    with pytest.raises(
+        ParallelPortDriverUnavailableError, match="already installed, running InpOut",
+    ):
         driver.connect()
     driver.close()
     assert [name for name, _args in calls] == ["open"]

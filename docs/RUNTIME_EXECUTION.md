@@ -318,6 +318,10 @@ scheduled spacing and drains pending pulses at condition boundaries. Test/Pilot 
 null output. Recording snapshots capture the parallel address, actiCHamp sampling rate
 and pulse width separately from serial endpoints; compiled contracts stay unchanged.
 Port access or a successful write is not proof of recorded markers or physical timing.
+If a normal parallel-port launch cannot open the InpOut device, its existing error
+popup prompts the user to ensure the parallel-interface and compatible InpOut drivers
+are installed/running and to close other apps using the port. Other recording choices
+and Test/Pilot do not show this driver reminder. No driver is bundled or installed.
 
 Manual acceptance: on the lab stimulus PC, open Recording Setup, select parallel
 output and check Detect, manual entry, invalid/missing address, multiple candidates,

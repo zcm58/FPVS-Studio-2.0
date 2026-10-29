@@ -32,6 +32,15 @@ def explain_error(
             None if current.__suppress_context__ else current.__context__
         )
     text = "\n".join([message, details, *(str(cause) for cause in causes)]).lower()
+    if any(type(cause).__name__ == "ParallelPortDriverUnavailableError" for cause in causes) or (
+        "an already installed, running inpout driver is required for native lpt output" in text
+    ):
+        return ErrorExplanation(
+            "FPVS Studio couldn't access the parallel-port driver.",
+            "Ensure the drivers for your parallel-port interface and a compatible InpOut "
+            "driver are installed and running. Close any other app using the parallel port, "
+            "then retry. Studio does not install drivers.",
+        )
     operating_errors = [cause for cause in causes if isinstance(cause, OSError)]
     if any(
         cause.errno == errno.ENOSPC or getattr(cause, "winerror", None) == 112
