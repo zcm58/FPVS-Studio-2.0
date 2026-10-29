@@ -4,6 +4,22 @@ Status: Active
 
 Date: 2026-09-16
 
+## Compiled-client workflow audit (October 29, 2026)
+
+Project-version selection now respects the latest catalog's view-only permission.
+Version details stay visible, while separate download is disabled with an access
+explanation. A subsequent check reflects changed lab permission. Existing download
+authorization, enrollment, provenance and independent-project import remain unchanged.
+The three new permission regressions failed before this correction and pass afterward.
+
+Library focused passes 390 tests and 24 subtests, with three Windows symlink privilege
+skips; GUI focused passes 95 tests. Changed-file Ruff/compilation and diff checks pass.
+Registered controller coverage checks the denied action at `760x680` and `820x720`;
+source Qt execution remains unrun. In the compiled app, verify that view-only access
+shows latest details without offering download, then refresh after permission changes.
+The concurrent upload cancellation repair is recorded in the
+[submission plan](streamlined-project-submission.md#october-29-cancellation-recovery).
+
 ## Library GUI copy follow-up (October 28, 2026)
 
 The user's project-version screenshot showed repeated linking instructions, an

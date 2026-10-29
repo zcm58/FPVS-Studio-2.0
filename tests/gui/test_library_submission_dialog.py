@@ -9,8 +9,10 @@ from PySide6.QtWidgets import QLabel
 from tests.gui.helpers import assert_visible_children_within_parent
 from tests.unit.test_data_sharing_gui_jobs import _Lifecycle
 
+from fpvs_studio.developer.library_publisher import PreparedPublication
 from fpvs_studio.gui.library_submission_controller import LibrarySubmissionController
 from fpvs_studio.gui.library_submission_dialog import LibrarySubmissionDialog
+from fpvs_studio.gui.update_lifecycle import UpdateTaskResult
 
 
 @pytest.mark.parametrize(
@@ -89,6 +91,51 @@ def test_prefilled_project_title_is_preserved_for_explicit_validation(qtbot):
     title = "A long authored project title " * 10
     dialog.title_edit.setText(title)
     assert dialog.title_edit.text() == title
+
+
+@pytest.mark.parametrize("size", [(760, 600), (820, 660)])
+def test_cancel_during_preparation_completion_preserves_retry_controls(
+    qtbot, qapp, tmp_path, monkeypatch, size,
+):
+    lifecycle = _Lifecycle()
+    monkeypatch.setattr(
+        "fpvs_studio.gui.library_submission_controller.update_lifecycle", lambda _app: lifecycle,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.library_submission_controller.publication_review",
+        lambda prepared: str(prepared.bundle_path),
+    )
+    controller = LibrarySubmissionController(qapp, client=object())
+    dialog = controller.dialog
+    qtbot.addWidget(dialog)
+    controller.show(
+        project_root=tmp_path, title="A project prepared for review", description="Purpose",
+        save_project=lambda: True,
+    )
+    prepared = PreparedPublication(
+        request=SimpleNamespace(item_id=f"submitted-{uuid4()}"), directory=tmp_path,
+        bundle_path=tmp_path / "project.fpvsbundle", metadata_path=tmp_path / "project.json",
+        report=SimpleNamespace(),
+    )
+    monkeypatch.setattr(controller.service, "prepare", lambda *_args, **_kwargs: prepared)
+    dialog.author_edit.setText("Researcher")
+    dialog.email_edit.setText("researcher@university.example.edu")
+    dialog.rights.setChecked(True)
+    dialog.buttons["submit"].click()
+    job = lifecycle.jobs[0]
+    value = job.callback(None, job.cancel_event)
+    dialog.buttons["cancel"].click()
+    job.finished.emit(UpdateTaskResult(value=value, cancelled=True))
+    dialog.resize(*size)
+    qtbot.wait(25)
+    assert controller._prepared is prepared
+    assert dialog.buttons["submit"].isEnabled()
+    assert dialog.buttons["new"].isEnabled()
+    assert not dialog.form.isEnabled()
+    assert not dialog.buttons["cancel"].isEnabled()
+    assert "Canceled" in dialog.status.text()
+    assert len(lifecycle.jobs) == 1
+    assert_visible_children_within_parent(dialog)
 
 
 @pytest.mark.parametrize("size", [(760, 600), (820, 660)])

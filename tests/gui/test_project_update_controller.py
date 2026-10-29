@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QApplication, QWidget
+from tests.gui.helpers import assert_visible_children_within_parent
 from tests.unit.test_library_installations import project as installed_project
 
 from fpvs_studio.core.library_origin import LibraryOriginError, LibraryProjectOrigin
@@ -245,6 +246,36 @@ def test_latest_version_already_installed_elsewhere_disables_update(updates):
     state.lifecycle.drain()
     assert state.client.download_calls == []
     assert state.handoffs == []
+
+@pytest.mark.parametrize("size", [(760, 680), (820, 720)])
+def test_view_only_project_update_disables_download_and_explains_access(
+    updates, monkeypatch, qtbot, size,
+):
+    state = updates
+    monkeypatch.setattr(
+        state.client, "catalog",
+        lambda **_kwargs: LibraryCatalog(
+            schema_version="1.0", library_name="Lab", access_level="view", items=[_item()],
+        ),
+    )
+    state.controller.show(state.window)
+    state.lifecycle.drain()
+    dialog = state.controller.dialog
+    assert dialog is not None
+    dialog.resize(*size)
+    qtbot.wait(25)
+    assert "1.0.1" in dialog.versions_label.text()
+    assert "view-only" in dialog.status_label.text()
+    assert not dialog.install_button.isEnabled()
+    assert_visible_children_within_parent(dialog)
+    assert dialog.status_label.height() >= dialog.status_label.heightForWidth(
+        dialog.status_label.width(),
+    )
+    state.controller._action("install")
+    state.lifecycle.drain()
+    assert state.client.download_calls == []
+    assert state.handoffs == []
+
 
 def test_closed_project_ignores_completed_background_result(updates):
     state = updates

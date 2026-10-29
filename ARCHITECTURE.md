@@ -84,6 +84,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   failure retains the active session for later recovery. See `docs/BUG_REPORTING.md`.
 - `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
   credentials, immutable durable upload outbox and bounded HTTPS delivery.
+  Its client owns guarded pending-enrollment replacement after explicit GUI
+  confirmation; registered access and saved consent retain their existing owners.
   `core/data_sharing.py` owns strict wire contracts and authored protocol identity;
   `data_sharing/library_scope.py` gates linked projects against the canonical Library
   origin receipt's exact item/version before enrollment, capture, send and comparison.

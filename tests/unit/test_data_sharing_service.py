@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from threading import Event
@@ -456,6 +457,27 @@ def test_enrollment_preserves_saved_off_including_late_optout(tmp_path, during_r
     result = enroll_project(tmp_path, "code", HASH, Event(), client=client(transport, Store()))
     assert result.settings.profile == profile()
     assert not result.settings.enabled
+
+
+def test_confirmed_pending_replacement_preserves_saved_off_and_exact_reports(tmp_path):
+    save_settings(tmp_path, SharingSettings(enabled=False))
+    queued = queue_report(tmp_path, report())
+    original = credential().model_copy(update={"connection": None})
+    store = Store(original)
+    sent = []
+
+    def transport(_method, _url, body, _headers, _cancel):
+        sent.append(json.loads(body))
+        return profile().model_dump_json().encode()
+
+    result = enroll_project(
+        tmp_path, "new code", HASH, Event(), client=client(transport, store),
+        reset_pending_credential_sha256=hashlib.sha256(original.token.encode()).hexdigest(),
+    )
+    assert not result.settings.enabled and result.settings.profile == profile()
+    assert len(sent) == 1 and sent[0]["device_token"] != original.token
+    assert store.value.token == sent[0]["device_token"] and store.value.connection is not None
+    assert list_records(tmp_path) == (queued,)
 
 
 def test_off_and_changed_protocol_cannot_send_or_compare(tmp_path):

@@ -212,6 +212,7 @@ def enroll_project(
     *,
     client: DataSharingClient | None = None,
     project_id: str | None = None,
+    reset_pending_credential_sha256: str | None = None,
 ) -> SharingView:
     transport = client or DataSharingClient.configured()
     previous = load_settings(root)
@@ -219,7 +220,10 @@ def enroll_project(
         raise DataSharingError(
             "Disconnect the current enrollment before reconnecting.", code="enrollment"
         )
-    profile = transport.enroll(root, code, protocol_sha256, cancel, project_id=project_id)
+    profile = transport.enroll(
+        root, code, protocol_sha256, cancel, project_id=project_id,
+        reset_pending_credential_sha256=reset_pending_credential_sha256,
+    )
     # A saved off choice outranks first-enrollment defaults, including a late opt-out.
     save_enrollment_settings(root, profile)
     return load_view(root, protocol_sha256, Event(), client=transport)

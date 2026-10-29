@@ -8,6 +8,23 @@ upload/email/validation/publication qualification remains pending.
 
 Date: 2026-10-08
 
+## October 29 cancellation recovery
+
+Cancel can arrive after preparation succeeds while the worker is finishing native
+cleanup. The controller now retains that exact preparation and author identity for
+the next explicit Upload action without starting delivery automatically. Cancellation
+before successful preparation still clears the attempt normally; no new persistence
+or server behavior is introduced. A regression reproduced the lost preparation before
+the fix and now proves that retry neither saves nor exports again.
+
+The combined upload-job/version unit selection passes 34 tests. Library focused passes
+390 tests and 24 subtests with three Windows symlink privilege skips; GUI focused passes
+95 tests, with changed-file Ruff/compilation passing. Registered visible checks cover
+retained preparation and controls at `760x600` and `820x660`; source Qt is unrun.
+Compiled smoke should cancel as preparation finishes, confirm that no upload starts,
+and retry using the retained preparation. Live upload/email/publication qualification
+remains pending as recorded below.
+
 ## Approved outcome
 
 Reuse the existing clean publication exporter, submission transport, private GitHub

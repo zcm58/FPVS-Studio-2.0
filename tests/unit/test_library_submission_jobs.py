@@ -12,7 +12,11 @@ import pytest
 from tests.unit.test_data_sharing_gui_jobs import _Lifecycle, _Object, _Result, _Signal
 
 from fpvs_studio import __version__
-from fpvs_studio.developer.library_publisher import PublicationRequest, PublisherError
+from fpvs_studio.developer.library_publisher import (
+    PreparedPublication,
+    PublicationRequest,
+    PublisherError,
+)
 from fpvs_studio.library.errors import LibraryError
 
 
@@ -75,9 +79,12 @@ class Dialog:
 @pytest.fixture
 def state(tmp_path):
     lifecycle = _Lifecycle()
-    prepared = SimpleNamespace(
+    prepared = PreparedPublication(
         request=SimpleNamespace(item_id=f"submitted-{uuid4()}"),
+        directory=tmp_path,
         bundle_path=tmp_path / "project.fpvsbundle",
+        metadata_path=tmp_path / "project.json",
+        report=SimpleNamespace(),
     )
     calls, saves = [], []
 
@@ -110,7 +117,7 @@ def state(tmp_path):
         "LibrarySubmissionDialog": Dialog,
         "update_lifecycle": lambda _app: lifecycle,
         "UpdateTaskResult": _Result,
-        "PreparedPublication": object,
+        "PreparedPublication": PreparedPublication,
         "SubmissionStatus": object,
         "cast": cast,
         "LibraryError": LibraryError,
@@ -184,6 +191,27 @@ def test_close_and_shutdown_cancel_active_worker_and_new_upload_resets_form(stat
     assert c.dialog.states[-1] == (False, False, False, False)
     assert c._identity is None
     assert not c.dialog.rights.isChecked()
+
+
+def test_cancel_after_preparation_retains_exact_bytes_without_starting_upload(state):
+    c = state.controller
+    c._action("submit")
+    job = state.lifecycle.jobs[0]
+    prepared = job.callback(None, job.cancel_event)
+    c.dialog.closing.emit()
+    job.finished.emit(_Result(value=prepared, cancelled=True))
+    assert c._prepared is prepared
+    assert c._identity == ("Researcher", "researcher@example.test")
+    assert c.dialog.states[-1] == (False, True, False, False)
+    assert len(state.lifecycle.jobs) == 1
+    assert [call[0] for call in state.calls] == ["prepare"]
+    assert "Canceled" in c.dialog.status.text()
+
+    c._action("submit")
+    state.lifecycle.jobs[1].run()
+    assert state.saves == ["save"]
+    assert [call[0] for call in state.calls] == ["prepare", "upload"]
+    assert state.calls[1][2] is prepared
 
 
 def test_upload_requires_rights_and_failed_save_does_not_start_worker(state):

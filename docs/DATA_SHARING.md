@@ -31,6 +31,13 @@ Locally authored experiments can enroll without a Library download. A Library
 view/download grant alone does not authorize reporting: the lab needs an explicit
 project grant, and Results credentials remain separate from Library credentials.
 
+If a pending connection belongs to a different study or lab code, Studio offers
+**Replace pending connection?** after the service reports that exact conflict.
+Confirming clears only the unchanged, unregistered local credential and retries
+the selected study. The previous server request remains for administrator review.
+Declining retains it. Registered access, saved sharing choices and reports are
+preserved; ordinary approval or lost-response retries reuse the same credential.
+
 After a completed session, Studio saves its research records and queues the report.
 An application-owned background job submits it. Project opening, session completion
 and opening the sharing dialog can retry opted-in pending reports; temporary

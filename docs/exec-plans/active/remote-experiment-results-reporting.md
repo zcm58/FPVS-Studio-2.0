@@ -2,6 +2,18 @@
 
 Status: Active
 
+## Pending connection recovery (2026-10-29)
+
+An exact OpenFPVS `credential_scope_conflict` now offers explicit replacement
+of the unchanged unregistered local credential. The default answer is No. The
+existing project reporting lock protects reset and binding; a stale successful
+response cannot overwrite a replacement token. Registered credentials, saved
+off choices and reports stay intact. The previous server request remains for
+administrator review. Ordinary same-scope approval retries preserve their token.
+Malformed bounded error JSON, including excessive nesting, becomes an actionable
+protocol error. Regression and compiled evidence are recorded in the
+[2.5.4 release plan](interlab-reliability-release-2.5.4.md).
+
 Date: 2026-10-07
 
 Implementation approved on 2026-10-05 on `codex/experiment-data-sharing`.

@@ -349,6 +349,19 @@ class DataSharingDialog(QDialog):
         )
         return answer == QMessageBox.StandardButton.Yes
 
+    def confirm_pending_connection_reset(self, project_id: str) -> bool:
+        target = f"project {project_id}" if project_id else "the selected project"
+        answer = QMessageBox.question(
+            self, "Replace pending connection?",
+            "The previous connection request used a different project or lab code. "
+            f"Clear this machine's pending request and connect to {target}?\n\n"
+            "The previous request remains in OpenFPVS for the administrator to review. "
+            "Saved sharing preferences and reports stay unchanged.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
     def set_comparison(
         self, rows: Sequence[ComparisonRow], *, scope: str, notice: str, details: str,
     ) -> None:

@@ -598,6 +598,44 @@ def test_packaged_smoke_checks_runtime_dependency_imports() -> None:
     assert '"sounddevice"' in GUI_PACKAGED_SMOKE_TEXT
 
 
+def test_packaged_smoke_refuses_source_execution_before_creating_user_dirs(monkeypatch) -> None:
+    from fpvs_studio.gui import packaged_smoke
+
+    monkeypatch.setattr(packaged_smoke.os, "environ", {"FPVS_ALLOW_QT_TESTS": "1"})
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    monkeypatch.setattr(packaged_smoke, "_isolate_psychopy_user_dirs", lambda: pytest.fail(
+        "A source-mode invocation must stop before user-directory setup or Qt imports."
+    ))
+    with pytest.raises(RuntimeError, match="compiled application"):
+        packaged_smoke.collect_packaged_smoke_report()
+
+
+def test_packaged_smoke_redirects_both_qsettings_scopes_to_its_temp_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fpvs_studio.gui.packaged_smoke import _isolate_qt_settings
+
+    calls = []
+    core = ModuleType("PySide6.QtCore")
+    core.QSettings = SimpleNamespace(  # type: ignore[attr-defined]
+        Format=SimpleNamespace(IniFormat="ini"),
+        Scope=SimpleNamespace(UserScope="user", SystemScope="system"),
+        setDefaultFormat=lambda format_: calls.append(("default", format_)),
+        setPath=lambda format_, scope, path: calls.append((format_, scope, path)),
+    )
+    monkeypatch.setitem(sys.modules, "PySide6.QtCore", core)
+    paths = _isolate_qt_settings(tmp_path)
+    assert calls == [
+        ("default", "ini"),
+        ("ini", "user", str(tmp_path / "qt-settings" / "user")),
+        ("ini", "system", str(tmp_path / "qt-settings" / "system")),
+    ]
+    assert set(paths) == {"user", "system"}
+    assert all(
+        Path(value).is_dir() and Path(value).is_relative_to(tmp_path) for value in paths.values()
+    )
+
+
 def _evaluate_updater_spec(monkeypatch: pytest.MonkeyPatch, modules: list[str]) -> dict:
     """Execute the spec graph checks with a simulated PyInstaller analysis, without Qt."""
     hooks = ModuleType("PyInstaller.utils.hooks")

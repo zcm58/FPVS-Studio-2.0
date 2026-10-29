@@ -26,11 +26,16 @@ from fpvs_studio.core.data_sharing import (
     SharingProfile,
 )
 from fpvs_studio.data_sharing.credentials import sharing_credential_store
-from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.errors import (
+    DataSharingCancelled,
+    DataSharingError,
+    PendingEnrollmentConflict,
+)
 from fpvs_studio.data_sharing.library_scope import (
     library_enrollment_scope,
     validate_library_scope,
 )
+from fpvs_studio.data_sharing.storage import _storage_lock, load_settings
 from fpvs_studio.library.credentials import CredentialStore
 from fpvs_studio.library.errors import LibraryError
 from fpvs_studio.library.models import DeviceCredential, LibraryConnection
@@ -72,6 +77,14 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 def _status_error(status: int, body: object = None) -> DataSharingError:
+    if (status == 409 and isinstance(body, dict)
+            and set(body) == {"schema_version", "error", "message"}
+            and body["schema_version"] == "1.0" and body["error"] == "credential_scope_conflict"
+            and isinstance(body["message"], str)):
+        return DataSharingError(
+            "This connection request uses a different project or lab code.",
+            code="enrollment_scope",
+        )
     if (status == 429 and isinstance(body, dict)
             and set(body) == {"schema_version", "error", "message"}
             and body["schema_version"] == "1.0" and body["error"] == "project_storage_limit"
@@ -160,7 +173,8 @@ def http_transport(
     except HTTPError as error:
         error_body: object = None
         try:
-            if (error.code in (403, 429) and error.headers.get_content_type() == "application/json"
+            if (error.code in (403, 409, 429)
+                    and error.headers.get_content_type() == "application/json"
                     and error.headers.get("Content-Encoding", "identity") == "identity"):
                 check_cancel(cancel)
                 payload = error.read(2049)
@@ -175,7 +189,7 @@ def http_transport(
                     )
                 try:
                     error_body = json.loads(payload)
-                except (ValueError, UnicodeDecodeError):
+                except (ValueError, UnicodeDecodeError, RecursionError):
                     raise DataSharingError(
                         "The results service returned invalid error data.", code="protocol"
                     ) from None
@@ -297,7 +311,7 @@ class DataSharingClient:
 
     def enroll(
         self, root: Path, code: str, protocol_sha256: str, cancel: Event,
-        *, project_id: str | None = None,
+        *, project_id: str | None = None, reset_pending_credential_sha256: str | None = None,
     ) -> SharingProfile:
         check_cancel(cancel)
         if not code.strip() or len(code) > 128:
@@ -318,13 +332,29 @@ class DataSharingClient:
             scope["project_id"] = project_id
         store = self._store(root, protocol_sha256)
         try:
-            credential = store.load()
-            if credential is None:
-                credential = DeviceCredential(
-                    token=secrets.token_hex(32),
-                    device_name="FPVS Studio data sharing",
-                )
-                store.save(credential)
+            with _storage_lock(root):
+                check_cancel(cancel)
+                credential = store.load()
+                if reset_pending_credential_sha256 is not None:
+                    if (
+                        load_settings(root).profile is not None or credential is None
+                        or credential.connection is not None
+                        or hashlib.sha256(credential.token.encode()).hexdigest()
+                        != reset_pending_credential_sha256
+                    ):
+                        raise DataSharingError(
+                            "The pending connection changed. "
+                            "Reconnect to review its current state.",
+                            code="enrollment",
+                        )
+                    store.delete()
+                    credential = None
+                if credential is None:
+                    credential = DeviceCredential(
+                        token=secrets.token_hex(32),
+                        device_name="FPVS Studio data sharing",
+                    )
+                    store.save(credential)
             payload = json.dumps(
                 {
                     "schema_version": "1.0",
@@ -335,9 +365,16 @@ class DataSharingClient:
                 },
                 separators=(",", ":"),
             ).encode("utf-8")
-            profile = self._parse(
-                self._request("POST", "/results/v1/enroll", payload, cancel), SharingProfile
-            )
+            try:
+                profile = self._parse(
+                    self._request("POST", "/results/v1/enroll", payload, cancel), SharingProfile
+                )
+            except DataSharingError as error:
+                if error.code == "enrollment_scope" and credential.connection is None:
+                    raise PendingEnrollmentConflict(
+                        hashlib.sha256(credential.token.encode()).hexdigest()
+                    ) from None
+                raise
             if profile.protocol_sha256 != protocol_sha256:
                 raise DataSharingError(
                     "The invitation belongs to a different protocol.", code="protocol"
@@ -354,7 +391,14 @@ class DataSharingClient:
                     )
                 }
             )
-            store.save(credential)
+            with _storage_lock(root):
+                current = store.load()
+                if current is None or current.token != credential.token:
+                    raise DataSharingError(
+                        "The connection changed while enrolling. Reconnect to check its status.",
+                        code="enrollment",
+                    )
+                store.save(credential)
             return profile
         except LibraryError:
             raise DataSharingError(

@@ -76,6 +76,13 @@ isolation. The Qt-enabled `full` tier remains serial.
 
 ## Skill Routing
 
+For a results connection stuck after changing its study or lab code, start with
+`data_sharing/client.py` and `gui/data_sharing_controller.py`. The exact service
+scope conflict permits confirmed replacement of an unchanged pending credential;
+see [Data sharing](../DATA_SHARING.md). Use data-sharing/GUI focused routes and
+repo precommit. Approved compiled verification in `gui/packaged_smoke.py` uses
+synthetic dialog states and isolated Qt settings without network or credentials.
+
 For startup saved-report notices, start with `gui/data_sharing_controller.py`,
 `gui/data_sharing_dialog.py` and the callback in `gui/controller.py`. Issues aggregate
 once per startup pass with full project paths; Welcome carries no report-status line.

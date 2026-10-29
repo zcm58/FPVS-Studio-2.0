@@ -100,6 +100,9 @@ class LibrarySubmissionController(QObject):
             result = cast(UpdateTaskResult, value)
             self._job = None
             if result.cancelled:
+                if isinstance(result.value, PreparedPublication):
+                    # Cancellation can arrive while a successful worker drains.
+                    self._ready(result.value, upload=False)
                 self._status("Canceled. You can retry this upload.")
             elif result.error is not None:
                 detail = (
@@ -208,12 +211,13 @@ class LibrarySubmissionController(QObject):
                     "Removing the unsubmitted copy…",
                 )
 
-    def _ready(self, value: object) -> None:
+    def _ready(self, value: object, *, upload: bool = True) -> None:
         self._prepared = cast(PreparedPublication, value)
         self.dialog.review.setPlainText(
             f"Source project: {self._source}\n\n" + publication_review(self._prepared)
         )
-        self._action("submit")
+        if upload:
+            self._action("submit")
 
     def _submitted(self, value: object) -> None:
         result = cast(SubmissionStatus, value)

@@ -21,7 +21,11 @@ from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.project_service import discover_project_roots
-from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.errors import (
+    DataSharingCancelled,
+    DataSharingError,
+    PendingEnrollmentConflict,
+)
 from fpvs_studio.data_sharing.library_scope import validate_library_scope
 from fpvs_studio.data_sharing.service import ComparisonView, ConditionAggregate, SharingView
 from fpvs_studio.data_sharing.storage import (
@@ -188,6 +192,7 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "isValid": lambda _window: True, "protocol_fingerprint": fingerprint,
         "DataSharingCancelled": DataSharingCancelled, "UpdateTaskResult": _Result,
         "DataSharingError": DataSharingError, "replace": replace, "Event": Event,
+        "PendingEnrollmentConflict": PendingEnrollmentConflict,
         "load_settings": load_preferences,
         "SharingView": SharingView, "ConditionAggregate": ConditionAggregate,
         "ComparisonRow": lambda **values: SimpleNamespace(**values),
@@ -497,6 +502,54 @@ def test_explicit_connect_hashes_protocol_without_automatic_enable(state):
     assert state.backend.calls[-1] == ("connect", state.root, "lab-issued-code", "a" * 64)
     assert not state.controller._view.settings.enabled
     assert all(call[0] != "sync" for call in state.backend.calls)
+
+
+@pytest.mark.parametrize(
+    "decision", ["decline", "confirm", "retry-conflict", "switch-project", "edit-project"],
+)
+def test_pending_connection_reset_requires_confirmation_and_current_project(state, decision):
+    state.controller.opened(state.window)
+    state.lifecycle.jobs[-1].run()
+    requests, questions, cleared = [], [], []
+
+    def enroll(root, code, fingerprint, _cancel, **kwargs):
+        requests.append((root, code, fingerprint, kwargs))
+        if len(requests) == 1 or decision == "retry-conflict":
+            raise PendingEnrollmentConflict("b" * 64)
+        state.backend.view = SharingView(SharingSettings(profile=_profile()))
+        return state.backend.view
+
+    def confirm(project_id):
+        questions.append(project_id)
+        if decision == "switch-project":
+            replacement = _Window(state.root / "replacement", state.window.document.project)
+            state.current[0] = replacement
+            state.controller.opened(replacement)
+        elif decision == "edit-project":
+            state.window.document.project = state.window.document.project.model_copy(deep=True)
+        return decision != "decline"
+
+    state.backend.enroll_project = enroll
+    state.controller.dialog = SimpleNamespace(
+        set_state=lambda **_values: None, set_project_url=lambda _url: None,
+        set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
+        confirm_pending_connection_reset=confirm, clear_invitation=lambda: cleared.append(True),
+        hide=lambda: None, deleteLater=lambda: None,
+    )
+    project_id = "01234567-89ab-cdef-0123-456789abcdef"
+    state.controller._request("connect", ("private lab code", project_id))
+    state.lifecycle.jobs[-1].run()
+    assert questions == [project_id]
+    _finish_jobs(state)
+    assert len(requests) == (2 if decision in {"confirm", "retry-conflict"} else 1)
+    if decision == "confirm":
+        assert requests[-1] == (state.root, "private lab code", "a" * 64, {
+            "project_id": project_id, "reset_pending_credential_sha256": "b" * 64,
+        })
+        assert cleared == [True]
+        assert not state.controller._view.settings.enabled
+    else:
+        assert not cleared
 
 
 def test_enabling_syncs_then_optout_cancels_and_outranks_queued_refresh(state):

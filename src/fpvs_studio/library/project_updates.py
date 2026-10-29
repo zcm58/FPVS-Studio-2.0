@@ -76,6 +76,12 @@ def select_project_update(
             "incompatible", origin, latest,
             f"Version {latest.version} requires FPVS Studio {latest.min_studio_version} or later.",
         )
+    if catalog.access_level != "download":
+        return ProjectUpdateResult(
+            "unavailable", origin, latest,
+            f"Library version {latest.version} is available. "
+            "Your lab has view-only Library access; downloads are not permitted.",
+        )
     if origin.installed_version is None:
         return ProjectUpdateResult(
             "version_unknown", origin, latest,

@@ -73,6 +73,9 @@ Active capture capacity is visible; Review captures offers confirmed local archi
 of unchanged terminal excluded evidence when capacity needs recovery.
 Copy protocol fingerprint supplies the hash for administrator project setup;
 View OpenFPVS project opens the private website dashboard after enrollment.
+An exact pending-enrollment scope conflict offers an explicit replacement prompt;
+its default is No. Confirmed retry runs through the existing worker and rechecks
+the pending credential before replacement. See the operator workflow below.
 See [Data sharing](DATA_SHARING.md) for exact fields, cohort limits and activation.
 Registered checks cover both tabs and connection states at minimum/default sizes.
 For visible acceptance, open View > Data Sharing & Comparison, inspect both tabs at

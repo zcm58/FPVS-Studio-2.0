@@ -85,6 +85,24 @@ def test_unknown_legacy_version_is_not_claimed_to_have_an_update():
     assert result.can_install
 
 
+@pytest.mark.parametrize("installed_version", ["1.0.0", None])
+def test_view_only_catalog_keeps_latest_visible_without_offering_download(installed_version):
+    receipt = origin(installed_version=installed_version, bundle_sha256=None)
+    available = catalog(item("1.1.0")).model_copy(update={"access_level": "view"})
+    result = check_project_update(Client(available), receipt, automatic=False)
+    assert result.status == "unavailable"
+    assert result.latest_item.version == "1.1.0"
+    assert "view-only" in result.message
+    assert not result.can_install
+
+
+def test_project_update_uses_refreshed_download_permission():
+    client = Client(catalog(item("1.1.0")).model_copy(update={"access_level": "view"}))
+    assert not check_project_update(client, origin()).can_install
+    client.result = catalog(item("1.1.0"))
+    assert check_project_update(client, origin()).can_install
+
+
 @pytest.mark.parametrize("available", [
     catalog(), catalog(item("1.0"), item("1.0.0")), catalog(item("1.0.0", sha256="b" * 64)),
 ])

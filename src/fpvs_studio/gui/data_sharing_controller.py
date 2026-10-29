@@ -20,7 +20,11 @@ from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing import service
 from fpvs_studio.data_sharing.client import DataSharingClient
-from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.errors import (
+    DataSharingCancelled,
+    DataSharingError,
+    PendingEnrollmentConflict,
+)
 from fpvs_studio.data_sharing.service import ConditionAggregate, SharingView
 from fpvs_studio.data_sharing.storage import CaptureArchiveReview, load_settings
 from fpvs_studio.gui.data_sharing_dialog import (
@@ -41,7 +45,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 _RETRY_LIMIT = 4
 _STOPPING_MESSAGE = "Stopping uploads… An in-flight report may already have been received."
-ActionValue = str | bool | tuple[str, str] | CaptureArchiveReview | None
+ActionValue = str | bool | tuple[str, str] | tuple[str, str, str] | CaptureArchiveReview | None
 
 
 class DataSharingController(QObject):
@@ -296,6 +300,12 @@ class DataSharingController(QObject):
                 result = backend.enroll_project(
                     root, code, fingerprint, cancel, project_id=project_id or None,
                 )
+            elif operation == "reset_connect":
+                code, project_id, credential_sha256 = cast(tuple[str, str, str], value)
+                result = backend.enroll_project(
+                    root, code, fingerprint, cancel, project_id=project_id or None,
+                    reset_pending_credential_sha256=credential_sha256,
+                )
             elif operation == "enable":
                 result = backend.set_sharing_enabled(root, bool(value), fingerprint, cancel)
             elif operation == "disconnect":
@@ -337,9 +347,9 @@ class DataSharingController(QObject):
         job = self._lifecycle.start_task(work, keep_success_on_cancel=True)
         self._job = job
 
-        def finished(value: object) -> None:
+        def finished(completion: object) -> None:
             self._job = None
-            outcome = cast(UpdateTaskResult, value)
+            outcome = cast(UpdateTaskResult, completion)
             current = self._current(window) and generation == self._generation
             project_changed = current and window.document.project is not original_project
             discarded = (
@@ -352,12 +362,27 @@ class DataSharingController(QObject):
                     if self.dialog is not None:
                         self._render()
                         self.dialog.set_busy(False, str(outcome.error))
+                        if (
+                            operation == "connect"
+                            and isinstance(outcome.error, PendingEnrollmentConflict)
+                        ):
+                            reviewer = self.dialog
+                            code, project_id = cast(tuple[str, str], value)
+                            if (
+                                reviewer.confirm_pending_connection_reset(project_id)
+                                and self._current(window) and generation == self._generation
+                                and window.document.project is original_project
+                                and self.dialog is reviewer and isValid(reviewer)
+                            ):
+                                self._request("reset_connect", (
+                                    code, project_id, outcome.error.credential_sha256,
+                                ))
                     self._schedule_retry()
                 else:
                     self._protocol, self._view = cast(tuple[str, SharingView], outcome.value)
                     self._off_error = ""
                     self._labels = labels
-                    if operation == "connect" and self.dialog is not None:
+                    if operation in {"connect", "reset_connect"} and self.dialog is not None:
                         self.dialog.clear_invitation()
                     self._render()
                     if operation == "protocol" and self.dialog is not None:

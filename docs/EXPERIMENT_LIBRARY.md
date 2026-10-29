@@ -32,7 +32,9 @@ Submission uses `/submissions/v1` and `/submissions/v1/<UUID>/bundle`; the
 private OpenFPVS project owns its additive review schema and GitHub writes. Uploads
 are capped at 64 MiB. The UUID, metadata, byte size and SHA-256 remain fixed on an
 exact retry; confirmed requests cannot have their bundles replaced. Cancel or an
-uncertain upload retains prepared files and **Retry Upload** reuses them. An independent
+uncertain upload retains prepared files and **Retry Upload** reuses them. Preparation
+that finishes just before cancellation is also retained for the next Upload
+action; cancellation never starts delivery automatically. An independent
 OS-protected upload token allows only this computer/user's uploads and status. It grants
 no Library or administrator access. **My Uploads** remains available after a
 restart with the same OS credential; resuming upload from retained preparation
@@ -246,6 +248,8 @@ bundle review, Save/Discard/Cancel guards and display-settings review. The curre
 project's setup, local edits, logs and participant data stay in its existing folder;
 the imported project gets its own collision-safe folder and version record. A newer
 release requiring a newer Studio build remains visible with installation disabled.
+View-only lab access also keeps version details visible with downloading disabled and
+an access explanation; a fresh check applies any changed download permission.
 When a download is available, the review shows concise guidance without scanning
 participant data:
 

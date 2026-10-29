@@ -111,7 +111,7 @@ def test_controller_shows_dismissible_report_notice_on_visible_window(
 
 @pytest.mark.parametrize("size", [(820, 480), (880, 540)])
 @pytest.mark.parametrize(
-    "state", ["empty", "ready", "busy", "error", "validation", "offline", "full"]
+    "state", ["empty", "ready", "busy", "error", "validation", "offline", "full", "conflict"]
 )
 @pytest.mark.parametrize("background", ["#202124", "#f4f7fb"])
 def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, background):
@@ -124,8 +124,8 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, backg
         + "\nProtocol SHA-256: " + "a" * 64
     )
     dialog.set_state(
-        connected=state not in {"empty", "validation"},
-        enabled=state not in {"empty", "validation"}, profile=profile,
+        connected=state not in {"empty", "validation", "conflict"},
+        enabled=state not in {"empty", "validation", "conflict"}, profile=profile,
         status="The service is temporarily unavailable. Reports remain pending; retry when "
         "the connection is available." if state == "error" else
         "Enter the lab-issued invitation code for the reviewed experiment version."
@@ -133,7 +133,9 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, backg
         "Studio will retry on its next launch." if state == "offline" else
         "Sharing capture history is full (512/512). "
         "Use Review captures to archive excluded sessions."
-        if state == "full" else "Sharing is enabled.",
+        if state == "full" else
+        "A pending connection request uses a different project or lab code."
+        if state == "conflict" else "Sharing is enabled.",
         pending=9999, held=9999, uploaded=9999,
         captures=512 if state == "full" else 32, capture_limit=512, reviewable_captures=31,
     )
@@ -164,7 +166,7 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, backg
     assert dialog.review_captures_button.isEnabled() == (state != "busy")
     assert dialog.profile_label.text() == profile.partition("\n")[0]
     assert dialog.profile_label.toolTip() == profile
-    assert dialog.profile_label.isVisible() == (state not in {"empty", "validation"})
+    assert dialog.profile_label.isVisible() == (state not in {"empty", "validation", "conflict"})
     assert not dialog.header.subtitle_label.isVisible()
     assert "Protocol SHA-256" not in dialog.profile_label.text()
     for index in range(dialog.tabs.count()):
@@ -317,6 +319,26 @@ def test_project_setup_and_website_actions_are_explicit(qtbot):
     dialog.set_busy(True)
     assert not dialog.website_button.isEnabled()
     assert not dialog.protocol_button.isEnabled()
+
+
+@pytest.mark.parametrize("answer", [QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No])
+def test_pending_connection_reset_is_explicit_and_identifies_selected_project(
+    qtbot, monkeypatch, answer,
+):
+    dialog = DataSharingDialog(configured=True)
+    qtbot.addWidget(dialog)
+    project_id = "01234567-89ab-cdef-0123-456789abcdef"
+    questions = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *args: questions.append(args) or answer)
+    assert dialog.confirm_pending_connection_reset(project_id) is (
+        answer == QMessageBox.StandardButton.Yes
+    )
+    question = questions[0]
+    assert question[1] == "Replace pending connection?"
+    assert project_id in question[2]
+    assert "previous request remains in OpenFPVS" in question[2]
+    assert "Saved sharing preferences and reports stay unchanged" in question[2]
+    assert question[-1] == QMessageBox.StandardButton.No
 
 
 def test_available_comparison_keeps_details_in_tooltips(qtbot):

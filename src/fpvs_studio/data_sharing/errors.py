@@ -13,3 +13,12 @@ class DataSharingError(RuntimeError):
 class DataSharingCancelled(DataSharingError):
     def __init__(self) -> None:
         super().__init__("Data sharing was canceled.", code="cancelled")
+
+
+class PendingEnrollmentConflict(DataSharingError):
+    def __init__(self, credential_sha256: str) -> None:
+        super().__init__(
+            "A pending connection request uses a different project or lab code.",
+            code="enrollment_scope",
+        )
+        self.credential_sha256 = credential_sha256

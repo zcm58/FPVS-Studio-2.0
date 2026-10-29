@@ -13,14 +13,24 @@ from uuid import uuid4
 
 import pytest
 
-from fpvs_studio.core.data_sharing import FixationOccurrence, SessionReport, SharingProfile
+from fpvs_studio.core.data_sharing import (
+    FixationOccurrence,
+    SessionReport,
+    SharingProfile,
+    SharingSettings,
+)
 from fpvs_studio.data_sharing.client import (
     DataSharingClient,
     _NoRedirect,
     _status_error,
     http_transport,
 )
-from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
+from fpvs_studio.data_sharing.errors import (
+    DataSharingCancelled,
+    DataSharingError,
+    PendingEnrollmentConflict,
+)
+from fpvs_studio.data_sharing.storage import save_settings
 from fpvs_studio.library.models import DeviceCredential, LibraryConnection
 
 ORIGIN = "https://results.example.invalid"
@@ -55,6 +65,9 @@ def test_storage_budget_requires_attention_and_throttling_keeps_backoff():
     (429, {"schema_version": "1.0", "error": "project_storage_limit", "message": "Private"},
      "storage_limit"),
     (429, {"schema_version": "1.0", "error": "rate_limit", "message": "Private"}, "throttled"),
+    (409, {"schema_version": "1.0", "error": "credential_scope_conflict", "message": "Private"},
+     "enrollment_scope"),
+    (409, {"schema_version": "1.0", "error": "report_conflict", "message": "Private"}, "conflict"),
 ])
 def test_http_budget_and_throttle_errors_are_bounded_and_close_response(
     monkeypatch, status, body, code,
@@ -79,6 +92,7 @@ def test_http_budget_and_throttle_errors_are_bounded_and_close_response(
      "administrator"),
     (b"x" * 2049, "exceeds its limit"),
     (b"invalid json", "invalid error data"),
+    pytest.param(b"[" * 1000 + b"]" * 1000, "invalid error data", id="nested-json"),
 ])
 def test_pending_results_http_error_is_bounded_and_safe(monkeypatch, payload, expected):
     import fpvs_studio.data_sharing.client as module
@@ -209,6 +223,66 @@ def test_lost_enrollment_response_reuses_secure_token_and_no_hostname(tmp_path):
     assert len(sent[0]["device_token"]) == 64
     assert set(sent[0]["device_token"]) <= set("0123456789abcdef")
     assert store.value.connection.device_id == "device-1"
+
+
+@pytest.mark.parametrize("registered", [False, True])
+def test_only_pending_scope_conflicts_offer_explicit_reset(tmp_path, registered):
+    saved = credential() if registered else credential().model_copy(update={"connection": None})
+    store = Store(saved)
+
+    def transport(*_args):
+        raise _status_error(409, {
+            "schema_version": "1.0", "error": "credential_scope_conflict", "message": "Private",
+        })
+
+    backend = DataSharingClient(ORIGIN, transport=transport, store_factory=lambda *_: store)
+    with pytest.raises(DataSharingError) as failure:
+        backend.enroll(tmp_path, "new lab code", HASH, Event())
+    assert isinstance(failure.value, PendingEnrollmentConflict) is (not registered)
+    assert store.value == saved
+    assert saved.token not in str(failure.value)
+    if not registered:
+        assert failure.value.credential_sha256 == hashlib.sha256(saved.token.encode()).hexdigest()
+
+
+@pytest.mark.parametrize("changed", ["registered", "new-token", "saved-profile", "canceled"])
+def test_pending_reset_rechecks_identity_registration_and_cancellation(tmp_path, changed):
+    original = credential().model_copy(update={"connection": None})
+    store = Store(original)
+    cancel = Event()
+    if changed == "registered":
+        store.value = credential()
+    elif changed == "new-token":
+        store.value = original.model_copy(update={"token": "b" * 64})
+    elif changed == "saved-profile":
+        save_settings(tmp_path, SharingSettings(profile=profile()))
+    else:
+        cancel.set()
+    retained = store.value
+    calls = []
+    backend = DataSharingClient(
+        ORIGIN, transport=lambda *args: calls.append(args), store_factory=lambda *_: store,
+    )
+    with pytest.raises(DataSharingError):
+        backend.enroll(
+            tmp_path, "new lab code", HASH, cancel,
+            reset_pending_credential_sha256=hashlib.sha256(original.token.encode()).hexdigest(),
+        )
+    assert store.value == retained and not calls
+
+
+def test_late_enrollment_response_cannot_overwrite_replaced_pending_identity(tmp_path):
+    store = Store()
+    replacement = credential().model_copy(update={"token": "b" * 64, "connection": None})
+
+    def transport(*_args):
+        store.save(replacement)
+        return profile().model_dump_json().encode()
+
+    backend = DataSharingClient(ORIGIN, transport=transport, store_factory=lambda *_: store)
+    with pytest.raises(DataSharingError, match="connection changed while enrolling"):
+        backend.enroll(tmp_path, "lab code", HASH, Event())
+    assert store.value == replacement
 
 
 @pytest.mark.parametrize(
