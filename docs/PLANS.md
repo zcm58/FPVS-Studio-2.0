@@ -32,6 +32,7 @@ Concrete planned work:
 - [Per-condition stream duration in seconds](exec-plans/planned/per-condition-stream-duration.md)
 - [Per-condition presentation counts and constrained shuffled order](exec-plans/planned/per-condition-repeat-counts.md)
 - [Reproducible randomization with three seeds](exec-plans/planned/reproducible-randomization-controls.md)
+- [Simplified condition modifiers, post-condition questions and readable response CSV](exec-plans/planned/simple-condition-modifiers-and-post-questions.md)
 - [Optional image pool reset policy](exec-plans/planned/image-pool-reset-policy.md) (retain reset per condition run; future carryover option with user-facing pros/cons)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md) (algorithm and validation investigation; not implemented)
