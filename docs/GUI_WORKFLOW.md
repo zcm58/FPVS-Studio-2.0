@@ -561,8 +561,13 @@ The authoring window is organized around two user-facing modes:
   - Timing exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), `Verify display`, derived rate/frame counts/condition duration, and
     presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
-    required when any image condition uses Contrast Modulation. Image cadence is edited
-    in Design; Timing retains cadence fields for word conditions. Setup requires a successful
+    required when any image condition uses Contrast Modulation. Timing & Session owns
+    the shared stimulus presentation frequency and inherited/custom rates for image
+    and word conditions. Design displays frequency read-only. A condition override
+    requires the explicit Yes/No warning (No by default); Use shared restores inheritance.
+    Shared edits preserve custom rates. Apply validates every affected condition before
+    committing, preserving its stream duration at the selected refresh target. Invalid
+    changes retain the project and show valid duration alternatives. Setup requires a successful
     PsychoPy fullscreen measurement before `Next`; a visible notice explains the
     fullscreen check before activation. Changing the dropdown clears the
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
@@ -1519,3 +1524,13 @@ Recording persistence manual acceptance: open one Unicorn and one BioSemi projec
 confirm Home and Run agree after switching and restarting. Change a device through
 Settings, cancel a draft, and confirm Apply persists without saving unrelated pending
 setup edits. Check Recording Setup at `700x640` and Settings in both themes.
+
+### Presentation frequency acceptance
+
+In an approved visible Windows session, open image and word projects at 1120x820
+in both themes. In Timing & Session, apply a shared frequency, decline and accept a
+condition-specific override, then use the shared value again. Check inherited/custom
+labels, long condition-name tooltips, keyboard focus, pending-draft navigation and
+invalid-duration recovery. Verify that Design cannot edit the frequency, saved custom
+rates survive reopen, and requested/realized rates remain distinguishable at 59.94 Hz.
+Registered Qt coverage is maintained separately from the default non-Qt checks.

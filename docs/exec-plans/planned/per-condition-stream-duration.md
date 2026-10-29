@@ -43,7 +43,7 @@ oddball cycle or silently substitute a different length.
    timing until a valid refresh target is resolved; do not invent a 60 Hz display to
    assign historical seconds or silently freeze an estimated duration as authored truth.
 2. Resolve seconds against the effective per-condition frequency from the
-   [frequency plan](clear-presentation-frequency.md) and the compiled display refresh.
+   [frequency plan](../completed/clear-presentation-frequency.md) and the compiled display refresh.
    Retain whole frames and complete oddball cycles as the execution contract.
 3. Reject incompatible entries and display useful valid alternatives above/below the
    requested length. Selecting a listed alternative is an explicit user action.

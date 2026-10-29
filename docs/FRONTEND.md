@@ -158,8 +158,10 @@ labels consistently against the input column. Shared form treatment lives in
 
 Visible descriptive text must help with the current field, explain a consequential
 action, or resolve a current error. Avoid repeating the page title, control label,
-completed state or another step's settings. Design owns stream rates and SOAs;
-Timing owns refresh selection, verification and background. Show a concise verification
+completed state or another step's settings. Design owns cycle structure and native
+AB stream rates/SOAs. Timing & Session owns ordinary FPVS shared frequency and
+confirmed per-condition overrides, plus refresh selection, verification and background.
+The frequency table spans the form above the Display and Session groups. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
 Do not repeat Timing's inline blocker in the footer. Participant-authored instructions
 and actual validation rules are preserved.

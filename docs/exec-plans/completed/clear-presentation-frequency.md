@@ -1,11 +1,11 @@
 # Clear Presentation Frequency and Condition Overrides
 
-Status: Planned
+Status: Completed
 
 ## Purpose and confirmed decisions
 
 Planning branch: `feat/condition-timing-and-reproducibility`, created from `master`
-at `11640cb`. This plan records the user interview; implementation has not started.
+at `11640cb`. Implemented on this feature branch.
 
 Make stimulus presentation frequency easy to find and edit for FPVS image and word
 conditions. New experiments retain a shared default of 6 Hz. Conditions normally
@@ -26,7 +26,7 @@ with Yes/No buttons, defaulting to No:
 No leaves the previous value intact. Yes applies only the selected condition's
 validated override. Offer a clear return to the shared experiment frequency.
 Changing frequency preserves the requested stream duration, not the image count;
-the [duration plan](per-condition-stream-duration.md) owns representability errors.
+the [duration plan](../planned/per-condition-stream-duration.md) owns representability errors.
 
 ## Current evidence and ownership
 
@@ -87,3 +87,39 @@ unrelated visual design. Preserve trigger codes, meanings and stimulus-role anch
 while core recompiles event frames/counts for the new timing; retain hardware pulse
 spacing validation. Update canonical workflow/RunSpec docs
 and compact architecture/routing guidance when implementation changes those contracts.
+
+## Execution progress
+
+- Complete: core effective-rate resolution, atomic timing edits and Timing & Session controls.
+- Verification: compiler baseline, targeted regression checks, safe GUI checks and repository precommit.
+- Visible GUI and physical-display checks remain outside local non-Qt verification.
+
+## Implementation decisions
+
+- The author edits shared frequency above a condition table in Timing & Session,
+  using the existing form shell. The table shows effective/inherited/custom rates;
+  duration and presentation editors arrive in the following two sequential plans.
+- Primary actions are Apply for the shared draft, confirmed Custom for one condition,
+  and Use shared for reset. Failed validation preserves the draft and project.
+- Empty, inherited, custom, invalid and pending states must fit the existing
+  1120x820 wizard in both themes. Long condition names retain a full-value tooltip.
+- A frequency edit requires a selected monitor refresh target so existing frame-based
+  durations can be preserved without assuming 60 Hz. Loading legacy projects without
+  a target retains their counts. The seconds-based editor and migration are plan 2.
+
+## Verification result
+
+- Compiler focused: 500 passed. Final affected regression run: 60 passed.
+- Safe repository suite: 4002 passed, 12 Windows symlink skips and 24 subtests passed;
+  its one failure exposed validation-order precedence, now fixed and rerun successfully
+  in the affected regression run above.
+- Changed-file Ruff/compilation, full-source mypy, GC and docs audits passed.
+  Verification configuration passes for all 14 scopes.
+- The unfiltered precommit command stops on pre-existing untracked helper lint errors
+  in `.codex-tmp/` and `engines/standalone_contrast_example.py`. The same commands were
+  run with those unrelated files excluded only from changed-file lint/compilation.
+- Registered GUI tests were added/updated without executing Qt. The visible smoke
+  path in GUI_WORKFLOW.md and physical display checks remain unperformed locally.
+- Plan 2 owns the editable seconds column and coordinated frequency/duration drafts;
+  plan 3 owns the presentation-count column. This commit preserves legacy durations
+  during frequency-only edits and exposes actionable valid-duration alternatives.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -19,6 +20,10 @@ from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
     require_profile_category,
+)
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    propose_condition_frequencies,
 )
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -592,6 +597,21 @@ class DocumentConditionMixin:
         )
         self._replace_project(project)
 
+    def update_condition_frequencies(
+        self, *, shared_base_hz: float | None = None,
+        overrides: Mapping[str, float | None] | None = None,
+    ) -> None:
+        """Apply one validated shared/condition frequency draft without partial edits."""
+
+        try:
+            project = propose_condition_frequencies(
+                self._project, shared_base_hz=shared_base_hz, overrides=overrides,
+                refresh_hz=self._project.settings.display.preferred_refresh_hz,
+            )
+        except ValueError as error:
+            raise DocumentError(str(error)) from error
+        self._replace_project(project)
+
     def apply_experiment_design(
         self,
         condition_id: str,
@@ -600,7 +620,7 @@ class DocumentConditionMixin:
         slot_count: int,
         attentional_blink: AttentionalBlinkSettings | None,
     ) -> None:
-        """Apply one validated design and its project-wide cadence atomically."""
+        """Apply one validated design and project-wide oddball cadence atomically."""
         if self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
             raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
         condition = self.get_condition(condition_id)
@@ -611,12 +631,14 @@ class DocumentConditionMixin:
         ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         if (attentional_blink is not None) != ab:
             raise DocumentError("The design must match the locked experiment type.")
+        if base_hz != effective_condition_base_hz(self._project, condition):
+            raise DocumentError("Edit stimulus presentation frequency in Timing & Session.")
         if ab and condition.attentional_blink is None:
             raise DocumentError(
                 "Separate this FPVS Oddball Paradigm condition into its own experiment first."
             )
         protocol = validated_copy(
-            self._project.settings.protocol, base_hz=base_hz, oddball_every_n=slot_count
+            self._project.settings.protocol, oddball_every_n=slot_count
         )
         updated_condition = validated_copy(
             condition,

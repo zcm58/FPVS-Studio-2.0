@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from math import isfinite
 
 from fpvs_studio.core.compiler_support import CompileError, check_compilation_cancelled
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.fixation_planning import seconds_to_frames
 from fpvs_studio.core.frame_validation import FrameValidationError, frames_per_stimulus
 from fpvs_studio.core.masking import MaskingSettings, condition_masking
@@ -74,18 +75,6 @@ def validate_compilation_workload(
             "Bundle validation refresh rate must be an approved value: "
             f"{approved_monitor_refresh_rates_text()}."
         )
-    base_hz = project.settings.protocol.base_hz
-    if not isfinite(base_hz) or base_hz <= 0:
-        raise CompileError("Bundle base rate must be a positive finite number.")
-    raw_frames = refresh_hz / base_hz
-    if not isfinite(raw_frames) or raw_frames > limits.max_total_frames:
-        raise CompileError(
-            "Bundle compilation exceeds the total frames limit at the requested base rate."
-        )
-    try:
-        frame_count = frames_per_stimulus(refresh_hz, base_hz)
-    except FrameValidationError as exc:
-        raise CompileError(str(exc)) from exc
     repetitions = project.settings.session.block_count
     masking = {item.condition_id: condition_masking(project, item) for item in conditions}
     all_masking = bool(conditions) and all(value is not None for value in masking.values())
@@ -138,6 +127,18 @@ def validate_compilation_workload(
     cadence = project.settings.protocol.oddball_every_n
     for condition in conditions:
         check_compilation_cancelled()
+        base_hz = effective_condition_base_hz(project, condition)
+        if not isfinite(base_hz) or base_hz <= 0:
+            raise CompileError("Bundle base rate must be a positive finite number.")
+        raw_frames = refresh_hz / base_hz
+        if not isfinite(raw_frames) or raw_frames > limits.max_total_frames:
+            raise CompileError(
+                "Bundle compilation exceeds the total frames limit at the requested base rate."
+            )
+        try:
+            frame_count = frames_per_stimulus(refresh_hz, base_hz)
+        except FrameValidationError as exc:
+            raise CompileError(str(exc)) from exc
         cycles = condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
         slots = cycles * cadence
         settings = masking[condition.condition_id]

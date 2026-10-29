@@ -364,14 +364,14 @@ def test_standard_category_preserves_existing_protocol_until_apply(
 
     QApplication.processEvents()
     assert dialog.rate_spin.value() == 6.0
+    assert dialog.rate_spin.isReadOnly()
     assert dialog.cycle_canvas.roles() == ("base", "base", "base", "base", "oddball")
     assert not dialog.t2_source.isVisible()
-    dialog.rate_spin.setValue(4.0)
     dialog.cycle_canvas.set_roles(("base", "base", "base", "oddball"))
     assert document.project == before
     qtbot.mouseClick(dialog.apply_button, Qt.MouseButton.LeftButton)
 
-    assert document.project.settings.protocol.base_hz == 4.0
+    assert document.project.settings.protocol.base_hz == 6.0
     assert document.project.settings.protocol.oddball_every_n == 4
     assert document.project.conditions == before.conditions
 
@@ -498,7 +498,6 @@ def test_closing_discards_unapplied_oddball_timing(qtbot, monkeypatch, oddball_d
     document, _condition_id = oddball_document
     before = document.project.model_copy(deep=True)
     dialog = _open_designer(qtbot, monkeypatch, oddball_document)
-    dialog.rate_spin.setValue(4.0)
     dialog.cycle_canvas.add_role("base")
 
     qtbot.mouseClick(dialog.close_button, Qt.MouseButton.LeftButton)
@@ -530,7 +529,7 @@ def test_slow_preview_stops_on_toggle_edit_and_window_close(
     assert not dialog._preview_timer.isActive()
     assert not dialog.preview_window.isVisible()
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
-    dialog.rate_spin.setValue(4.0)
+    dialog.cycle_canvas.add_role("base")
     assert not dialog._preview_timer.isActive()
     assert not dialog.preview_button.isChecked()
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
@@ -565,9 +564,9 @@ def test_standard_half_blank_preview_removes_the_image_for_half_of_each_slot(
     document, condition_id = oddball_document
     _populate_sources(document, condition_id, tmp_path)
     document.update_condition(condition_id, duty_cycle_mode=DutyCycleMode.BLANK_50)
+    document.update_protocol_settings(base_hz=4.0)
     dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     _inject_thumbnails(dialog)
-    dialog.rate_spin.setValue(4.0)
     dialog.cycle_canvas.set_roles(("base", "oddball"))
 
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
@@ -593,9 +592,9 @@ def test_standard_contrast_preview_discloses_modulation_omission(
     document, condition_id = oddball_document
     _populate_sources(document, condition_id, tmp_path)
     document.update_condition(condition_id, duty_cycle_mode=DutyCycleMode.SINUSOIDAL)
+    document.update_protocol_settings(base_hz=4.0)
     dialog = _open_designer(qtbot, monkeypatch, oddball_document)
     _inject_thumbnails(dialog)
-    dialog.rate_spin.setValue(4.0)
     dialog.cycle_canvas.set_roles(("base", "oddball"))
 
     qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)

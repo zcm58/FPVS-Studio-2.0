@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.attentional_blink_presets import is_attentional_blink_stream_project
 from fpvs_studio.core.attentional_blink_stream import preview_attentional_blink_stream
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
@@ -35,6 +36,7 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
     StimulusModality,
 )
+from fpvs_studio.core.frame_validation import frames_per_stimulus
 from fpvs_studio.core.masking import is_masking_project
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, DisplayValidationReport
 from fpvs_studio.core.validation import (
@@ -314,16 +316,22 @@ class DisplaySettingsEditor(QWidget):
             )
             if mode in condition_modes
         ]
+        conditions = self._document.project.conditions
         reports = [
             validate_display_refresh(
-                self.current_refresh_hz(),
-                duty_cycle_mode=mode,
-                base_hz=protocol.base_hz,
+                self.current_refresh_hz(), duty_cycle_mode=condition.duty_cycle_mode,
+                base_hz=effective_condition_base_hz(self._document.project, condition),
                 oddball_every_n=self._target_cadence_slots(),
             )
-            for mode in ordered_modes
+            for condition in conditions
+        ] if conditions else [
+            validate_display_refresh(
+                self.current_refresh_hz(), duty_cycle_mode=mode, base_hz=protocol.base_hz,
+                oddball_every_n=self._target_cadence_slots(),
+            ) for mode in ordered_modes
         ]
-        report = next((report for report in reports if not report.compatible), reports[0])
+        report = next((report for report in reports if not report.compatible),
+                      next((report for report in reports if report.warnings), reports[0]))
         for condition in self._document.project.conditions:
             settings = condition.attentional_blink
             if isinstance(settings, AttentionalBlinkStreamSettings):
@@ -384,7 +392,7 @@ class DisplaySettingsEditor(QWidget):
             and condition.attentional_blink.target_count > 1
             for condition in self._document.project.conditions
         )
-        _set_form_row_visible(self.form_layout, self.base_hz_spin, not image_design and not stream)
+        _set_form_row_visible(self.form_layout, self.base_hz_spin, False)
         _set_form_row_visible(
             self.form_layout, self.oddball_every_n_spin, not image_design and not stream,
         )
@@ -429,11 +437,17 @@ class DisplaySettingsEditor(QWidget):
         self.summary_container.setVisible(not self._editable)
         if not self._editable:
             self.summary_value_labels["refresh"].setText(f"{preferred_refresh:.2f} Hz")
-            self.summary_value_labels["base"].setText(f"{protocol.base_hz:g} Hz")
+            rates = {
+                effective_condition_base_hz(self._document.project, condition)
+                for condition in self._document.project.conditions
+            } or {protocol.base_hz}
+            self.summary_value_labels["base"].setText(
+                ", ".join(f"{rate:g} Hz" for rate in sorted(rates)),
+            )
             cadence_slots = self._target_cadence_slots()
             self.summary_value_labels["oddball"].setText(
-                f"Every {cadence_slots} stimuli ({protocol.base_hz / cadence_slots:g} Hz)"
-                if cadence_slots is not None else "Varies by condition"
+                f"Every {cadence_slots} stimuli ({next(iter(rates)) / cadence_slots:g} Hz)"
+                if cadence_slots is not None and len(rates) == 1 else "Varies by condition"
             )
             self.summary_value_labels["background"].setText(
                 self.runtime_background_color_combo.currentText()
@@ -446,10 +460,14 @@ class DisplaySettingsEditor(QWidget):
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         cadence = "target pair" if ab else "oddball"
         item = "slot" if ab else "stimulus"
+        requested_oddball = report.requested_oddball_hz
+        requested_oddball_text = (
+            f"{requested_oddball:g} Hz" if requested_oddball is not None else "varies by condition"
+        )
         if report.frames_per_cycle is None:
             self.timing_summary_label.setText(
-                f"Requested: {protocol.base_hz:g} Hz stream, "
-                f"{protocol.oddball_hz:g} Hz {cadence}."
+                f"Requested: {report.base_hz:g} Hz stream, "
+                f"{requested_oddball_text} {cadence}."
             )
         else:
             frames_per_oddball = report.frames_per_cycle * protocol.oddball_every_n
@@ -457,7 +475,12 @@ class DisplaySettingsEditor(QWidget):
             self.timing_summary_label.setText(
                 f"{report.frames_per_cycle} frames/{item}; "
                 f"{frames_per_oddball} frames/{cadence}; "
-                f"requested {cadence} {protocol.oddball_hz:g} Hz; {duration_text}."
+                f"requested {cadence} {requested_oddball_text}; {duration_text}."
+            )
+        if len({effective_condition_base_hz(self._document.project, condition)
+                for condition in self._document.project.conditions}) > 1:
+            self.timing_summary_label.setText(
+                "Timing varies by condition. " + self.timing_summary_label.text(),
             )
         if is_attentional_blink_stream_project(self._document.project):
             soas = ", ".join(
@@ -497,10 +520,11 @@ class DisplaySettingsEditor(QWidget):
             self.timing_status_label.setVisible(True)
         elif report.warnings:
             self.timing_status_label.setProperty("statusState", "warning")
-            realized_base = report.realized_base_hz or protocol.base_hz
+            realized_base = report.realized_base_hz or report.base_hz
             realized_oddball = report.realized_oddball_hz or protocol.oddball_hz
             self.timing_status_label.setText(
-                f"{verification_prefix}Approximate timing: whole-frame scheduling realizes "
+                f"{verification_prefix}Approximate timing: requested {report.base_hz:g} Hz; "
+                "whole-frame scheduling realizes "
                 f"{realized_base:.6g} Hz stream and {realized_oddball:.6g} Hz {cadence}."
             )
             self.timing_status_label.setVisible(True)
@@ -557,7 +581,9 @@ class DisplaySettingsEditor(QWidget):
                     condition.sequence_count
                     * condition.oddball_cycle_repeats_per_sequence
                     * protocol.oddball_every_n
-                    * frames_per_stimulus_value
+                    * frames_per_stimulus(
+                        refresh_hz, effective_condition_base_hz(self._document.project, condition),
+                    )
                     / refresh_hz
                 )
                 for condition in conditions
@@ -668,7 +694,12 @@ class DisplaySettingsEditor(QWidget):
     def _apply_protocol_settings(self) -> None:
         try:
             self._document.update_protocol_settings(
-                base_hz=self.base_hz_spin.value(),
+                base_hz=(
+                    self.base_hz_spin.value()
+                    if self._document.project.experiment_category
+                    == ExperimentCategory.ATTENTIONAL_BLINK
+                    else self._document.project.settings.protocol.base_hz
+                ),
                 oddball_every_n=self.oddball_every_n_spin.value(),
             )
         except Exception as error:

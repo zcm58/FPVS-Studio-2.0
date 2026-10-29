@@ -8,6 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil, copysign, floor, isclose, isfinite
 
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.display_geometry import visual_angle_width_cm
 from fpvs_studio.core.enums import (
@@ -444,7 +445,6 @@ def condition_fixation_guidance(
     """Return condition-level duration and max-feasible fixation guidance."""
 
     protocol = project.settings.protocol
-    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
     fixation = project.settings.fixation_task
     target_duration_frames = milliseconds_to_frames(
         fixation.target_duration_ms,
@@ -454,6 +454,9 @@ def condition_fixation_guidance(
 
     guidance_rows: list[ConditionFixationGuidance] = []
     for condition in sorted(project.conditions, key=lambda item: item.order_index):
+        frames_per_stimulus_value = frames_per_stimulus(
+            refresh_hz, effective_condition_base_hz(project, condition),
+        )
         total_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
         total_stimuli = total_cycles * protocol.oddball_every_n
         total_frames = total_stimuli * frames_per_stimulus_value
@@ -565,18 +568,23 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
 
 
 def validate_condition_repeat_cycle_consistency(project: ProjectFile) -> list[ValidationIssue]:
-    """Return issues when condition repeat/cycle settings are not uniform."""
+    """Keep legacy repeat/cycle counts uniform among conditions with the same rate."""
 
     ordered_conditions = sorted(project.conditions, key=lambda item: item.order_index)
     if len(ordered_conditions) <= 1:
         return []
 
-    first_condition = ordered_conditions[0]
-    expected_sequence_count = first_condition.sequence_count
-    expected_cycle_repeats = first_condition.oddball_cycle_repeats_per_sequence
+    first_by_rate: dict[float, Condition] = {}
     issues: list[ValidationIssue] = []
 
-    for condition in ordered_conditions[1:]:
+    for condition in ordered_conditions:
+        rate = effective_condition_base_hz(project, condition)
+        if rate not in first_by_rate:
+            first_by_rate[rate] = condition
+            continue
+        first_condition = first_by_rate[rate]
+        expected_sequence_count = first_condition.sequence_count
+        expected_cycle_repeats = first_condition.oddball_cycle_repeats_per_sequence
         if (
             condition.sequence_count == expected_sequence_count
             and condition.oddball_cycle_repeats_per_sequence == expected_cycle_repeats
@@ -1079,17 +1087,27 @@ def validate_project(
             display_report = validate_display_refresh(
                 refresh_hz,
                 duty_cycle_mode=condition.duty_cycle_mode,
-                base_hz=project.settings.protocol.base_hz,
+                base_hz=effective_condition_base_hz(project, condition),
                 oddball_every_n=project.settings.protocol.oddball_every_n,
             )
             for error in display_report.errors:
-                if error in protocol_report.errors:
+                if condition.base_hz is None and error in protocol_report.errors:
                     continue
                 issues.append(
                     ValidationIssue(
                         location=f"conditions.{condition.condition_id}.duty_cycle_mode",
                         message=error,
                     )
+                )
+
+            if condition.base_hz is not None:
+                issues.extend(
+                    ValidationIssue(
+                        location=f"conditions.{condition.condition_id}.base_hz",
+                        message=warning,
+                        severity=ValidationSeverity.WARNING,
+                    )
+                    for warning in display_report.warnings
                 )
 
     if not project.conditions:

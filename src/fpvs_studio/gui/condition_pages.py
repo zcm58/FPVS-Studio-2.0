@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
 from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import Condition, StimulusSet
@@ -529,9 +530,10 @@ class ConditionsPage(QWidget):
             selected_mode=condition.duty_cycle_mode,
         )
         protocol = self._document.project.settings.protocol
+        base_hz = effective_condition_base_hz(self._document.project, condition)
         self.template_info_label.setText(
-            f"{template.display_name}: base {protocol.base_hz:g} Hz, oddball every "
-            f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)."
+            f"{template.display_name}: base {base_hz:g} Hz, oddball every "
+            f"{protocol.oddball_every_n} stimuli ({base_hz / protocol.oddball_every_n:g} Hz)."
         )
         if masking is not None:
             self.selected_condition_note.setText(

@@ -53,6 +53,7 @@ from fpvs_studio.core.condition_modifiers import (
     modifier_condition_ids,
     validate_image_memory_definition,
 )
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.masking import MaskingSettings
 from fpvs_studio.core.masking_presets import (
     apply_masking_timing_defaults,
@@ -972,8 +973,14 @@ class ConditionModifierDialog(QDialog):
             f"{len(settings.base_visuals)} base · "
             f"{len(settings.target_visuals)} target · {masks} mask"
         )
+        assigned = set(self._scopes.get(self._selected_id or "", [])) or {self._condition_id}
+        conditions = [item for item in self._project.conditions if item.condition_id in assigned]
+        rates = sorted({effective_condition_base_hz(self._project, item) for item in conditions})
+        rate_text = (
+            f"{rates[0]:g} Hz" if len(rates) == 1 else "frequency varies by condition"
+        )
         self.masking_timing_label.setText(
-            f"Project: {self._project.settings.protocol.base_hz:g} Hz; target every "
+            f"Assigned conditions: {rate_text}; target every "
             f"{self._project.settings.protocol.oddball_every_n} items. Source: 5 Hz, "
             "40 cycles/run, three randomized SOA triplets. Native sources replace "
             "ordinary condition pools while Masking is assigned."

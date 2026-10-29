@@ -237,6 +237,14 @@ def masking_catch_source_conditions(
             f"The {settings.variant} catch condition needs an ordinary {settings.variant} "
             "condition to supply its SOA."
         )
+    from fpvs_studio.core.condition_timing import effective_condition_base_hz
+
+    catch_rate = effective_condition_base_hz(project, condition)
+    if any(effective_condition_base_hz(project, item) != catch_rate for item in sources):
+        raise ValueError(
+            "A masking catch condition and all of its SOA source conditions must use "
+            "the same stimulus presentation frequency."
+        )
     return sources
 
 

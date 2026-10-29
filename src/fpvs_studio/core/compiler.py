@@ -53,6 +53,7 @@ from fpvs_studio.core.compiler_tasks import (
     relocate_masking_lead_ins,
     resolve_modifier_baseline,
 )
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import SchemaVersion
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.fixation_planning import (
@@ -150,7 +151,8 @@ def _compile_prepared_run(
     _ = inputs.manifest
     template = inputs.template
     protocol = project.settings.protocol
-    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
+    base_hz = effective_condition_base_hz(project, condition)
+    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, base_hz)
     on_frames, off_frames = on_off_frames(
         frames_per_stimulus_value,
         condition.duty_cycle_mode,
@@ -278,12 +280,12 @@ def _compile_prepared_run(
             show_title_on_screen=project.settings.session.show_condition_title_on_screen,
             template_id=template.template_id,
             instructions_text=condition.instructions or None,
-            base_hz=protocol.base_hz,
+            base_hz=base_hz,
             oddball_every_n=protocol.oddball_every_n,
             oddball_hz=(
-                protocol.base_hz / attentional_blink.target_interval_slots
+                base_hz / attentional_blink.target_interval_slots
                 if attentional_blink is not None and attentional_blink.target_interval_slots
-                else protocol.oddball_hz
+                else base_hz / protocol.oddball_every_n
             ),
             total_oddball_cycles=total_oddball_cycles,
             total_stimuli=len(stimulus_sequence),
@@ -426,7 +428,12 @@ def _compile_session_plan(
     fixation_settings = project.settings.fixation_task
     protocol = project.settings.protocol
     try:
-        frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
+        condition_frame_counts = {
+            condition.condition_id: frames_per_stimulus(
+                refresh_hz, effective_condition_base_hz(project, condition),
+            )
+            for condition in selected_conditions
+        }
     except FrameValidationError as exc:
         raise CompileError(str(exc)) from exc
     target_duration_frames = milliseconds_to_frames(
@@ -509,6 +516,7 @@ def _compile_session_plan(
         for index_within_block, trial in enumerate(block_trials):
             check_compilation_cancelled()
             condition, is_catch_trial, masking_source = trial
+            frames_per_stimulus_value = condition_frame_counts[condition.condition_id]
             masking = condition_masking(project, condition)
             occurrence_index = occurrences.get(condition.condition_id, 0)
             occurrences[condition.condition_id] = occurrence_index + 1

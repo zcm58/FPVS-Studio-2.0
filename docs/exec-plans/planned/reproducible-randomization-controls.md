@@ -97,7 +97,7 @@ does not change them accidentally or claim three new controls cover unrelated ta
 
 ## Related plans
 
-Coordinate with [frequency overrides](clear-presentation-frequency.md),
+Coordinate with [frequency overrides](../completed/clear-presentation-frequency.md),
 [stream duration](per-condition-stream-duration.md) and
 [presentation counts](per-condition-repeat-counts.md). Implementation may share
 canonical models/helpers where needed, but each plan retains its own acceptance gate.

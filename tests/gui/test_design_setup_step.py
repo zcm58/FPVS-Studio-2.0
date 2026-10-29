@@ -168,7 +168,7 @@ def test_explicit_discard_restores_document_timing_and_waits_for_workers(
     document.create_condition(name="Draft to discard")
     step = _step(qtbot, monkeypatch, document)
     assert step.editor is not None
-    step.editor.rate_spin.setValue(4.0)
+    step.editor.cycle_canvas.add_role("base")
     step.editor._thumbnail_task = object()
     assert not step.discard_pending_design()
     assert step.has_pending_design()
@@ -210,14 +210,15 @@ def test_thumbnail_decoding_allows_apply_but_defers_condition_disposal(
     _populate_sources(document, first, tmp_path / "first-sources")
     step = _step(qtbot, monkeypatch, document)
     assert step.editor is not None
-    step.editor.rate_spin.setValue(4.0)
+    step.editor.cycle_canvas.add_role("base")
     step.editor._thumbnail_task = object()
     step.editor._refresh_preview()
     assert step.is_busy()
     assert not step.is_importing()
     assert not step.editor.preview_button.isEnabled()
     assert step.apply_pending_design()
-    assert document.project.settings.protocol.base_hz == 4.0
+    assert document.project.settings.protocol.base_hz == 6.0
+    assert document.project.settings.protocol.oddball_every_n == 6
     assert not step.select_condition(second)
     step.editor._thumbnail_finished()
     assert step.select_condition(second)
@@ -248,7 +249,7 @@ def test_document_source_updates_during_thumbnail_loading_refresh_after_completi
     condition_id = document.create_condition(name="Sources change during decoding")
     step = _step(qtbot, monkeypatch, document)
     assert step.editor is not None
-    step.editor.rate_spin.setValue(4.0)
+    step.editor.cycle_canvas.add_role("base")
     step.editor._thumbnail_task = object()
     step.editor._refresh_preview()
 
@@ -260,7 +261,7 @@ def test_document_source_updates_during_thumbnail_loading_refresh_after_completi
     assert not step.editor._refresh_pending
     assert all(card.source_count == 2 for card in step.editor._cards().values())
     assert step.editor.apply_button.isEnabled()
-    assert step.editor.rate_spin.value() == 4.0
+    assert step.editor.rate_spin.value() == 6.0
     assert step.has_pending_design()
 
 
@@ -320,11 +321,11 @@ def test_refresh_retains_pending_edits_and_updates_saved_external_timing(
     document.create_condition(name="Image condition")
     step = _step(qtbot, monkeypatch, document)
     assert step.editor is not None
-    step.editor.rate_spin.setValue(4.0)
+    step.editor.cycle_canvas.add_role("base")
     editor = step.editor
     step.refresh()
     assert step.editor is editor
-    assert step.editor.rate_spin.value() == 4.0
+    assert step.editor.rate_spin.value() == 6.0
     assert step.has_pending_design()
 
 

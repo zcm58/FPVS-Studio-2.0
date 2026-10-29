@@ -15,6 +15,13 @@ project models and compiles engine-neutral execution contracts. Runtime coordina
 sessions; presentation is isolated behind an engine interface, with PsychoPy loaded
 lazily only inside the engine package.
 
+## Condition timing
+
+`core/condition_timing.py` resolves shared/per-condition FPVS presentation frequency
+and validates atomic edits. Timing & Session owns authoring; compilers, previews,
+fixation guidance and exports use the effective condition rate. RunSpec remains
+frame-based. See [RunSpec timing](docs/RUNSPEC.md#timing-model).
+
 ## Package Map
 
 Automatic crash recovery/consent and the bounded sanitized outbox live in

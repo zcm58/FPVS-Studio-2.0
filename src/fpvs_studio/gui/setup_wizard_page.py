@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.attentional_blink_stream import describe_attentional_blink_stream
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.frame_validation import FrameValidationError
@@ -51,6 +52,7 @@ from fpvs_studio.gui.condition_setup_step import (
     is_guided_condition_name,
     is_guided_trigger_code,
 )
+from fpvs_studio.gui.condition_timing_table import ConditionTimingTable
 from fpvs_studio.gui.design_setup_step import DesignSetupStep
 from fpvs_studio.gui.design_system import PAGE_MARGIN_X
 from fpvs_studio.gui.document import ProjectDocument
@@ -487,6 +489,7 @@ class SetupWizardPage(QWidget):
         self._document.manifest_changed.connect(self.schedule_refresh)
         self._document.session_plan_changed.connect(self.schedule_refresh)
         self.design_setup_step.draft_changed.connect(self.pending_edits_changed)
+        self.condition_timing_table.draft_changed.connect(self.pending_edits_changed)
         self.project_overview_editor.project_name_edit.textEdited.connect(self.pending_edits_changed)
         self.condition_setup_step.condition_name_edit.textEdited.connect(self.pending_edits_changed)
         for editor in (
@@ -543,10 +546,15 @@ class SetupWizardPage(QWidget):
             self.design_setup_step.has_pending_design()
             or self.project_overview_editor.has_pending_edits()
             or self.condition_setup_step.has_pending_edits()
+            or self.condition_timing_table.has_pending_edits()
         )
 
     def flush_pending_edits(self) -> bool:
         if self._condition_image_task_active():
+            return False
+        if not self.condition_timing_table.apply_pending_edits():
+            self._active_step_index = self._step_index_for_key("experiment")
+            self.refresh()
             return False
         if self.design_setup_step.has_pending_design():
             if not self.design_setup_step.apply_pending_design():
@@ -679,9 +687,13 @@ class SetupWizardPage(QWidget):
     def _experiment_settings_step_page(self) -> QWidget:
         page = QWidget(self)
         page.setObjectName("setup_wizard_experiment_settings_page")
-        layout = QHBoxLayout(page)
+        layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(32)
+        layout.setSpacing(16)
+        self.condition_timing_table = ConditionTimingTable(self._document, page)
+        layout.addWidget(self.condition_timing_table)
+        settings = QHBoxLayout()
+        settings.setSpacing(32)
         self.experiment_settings_card = self._settings_step_card(
             self.runtime_settings_editor,
             title="Display",
@@ -698,8 +710,9 @@ class SetupWizardPage(QWidget):
         self.session_structure_editor.block_count_spin.setFixedWidth(240)
         self.session_structure_editor.seed_help_label.setMinimumHeight(30)
         self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
-        layout.addWidget(self.experiment_settings_card, 1, Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.session_settings_card, 1, Qt.AlignmentFlag.AlignTop)
+        settings.addWidget(self.experiment_settings_card, 1, Qt.AlignmentFlag.AlignTop)
+        settings.addWidget(self.session_settings_card, 1, Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(settings)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -912,6 +925,10 @@ class SetupWizardPage(QWidget):
 
     def _return_home(self) -> None:
         if self._condition_image_task_active():
+            return
+        if not self.condition_timing_table.apply_pending_edits():
+            self._active_step_index = self._step_index_for_key("experiment")
+            self.refresh()
             return
         if self.design_setup_step.has_pending_design():
             answer = QMessageBox.question(
@@ -1211,6 +1228,15 @@ class SetupWizardPage(QWidget):
             else f"{protocol.base_hz:g} Hz base · oddball every {protocol.oddball_every_n} "
             f"({protocol.oddball_hz:g} Hz)"
         )
+        if not is_ab and any(condition.base_hz is not None for condition in conditions):
+            rates = sorted({effective_condition_base_hz(project, item) for item in conditions})
+            cadence_summary = (
+                f"{rates[0]:g} Hz stimulus frequency · oddball every {protocol.oddball_every_n} "
+                f"({rates[0] / protocol.oddball_every_n:g} Hz)"
+                if len(rates) == 1 else
+                "Stimulus frequency varies by condition · "
+                f"oddball every {protocol.oddball_every_n} stimuli"
+            )
         if letter_stream:
             cadence_summary = (
                 f"{protocol.base_hz:g} Hz · 5 s bursts · one T1/T2 pair per burst"

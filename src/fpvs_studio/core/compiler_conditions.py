@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 
 from fpvs_studio.core.compiler_support import CompileError
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
@@ -85,7 +86,7 @@ def validate_selected_condition(
     timing_report = validate_display_refresh(
         refresh_hz,
         duty_cycle_mode=condition.duty_cycle_mode,
-        base_hz=protocol.base_hz,
+        base_hz=effective_condition_base_hz(project, condition),
         oddball_every_n=protocol.oddball_every_n,
     )
     if not timing_report.compatible:

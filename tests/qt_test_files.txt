@@ -9,6 +9,7 @@ tests/gui/test_condition_modifier_dialog.py
 tests/gui/test_condition_recovery_dialog.py
 tests/gui/test_condition_search.py
 tests/gui/test_condition_task_dialog.py
+tests/gui/test_condition_timing_table.py
 tests/gui/test_conditions_session_fixation.py
 tests/gui/test_crash_reporting.py
 tests/gui/test_create_project_dialog.py

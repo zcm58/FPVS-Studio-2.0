@@ -49,7 +49,7 @@ schema, trigger and result contracts.
 
 All execution timing in `RunSpec` is represented in frames.
 
-For a project-selected base rate:
+For each condition's effective base rate:
 
 - `frames_per_stimulus` is the nearest positive whole frame count to
   `refresh_hz / requested_base_hz`
@@ -82,8 +82,17 @@ the compiled refresh target before playback.
 Runtime and engines must consume these compiled frame counts directly. They do
 not recompute protocol logic from `ProjectFile`.
 
-The editable project stores project-wide `base_hz` and integer `oddball_every_n`
-settings plus duty-cycle mode per condition. Project-level
+The editable project stores shared `ProtocolSettings.base_hz` (6 Hz by default),
+integer `oddball_every_n`, and optional `Condition.base_hz` overrides. A null override
+inherits the shared frequency. `core/condition_timing.py` owns effective-rate
+resolution and atomic frequency proposals. Frequency edits at a selected refresh
+target preserve the existing stream duration by changing complete cycle counts;
+incompatible edits report valid durations and leave the project unchanged. A refresh
+target is required for edits, while legacy projects without one retain their counts.
+The compiled `ConditionRunSpec.base_hz` stores the effective requested rate, and
+frame validation reports the realized rate. Projects containing an override use project
+schema 1.11.0 and portable config 1.9.0; inherited-only projects retain their prior
+versions and omit the optional condition field. Duty-cycle mode remains per condition. Project-level
 condition-template profiles only seed defaults for authoring. Mixed Continuous Images,
 50% Blank Between Images, and image-only Contrast Modulation sessions compile into
 separate `RunSpec` entries with each condition's resolved frame counts. The contrast

@@ -364,7 +364,7 @@ def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
     editor = guide.runtime_settings_editor
 
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(60.0))
-    editor.base_hz_spin.setValue(120.0)
+    window.document.update_protocol_settings(base_hz=120.0)
     QApplication.processEvents()
 
     assert editor.timing_is_compatible() is False

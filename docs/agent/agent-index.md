@@ -558,6 +558,15 @@ project service and ignores obsolete global overrides. Recording choice is separ
 from project COM fields;
 the broader named-profile/display plan remains planned work.
 
+## FPVS Condition Timing
+
+For shared frequency and confirmed condition overrides, start with
+`core/condition_timing.py`, `gui/condition_timing_table.py` and
+`gui/session_structure_page.py`. Design displays the effective rate read-only;
+Timing & Session owns edits. Use core/compiler/GUI/project-I/O focused routes and
+repo precommit. Read [RunSpec timing](../RUNSPEC.md#timing-model) for duration
+preservation and frame constraints; visible acceptance stays opt-in.
+
 ## Planning Route
 
 - Planning map: `docs/PLANS.md`

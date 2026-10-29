@@ -11,6 +11,7 @@ from fpvs_studio.core.compiler_support import (
     consume_compilation_work,
     make_run_id,
 )
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.masking import (
     MaskingEventTriggers,
@@ -64,7 +65,9 @@ def validate_masking_settings(
         raise ValueError("Every masking target needs exactly one identification answer.")
     if project.settings.protocol.oddball_every_n < 2:
         raise ValueError("Masking needs at least one base slot before each target.")
-    masking_frame_counts(settings, refresh_hz=refresh_hz, base_hz=project.settings.protocol.base_hz)
+    masking_frame_counts(
+        settings, refresh_hz=refresh_hz, base_hz=effective_condition_base_hz(project, condition),
+    )
     return validate_masking_event_triggers(project, settings)
 
 
@@ -80,12 +83,13 @@ def compile_masking_run(
     previous_base_id: str | None = None,
     is_catch_trial: bool = False,
 ) -> RunSpec:
+    base_hz = effective_condition_base_hz(project, condition)
     try:
         event_triggers = validate_masking_settings(project, condition, settings, refresh_hz)
         slot, soa, target_frames, mask_frames, base_frames = masking_frame_counts(
             settings,
             refresh_hz=refresh_hz,
-            base_hz=project.settings.protocol.base_hz,
+            base_hz=base_hz,
         )
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
@@ -195,9 +199,9 @@ def compile_masking_run(
             condition_id=condition.condition_id,
             name=condition.name,
             template_id=project.meta.template_id,
-            base_hz=protocol.base_hz,
+            base_hz=base_hz,
             oddball_every_n=protocol.oddball_every_n,
-            oddball_hz=protocol.oddball_hz,
+            oddball_hz=base_hz / protocol.oddball_every_n,
             total_oddball_cycles=cycles,
             total_stimuli=total_slots,
             stimulus_modality=StimulusModality.SCENE,
