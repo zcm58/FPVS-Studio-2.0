@@ -36,6 +36,11 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [actiCHamp parallel-port output](exec-plans/completed/actichamp-parallel-port.md)
+(explicit Windows LPT connection, metadata-only detection, checked installed-driver
+I/O, pulse/reset validation and portable recording evidence; visible GUI and physical
+hardware qualification remain separate).
+
 Recent completion: [BioSemi project serial-port selector](exec-plans/completed/biosemi-port-selector.md)
 (editable ActiveTwo/ActiveThree port selection, selected-port availability checks
 without marker bytes, and atomic saves to existing project trigger settings).

@@ -49,6 +49,7 @@ _HOME_RECORDING_DEVICE_NAMES = {
     "serial": "BioSemi ActiveTwo",
     "biosemi_active_three": "BioSemi ActiveThree",
     "brainproducts_triggerbox": "Brain Products / BrainVision (TriggerBox/Plus)",
+    "brainproducts_parallel": "Brain Products / BrainVision (Parallel port)",
     "unicorn_udp": "Unicorn Black Mobile Headset",
 }
 _SOPHIA_MODE_TICKER_TEXT = (

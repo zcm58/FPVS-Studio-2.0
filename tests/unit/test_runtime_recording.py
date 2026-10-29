@@ -37,7 +37,7 @@ from fpvs_studio.runtime.recording import (
     validate_recording_configuration,
     validate_recording_trigger_schedule,
 )
-from fpvs_studio.runtime.run_worker import RuntimeWorker
+from fpvs_studio.runtime.run_worker import RuntimeWorker, _build_and_connect_trigger_backend
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
 from fpvs_studio.triggers.null_backend import NullBackend
 
@@ -85,6 +85,12 @@ class FakeTriggerBox(FakeUnicorn):
     @property
     def backend_name(self):
         return "brainproducts_triggerbox"
+
+
+class FakeParallel(FakeTriggerBox):
+    @property
+    def backend_name(self):
+        return "brainproducts_parallel"
 
 
 @pytest.fixture
@@ -520,6 +526,134 @@ def test_triggerbox_factory_uses_project_endpoint_and_fixed_protocol(monkeypatch
     assert snapshot.acquisition_profile is None
 
 
+def test_parallel_factory_uses_explicit_address_without_serial_configuration(monkeypatch):
+    adapter = Mock(return_value=FakeParallel())
+    monkeypatch.setattr(triggers, "ParallelPortBackend", adapter)
+    options = {
+        "recording_backend": "brainproducts_parallel", "brainproducts_parallel_address": 0xD010,
+        "brainproducts_sampling_rate_hz": 100, "brainproducts_pulse_width_ms": 20,
+        "serial_port": "COM99", "brainproducts_serial_port": "", "serial_baudrate": 0,
+        "serial_enabled": False,
+    }
+    backend, _ = triggers.build_trigger_backend(options)
+    adapter.assert_called_once_with(address=0xD010, pulse_width_ms=20)
+    assert backend.backend_name == "brainproducts_parallel"
+    snapshot = recording_snapshot(options)
+    assert snapshot.parallel_port_address == 0xD010
+    assert snapshot.serial_port is None and snapshot.serial_baudrate is None
+    assert snapshot.brainproducts_amplifier == "actichamp"
+    assert snapshot.brainproducts_sampling_rate_hz == 100
+    assert snapshot.trigger_pulse_width_ms == 20
+    assert snapshot.acquisition_profile is None
+    assert snapshot.receiver_validation == "pending"
+    assert snapshot.recorded_marker_integrity == "unknown"
+    assert snapshot.physical_timing == "uncharacterized"
+    settings = LaunchSettings(**options)
+    launcher._validate_launch_settings(settings)
+    assert settings.as_runtime_options()["brainproducts_parallel_address"] == 0xD010
+
+
+def test_parallel_connect_failure_gives_address_and_driver_recovery_guidance(monkeypatch):
+    output = FakeParallel()
+    failure = OSError("InpOut driver is not running")
+    output.connect = Mock(side_effect=failure)
+    adapter = Mock(return_value=output)
+    monkeypatch.setattr(triggers, "ParallelPortBackend", adapter)
+    options = {
+        "recording_backend": "brainproducts_parallel", "brainproducts_parallel_address": 0xD010,
+        "brainproducts_sampling_rate_hz": 500,
+    }
+
+    with pytest.raises(PreflightError) as error:
+        _build_and_connect_trigger_backend(options)
+
+    message = str(error.value)
+    assert "0xD010" in message
+    assert "parallel-port I/O address matches this PC" in message
+    assert "compatible InpOut driver is installed and running" in message
+    assert "Details: InpOut driver is not running" in message
+    assert "serial port" not in message
+    assert error.value.__cause__ is failure
+    assert output.closed
+    adapter.assert_called_once_with(address=0xD010, pulse_width_ms=10)
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_parallel_test_modes_never_construct_hardware_and_allow_unset_endpoint(monkeypatch, mode):
+    adapter = Mock(side_effect=AssertionError("hardware must not be created"))
+    monkeypatch.setattr(triggers, "ParallelPortBackend", adapter)
+    options = {"recording_backend": "brainproducts_parallel", mode: True}
+    backend, _ = triggers.build_trigger_backend(options)
+    assert backend.backend_name == "null"
+    snapshot = recording_snapshot(options)
+    assert snapshot.selected_backend == "brainproducts_parallel"
+    assert snapshot.parallel_port_address is None
+    assert snapshot.serial_port is None and snapshot.serial_baudrate is None
+    assert snapshot.brainproducts_amplifier == "actichamp"
+    assert snapshot.brainproducts_sampling_rate_hz is None
+    adapter.assert_not_called()
+
+
+@pytest.mark.parametrize("field,value", [
+    ("brainproducts_parallel_address", True), ("brainproducts_parallel_address", "0x378"),
+    ("brainproducts_parallel_address", 888.0), ("brainproducts_parallel_address", 0),
+    ("brainproducts_parallel_address", -1), ("brainproducts_parallel_address", 65536),
+    ("brainproducts_pulse_width_ms", 0), ("brainproducts_pulse_width_ms", True),
+    ("brainproducts_sampling_rate_hz", "500"), ("brainproducts_sampling_rate_hz", 0),
+    ("brainproducts_sampling_rate_hz", True), ("brainproducts_sampling_rate_hz", 300),
+    ("brainproducts_amplifier", "liveamp"), ("brainproducts_amplifier", "brainamp"),
+])
+def test_parallel_rejects_malformed_or_unsupported_configuration_even_in_test(field, value):
+    with pytest.raises(RecordingConfigurationError, match="Brain Products|actiCHamp"):
+        validate_recording_configuration({
+            "recording_backend": "brainproducts_parallel", "experiment_test_mode": True,
+            field: value,
+        })
+
+
+@pytest.mark.parametrize("configuration,match", [
+    ({}, "actual I/O address"),
+    ({"brainproducts_sampling_rate_hz": 500}, "actual I/O address"),
+    ({"brainproducts_parallel_address": 0x378}, "sampling rate"),
+    ({"brainproducts_parallel_address": 0x378, "brainproducts_sampling_rate_hz": 100},
+     "at least 20 ms"),
+])
+@pytest.mark.parametrize("launch_kind", ["run", "session"])
+def test_parallel_missing_address_or_invalid_timing_fails_before_visit_or_output(
+    execution, monkeypatch, launch_kind, configuration, match,
+):
+    root, plan = execution
+    reserve = Mock(side_effect=AssertionError("visit must not be reserved"))
+    monkeypatch.setattr(launcher, "reserve_participant_session", reserve)
+    adapter = Mock(side_effect=AssertionError("hardware must not be opened"))
+    monkeypatch.setattr(triggers, "ParallelPortBackend", adapter)
+    with pytest.raises(LaunchSettingsError, match=match):
+        _launch_at_boundary(root, plan, launch_kind, LaunchSettings(
+            recording_backend="brainproducts_parallel", verify_refresh_rate=False, **configuration,
+        ))
+    reserve.assert_not_called()
+    adapter.assert_not_called()
+    assert not (root / "logs" / "acquisition").exists()
+
+
+def test_parallel_schedule_reuses_actichamp_high_and_low_interval_validation(execution):
+    _, plan = execution
+    spec = plan.ordered_entries()[0].run_spec.model_copy(deep=True)
+    spec.display.refresh_hz = 100
+    spec.trigger_events = [
+        TriggerEvent(frame_index=-1, code=1, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    options = {
+        "recording_backend": "brainproducts_parallel", "brainproducts_parallel_address": 0x378,
+        "brainproducts_sampling_rate_hz": 1000, "brainproducts_pulse_width_ms": 10,
+    }
+    with pytest.raises(RecordingConfigurationError, match="Parallel-port output needs more than"):
+        validate_recording_trigger_schedule(spec, options)
+    validate_recording_trigger_schedule(spec, {**options, "brainproducts_pulse_width_ms": 2})
+    validate_recording_trigger_schedule(spec, {**options, "experiment_test_mode": True})
+
+
 @pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
 def test_triggerbox_test_modes_never_construct_hardware(monkeypatch, mode):
     adapter = Mock(side_effect=AssertionError("hardware must not be created"))
@@ -704,20 +838,24 @@ def test_triggerbox_impossible_schedule_fails_before_visit_or_output(
     assert not (root / "logs" / "acquisition").exists()
 
 
-def test_triggerbox_reset_failure_retains_interrupted_acquisition_without_completed_handoff(
-    execution, sample_project, monkeypatch,
+@pytest.mark.parametrize("backend", ["brainproducts_triggerbox", "brainproducts_parallel"])
+def test_brainproducts_reset_failure_retains_interrupted_acquisition_without_completed_handoff(
+    execution, sample_project, monkeypatch, backend,
 ):
     root, plan = execution
     sample_project.settings.recording = ProjectRecordingSettings(
-        recording_backend="brainproducts_triggerbox",
+        recording_backend=backend, brainproducts_parallel_address=0xD010,
         brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
     )
     config = export_project_config(sample_project, root)
-    output = FakeTriggerBox()
+    output = FakeParallel() if backend == "brainproducts_parallel" else FakeTriggerBox()
     output.reset = Mock(side_effect=OSError("zero write failed"))
-    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", lambda **_kwargs: output)
+    adapter_name = "ParallelPortBackend" if backend == "brainproducts_parallel" else (
+        "BrainProductsTriggerBoxBackend"
+    )
+    monkeypatch.setattr(triggers, adapter_name, lambda **_kwargs: output)
     summary = _execute(root, plan, RuntimeWorker(StubEngine({})),
-                       recording_backend="brainproducts_triggerbox",
+                       recording_backend=backend, brainproducts_parallel_address=0xD010,
                        brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
                        toolbox_handoff_config=config.model_dump(mode="json"))
     assert summary.aborted
@@ -732,6 +870,7 @@ def test_triggerbox_reset_failure_retains_interrupted_acquisition_without_comple
 @pytest.mark.parametrize("export_mode", ["compact", "full"])
 @pytest.mark.parametrize("backend", [
     "serial", "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
+    "brainproducts_parallel",
 ])
 def test_completed_handoff_automatically_retains_hardware_identity_and_event_evidence(
     execution, sample_project, monkeypatch, export_mode, backend,
@@ -739,7 +878,10 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     root, plan = execution
     amplifier_options = (
         {"brainproducts_amplifier": "liveamp", "brainproducts_sampling_rate_hz": 250}
-        if backend == "brainproducts_triggerbox" else {}
+        if backend == "brainproducts_triggerbox" else (
+            {"brainproducts_parallel_address": 0xD010, "brainproducts_sampling_rate_hz": 500}
+            if backend == "brainproducts_parallel" else {}
+        )
     )
     sample_project.settings.recording = ProjectRecordingSettings(
         recording_backend=backend, **amplifier_options,
@@ -752,6 +894,10 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
         output = FakeTriggerBox()
         monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend",
                             lambda **_kwargs: output)
+    elif backend == "brainproducts_parallel":
+        output = FakeParallel()
+        output.reset = Mock()
+        monkeypatch.setattr(triggers, "ParallelPortBackend", lambda **_kwargs: output)
     else:
         _fake_output(monkeypatch, output)
     summary = _execute(
@@ -772,7 +918,14 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
         assert completed.recording.brainproducts_sampling_rate_hz == 250
         assert evidence.recording.brainproducts_amplifier == "liveamp"
         assert evidence.recording.brainproducts_sampling_rate_hz == 250
-    if backend in ("biosemi_active_three", "brainproducts_triggerbox"):
+    if backend == "brainproducts_parallel":
+        assert completed.recording.brainproducts_parallel_address == 0xD010
+        assert completed.recording.brainproducts_amplifier == "actichamp"
+        assert evidence.recording.parallel_port_address == 0xD010
+        assert evidence.recording.serial_port is None
+        assert evidence.recording.brainproducts_sampling_rate_hz == 500
+        assert output.reset.call_count >= len(plan.ordered_entries())
+    if backend in ("biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel"):
         assert evidence.acquisition_profile is None
         assert evidence.recording.receiver_validation == "pending"
     assert completed.completed_session.execution_id == evidence.execution_id
@@ -884,7 +1037,8 @@ def test_completed_helper_rejects_wrong_session_association(execution, sample_pr
 
 
 @pytest.mark.parametrize("selection", [
-    "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+    "unicorn_udp",
 ])
 def test_inherited_default_handoff_matches_recording_evidence_without_project_edits(
     sample_project, sample_project_root, selection,
@@ -906,6 +1060,7 @@ def test_inherited_default_handoff_matches_recording_evidence_without_project_ed
     effective_recording = ProjectRecordingSettings(
         recording_backend=selection, unicorn_udp_port=4567,
         brainproducts_serial_port="COM123", brainproducts_pulse_width_ms=20,
+        brainproducts_parallel_address=0xD010,
         brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
     )
     options = {
@@ -939,6 +1094,10 @@ def test_inherited_default_handoff_matches_recording_evidence_without_project_ed
         assert snapshot.trigger_pulse_width_ms == 20
         assert snapshot.brainproducts_amplifier == "actichamp"
         assert snapshot.brainproducts_sampling_rate_hz == 500
+    elif selection == "brainproducts_parallel":
+        assert snapshot.parallel_port_address == 0xD010
+        assert snapshot.serial_port is None
+        assert snapshot.brainproducts_amplifier == "actichamp"
     else:
         assert snapshot.serial_port == "COM87"
 

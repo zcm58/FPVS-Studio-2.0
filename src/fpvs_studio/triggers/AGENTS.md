@@ -37,6 +37,10 @@ adapter scaffolding.
 - Resolve unset/blank serial-port configuration to `COM3`, while preserving an
   explicit nonempty port. This is a configuration default, never a retry/fallback
   after a port fails to open or write.
+- Parallel-port output is an explicit Windows actiCHamp transport. Open only the
+  installed InpOut device, check each device-I/O result, and close it on failure.
+  Never load the auto-installing vendor DLL, install/start drivers, guess addresses
+  or probe ports by writing. Discovery reads Windows device/resource metadata only.
 - Let backend open/write failures propagate to runtime so they can abort and export a
   clear error record. Runtime owns the pre-run serial-open check and trigger logs.
 - Unicorn UDP uses only `127.0.0.1`, a validated port, prepared decimal ASCII codes,

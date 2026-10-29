@@ -28,6 +28,7 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
     selected = values.get("recording_backend")
     if selected not in (
         None, "serial", "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
+        "brainproducts_parallel",
     ):
         raise RecordingConfigurationError(
             "Unknown recording backend. Open Settings > Recording and choose a "
@@ -38,7 +39,7 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
             raise RecordingConfigurationError(f"{key} must be a boolean.")
     if values.get("experiment_test_mode", False) or values.get("pilot_mode", False):
         return "null"
-    if selected in ("unicorn_udp", "brainproducts_triggerbox"):
+    if selected in ("unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel"):
         return str(selected)
     return "serial"
 
@@ -62,16 +63,37 @@ def validate_recording_configuration(options: Mapping[str, object] | None = None
             raise RecordingConfigurationError(
                 "Unicorn UDP port must be an integer from 1 to 65535."
             )
-    if values.get("recording_backend") == "brainproducts_triggerbox":
-        port = values.get("brainproducts_serial_port", "COM3")
-        if not isinstance(port, str) or not port.strip():
-            raise RecordingConfigurationError("Brain Products COM port must be nonblank text.")
+    selected = values.get("recording_backend")
+    if selected in ("brainproducts_triggerbox", "brainproducts_parallel"):
+        parallel = selected == "brainproducts_parallel"
+        if parallel:
+            address = values.get("brainproducts_parallel_address")
+            if address is not None and (
+                isinstance(address, bool) or not isinstance(address, int)
+                or not 1 <= address <= 65535
+            ):
+                raise RecordingConfigurationError(
+                    "Brain Products parallel-port address must be an integer from 1 to 65535."
+                )
+            if effective != "null" and address is None:
+                raise RecordingConfigurationError(
+                    "Open Settings > Recording and enter the parallel port's actual I/O address "
+                    "before recording."
+                )
+            if values.get("brainproducts_amplifier") not in (None, "actichamp"):
+                raise RecordingConfigurationError(
+                    "Brain Products parallel-port output supports actiCHamp / actiCHamp Plus only."
+                )
+        else:
+            port = values.get("brainproducts_serial_port", "COM3")
+            if not isinstance(port, str) or not port.strip():
+                raise RecordingConfigurationError("Brain Products COM port must be nonblank text.")
         pulse = values.get("brainproducts_pulse_width_ms", 10)
         if isinstance(pulse, bool) or not isinstance(pulse, int) or not 1 <= pulse <= 1000:
             raise RecordingConfigurationError(
                 "Brain Products pulse width must be an integer from 1 to 1000 ms."
             )
-        amplifier = values.get("brainproducts_amplifier")
+        amplifier = "actichamp" if parallel else values.get("brainproducts_amplifier")
         if amplifier is not None and (
             not isinstance(amplifier, str) or amplifier not in AMPLIFIER_LABELS
         ):
@@ -87,6 +109,11 @@ def validate_recording_configuration(options: Mapping[str, object] | None = None
                 "Brain Products EEG sampling rate must be a positive integer in Hz."
             )
         if effective != "null" and (amplifier is None or sampling_rate is None):
+            if parallel:
+                raise RecordingConfigurationError(
+                    "Open Settings > Recording and select the actiCHamp EEG sampling rate "
+                    "configured in Recorder before recording."
+                )
             raise RecordingConfigurationError(
                 "Open Settings > Recording and select the Brain Products amplifier family "
                 "and EEG sampling rate configured in Recorder before recording."
@@ -129,18 +156,22 @@ def validate_production_recording(options: Mapping[str, object] | None = None) -
 def validate_recording_trigger_schedule(
     run_spec: RunSpec, options: Mapping[str, object] | None = None,
 ) -> None:
-    """Reject schedules that cannot contain TriggerBox high and low intervals."""
+    """Reject schedules that cannot contain Brain Products high and low intervals."""
 
-    if validate_recording_configuration(options) != "brainproducts_triggerbox":
+    effective = validate_recording_configuration(options)
+    if effective not in ("brainproducts_triggerbox", "brainproducts_parallel"):
         return
     pulse_ms = cast(int, (options or {}).get("brainproducts_pulse_width_ms", 10))
     frames = sorted(event.frame_index for event in run_spec.trigger_events)
     for previous, current in zip(frames, frames[1:], strict=False):
         gap_ms = (current - previous) * 1000 / run_spec.display.refresh_hz
         if gap_ms <= 2 * pulse_ms:
+            transport = (
+                "Parallel-port output" if effective == "brainproducts_parallel" else "TriggerBox"
+            )
             raise RecordingConfigurationError(
                 f"Brain Products markers at frames {previous} and {current} are "
-                f"{gap_ms:g} ms apart. TriggerBox needs more than {2 * pulse_ms} ms "
+                f"{gap_ms:g} ms apart. {transport} needs more than {2 * pulse_ms} ms "
                 f"for the configured {pulse_ms} ms pulse and low interval. "
                 "Choose a shorter pulse only if supported by the amplifier sampling "
                 "rate, or revise the marker schedule."
@@ -162,6 +193,14 @@ def recording_backend_label(options: Mapping[str, object] | None = None) -> str:
             f"{values.get('brainproducts_serial_port', 'COM3')} "
             f"({values.get('brainproducts_pulse_width_ms', 10)} ms pulse)"
         )
+    if effective == "brainproducts_parallel":
+        values = options or {}
+        address = values.get("brainproducts_parallel_address")
+        endpoint = f"0x{address:X}" if isinstance(address, int) else "address required"
+        return (
+            f"Brain Products / BrainVision (Parallel port) — {endpoint} "
+            f"({values.get('brainproducts_pulse_width_ms', 10)} ms pulse)"
+        )
     name = (
         "BioSemi ActiveThree serial"
         if (options or {}).get("recording_backend") == "biosemi_active_three"
@@ -178,8 +217,9 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
     values = options or {}
     effective = validate_recording_configuration(values)
     selected = cast(str, values.get("recording_backend") or "serial")
-    brainproducts = effective == "brainproducts_triggerbox"
-    serial_port = values.get("brainproducts_serial_port", "COM3") if brainproducts else values.get(
+    triggerbox = effective == "brainproducts_triggerbox"
+    brainproducts = effective in ("brainproducts_triggerbox", "brainproducts_parallel")
+    serial_port = values.get("brainproducts_serial_port", "COM3") if triggerbox else values.get(
         "serial_port"
     )
     serial_output = effective in ("serial", "brainproducts_triggerbox")
@@ -197,19 +237,25 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
             "udp_port": values.get("unicorn_udp_port", 1000) if selected == "unicorn_udp" else None,
             "serial_port": (resolve_serial_port(serial_port) if serial_output else None),
             "serial_baudrate": (
-                (2_000_000 if brainproducts else values.get("serial_baudrate", 115200))
+                (2_000_000 if triggerbox else values.get("serial_baudrate", 115200))
                 if serial_output else None
+            ),
+            "parallel_port_address": (
+                values.get("brainproducts_parallel_address")
+                if selected == "brainproducts_parallel" else None
             ),
             "trigger_pulse_width_ms": (
                 values.get("brainproducts_pulse_width_ms", 10) if brainproducts else None
             ),
             "brainproducts_amplifier": (
-                values.get("brainproducts_amplifier")
-                if selected == "brainproducts_triggerbox" else None
+                "actichamp" if selected == "brainproducts_parallel" else (
+                    values.get("brainproducts_amplifier")
+                    if selected == "brainproducts_triggerbox" else None
+                )
             ),
             "brainproducts_sampling_rate_hz": (
                 values.get("brainproducts_sampling_rate_hz")
-                if selected == "brainproducts_triggerbox" else None
+                if selected in ("brainproducts_triggerbox", "brainproducts_parallel") else None
             ),
             "operator_confirmed_raw_bdf_recording": (
                 bool(values.get("recording_operator_confirmed", False))
@@ -220,7 +266,8 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
             "recorder_version": values.get("recorder_version"),
             "receiver_validation": (
                 "pending" if selected in ("unicorn_udp", "biosemi_active_three",
-                                           "brainproducts_triggerbox") else "not_applicable"
+                                           "brainproducts_triggerbox", "brainproducts_parallel")
+                else "not_applicable"
             ),
         }
     )

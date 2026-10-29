@@ -172,6 +172,14 @@ use GUI focused plus project-service and inherited-handoff tests, then repo prec
 Manual completed export reuses `core/project_config.py::find_latest_completed_toolbox_config`;
 keep captured historical hardware distinct from today's default and authoring exports.
 
+For actiCHamp parallel-port output, start with `triggers/parallel_backend.py`,
+`triggers/parallel_discovery.py`, `runtime/recording.py` and
+`gui/parallel_port_selector.py`. The explicit `brainproducts_parallel` choice uses an
+already installed InpOut driver; Detect is metadata-only and never sends markers.
+See [Runtime execution](../RUNTIME_EXECUTION.md#actichamp-parallel-port-output).
+Use triggers/runtime/gui focused routes, registered Recording Setup tests, then repo
+precommit. Physical receipt and timing require separate lab qualification.
+
 For Studio/Toolbox completed handoff, start with `core/recording_hardware.py`,
 `core/project_config.py`, `runtime/acquisition_evidence.py` and
 `docs/exec-plans/active/studio-toolbox-integration.md`. Use project-io/runtime/data-sharing

@@ -78,6 +78,36 @@ def test_triggerbox_amplifier_and_sampling_rate_survive_project_json(
     assert load_project_file(project_path).settings.recording == recording
 
 
+def test_parallel_settings_preserve_explicit_address_and_fixed_amplifier(tmp_path, sample_project):
+    recording = ProjectRecordingSettings(
+        recording_backend="brainproducts_parallel", brainproducts_parallel_address=0xD010,
+        brainproducts_sampling_rate_hz=1000,
+    )
+    assert recording.brainproducts_amplifier == "actichamp"
+    unset = ProjectRecordingSettings(recording_backend="brainproducts_parallel")
+    assert unset.brainproducts_parallel_address is None
+    sample_project.settings.recording = recording
+    project_path = tmp_path / "project.json"
+    save_project_file(sample_project, project_path)
+    assert load_project_file(project_path).settings.recording == recording
+
+
+@pytest.mark.parametrize("address", [True, "0x378", 888.0, 0, -1, 65536])
+def test_parallel_settings_reject_malformed_address(address):
+    with pytest.raises(ValidationError):
+        ProjectRecordingSettings(
+            recording_backend="brainproducts_parallel", brainproducts_parallel_address=address,
+        )
+
+
+@pytest.mark.parametrize("amplifier", ["brainamp", "liveamp"])
+def test_parallel_settings_only_allow_actichamp_family(amplifier):
+    with pytest.raises(ValidationError, match="actiCHamp"):
+        ProjectRecordingSettings(
+            recording_backend="brainproducts_parallel", brainproducts_amplifier=amplifier,
+        )
+
+
 @pytest.mark.parametrize("configuration", [
     {"brainproducts_amplifier": "unknown"}, {"brainproducts_amplifier": 1},
     {"brainproducts_sampling_rate_hz": True}, {"brainproducts_sampling_rate_hz": "500"},

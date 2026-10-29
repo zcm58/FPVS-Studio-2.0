@@ -41,7 +41,8 @@ class RecordingHardwareDefinition(BaseModel):
 
     label: str
     recording_backend: Literal[
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp"
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+        "unicorn_udp"
     ]
     acquisition_profile: AcquisitionProfile | None = None
 
@@ -61,6 +62,10 @@ _HARDWARE = (
     RecordingHardwareDefinition(
         label="Brain Products / BrainVision (TriggerBox/Plus)",
         recording_backend="brainproducts_triggerbox",
+    ),
+    RecordingHardwareDefinition(
+        label="Brain Products / BrainVision (Parallel port)",
+        recording_backend="brainproducts_parallel",
     ),
     RecordingHardwareDefinition(
         label="Unicorn Hybrid Black (factory 8 channels)", recording_backend="unicorn_udp",

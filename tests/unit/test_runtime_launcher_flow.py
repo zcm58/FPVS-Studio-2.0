@@ -109,6 +109,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
         "recording_selection_source": "local_settings",
         "unicorn_udp_port": 1000,
         "brainproducts_serial_port": "COM3",
+        "brainproducts_parallel_address": None,
         "brainproducts_pulse_width_ms": 10,
         "brainproducts_amplifier": None,
         "brainproducts_sampling_rate_hz": None,

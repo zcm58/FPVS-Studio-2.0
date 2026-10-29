@@ -357,7 +357,7 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   The trigger backend contract declares external-marker capability; playback rejects
   log-only backends outside explicit test/pilot launches and empty trigger schedules.
 - `ProjectSettings.recording` persists each project's BioSemi ActiveTwo/ActiveThree,
-  Brain Products TriggerBox or Unicorn override and relevant endpoint/pulse settings;
+  Brain Products TriggerBox/parallel-port or Unicorn override and relevant endpoint/pulse settings;
   unset native projects inherit the computer default injected by `gui/controller.py`
   into `gui/document.py`. First setup chooses it after the Root Folder; Settings can
   edit it without a project. QSettings stores the separate typed local preference,
@@ -377,6 +377,10 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   levels; see [Runtime execution](docs/RUNTIME_EXECUTION.md#trigger-behavior).
   ActiveThree reuses the BioSemi serial adapter; TriggerBox uses a dedicated adapter
   with synchronous event writes and worker-owned zero reset outside frame scheduling.
+  `triggers/parallel_backend.py` supplies Windows LPT output for actiCHamp through an
+  already installed InpOut driver. `triggers/parallel_discovery.py` reads device and
+  I/O-resource metadata without opening that driver or writing markers. Explicit
+  addresses stay outside compiled timing; detection never proves amplifier receipt.
   `triggers/brainproducts_discovery.py` owns named COM-port candidates and explicit
   open/close access checks without marker bytes. Recording Setup keeps automatic
   discovery metadata-only and runs Detect checks through the app-owned worker lifecycle,

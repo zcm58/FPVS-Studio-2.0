@@ -14,6 +14,7 @@ from fpvs_studio.runtime.recording import validate_production_recording
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxBackend
 from fpvs_studio.triggers.null_backend import NullBackend
+from fpvs_studio.triggers.parallel_backend import ParallelPortBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
@@ -214,6 +215,16 @@ def build_trigger_backend(
             ),
             backend_name="brainproducts_triggerbox",
         ), []
+    if backend_name == "brainproducts_parallel":
+        return LoggedTriggerBackend(
+            ParallelPortBackend(
+                address=_positive_int_option(options, "brainproducts_parallel_address"),
+                pulse_width_ms=_positive_int_option(
+                    options, "brainproducts_pulse_width_ms", default=10,
+                ),
+            ),
+            backend_name="brainproducts_parallel",
+        ), []
     return LoggedNullBackend(), []
 
 
@@ -221,7 +232,7 @@ def _positive_int_option(
     options: Mapping[str, object],
     name: str,
     *,
-    default: int,
+    default: int | None = None,
 ) -> int:
     value = options.get(name, default)
     if not isinstance(value, int) or isinstance(value, bool) or value <= 0:

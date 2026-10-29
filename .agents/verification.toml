@@ -274,10 +274,10 @@ manual_smoke = ["Run a short experiment on the intended presentation machine whe
 
 [scopes.triggers]
 checks = []
-tests = ["tests/unit/test_serial_trigger_backend.py", "tests/unit/test_serial_port_access.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py", "tests/unit/test_brainproducts_discovery.py"]
+tests = ["tests/unit/test_serial_trigger_backend.py", "tests/unit/test_serial_port_access.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py", "tests/unit/test_brainproducts_discovery.py", "tests/unit/test_parallel_backend.py", "tests/unit/test_parallel_discovery.py"]
 full_tests = []
-include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py", "tests/unit/test_serial_port_access.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py", "tests/unit/test_brainproducts_discovery.py"]
-manual_smoke = ["Select each recording device in Settings; verify Test/Pilot sends no markers. With the configured vendor interface and acquisition software, inspect saved boundary/repeated markers separately from COM or Recorder readiness and measure physical timing. See docs/RUNTIME_EXECUTION.md for ActiveThree and TriggerBox setup."]
+include = ["src/fpvs_studio/triggers/**", "src/fpvs_studio/runtime/triggers.py", "tests/unit/test_serial_trigger_backend.py", "tests/unit/test_serial_port_access.py", "tests/unit/test_unicorn_udp_backend.py", "tests/unit/test_brainproducts_trigger_backend.py", "tests/unit/test_brainproducts_discovery.py", "tests/unit/test_parallel_backend.py", "tests/unit/test_parallel_discovery.py"]
+manual_smoke = ["Select each recording device in Settings; verify Test/Pilot sends no markers. With the configured vendor interface and acquisition software, inspect saved boundary/repeated markers separately from port or Recorder readiness and measure physical timing. See docs/RUNTIME_EXECUTION.md for ActiveThree, TriggerBox and actiCHamp parallel-port setup."]
 
 [scopes.updates]
 checks = []

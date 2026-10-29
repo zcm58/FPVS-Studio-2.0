@@ -23,7 +23,10 @@ from fpvs_studio.gui.recording_dialog import (
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
-_BACKENDS = ("serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp")
+_BACKENDS = (
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+    "unicorn_udp",
+)
 _PROMPT = "Please select your default EEG hardware. You can change this choice later."
 
 
@@ -59,13 +62,14 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("error_message", ["", "The saved EEG hardware choice is invalid."])
-def test_hardware_picker_fits_minimum_size(qtbot, background, error_message):
+@pytest.mark.parametrize("backend", ["brainproducts_triggerbox", "brainproducts_parallel"])
+def test_hardware_picker_fits_minimum_size(qtbot, background, error_message, backend):
     dialog = DefaultRecordingHardwareDialog(error_message=error_message)
     qtbot.addWidget(dialog)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData("brainproducts_triggerbox"))
+    dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData(backend))
     dialog.resize(640, 300)
     dialog.show()
     QApplication.processEvents()

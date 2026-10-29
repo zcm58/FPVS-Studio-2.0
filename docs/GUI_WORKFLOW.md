@@ -233,7 +233,8 @@ folder picker. Canceling the picker returns to the setup dialog; choosing
 After the root is configured, a `Default EEG Hardware` picker asks: "Please select
 your default EEG hardware. You can change this choice later." It lists BioSemi
 ActiveTwo, BioSemi ActiveThree, Brain Products TriggerBox / Plus,
-and Unicorn Hybrid Black. Continue requires an explicit choice. The picker is
+Brain Products parallel port (actiCHamp), and Unicorn Hybrid Black.
+Continue requires an explicit choice. The picker is
 `640x300` at minimum/default size and uses no hardware probes. Existing installations
 without this preference also see it once, after their saved root is validated.
 Exit retains the root but leaves hardware unset, so setup resumes on next launch.

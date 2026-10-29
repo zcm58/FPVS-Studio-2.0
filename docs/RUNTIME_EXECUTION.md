@@ -286,6 +286,48 @@ backend send failures record `error` before the run/session is aborted and expor
 The pre-run COM-port open check verifies OS-level serial availability; it does not prove
 that downstream EEG/status-channel cabling is physically correct.
 
+### actiCHamp parallel-port output
+
+Settings > Recording includes **Brain Products / BrainVision (Parallel port)** for
+actiCHamp and actiCHamp Plus. This is an alternative to the USB TriggerBox route for
+a stimulus PC with a compatible native or expansion-card LPT interface and the correct
+amplifier trigger cable. A printer-style USB adapter is not assumed compatible.
+The amplifier's trigger input is an eight-bit TTL input; configure Recorder's eight
+bits as high-active Stimulus inputs, as for TriggerBox.
+
+Select the explicit I/O address in Recording Setup, enter the sampling rate actually
+configured in Recorder and choose a pulse width satisfying the existing actiCHamp
+minimum table. Addresses are integers from 1 to 65535, displayed/entered as hexadecimal.
+No default address is inferred. Detect reads Windows PnP device and I/O-resource
+metadata on the app-owned worker, without opening an output driver or writing any
+markers. Missing or ambiguous resources require manual address entry; multiple ports
+require selection. A listed LPT device does not identify its attached amplifier.
+
+Windows must already have a compatible InpOut32/InpOutx64 kernel driver installed and
+running, with access granted to the Studio process. The adapter opens its existing
+device and submits checked byte-write requests directly. Studio does not load the
+vendor DLL, install/start a driver, elevate privileges or change Windows security
+settings. This avoids the vendor DLL's automatic driver installation and its void
+write API. No driver binary is bundled. Driver compatibility with the target Windows
+configuration must be established locally. See the [vendor project and source](https://www.highrez.co.uk/downloads/inpout32/).
+
+The `brainproducts_parallel` backend sends codes 1–255 synchronously at the existing
+flip callback, returns to zero through a connection-owned worker, requires a complete
+low interval and rejects overlaps without sleeping or queueing. Runtime validates
+scheduled spacing and drains pending pulses at condition boundaries. Test/Pilot uses
+null output. Recording snapshots capture the parallel address, actiCHamp sampling rate
+and pulse width separately from serial endpoints; compiled contracts stay unchanged.
+Port access or a successful write is not proof of recorded markers or physical timing.
+
+Manual acceptance: on the lab stimulus PC, open Recording Setup, select parallel
+output and check Detect, manual entry, invalid/missing address, multiple candidates,
+Cancel and close during discovery at the documented dialog sizes in both themes.
+Start a separate Recorder test acquisition and verify distinct and repeated codes,
+condition boundaries and reset-to-zero behavior, then measure event/display timing.
+Use the correct amplifier cable and the intended sampling rate; this lab check is
+separate from fake-driver unit tests. [PsychoPy's trigger-test guidance](https://psychopy.org/hardware/parallelPortInstr.html)
+describes receiving-side and photodiode checks.
+
 ### BioSemi ActiveThree and Brain Products TriggerBox
 
 Settings > Recording also offers BioSemi ActiveThree and Brain

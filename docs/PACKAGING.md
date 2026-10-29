@@ -18,6 +18,12 @@ py -3.10 -m venv .venv3.10
 The `engine` extra is included because lab builds should contain PsychoPy and runtime
 dependencies. The `packaging` extra installs PyInstaller.
 
+Native actiCHamp parallel-port output uses an already installed, running Windows
+InpOut kernel driver through checked device I/O. Builds do not bundle or load its
+auto-installing DLL, install/start a driver or change Windows security policy.
+The lab must supply and qualify a compatible driver/interface; see
+[parallel-port setup](RUNTIME_EXECUTION.md#actichamp-parallel-port-output).
+
 Experiment Library access uses Windows Credential Manager without a Python keyring
 dependency. On Linux, the declared `keyring` and `SecretStorage` dependencies provide
 the explicitly selected Secret Service backend. The Studio spec includes that backend

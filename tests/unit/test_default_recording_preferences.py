@@ -14,7 +14,10 @@ import pytest
 from fpvs_studio.core.models import ProjectRecordingSettings
 
 _KEY = "recording/default_configuration"
-_BACKENDS = ("serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp")
+_BACKENDS = (
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+    "unicorn_udp",
+)
 _LEGACY_SETTINGS = {"recording/backend": "unicorn_udp", "recording/unicorn_udp_port": 4321}
 
 
@@ -147,6 +150,7 @@ def test_default_roundtrip_serializes_the_model_and_updates_only_after_success(
         "recording_backend": backend,
         "unicorn_udp_port": 4321,
         "brainproducts_serial_port": " COM18 ",
+        "brainproducts_parallel_address": 0xD010,
         "brainproducts_pulse_width_ms": 20,
     }
     expected = ProjectRecordingSettings.model_validate(configuration).model_dump(mode="json")
@@ -226,7 +230,10 @@ def test_first_picker_saves_only_selected_hardware_without_guessing_amplifier(ba
     factory.assert_called_once_with(parent=controller.welcome_window, error_message="")
     expected = ProjectRecordingSettings(recording_backend=backend).model_dump(mode="json")
     assert controller.load_default_recording_configuration() == expected
-    assert expected["brainproducts_amplifier"] is None
+    assert expected["brainproducts_amplifier"] == (
+        "actichamp" if backend == "brainproducts_parallel" else None
+    )
+    assert expected["brainproducts_parallel_address"] is None
     assert expected["brainproducts_sampling_rate_hz"] is None
     controller._app.quit.assert_not_called()
 

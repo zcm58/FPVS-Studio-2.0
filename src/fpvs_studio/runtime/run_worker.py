@@ -1161,7 +1161,7 @@ def _finish_playback_trigger_output(
 def _finish_triggerbox_pulse(backend: LoggedTriggerBackend) -> None:
     """Finish asynchronous resets between conditions, outside timed presentation."""
 
-    if backend.backend_name == "brainproducts_triggerbox":
+    if backend.backend_name in ("brainproducts_triggerbox", "brainproducts_parallel"):
         try:
             backend.reset()
         except Exception as exc:
@@ -1189,13 +1189,22 @@ def _build_and_connect_trigger_backend(
             label = recording_backend_label(runtime_options)
         except ValueError:
             label = "configured recording backend"
-        help_text = (
-            "Check the configured loopback UDP port. Opening a socket cannot verify "
-            "Recorder is listening or saving EEG."
-            if (runtime_options or {}).get("recording_backend") == "unicorn_udp"
-            else "Confirm the configured serial port is available, the trigger interface "
-            "is connected, and no other program has the port open."
-        )
+        selected = (runtime_options or {}).get("recording_backend")
+        if selected == "unicorn_udp":
+            help_text = (
+                "Check the configured loopback UDP port. Opening a socket cannot verify "
+                "Recorder is listening or saving EEG."
+            )
+        elif selected == "brainproducts_parallel":
+            help_text = (
+                "Confirm the configured parallel-port I/O address matches this PC and "
+                "a compatible InpOut driver is installed and running."
+            )
+        else:
+            help_text = (
+                "Confirm the configured serial port is available, the trigger interface "
+                "is connected, and no other program has the port open."
+            )
         raise PreflightError(
             f"Trigger preflight failed before launch ({label}). {help_text} Details: {exc}"
         ) from exc

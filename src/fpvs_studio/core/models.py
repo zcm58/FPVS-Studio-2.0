@@ -596,10 +596,12 @@ class ProjectRecordingSettings(FPVSBaseModel):
     """Saved recording-device choice, separate from compiled timing contracts."""
 
     recording_backend: Literal[
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp"
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+        "unicorn_udp"
     ] = "serial"
     unicorn_udp_port: StrictInt = Field(default=1000, ge=1, le=65535)
     brainproducts_serial_port: StrictStr = "COM3"
+    brainproducts_parallel_address: StrictInt | None = Field(default=None, ge=1, le=65535)
     brainproducts_pulse_width_ms: StrictInt = Field(default=10, ge=1, le=1000)
     brainproducts_amplifier: BrainProductsAmplifier | None = None
     brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)
@@ -615,6 +617,10 @@ class ProjectRecordingSettings(FPVSBaseModel):
 
     @model_validator(mode="after")
     def resolve_hardware_declaration(self) -> ProjectRecordingSettings:
+        if self.recording_backend == "brainproducts_parallel":
+            if self.brainproducts_amplifier not in (None, "actichamp"):
+                raise ValueError("Parallel-port output supports actiCHamp / actiCHamp Plus only.")
+            self.brainproducts_amplifier = "actichamp"
         declared = acquisition_profile_for_recording(self.recording_backend)
         if self.acquisition_profile is None:
             self.acquisition_profile = declared

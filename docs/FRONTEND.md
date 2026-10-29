@@ -123,6 +123,8 @@ interaction.
   through the app-owned job lifecycle with loading, close and retry states; see
   [GUI responsiveness](GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness).
 - Settings > Recording exposes project BioSemi/TriggerBox serial-port selection.
+  actiCHamp parallel output has a separate hexadecimal address selector with
+  metadata-only Windows detection and shared sampling-rate/pulse controls.
   Other serial parameters, display selection and fullscreen policy remain
   backend/runtime contract values outside runtime launch controls.
 

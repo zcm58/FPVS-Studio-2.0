@@ -33,6 +33,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
+from fpvs_studio.gui.parallel_port_selector import ParallelPortSelector
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.runtime.recording import (
     UNICORN_VALIDATION_NOTE,
@@ -51,6 +52,7 @@ RECORDING_HARDWARE_CHOICES = (
     ("BioSemi ActiveTwo", "serial"),
     ("BioSemi ActiveThree", "biosemi_active_three"),
     ("Brain Products / BrainVision (TriggerBox/Plus)", "brainproducts_triggerbox"),
+    ("Brain Products / BrainVision (Parallel port)", "brainproducts_parallel"),
     ("Unicorn Hybrid Black", "unicorn_udp"),
 )
 
@@ -163,6 +165,11 @@ class RecordingSetupDialog(QDialog):
             triggerbox_port.strip()
             if isinstance(triggerbox_port, str) and triggerbox_port.strip() else "COM3"
         )
+        parallel_address = configuration.get("brainproducts_parallel_address")
+        self._valid_parallel_address = (
+            parallel_address
+            if type(parallel_address) is int and 1 <= parallel_address <= 65535 else None
+        )
         pulse_width = configuration.get("brainproducts_pulse_width_ms", 10)
         self._valid_pulse_width = (
             pulse_width if type(pulse_width) is int and 1 <= pulse_width <= 1000 else 10
@@ -185,6 +192,9 @@ class RecordingSetupDialog(QDialog):
         self.backend_combo.addItem(
             "Brain Products / BrainVision (TriggerBox/Plus)", "brainproducts_triggerbox",
         )
+        self.backend_combo.addItem(
+            "Brain Products / BrainVision (Parallel port)", "brainproducts_parallel",
+        )
         self.backend_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
         backend = configuration.get("recording_backend") or "serial"
         index = self.backend_combo.findData(backend)
@@ -201,6 +211,10 @@ class RecordingSetupDialog(QDialog):
         self.biosemi_port_selector = BioSemiPortSelector(
             biosemi_serial_port, biosemi_serial_baudrate, self,
         )
+        self.parallel_port_selector = ParallelPortSelector(parallel_address, self)
+        self.brainproducts_parallel_combo = self.parallel_port_selector.combo
+        self.brainproducts_parallel_edit = self.parallel_port_selector.edit
+        self.detect_parallel_ports_button = self.parallel_port_selector.detect_button
         self.brainproducts_port_combo = QComboBox(self)
         self.brainproducts_port_combo.setEditable(True)
         self.brainproducts_port_combo.setAccessibleName("Brain Products TriggerBox COM port")
@@ -279,10 +293,13 @@ class RecordingSetupDialog(QDialog):
         self.biosemi_port_label.setBuddy(self.biosemi_port_selector.combo)
         form.addRow(self.biosemi_port_label, self.biosemi_port_selector)
         self.brainproducts_port_label = QLabel("TriggerBox COM port", self)
+        self.brainproducts_parallel_label = QLabel("Parallel I/O address (hex)", self)
+        self.brainproducts_parallel_label.setBuddy(self.brainproducts_parallel_edit)
         self.brainproducts_pulse_label = QLabel("Trigger pulse width (ms)", self)
         self.brainproducts_amplifier_label = QLabel("EEG amplifier", self)
         self.brainproducts_sampling_rate_label = QLabel("EEG sampling rate (Hz)", self)
         form.addRow(self.brainproducts_port_label, self.brainproducts_port_row)
+        form.addRow(self.brainproducts_parallel_label, self.parallel_port_selector)
         form.addRow(self.brainproducts_amplifier_label, self.brainproducts_amplifier_combo)
         form.addRow(self.brainproducts_sampling_rate_label, self.brainproducts_sampling_rate_combo)
         form.addRow(self.brainproducts_pulse_label, self.brainproducts_pulse_edit)
@@ -317,9 +334,10 @@ class RecordingSetupDialog(QDialog):
         self.apply_button.clicked.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
         layout.addWidget(self.button_box)
-        self.backend_combo.currentIndexChanged.connect(self._refresh)
+        self.backend_combo.currentIndexChanged.connect(self._backend_changed)
         self.port_edit.textChanged.connect(self._refresh)
         self.biosemi_port_selector.port_changed.connect(self._refresh)
+        self.parallel_port_selector.address_changed.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh_port_detection_status)
         self.brainproducts_pulse_edit.textChanged.connect(self._refresh)
@@ -330,15 +348,16 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_port_combo.activated.connect(self._manual_port_edited)
         self.finished.connect(self._cancel_port_detection)
         self.finished.connect(self.biosemi_port_selector.cancel)
+        self.finished.connect(self.parallel_port_selector.cancel)
         self._refresh()
         apply_dialog_theme(self)
 
     def _populate_sampling_rates(self, selected: object = None) -> None:
-        amplifier = self.brainproducts_amplifier_combo.currentData()
+        amplifier = self._selected_amplifier()
         self.brainproducts_sampling_rate_combo.blockSignals(True)
         self.brainproducts_sampling_rate_combo.clear()
         self.brainproducts_sampling_rate_combo.addItem("Choose sampling rate", None)
-        if amplifier in AMPLIFIER_LABELS:
+        if amplifier is not None and amplifier in AMPLIFIER_LABELS:
             for rate in supported_sampling_rates_hz(amplifier):
                 self.brainproducts_sampling_rate_combo.addItem(str(rate), rate)
         index = self.brainproducts_sampling_rate_combo.findData(selected)
@@ -350,10 +369,20 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_sampling_rate_combo.setCurrentIndex(index)
         self.brainproducts_sampling_rate_combo.blockSignals(False)
 
+    def _selected_amplifier(self) -> str | None:
+        if self.backend_combo.currentData() == "brainproducts_parallel":
+            return "actichamp"
+        return cast(str | None, self.brainproducts_amplifier_combo.currentData())
+
+    def _backend_changed(self) -> None:
+        self._populate_sampling_rates(self.brainproducts_sampling_rate_combo.currentData())
+        self._refresh()
+
     def _amplifier_changed(self) -> None:
         rate = self.brainproducts_sampling_rate_combo.currentData()
-        amplifier = self.brainproducts_amplifier_combo.currentData()
-        rates = supported_sampling_rates_hz(amplifier) if amplifier in AMPLIFIER_LABELS else ()
+        amplifier = self._selected_amplifier()
+        rates = (supported_sampling_rates_hz(amplifier)
+                 if amplifier is not None and amplifier in AMPLIFIER_LABELS else ())
         self._populate_sampling_rates(rate if rate in rates else None)
         self._refresh()
 
@@ -518,6 +547,7 @@ class RecordingSetupDialog(QDialog):
 
     def _draft(self) -> dict[str, object]:
         selected = self.backend_combo.currentData()
+        brainproducts = selected in ("brainproducts_triggerbox", "brainproducts_parallel")
         text = self.port_edit.text()
         # Parse decimal digits only; preserve malformed saved text for validation.
         port: object = int(text) if len(text) <= 5 and text.isascii() and text.isdecimal() else text
@@ -534,23 +564,28 @@ class RecordingSetupDialog(QDialog):
                 self.brainproducts_port_edit.text().strip()
                 if selected == "brainproducts_triggerbox" else self._valid_triggerbox_port
             ),
+            "brainproducts_parallel_address": (
+                self.parallel_port_selector.address
+                if selected == "brainproducts_parallel" else self._valid_parallel_address
+            ),
             "brainproducts_pulse_width_ms": (
-                pulse if selected == "brainproducts_triggerbox" else self._valid_pulse_width
+                pulse if brainproducts else self._valid_pulse_width
             ),
             "brainproducts_amplifier": (
-                self.brainproducts_amplifier_combo.currentData()
-                if selected == "brainproducts_triggerbox" else self._valid_amplifier
+                self._selected_amplifier() if brainproducts else self._valid_amplifier
             ),
             "brainproducts_sampling_rate_hz": (
                 self.brainproducts_sampling_rate_combo.currentData()
-                if selected == "brainproducts_triggerbox" else self._valid_sampling_rate
+                if brainproducts else self._valid_sampling_rate
             ),
         }
 
     def _refresh(self) -> None:
         selected = self.backend_combo.currentData()
         unicorn = selected == "unicorn_udp"
-        brainproducts = selected == "brainproducts_triggerbox"
+        triggerbox = selected == "brainproducts_triggerbox"
+        parallel = selected == "brainproducts_parallel"
+        brainproducts = triggerbox or parallel
         biosemi = selected in ("serial", "biosemi_active_three")
         self.port_edit.setEnabled(unicorn)
         self.unicorn_port_label.setVisible(unicorn)
@@ -561,9 +596,15 @@ class RecordingSetupDialog(QDialog):
         for widget in (
             self.brainproducts_port_label, self.brainproducts_port_row,
             self.brainproducts_amplifier_label, self.brainproducts_amplifier_combo,
+            self.detection_status_label,
+        ):
+            widget.setVisible(triggerbox)
+        self.brainproducts_parallel_label.setVisible(parallel)
+        self.parallel_port_selector.setVisible(parallel)
+        for widget in (
             self.brainproducts_sampling_rate_label, self.brainproducts_sampling_rate_combo,
             self.brainproducts_pulse_label, self.brainproducts_pulse_edit,
-            self.detection_status_label, self.pulse_requirement_label,
+            self.pulse_requirement_label,
         ):
             widget.setVisible(brainproducts)
         self.backend_combo.setToolTip(str(selected))
@@ -584,6 +625,14 @@ class RecordingSetupDialog(QDialog):
                 "Test and Pilot modes never send markers."
             )
             detail = (
+                "For actiCHamp / actiCHamp Plus. Connect the parallel port using the "
+                "vendor-compatible trigger cable. Use the I/O start address from Device "
+                "Manager > Resources, with a compatible InpOut driver installed and running. "
+                "Detection "
+                "only reads Windows metadata; it does not test the driver or attached amplifier. "
+                "Enable high-active Stimulus inputs in Recorder. Confirm received codes, "
+                "repeated markers and physical timing before collecting study data."
+                if parallel else
                 "Connect the TriggerBox USB port to this computer and use the vendor's "
                 "amplifier-specific output cable. For TriggerBox Plus, set the lower "
                 "eight output switches to PC. In BrainVision Recorder, enable the lower "
@@ -610,9 +659,10 @@ class RecordingSetupDialog(QDialog):
         self.guidance_label.setAccessibleDescription(detail)
         self.pulse_requirement_label.clear()
         if brainproducts:
-            amplifier = self.brainproducts_amplifier_combo.currentData()
+            amplifier = self._selected_amplifier()
             rate = self.brainproducts_sampling_rate_combo.currentData()
-            if amplifier in AMPLIFIER_LABELS and rate in supported_sampling_rates_hz(amplifier):
+            if (amplifier is not None and amplifier in AMPLIFIER_LABELS
+                    and rate in supported_sampling_rates_hz(amplifier)):
                 minimum = minimum_pulse_width_ms(amplifier, rate)
                 self.pulse_requirement_label.setText(
                     f"Minimum pulse: {minimum:g} ms. Launch checks spacing between markers.",
@@ -629,6 +679,7 @@ class RecordingSetupDialog(QDialog):
         else:
             self._valid_udp_port = validated.unicorn_udp_port
             self._valid_triggerbox_port = validated.brainproducts_serial_port
+            self._valid_parallel_address = validated.brainproducts_parallel_address
             self._valid_pulse_width = validated.brainproducts_pulse_width_ms
             self._valid_amplifier = validated.brainproducts_amplifier
             self._valid_sampling_rate = validated.brainproducts_sampling_rate_hz

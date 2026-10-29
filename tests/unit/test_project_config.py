@@ -122,6 +122,7 @@ def test_hardware_registry_does_not_allow_mapping_mutation_or_unknown_choices():
 @pytest.mark.parametrize("backend,label", [
     ("biosemi_active_three", "BioSemi ActiveThree"),
     ("brainproducts_triggerbox", "Brain Products / BrainVision (TriggerBox/Plus)"),
+    ("brainproducts_parallel", "Brain Products / BrainVision (Parallel port)"),
 ])
 def test_new_hardware_declares_selection_without_inventing_toolbox_profile(backend, label):
     definition = next(
@@ -132,7 +133,9 @@ def test_new_hardware_declares_selection_without_inventing_toolbox_profile(backe
     assert acquisition_profile_for_recording(backend) is None
 
 
-@pytest.mark.parametrize("backend", ["biosemi_active_three", "brainproducts_triggerbox"])
+@pytest.mark.parametrize("backend", [
+    "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+])
 def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
     sample_project, sample_project_root, tmp_path, backend,
 ):
@@ -635,6 +638,10 @@ def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample
         "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": "COM18",
         "brainproducts_pulse_width_ms": 20,
         "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 100,
+    },
+    {
+        "recording_backend": "brainproducts_parallel", "brainproducts_parallel_address": 0xD010,
+        "brainproducts_pulse_width_ms": 20, "brainproducts_sampling_rate_hz": 100,
     },
 ])
 def test_recording_device_and_port_survive_config_interchange(

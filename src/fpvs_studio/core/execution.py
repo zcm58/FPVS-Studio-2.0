@@ -111,14 +111,18 @@ class RecordingSnapshot(FPVSBaseModel):
 
     schema_version: Literal[1] = 1
     selected_backend: Literal[
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp"
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+        "unicorn_udp"
     ]
-    effective_backend: Literal["serial", "brainproducts_triggerbox", "unicorn_udp", "null"]
+    effective_backend: Literal[
+        "serial", "brainproducts_triggerbox", "brainproducts_parallel", "unicorn_udp", "null"
+    ]
     selection_source: Literal["legacy_project", "local_settings", "project_settings"]
     udp_host: Literal["127.0.0.1"] | None = None
     udp_port: StrictInt | None = Field(default=None, ge=1, le=65535)
     serial_port: str | None = None
     serial_baudrate: StrictInt | None = Field(default=None, gt=0)
+    parallel_port_address: StrictInt | None = Field(default=None, ge=1, le=65535)
     trigger_pulse_width_ms: StrictInt | None = Field(default=None, ge=1, le=1000)
     brainproducts_amplifier: BrainProductsAmplifier | None = None
     brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)

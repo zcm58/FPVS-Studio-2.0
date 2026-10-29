@@ -622,7 +622,8 @@ def test_computer_recording_default_updates_only_inheriting_projects(tmp_path):
 
 
 @pytest.mark.parametrize("selection", [
-    "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+    "unicorn_udp",
 ])
 @pytest.mark.parametrize("test_mode", [False, True])
 def test_inherited_recording_launch_and_handoff_share_effective_device(
@@ -641,6 +642,7 @@ def test_inherited_recording_launch_and_handoff_share_effective_device(
     document.set_default_recording_configuration({
         "recording_backend": selection, "unicorn_udp_port": 2345,
         "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
+        "brainproducts_parallel_address": 0x378,
         "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 500,
     })
     document.set_experiment_test_mode_enabled(test_mode)
@@ -659,6 +661,7 @@ def test_inherited_recording_launch_and_handoff_share_effective_device(
     assert settings.recording_selection_source == "local_settings"
     assert settings.unicorn_udp_port == 2345
     assert settings.brainproducts_serial_port == "COM123"
+    assert settings.brainproducts_parallel_address == 0x378
     assert settings.brainproducts_pulse_width_ms == 20
     assert settings.brainproducts_amplifier == "actichamp"
     assert settings.brainproducts_sampling_rate_hz == 500

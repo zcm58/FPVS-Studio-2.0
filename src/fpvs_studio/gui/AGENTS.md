@@ -155,4 +155,7 @@ trigger settings. Metadata listing never identifies generic ports as BioSemi; Ch
 Port checks only the selection on a worker without marker bytes. Computer defaults
 do not own BioSemi COM fields. Preserve selected hardware identity on
 Home independently of transport.
+Parallel-port actiCHamp uses its own address selector with metadata-only detection,
+manual hexadecimal entry and the shared rate/pulse controls. Do not infer an attached
+amplifier from a listed LPT device or load hardware drivers during dialog validation.
 See `docs/GUI_WORKFLOW.md`.

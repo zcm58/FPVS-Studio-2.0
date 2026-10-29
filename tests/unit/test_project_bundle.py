@@ -1015,12 +1015,19 @@ def test_export_failure_during_stream_preserves_destination_and_cleans_owned_tem
     assert unrelated_temp.read_bytes() == b"unrelated work"
 
 
+@pytest.mark.parametrize("configuration", [
+    {"recording_backend": "unicorn_udp", "unicorn_udp_port": 2345},
+    {
+        "recording_backend": "brainproducts_parallel", "brainproducts_parallel_address": 0xD010,
+        "brainproducts_sampling_rate_hz": 1000,
+    },
+])
 def test_recording_device_and_port_survive_project_bundle(
-    tmp_path, sample_project, sample_project_root
+    tmp_path, sample_project, sample_project_root, configuration,
 ):
     from fpvs_studio.core.models import ProjectRecordingSettings
 
-    setting = ProjectRecordingSettings(recording_backend="unicorn_udp", unicorn_udp_port=2345)
+    setting = ProjectRecordingSettings(**configuration)
     sample_project.settings.recording = setting
     _save_bundle_ready_project(sample_project_root, sample_project)
     bundle = tmp_path / "device.fpvsbundle"

@@ -21,6 +21,7 @@ from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.gui import home_page as home_page_module
+from fpvs_studio.gui import parallel_port_selector as parallel_port_selector_module
 from fpvs_studio.gui import recording_dialog as recording_dialog_module
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog
@@ -34,6 +35,7 @@ from fpvs_studio.runtime.unicorn_recorder import (
     _require_recording_snapshot,
 )
 from fpvs_studio.triggers.brainproducts_discovery import TriggerBoxPortCandidate
+from fpvs_studio.triggers.parallel_discovery import ParallelPortCandidate
 
 
 class _HeldPortDetectionJob(QObject):
@@ -66,9 +68,14 @@ def port_detection_jobs(monkeypatch):
 
     lifecycle = SimpleNamespace(is_shutting_down=False, start_task=start_task)
     monkeypatch.setattr(recording_dialog_module, "update_lifecycle", lambda: lifecycle)
+    monkeypatch.setattr(parallel_port_selector_module, "update_lifecycle", lambda: lifecycle)
     monkeypatch.setattr(
         recording_dialog_module, "discover_triggerbox_ports",
         Mock(side_effect=AssertionError("GUI tests must not enumerate real serial ports")),
+    )
+    monkeypatch.setattr(
+        parallel_port_selector_module, "discover_parallel_ports",
+        Mock(side_effect=AssertionError("GUI tests must not enumerate real parallel ports")),
     )
     return jobs
 
@@ -93,6 +100,15 @@ def _triggerbox_configuration(**overrides):
     }
 
 
+def _parallel_configuration(**overrides):
+    return {
+        **_triggerbox_configuration(),
+        "recording_backend": "brainproducts_parallel",
+        "brainproducts_parallel_address": 0x378,
+        **overrides,
+    }
+
+
 def _assert_labels_fit(widget) -> None:
     assert_visible_children_within_parent(widget)
     for label in widget.findChildren(QLabel):
@@ -111,14 +127,17 @@ def _assert_labels_fit(widget) -> None:
 @pytest.mark.parametrize("backend, port", [
     (None, 1000), ("serial", 1000), ("unicorn_udp", 65535),
     ("biosemi_active_three", 1000), ("brainproducts_triggerbox", 1000),
+    ("brainproducts_parallel", 1000),
     ("unicorn_udp", "broken saved port"), ("unknown old selection", 1000),
 ])
 def test_recording_setup_geometry_and_validation(qtbot, background, backend, port):
     configuration = {"recording_backend": backend, "unicorn_udp_port": port}
-    if backend == "brainproducts_triggerbox":
+    if backend in ("brainproducts_triggerbox", "brainproducts_parallel"):
         configuration.update(
             brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
         )
+    if backend == "brainproducts_parallel":
+        configuration["brainproducts_parallel_address"] = 0x378
     dialog = RecordingSetupDialog(configuration)
     qtbot.addWidget(dialog)
     palette = dialog.palette()
@@ -154,6 +173,15 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert dialog.backend_combo.currentText() == "BioSemi ActiveThree"
         assert "USB Trigger Interface" in dialog.guidance_label.toolTip()
         assert dialog.apply_button.isEnabled()
+    elif backend == "brainproducts_parallel":
+        assert dialog.backend_combo.currentText() == (
+            "Brain Products / BrainVision (Parallel port)"
+        )
+        assert dialog.brainproducts_parallel_edit.isVisible()
+        assert dialog.brainproducts_parallel_edit.text() == "0x378"
+        assert not dialog.brainproducts_port_edit.isVisible()
+        assert not dialog.brainproducts_amplifier_combo.isVisible()
+        assert dialog.apply_button.isEnabled()
     elif backend not in (None, "serial"):
         assert dialog.backend_combo.currentData() == backend
         assert backend in dialog.backend_combo.toolTip()
@@ -178,8 +206,201 @@ def test_recording_setup_apply_and_keyboard_cancel(qtbot):
     assert dialog.configuration == {
         "recording_backend": "unicorn_udp", "unicorn_udp_port": 65535,
         "brainproducts_serial_port": "COM3", "brainproducts_pulse_width_ms": 10,
+        "brainproducts_parallel_address": None,
         "brainproducts_amplifier": None, "brainproducts_sampling_rate_hz": None,
     }
+
+
+@pytest.mark.parametrize("address, rate, pulse, valid", [
+    ("0x378", 500, 10, True), ("378", 500, 10, True), ("0xFFFF", 500, 10, True),
+    ("", 500, 10, False), ("0x0", 500, 10, False), ("0x10000", 500, 10, False),
+    ("not an address", 500, 10, False), ("0x378", None, 10, False),
+    ("0x378", 777, 10, False), ("0x378", 100, 19, False),
+    ("0x378", 100, 20, True),
+])
+def test_parallel_address_and_actichamp_timing_validation(qtbot, address, rate, pulse, valid):
+    dialog = RecordingSetupDialog(_parallel_configuration(
+        brainproducts_sampling_rate_hz=rate, brainproducts_pulse_width_ms=pulse,
+    ))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.brainproducts_parallel_edit.setText(address)
+    QApplication.processEvents()
+    assert dialog.backend_combo.currentText() == "Brain Products / BrainVision (Parallel port)"
+    assert dialog.brainproducts_parallel_edit.isVisible()
+    assert not dialog.brainproducts_port_edit.isVisible()
+    assert not dialog.brainproducts_amplifier_combo.isVisible()
+    assert dialog.brainproducts_sampling_rate_combo.isVisible()
+    assert dialog.brainproducts_pulse_edit.isVisible()
+    assert "actiCHamp" in dialog.guidance_label.toolTip()
+    assert "InpOut driver installed and running" in dialog.guidance_label.toolTip()
+    assert dialog.apply_button.isEnabled() is valid
+    if valid:
+        dialog.apply_button.click()
+        assert dialog.configuration["brainproducts_parallel_address"] == int(address, 16)
+        assert dialog.configuration["brainproducts_amplifier"] == "actichamp"
+    else:
+        assert dialog.error_label.text()
+    _assert_labels_fit(dialog)
+
+
+def test_parallel_discovery_uses_only_metadata_and_retains_manual_address(
+    qtbot, port_detection_jobs, monkeypatch,
+):
+    discovery = Mock(return_value=())
+    monkeypatch.setattr(parallel_port_selector_module, "discover_parallel_ports", discovery)
+    dialog = RecordingSetupDialog(_parallel_configuration(brainproducts_parallel_address=None))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert len(port_detection_jobs) == 1
+    cancel = Event()
+    assert port_detection_jobs[0].callback(None, cancel) == ()
+    cancelled = discovery.call_args.kwargs["cancelled"]
+    assert set(discovery.call_args.kwargs) == {"cancelled"}
+    assert not cancelled()
+    cancel.set()
+    assert cancelled()
+    assert "without loading a driver" in dialog.detect_parallel_ports_button.toolTip()
+    candidate = ParallelPortCandidate("ECP Printer Port (LPT1)", 0x378, "ACPI\\PNP0401\\1")
+    port_detection_jobs[0].finish(candidates=(candidate,))
+    assert dialog.brainproducts_parallel_edit.text() == "0x378"
+    dialog.brainproducts_parallel_edit.selectAll()
+    qtbot.keyClicks(dialog.brainproducts_parallel_edit, "0xD010")
+    dialog.detect_parallel_ports_button.click()
+    port_detection_jobs[1].finish(candidates=(candidate,))
+    assert dialog.brainproducts_parallel_edit.text() == "0xD010"
+    dialog.apply_button.click()
+    assert dialog.configuration["brainproducts_parallel_address"] == 0xD010
+
+
+def test_parallel_discovery_requires_choice_for_multiple_or_missing_addresses(
+    qtbot, port_detection_jobs,
+):
+    dialog = RecordingSetupDialog(_parallel_configuration(brainproducts_parallel_address=None))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    port_detection_jobs[0].finish(candidates=(
+        ParallelPortCandidate("LPT1", 0x378, "first device"),
+        ParallelPortCandidate("LPT2", 0xD010, "second device"),
+    ))
+    assert dialog.brainproducts_parallel_edit.text() == ""
+    assert not dialog.apply_button.isEnabled()
+    assert "Several" in dialog.parallel_port_selector.status_label.text()
+    dialog.brainproducts_parallel_combo.setCurrentIndex(1)
+    assert dialog.parallel_port_selector.address == 0xD010
+    assert dialog.apply_button.isEnabled()
+    dialog.brainproducts_parallel_edit.clear()
+    dialog.detect_parallel_ports_button.click()
+    port_detection_jobs[1].finish(candidates=(ParallelPortCandidate("LPT3", None, "third device"),))
+    assert dialog.brainproducts_parallel_edit.text() == ""
+    assert "Device Manager > Resources" in dialog.parallel_port_selector.status_label.text()
+    assert not dialog.apply_button.isEnabled()
+
+
+def test_parallel_manual_draft_survives_backend_switch_and_cancel(qtbot, port_detection_jobs):
+    original = _parallel_configuration()
+    dialog = RecordingSetupDialog(original)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.brainproducts_parallel_edit.selectAll()
+    qtbot.keyClicks(dialog.brainproducts_parallel_edit, "0xD010")
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("unicorn_udp"))
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("brainproducts_parallel"))
+    assert dialog.brainproducts_parallel_edit.text() == "0xD010"
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    assert dialog.configuration == original
+    dialog.show()
+    dialog.brainproducts_parallel_edit.selectAll()
+    qtbot.keyClick(dialog.brainproducts_parallel_edit, Qt.Key.Key_Backspace)
+    port_detection_jobs[-1].finish(candidates=(
+        ParallelPortCandidate("LPT1", 0x378, "detected device"),
+    ))
+    assert dialog.brainproducts_parallel_edit.text() == ""
+    assert not dialog.apply_button.isEnabled()
+
+
+@pytest.mark.parametrize("finish", ["cancel", "switch"])
+def test_parallel_discovery_cancel_and_backend_switch_ignore_stale_results(
+    qtbot, port_detection_jobs, finish,
+):
+    original = _parallel_configuration(brainproducts_parallel_address=None)
+    dialog = RecordingSetupDialog(original)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    job = port_detection_jobs[0]
+    if finish == "cancel":
+        qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+        assert dialog.configuration == original
+    else:
+        dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("unicorn_udp"))
+        dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("brainproducts_parallel"))
+        assert len(port_detection_jobs) == 2
+    assert job.cancelled
+    job.finish(candidates=(ParallelPortCandidate("LPT1", 0x378, "stale device"),))
+    assert dialog.brainproducts_parallel_edit.text() == ""
+    if finish == "switch":
+        assert dialog.parallel_port_selector._job is port_detection_jobs[1]
+        port_detection_jobs[1].finish(candidates=(
+            ParallelPortCandidate("LPT2", 0xD010, "current device"),
+        ))
+        assert dialog.brainproducts_parallel_edit.text() == "0xD010"
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("state", [
+    "busy", "empty", "multiple", "missing", "error", "unique", "cancelled", "manual",
+])
+def test_parallel_discovery_states_fit_minimum_dialog(
+    qtbot, port_detection_jobs, background, state,
+):
+    dialog = RecordingSetupDialog(_parallel_configuration(
+        brainproducts_parallel_address=None,
+        brainproducts_sampling_rate_hz=100, brainproducts_pulse_width_ms=20,
+    ))
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(700, 640)
+    dialog.show()
+    description = "PCI Express Multi-Mode ECP Parallel Port (LPT123) " * 8
+    device_id = "PCI\\VEN_9710&DEV_9901&SUBSYS_2000A000\\VERY_LONG_DEVICE_INSTANCE " * 8
+    candidate = ParallelPortCandidate(description, 0xD010, device_id)
+    if state == "empty":
+        port_detection_jobs[0].finish()
+    elif state == "multiple":
+        port_detection_jobs[0].finish(candidates=(
+            candidate, ParallelPortCandidate("LPT2", 0x378, "second device"),
+        ))
+    elif state == "missing":
+        port_detection_jobs[0].finish(candidates=(
+            ParallelPortCandidate(description, None, device_id),
+        ))
+    elif state == "error":
+        details = "Windows could not read the parallel-port device resources. " * 12
+        port_detection_jobs[0].finish(error=RuntimeError(details))
+        assert dialog.parallel_port_selector.status_label.toolTip() == details
+    elif state == "cancelled":
+        port_detection_jobs[0].finish(cancelled=True)
+    elif state == "unique":
+        port_detection_jobs[0].finish(candidates=(candidate,))
+    elif state == "manual":
+        qtbot.keyClicks(dialog.brainproducts_parallel_edit, "0xFFFF")
+        port_detection_jobs[0].finish(candidates=(candidate,))
+        assert dialog.brainproducts_parallel_edit.text() == "0xFFFF"
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == (700, 640)
+    _assert_labels_fit(dialog)
+    assert dialog.backend_combo.width() >= (
+        dialog.backend_combo.fontMetrics().horizontalAdvance(dialog.backend_combo.currentText())
+        + 32
+    )
+    if state in ("unique", "multiple", "missing", "manual"):
+        assert description in dialog.parallel_port_selector.status_label.toolTip()
+        assert device_id in dialog.parallel_port_selector.status_label.accessibleDescription()
+        assert description in dialog.brainproducts_parallel_combo.itemData(
+            0, Qt.ItemDataRole.ToolTipRole,
+        )
 
 
 @pytest.mark.parametrize("port, pulse, valid", [
@@ -671,6 +892,7 @@ def test_triggerbox_drafts_survive_device_switch_and_cancel(qtbot):
     assert dialog.configuration == {
         "recording_backend": "brainproducts_triggerbox", "unicorn_udp_port": 3456,
         "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
+        "brainproducts_parallel_address": None,
         "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 500,
     }
 
@@ -976,6 +1198,10 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
             "brainproducts_triggerbox", 1000,
             "Recording Device: Brain Products / BrainVision (TriggerBox/Plus)",
         ),
+        (
+            "brainproducts_parallel", 1000,
+            "Recording Device: Brain Products / BrainVision (Parallel port)",
+        ),
         ("unicorn_udp", 65535, "Recording Device: Unicorn Black Mobile Headset"),
         (
             "unicorn_udp",
@@ -1005,7 +1231,8 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
     if backend is None:
         assert document.validate_recording_launch() == "serial"
     elif backend not in (
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+        "unicorn_udp",
     ) or not isinstance(port, int):
         # Corrupt drafts remain actionable; disk loading rejects malformed typed settings.
         monkeypatch.setattr(
@@ -1019,10 +1246,12 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
         document.project_changed.emit()
     else:
         configuration = {"recording_backend": backend, "unicorn_udp_port": port}
-        if backend == "brainproducts_triggerbox":
+        if backend in ("brainproducts_triggerbox", "brainproducts_parallel"):
             configuration.update(
                 brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
             )
+        if backend == "brainproducts_parallel":
+            configuration["brainproducts_parallel_address"] = 0x378
         document.set_recording_configuration(configuration)
     palette = window.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -1045,7 +1274,8 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
         _assert_labels_fit(page)
 
     if backend in (
-        None, "serial", "biosemi_active_three", "brainproducts_triggerbox", "unicorn_udp",
+        None, "serial", "biosemi_active_three", "brainproducts_triggerbox",
+        "brainproducts_parallel", "unicorn_udp",
     ) and isinstance(port, int):
         document.set_experiment_test_mode_enabled(True)
         QApplication.processEvents()
@@ -1098,6 +1328,7 @@ def test_home_recording_device_name_extension_and_pilot_output(
         (None, 1000),
         ("biosemi_active_three", 1000),
         ("brainproducts_triggerbox", 1000),
+        ("brainproducts_parallel", 1000),
         ("unicorn_udp", 65535),
         ("invalid", 1000),
     ],
@@ -1124,10 +1355,12 @@ def test_run_recording_summary_fits_existing_window_budget(
         )
     else:
         configuration = {"recording_backend": backend, "unicorn_udp_port": port}
-        if backend == "brainproducts_triggerbox":
+        if backend in ("brainproducts_triggerbox", "brainproducts_parallel"):
             configuration.update(
                 brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
             )
+        if backend == "brainproducts_parallel":
+            configuration["brainproducts_parallel_address"] = 0x378
         document.set_recording_configuration(configuration)
     page = RunPage(document)
     qtbot.addWidget(page)

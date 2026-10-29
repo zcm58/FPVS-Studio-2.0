@@ -56,6 +56,7 @@ class LaunchSettings:
     recording_selection_source: str = "local_settings"
     unicorn_udp_port: int = 1000
     brainproducts_serial_port: str = "COM3"
+    brainproducts_parallel_address: int | None = None
     brainproducts_pulse_width_ms: int = 10
     brainproducts_amplifier: str | None = None
     brainproducts_sampling_rate_hz: int | None = None
@@ -147,7 +148,9 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
     if settings.export_mode not in VALID_EXPORT_MODES:
         valid_values = "', '".join(sorted(VALID_EXPORT_MODES))
         raise LaunchSettingsError(f"export_mode must be one of '{valid_values}'.")
-    if settings.recording_backend in ("unicorn_udp", "brainproducts_triggerbox"):
+    if settings.recording_backend in (
+        "unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel",
+    ):
         return
     if effective_recording_backend == "serial":
         try:

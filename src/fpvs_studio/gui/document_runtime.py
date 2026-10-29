@@ -300,6 +300,9 @@ class DocumentRuntimeMixin:
                     brainproducts_serial_port=cast(
                         str, recording_configuration.get("brainproducts_serial_port", "COM3"),
                     ),
+                    brainproducts_parallel_address=cast(
+                        int | None, recording_configuration.get("brainproducts_parallel_address"),
+                    ),
                     brainproducts_pulse_width_ms=cast(
                         int, recording_configuration.get("brainproducts_pulse_width_ms", 10),
                     ),
