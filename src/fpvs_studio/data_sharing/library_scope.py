@@ -5,12 +5,16 @@ from __future__ import annotations
 from pathlib import Path
 
 from fpvs_studio.core.data_sharing import SharingProfile
-from fpvs_studio.core.library_origin import LibraryOriginError, load_library_origin
+from fpvs_studio.core.library_origin import (
+    LibraryOriginError,
+    canonical_library_service_url,
+    load_library_origin,
+)
 from fpvs_studio.data_sharing.errors import DataSharingError
 
 
-def library_enrollment_scope(root: Path) -> dict[str, str]:
-    """Unlinked studies use their invitation; linked studies require the installed release."""
+def library_enrollment_scope(root: Path, *, service_url: str | None = None) -> dict[str, str]:
+    """Unlinked studies use their protocol; linked studies require the installed release."""
     try:
         origin = load_library_origin(root)
     except LibraryOriginError:
@@ -20,6 +24,13 @@ def library_enrollment_scope(root: Path) -> dict[str, str]:
         ) from None
     if origin is None:
         return {}
+    if (
+        service_url is not None
+        and canonical_library_service_url(origin.service_url) != service_url
+    ):
+        raise DataSharingError(
+            "This project's Library link belongs to a different service.", code="configuration",
+        )
     if origin.installed_version is None:
         raise DataSharingError(
             "Confirm this project's installed Library version before sharing results.",

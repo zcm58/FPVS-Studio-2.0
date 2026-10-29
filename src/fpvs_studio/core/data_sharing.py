@@ -90,6 +90,32 @@ class SharingSettings(SharingModel):
         return self
 
 
+class SharingStudyChoice(SharingModel):
+    """A permitted matching study, without any machine credential or report data."""
+
+    project_id: str
+    title: str = Field(min_length=1, max_length=160)
+    experiment_id: Identifier
+    experiment_version: VersionText
+    protocol_sha256: Sha256
+
+    @field_validator("project_id")
+    @classmethod
+    def validate_project_id(cls, value: str) -> str:
+        return _uuid(value)
+
+
+class SharingStudyChoices(SharingModel):
+    schema_version: Literal["1.0"] = "1.0"
+    projects: tuple[SharingStudyChoice, ...] = Field(max_length=256)
+
+    @model_validator(mode="after")
+    def unique_projects(self) -> SharingStudyChoices:
+        if len({project.project_id for project in self.projects}) != len(self.projects):
+            raise ValueError("Matching studies must have distinct project IDs.")
+        return self
+
+
 class FixationOccurrence(SharingModel):
     condition_id: Identifier
     occurrence_index: StrictInt = Field(ge=1, le=4096)

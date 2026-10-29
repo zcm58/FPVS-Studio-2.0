@@ -84,6 +84,11 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   failure retains the active session for later recovery. See `docs/BUG_REPORTING.md`.
 - `src/fpvs_studio/data_sharing/`: GUI-neutral per-experiment consent, native OS
   credentials, immutable durable upload outbox and bounded HTTPS delivery.
+  Study discovery and enrollment reuse the same-origin protected Library machine
+  identity through `LibraryClient.enrolled_credential`; no lab code is persisted.
+  Results authorization, separate credentials and approval remain server-owned.
+  The dialog presents named studies instead of code/project-ID inputs; the exact
+  workflow and API boundaries live in `docs/DATA_SHARING.md`.
   Its client owns guarded pending-enrollment replacement after explicit GUI
   confirmation; registered access and saved consent retain their existing owners.
   `core/data_sharing.py` owns strict wire contracts and authored protocol identity;

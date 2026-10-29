@@ -18,20 +18,40 @@ the lab and immutable experiment ID, version and protocol fingerprint. Studio's
 **Copy protocol fingerprint** action supplies the actual authored/asset hash.
 For a Library-linked experiment, use its installed item ID and version.
 
-Open **View > Data Sharing & Comparison** in the active experiment. Enter the
-existing lab code and the website's **OpenFPVS project ID**, choose **Connect**,
-then ask the administrator to approve a new results enrollment on its project page.
-Reconnect with the same code/project after approval;
+Connect the computer once in **Experiment Library** using the reusable lab code.
+Open **View > Data Sharing & Comparison** in the active experiment. Studio finds
+matching studies using that saved machine identity. A unique study is selected;
+if several match, choose the study by name, then **Connect**. No additional code
+or copied project ID is needed. Ask the administrator to approve a new results
+enrollment on its project page, then choose **Connect** again after approval.
+**Refresh studies** checks current access; **Lab access…** opens the existing
+Library connection controls when enrollment or reconnection is needed.
 review the registered study, version and field list through the study-title and sharing
 checkbox tooltips. **Automatically share completed sessions** defaults on for new
 enrollments; clear it to opt out. Saved off choices survive reconnection, including
 an off choice saved while enrollment is in flight. Enrollment never uploads history.
 **View OpenFPVS project** opens the private dashboard.
-Locally authored experiments can enroll without a Library download. A Library
+Locally authored experiments can enroll without a Library download, using their
+protocol fingerprint to discover matching studies. Linked experiments also require
+the exact installed Library item and version. A Library
 view/download grant alone does not authorize reporting: the lab needs an explicit
 project grant, and Results credentials remain separate from Library credentials.
+Only a Library machine enrolled through a reusable lab code can use this flow.
+Legacy individual invitations require reconnecting Library access with a lab code.
+Older clients retain their existing code-based Results API.
 
-If a pending connection belongs to a different study or lab code, Studio offers
+The client never saves the lab code. Its cache-locked Library credential reader
+supplies the machine token only in memory, only to the same configured HTTPS
+origin. `POST /results/v1/library/projects` returns a bounded strict list of
+eligible studies; `POST /results/v1/library/enroll` exchanges that authorization
+for the existing separately approved project Results identity. Both recheck live
+lab/code/device and study permission. Results approval or permission errors never
+clear the Library credential. Revoking only Library access stops discovery and new
+enrollment; existing Results access keeps its separate revocation control. Revoking
+the shared lab code disables both. See the
+[one-time connection plan](exec-plans/active/one-time-lab-connection.md) for rollout.
+
+If a pending connection belongs to a different study or lab connection, Studio offers
 **Replace pending connection?** after the service reports that exact conflict.
 Confirming clears only the unchanged, unregistered local credential and retries
 the selected study. The previous server request remains for administrator review.

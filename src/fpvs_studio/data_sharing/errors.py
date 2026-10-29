@@ -18,7 +18,7 @@ class DataSharingCancelled(DataSharingError):
 class PendingEnrollmentConflict(DataSharingError):
     def __init__(self, credential_sha256: str) -> None:
         super().__init__(
-            "A pending connection request uses a different project or lab code.",
+            "A pending connection request uses a different study or lab.",
             code="enrollment_scope",
         )
         self.credential_sha256 = credential_sha256

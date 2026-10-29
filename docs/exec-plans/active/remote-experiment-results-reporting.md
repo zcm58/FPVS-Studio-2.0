@@ -4,6 +4,12 @@ Status: Active
 
 Date: 2026-10-07
 
+## One-time lab connection (2026-10-29)
+
+The [connection plan](one-time-lab-connection.md) replaces repeated code and
+project-ID entry with authorized study discovery using the saved Library identity.
+Separate Results approval, credentials, saved opt-outs and upload ownership remain.
+
 ## Pending connection recovery (2026-10-29)
 
 An exact OpenFPVS `credential_scope_conflict` now offers explicit replacement
@@ -71,7 +77,8 @@ local verification, and no additional service or storage provider is required.
 
 ## Decisions and integrity boundaries
 
-Enrollment never opts in. Project/config/bundle transfers exclude automatic sharing
+First approved enrollment follows the current default described above and preserves
+saved off choices. Project/config/bundle transfers exclude automatic sharing
 activation and credentials. Protocol/version edits hold uploads while local runs
 continue; earlier reports retain their original identity. Actual selected image and
 task media bytes enter the fingerprint, excluding local identity, random seeds and

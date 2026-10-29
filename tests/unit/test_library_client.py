@@ -628,12 +628,13 @@ def test_download_cancellation_cleans_partial(environment):
     assert list(client._cache.root.glob("*.fpvsbundle")) == []
 
 
-def test_pre_cancellation_does_not_touch_store_cache_or_network(environment):
+@pytest.mark.parametrize("operation", ["catalog", "enrolled_credential"])
+def test_pre_cancellation_does_not_touch_store_cache_or_network(environment, operation):
     client, _, requests, _ = environment
     cancel = Event()
     cancel.set()
     with pytest.raises(LibraryCancelled):
-        client.catalog(cancel_event=cancel)
+        getattr(client, operation)(cancel_event=cancel)
     assert not client._cache.root.exists()
     assert requests == []
 
@@ -764,6 +765,80 @@ def test_current_protocol_access_does_not_prompt_again(environment):
     assert client.connection_info() == store.value.connection
     assert client.connection_info() == store.value.connection
     assert requests == []
+
+
+@pytest.mark.parametrize("access_level", ["view", "download"])
+def test_enrolled_credential_is_read_under_lock_without_http_or_token_repr(
+    environment, monkeypatch, access_level,
+):
+    client, store, requests, _ = environment
+    saved = store.value.model_copy(update={
+        "connection": store.value.connection.model_copy(update={"access_level": access_level}),
+    })
+    store.value = saved
+
+    def load():
+        assert client._cache._lock is not None
+        return store.value
+
+    monkeypatch.setattr(store, "load", load)
+    credential = client.enrolled_credential()
+    assert credential is saved
+    assert credential.token not in repr(credential)
+    assert not store.saved and not requests
+    assert client._cache._lock is None
+
+
+@pytest.mark.parametrize("state", ["missing", "pending", "previous-protocol"])
+def test_enrolled_credential_requires_current_enrollment(environment, state):
+    client, store, requests, _ = environment
+    if state == "missing":
+        store.value = None
+    elif state == "pending":
+        store.value = store.value.model_copy(update={"connection": None})
+    else:
+        store.value = store.value.model_copy(update={"library_api_version": 1})
+    saved = store.value
+    with pytest.raises(LibraryAuthorizationError, match="lab code"):
+        client.enrolled_credential()
+    assert store.value is (None if state == "previous-protocol" else saved)
+    assert not requests
+    assert client._cache._lock is None
+
+
+@pytest.mark.parametrize("stage", ["acquire", "load"])
+def test_enrolled_credential_cancellation_during_secure_lookup_returns_no_access(
+    environment, monkeypatch, stage,
+):
+    client, store, requests, _ = environment
+    cancel = Event()
+    target = client._cache if stage == "acquire" else store
+    original = getattr(target, stage)
+
+    def cancelled():
+        result = original()
+        cancel.set()
+        return result
+
+    monkeypatch.setattr(target, stage, cancelled)
+    with pytest.raises(LibraryCancelled):
+        client.enrolled_credential(cancel_event=cancel)
+    assert client._cache._lock is None
+    assert store.value is not None and not store.saved and not requests
+
+
+def test_enrolled_credential_cannot_bypass_an_active_library_operation(environment, monkeypatch):
+    client, store, requests, _ = environment
+    client._cache.acquire()
+    held = client._cache._lock
+    monkeypatch.setattr(store, "load", lambda: pytest.fail("No unlocked credential read"))
+    try:
+        with pytest.raises(LibraryError, match="Finish the current Library operation"):
+            client.enrolled_credential()
+        assert client._cache._lock is held
+        assert not requests
+    finally:
+        client._cache.release()
 
 
 def test_previous_access_is_removed_under_lock_before_catalog_request(environment, monkeypatch):

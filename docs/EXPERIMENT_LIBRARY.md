@@ -91,6 +91,12 @@ Enter the lab access code and a friendly computer name, then select **Connect**.
 No GitHub account, Git installation, installer, administrator rights, or application
 restart is needed to browse and download experiments.
 
+This machine enrollment covers every experiment currently granted to the lab; no
+per-experiment access code is required. Data Sharing & Comparison reuses that saved
+identity to find authorized studies by name. It keeps separate Results permissions
+and approval while removing repeated lab-code and project-ID entry. No reusable
+code is persisted. See [Data sharing](DATA_SHARING.md) for the connection workflow.
+
 Startup offers lab setup when this OS user has no saved Library enrollment.
 Ask your PI or lab manager for the reusable lab code; no researcher account or
 email registration is required. **Continue offline** leaves local experiments

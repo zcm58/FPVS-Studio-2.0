@@ -18,8 +18,34 @@ from fpvs_studio.core.data_sharing import (
     ParticipantSummary,
     SessionReport,
     SharingSettings,
+    SharingStudyChoice,
+    SharingStudyChoices,
     protocol_fingerprint,
 )
+
+
+def test_study_discovery_contract_bounds_and_unique_identity():
+    choice = SharingStudyChoice(
+        project_id=str(uuid4()), title="Named study", experiment_id="study",
+        experiment_version="1.0", protocol_sha256="a" * 64,
+    )
+    assert SharingStudyChoices.model_validate_json(
+        SharingStudyChoices(projects=(choice,)).model_dump_json()
+    ).projects == (choice,)
+    for invalid in (
+        {"projects": (choice, choice)},
+        {"projects": tuple(choice.model_copy(update={"project_id": str(uuid4())})
+                           for _ in range(257))},
+        {"projects": (), "device_token": "private"},
+    ):
+        with pytest.raises(ValidationError):
+            SharingStudyChoices.model_validate(invalid)
+    for update in (
+        {"project_id": "not-a-uuid"}, {"title": "x" * 161},
+        {"protocol_sha256": "wrong"}, {"device_token": "private"},
+    ):
+        with pytest.raises(ValidationError):
+            SharingStudyChoice.model_validate({**choice.model_dump(), **update})
 
 
 def report_fixture(**changes):

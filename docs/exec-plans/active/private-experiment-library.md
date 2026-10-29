@@ -4,6 +4,13 @@ Status: Active
 
 Date: 2026-09-16
 
+## One-time lab connection (October 29, 2026)
+
+The [connection plan](one-time-lab-connection.md) extends the saved Library machine
+identity to authorized study discovery and Results enrollment. Library grants,
+downloads and secure storage remain unchanged; the canonical user workflow lives
+in [Data sharing](../../DATA_SHARING.md).
+
 ## Compiled-client workflow audit (October 29, 2026)
 
 Project-version selection now respects the latest catalog's view-only permission.

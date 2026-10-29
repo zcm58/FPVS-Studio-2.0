@@ -1139,6 +1139,7 @@ class StudioController(QObject):
             self._data_sharing_controller = DataSharingController(
                 self._app, current_window=lambda: self.main_window,
                 startup_notice=self._show_startup_sharing_notice,
+                lab_access=self.show_library,
             )
         return self._data_sharing_controller
 

@@ -13,11 +13,13 @@ import pytest
 from tests.unit.test_data_sharing_client import (
     HASH,
     ORIGIN,
+    LabAccess,
     Store,
     credential,
     profile,
     receipt_bytes,
     report,
+    study_choice,
 )
 
 from fpvs_studio.core.data_sharing import SharingSettings
@@ -28,6 +30,8 @@ from fpvs_studio.data_sharing.errors import DataSharingError
 from fpvs_studio.data_sharing.service import (
     archive_project,
     disconnect_project,
+    discover_project_enrollments,
+    enroll_library_project,
     enroll_project,
     load_view,
     set_sharing_enabled,
@@ -442,6 +446,54 @@ def test_first_enrollment_defaults_on_without_submitting_existing_history(tmp_pa
     assert result.settings.enabled
     assert calls == [ORIGIN + "/results/v1/enroll"]
     assert list_records(tmp_path) == ()
+
+
+@pytest.mark.parametrize("saved_off", [False, True, "during-request"])
+def test_library_enrollment_preserves_consent_and_never_backfills(tmp_path, saved_off):
+    if saved_off is True:
+        save_settings(tmp_path, SharingSettings(enabled=False))
+    queued = queue_report(tmp_path, report())
+    chosen = study_choice()
+    calls = []
+
+    def transport(_method, url, _body, _headers, _cancel):
+        calls.append(url)
+        if saved_off == "during-request":
+            save_settings(tmp_path, SharingSettings(enabled=False))
+        return profile().model_copy(
+            update={"project_id": chosen.project_id},
+        ).model_dump_json().encode()
+
+    store = Store()
+    backend = DataSharingClient(
+        ORIGIN, transport=transport, store_factory=lambda *_: store, library_client=LabAccess(),
+    )
+    result = enroll_library_project(tmp_path, chosen.project_id, HASH, Event(), client=backend)
+    assert result.settings.enabled is (saved_off is False)
+    assert list_records(tmp_path) == (queued,)
+    assert calls == [ORIGIN + "/results/v1/library/enroll"]
+
+
+def test_library_study_discovery_does_not_change_sharing_preference(tmp_path):
+    save_settings(tmp_path, SharingSettings(enabled=False))
+    original = load_settings(tmp_path)
+    backend = DataSharingClient(
+        ORIGIN, transport=lambda *_: b'{"schema_version":"1.0","projects":[]}',
+        library_client=LabAccess(),
+    )
+    assert not discover_project_enrollments(tmp_path, HASH, Event(), client=backend).projects
+    assert load_settings(tmp_path) == original
+
+
+def test_library_enrollment_cannot_replace_registered_scope(tmp_path):
+    enable(tmp_path)
+    backend = DataSharingClient(
+        ORIGIN, transport=lambda *_: pytest.fail("Registered enrollment must not be replaced"),
+        library_client=LabAccess(),
+    )
+    with pytest.raises(DataSharingError, match="Disconnect"):
+        enroll_library_project(tmp_path, study_choice().project_id, HASH, Event(), client=backend)
+    assert load_settings(tmp_path).profile == profile()
 
 
 @pytest.mark.parametrize("during_request", [False, True])

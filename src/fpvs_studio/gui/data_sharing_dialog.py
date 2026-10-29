@@ -11,11 +11,11 @@ from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLineEdit,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.data_sharing import SharingStudyChoice
 from fpvs_studio.data_sharing.storage import CaptureArchiveReview
 from fpvs_studio.gui.components import (
     DialogHeader,
@@ -149,13 +150,17 @@ class DataSharingDialog(QDialog):
         self.profile_label = self._label("No experiment enrollment. Sharing is off.")
         self.profile_label.setObjectName("sharing_profile")
         sharing_layout.addWidget(self.profile_label)
-        self.project_id_edit = QLineEdit(self)
-        self.project_id_edit.setObjectName("sharing_project_id")
-        self.project_id_edit.setPlaceholderText("OpenFPVS project ID")
-        self.project_id_edit.setToolTip("Copy the project ID from the OpenFPVS project page.")
-        self.project_id_edit.setAccessibleName("OpenFPVS project ID")
-        self.project_id_edit.setMaxLength(36)
-        sharing_layout.addWidget(self.project_id_edit)
+        self.study_combo = QComboBox(self)
+        self.study_combo.setObjectName("sharing_study")
+        self.study_combo.setAccessibleName("Shared study")
+        self.study_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon,
+        )
+        self.study_combo.setMinimumContentsLength(15)
+        self.study_combo.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+        self.study_combo.setPlaceholderText("Refresh to find available studies")
+        self.study_combo.currentIndexChanged.connect(self._study_changed)
+        sharing_layout.addWidget(self.study_combo)
         self.enabled_checkbox = QCheckBox(
             "Automatically share completed sessions", self,
         )
@@ -176,14 +181,6 @@ class DataSharingDialog(QDialog):
         )
         connection = QHBoxLayout()
         connection.setSpacing(8)
-        self.invitation_edit = QLineEdit(self)
-        self.invitation_edit.setObjectName("sharing_invitation_code")
-        self.invitation_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.invitation_edit.setPlaceholderText("Lab-issued invitation code")
-        self.invitation_edit.setAccessibleName("Lab-issued invitation code")
-        self.invitation_edit.setMaxLength(128)
-        self.invitation_edit.textChanged.connect(self._update_controls)
-        connection.addWidget(self.invitation_edit, 1)
         self.connect_button = QPushButton("Connect", self)
         self.connect_button.setObjectName("sharing_connect")
         self.connect_button.setAutoDefault(False)
@@ -194,6 +191,21 @@ class DataSharingDialog(QDialog):
         self.connect_button.clicked.connect(lambda: self.action_requested.emit("connect"))
         mark_primary_action(self.connect_button)
         connection.addWidget(self.connect_button)
+        self.refresh_studies_button = QPushButton("Refresh studies", self)
+        self.refresh_studies_button.setToolTip(
+            "Find matching studies using this computer's lab access."
+        )
+        self.refresh_studies_button.clicked.connect(lambda: self.action_requested.emit("discover"))
+        mark_secondary_action(self.refresh_studies_button)
+        connection.addWidget(self.refresh_studies_button)
+        self.lab_access_button = QPushButton("Lab access…", self)
+        self.lab_access_button.setToolTip(
+            "Connect this computer to your lab in the Experiment Library."
+        )
+        self.lab_access_button.clicked.connect(lambda: self.action_requested.emit("lab_access"))
+        mark_secondary_action(self.lab_access_button)
+        connection.addWidget(self.lab_access_button)
+        connection.addStretch(1)
         self.disconnect_button = QPushButton("Revoke access", self)
         self.disconnect_button.setObjectName("sharing_disconnect")
         self.disconnect_button.setToolTip("Revoking access leaves received reports with the owner.")
@@ -293,14 +305,37 @@ class DataSharingDialog(QDialog):
         label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         return label
 
-    def invitation_code(self) -> str:
-        return self.invitation_edit.text().strip()
-
-    def clear_invitation(self) -> None:
-        self.invitation_edit.clear()
-
     def project_id(self) -> str:
-        return self.project_id_edit.text().strip()
+        return str(self.study_combo.currentData() or "")
+
+    def study_title(self) -> str:
+        return self.study_combo.currentText() if self.project_id() else "the selected study"
+
+    def set_studies(self, studies: Sequence[SharingStudyChoice]) -> None:
+        previous = self.project_id()
+        self.study_combo.blockSignals(True)
+        self.study_combo.clear()
+        for study in studies:
+            title = f"{study.title} · {study.experiment_version}"
+            self.study_combo.addItem(title, study.project_id)
+            self.study_combo.setItemData(
+                self.study_combo.count() - 1,
+                f"{title}\nExperiment: {study.experiment_id}\nStudy: {study.project_id}",
+                Qt.ItemDataRole.ToolTipRole,
+            )
+        self.study_combo.setPlaceholderText(
+            "Choose a study…" if studies else "No matching studies available",
+        )
+        index = self.study_combo.findData(previous) if previous else -1
+        self.study_combo.setCurrentIndex(0 if len(studies) == 1 else index)
+        self.study_combo.blockSignals(False)
+        self._study_changed()
+
+    def _study_changed(self) -> None:
+        self.study_combo.setToolTip(
+            str(self.study_combo.currentData(Qt.ItemDataRole.ToolTipRole) or "")
+        )
+        self._update_controls()
 
     def set_project_url(self, url: str) -> None:
         self._project_url = url
@@ -349,18 +384,20 @@ class DataSharingDialog(QDialog):
         )
         return answer == QMessageBox.StandardButton.Yes
 
-    def confirm_pending_connection_reset(self, project_id: str) -> bool:
-        target = f"project {project_id}" if project_id else "the selected project"
-        answer = QMessageBox.question(
-            self, "Replace pending connection?",
-            "The previous connection request used a different project or lab code. "
-            f"Clear this machine's pending request and connect to {target}?\n\n"
+    def confirm_pending_connection_reset(self, study_title: str) -> bool:
+        prompt = QMessageBox(self)
+        prompt.setWindowTitle("Replace pending connection?")
+        prompt.setIcon(QMessageBox.Icon.Question)
+        prompt.setTextFormat(Qt.TextFormat.PlainText)
+        prompt.setText(
+            "The previous connection request used a different study or lab connection. "
+            f"Clear this machine's pending request and connect to {study_title}?\n\n"
             "The previous request remains in OpenFPVS for the administrator to review. "
-            "Saved sharing preferences and reports stay unchanged.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
+            "Saved sharing preferences and reports stay unchanged."
         )
-        return answer == QMessageBox.StandardButton.Yes
+        prompt.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        prompt.setDefaultButton(QMessageBox.StandardButton.No)
+        return prompt.exec() == int(QMessageBox.StandardButton.Yes)
 
     def set_comparison(
         self, rows: Sequence[ComparisonRow], *, scope: str, notice: str, details: str,
@@ -392,13 +429,19 @@ class DataSharingDialog(QDialog):
     def _update_controls(self) -> None:
         ready = self._configured and not self._busy
         self.profile_label.setVisible(self._connected)
-        self.project_id_edit.setEnabled(ready and not self._connected)
+        self.study_combo.setVisible(not self._connected)
+        self.study_combo.setEnabled(ready and not self._connected)
+        self.refresh_studies_button.setVisible(not self._connected)
+        self.refresh_studies_button.setEnabled(ready)
+        self.lab_access_button.setVisible(not self._connected)
+        self.lab_access_button.setEnabled(not self._busy)
         self.protocol_button.setEnabled(not self._busy)
         self.website_button.setEnabled(not self._busy and bool(self._project_url))
-        self.invitation_edit.setEnabled(ready and not self._connected)
+        self.connect_button.setVisible(not self._connected)
         self.connect_button.setEnabled(
-            ready and not self._connected and bool(self.invitation_code())
+            ready and not self._connected and bool(self.project_id())
         )
+        self.disconnect_button.setVisible(self._connected)
         self.disconnect_button.setEnabled(not self._busy and self._connected)
         self.enabled_checkbox.setEnabled(
             self._connected and (not self._busy or self._enabled)

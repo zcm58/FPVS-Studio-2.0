@@ -5,9 +5,10 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QCheckBox, QLabel, QLineEdit, QMessageBox, QPushButton, QWidget
+from PySide6.QtWidgets import QCheckBox, QLabel, QMessageBox, QPushButton, QWidget
 from tests.gui.helpers import assert_visible_children_within_parent
 
+from fpvs_studio.core.data_sharing import SharingStudyChoice
 from fpvs_studio.data_sharing.storage import CaptureArchiveReview, ReviewedCapture
 from fpvs_studio.gui.data_sharing_dialog import (
     ComparisonRow,
@@ -15,6 +16,15 @@ from fpvs_studio.gui.data_sharing_dialog import (
     SavedReportsDialog,
     StartupReportNotice,
 )
+
+
+def _study(number=1):
+    return SharingStudyChoice(
+        project_id=f"00000000-0000-0000-0000-{number:012d}",
+        title=f"Study {number}: " + "A realistic extended cross-laboratory experiment title " * 2,
+        experiment_id=f"shared-study-{number}", experiment_version="2026.10.29+reviewed",
+        protocol_sha256="a" * 64,
+    )
 
 
 @pytest.mark.parametrize("size", [(560, 360), (680, 440)])
@@ -111,7 +121,10 @@ def test_controller_shows_dismissible_report_notice_on_visible_window(
 
 @pytest.mark.parametrize("size", [(820, 480), (880, 540)])
 @pytest.mark.parametrize(
-    "state", ["empty", "ready", "busy", "error", "validation", "offline", "full", "conflict"]
+    "state", [
+        "empty", "single", "multiple", "discovering", "approval", "ready", "busy", "error",
+        "validation", "offline", "full", "conflict",
+    ],
 )
 @pytest.mark.parametrize("background", ["#202124", "#f4f7fb"])
 def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, background):
@@ -123,23 +136,29 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, backg
         + "\nExperiment: " + "study-" * 12 + "\nVersion: " + "2026.10.05+reviewed-" * 3
         + "\nProtocol SHA-256: " + "a" * 64
     )
+    connected = state in {"ready", "busy", "offline", "full"}
+    studies = [] if state == "empty" else [_study(), _study(2)] if state in {
+        "multiple", "validation",
+    } else [_study()]
+    dialog.set_studies(studies)
     dialog.set_state(
-        connected=state not in {"empty", "validation", "conflict"},
-        enabled=state not in {"empty", "validation", "conflict"}, profile=profile,
+        connected=connected, enabled=connected, profile=profile,
         status="The service is temporarily unavailable. Reports remain pending; retry when "
         "the connection is available." if state == "error" else
-        "Enter the lab-issued invitation code for the reviewed experiment version."
+        "Choose a shared study before connecting."
         if state == "validation" else "Waiting for connection. Reports are saved locally; "
         "Studio will retry on its next launch." if state == "offline" else
         "Sharing capture history is full (512/512). "
         "Use Review captures to archive excluded sessions."
         if state == "full" else
-        "A pending connection request uses a different project or lab code."
-        if state == "conflict" else "Sharing is enabled.",
+        "A pending connection request uses a different study or lab connection."
+        if state == "conflict" else
+        "This computer is awaiting administrator approval. Select Connect after approval."
+        if state == "approval" else "Sharing is enabled." if connected else
+        "Choose an available study or refresh studies using this computer's lab access.",
         pending=9999, held=9999, uploaded=9999,
         captures=512 if state == "full" else 32, capture_limit=512, reviewable_captures=31,
     )
-    dialog.project_id_edit.setText("01234567-89ab-cdef-0123-456789abcdef")
     dialog.set_project_url("https://openfpvs.com/projects/01234567-89ab-cdef-0123-456789abcdef")
     full_name = "Repeated condition with a long experimental label and a demanding task " * 3
     rows = [] if state == "empty" else [ComparisonRow(
@@ -155,18 +174,23 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, backg
         "session reports from 3 devices per condition. Task accuracy does not measure EEG quality.",
     )
     dialog.set_busy(
-        state == "busy", "Updating sharing settings and aggregate comparison…"
-        if state == "busy" else "",
+        state in {"busy", "discovering"}, "Updating sharing settings and aggregate comparison…"
+        if state == "busy" else "Finding available shared studies…"
+        if state == "discovering" else "",
     )
     dialog.resize(*size)
     dialog.show()
     assert "Retained uploaded: 9,999" in dialog.counts_label.text()
     assert "cloud contributions remain" in dialog.counts_label.toolTip()
     assert f"Captures: {512 if state == 'full' else 32}/512" in dialog.counts_label.text()
-    assert dialog.review_captures_button.isEnabled() == (state != "busy")
+    assert dialog.review_captures_button.isEnabled() == (state not in {"busy", "discovering"})
     assert dialog.profile_label.text() == profile.partition("\n")[0]
     assert dialog.profile_label.toolTip() == profile
-    assert dialog.profile_label.isVisible() == (state not in {"empty", "validation", "conflict"})
+    assert dialog.profile_label.isVisible() == connected
+    assert dialog.study_combo.isVisible() != connected
+    assert dialog.connect_button.isEnabled() == (
+        not connected and state not in {"empty", "multiple", "validation", "discovering"}
+    )
     assert not dialog.header.subtitle_label.isVisible()
     assert "Protocol SHA-256" not in dialog.profile_label.text()
     for index in range(dialog.tabs.count()):
@@ -195,6 +219,53 @@ def test_sharing_dialog_fits_long_content_and_all_tabs(qtbot, size, state, backg
         assert dialog.comparison_table.item(0, 2).toolTip().endswith("25 enrollments")
 
 
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_study_discovery_selects_only_a_unique_match_and_exposes_full_titles(qtbot, count):
+    dialog = DataSharingDialog(configured=True)
+    qtbot.addWidget(dialog)
+    studies = [_study(index + 1) for index in range(count)]
+    actions = []
+    dialog.action_requested.connect(actions.append)
+    dialog.set_studies(studies)
+    assert dialog.study_combo.count() == count
+    assert not dialog.study_combo.isEditable()
+    assert dialog.study_combo.accessibleName() == "Shared study"
+    assert dialog.project_id() == (studies[0].project_id if count == 1 else "")
+    assert dialog.connect_button.isEnabled() == (count == 1)
+    assert not actions  # Discovery and automatic selection do not enroll.
+    for index, study in enumerate(studies):
+        tooltip = dialog.study_combo.itemData(index, Qt.ItemDataRole.ToolTipRole)
+        assert study.title in tooltip and study.experiment_version in tooltip
+        assert study.experiment_id in tooltip and study.project_id in tooltip
+    if count:
+        dialog.study_combo.setCurrentIndex(count - 1)
+        assert dialog.project_id() == studies[-1].project_id
+        assert studies[-1].title in dialog.study_combo.toolTip()
+        assert studies[-1].title in dialog.study_title()
+        assert dialog.connect_button.isEnabled()
+        assert not actions
+    else:
+        assert dialog.study_combo.placeholderText() == "No matching studies available"
+
+
+def test_study_refresh_preserves_explicit_choice_and_clears_a_removed_ambiguous_choice(qtbot):
+    dialog = DataSharingDialog(configured=True)
+    qtbot.addWidget(dialog)
+    first, second, third = _study(), _study(2), _study(3)
+    dialog.set_studies([first, second])
+    dialog.study_combo.setCurrentIndex(1)
+    dialog.set_studies([second, first])
+    assert dialog.project_id() == second.project_id
+    assert second.title in dialog.study_combo.toolTip()
+    dialog.set_studies([first, third])
+    assert dialog.project_id() == ""
+    assert dialog.study_combo.toolTip() == ""
+    assert not dialog.connect_button.isEnabled()
+    dialog.set_studies([third])
+    assert dialog.project_id() == third.project_id
+    assert dialog.connect_button.isEnabled()
+
+
 def test_connection_and_checkbox_require_explicit_operator_actions(qtbot):
     dialog = DataSharingDialog(configured=True)
     qtbot.addWidget(dialog)
@@ -205,12 +276,12 @@ def test_connection_and_checkbox_require_explicit_operator_actions(qtbot):
     assert not dialog.enabled_checkbox.isEnabled()
     assert not dialog.connect_button.isEnabled()
     assert not dialog.archive_button.isEnabled()
-    assert dialog.invitation_edit.echoMode() == QLineEdit.EchoMode.Password
-    assert dialog.invitation_edit.maxLength() == 128
-    dialog.invitation_edit.setText("  lab-issued-private-code  ")
-    assert dialog.invitation_code() == "lab-issued-private-code"
+    dialog.refresh_studies_button.click()
+    dialog.lab_access_button.click()
+    assert actions == ["discover", "lab_access"]
+    dialog.set_studies([_study()])
     dialog.connect_button.click()
-    assert actions == ["connect"]
+    assert actions == ["discover", "lab_access", "connect"]
     dialog.set_state(connected=True, enabled=False, profile="Study v1", status="Connected.")
     assert enabled == []
     assert not dialog.enabled_checkbox.isChecked()
@@ -218,8 +289,6 @@ def test_connection_and_checkbox_require_explicit_operator_actions(qtbot):
     assert not dialog.retry_button.isEnabled()
     dialog.enabled_checkbox.click()
     assert enabled == [True]
-    dialog.clear_invitation()
-    assert dialog.invitation_code() == ""
     dialog.set_state(connected=True, enabled=True, profile="Study v1", status="Enabled.")
     dialog.retry_button.click()
     dialog.disconnect_button.click()
@@ -237,8 +306,10 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     dialog = DataSharingDialog(configured=False)
     qtbot.addWidget(dialog)
     assert "not configured" in dialog.status_label.text()
-    dialog.invitation_edit.setText("private-code")
+    dialog.set_studies([_study()])
     assert not dialog.connect_button.isEnabled()
+    assert not dialog.refresh_studies_button.isEnabled()
+    assert dialog.lab_access_button.isEnabled()
     dialog.set_state(connected=True, enabled=True, profile="Study v1", status="Offline.",
                      reviewable_captures=1)
     assert dialog.enabled_checkbox.isEnabled()  # Off remains available without a service.
@@ -248,7 +319,7 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     assert dialog.cancel_button.isVisible()
     for button in (
         dialog.connect_button, dialog.disconnect_button, dialog.retry_button, dialog.archive_button,
-        dialog.review_captures_button,
+        dialog.review_captures_button, dialog.refresh_studies_button, dialog.lab_access_button,
     ):
         assert not button.isEnabled()
     assert dialog.enabled_checkbox.isEnabled()  # Opt-out is available while a transfer is busy.
@@ -256,9 +327,9 @@ def test_busy_unconfigured_and_cancel_states(qtbot):
     dialog.action_requested.connect(actions.append)
     dialog.cancel_button.click()
     assert actions == ["cancel"]
-    dialog.set_busy(False, "Enter the lab-issued invitation code.")
+    dialog.set_busy(False, "Refresh studies after reconnecting Lab access.")
     assert not dialog.cancel_button.isVisible()
-    assert "invitation code" in dialog.status_label.text()
+    assert "Lab access" in dialog.status_label.text()
     assert "No original participant numbers" in dialog.enabled_checkbox.toolTip()
     assert "age, sex, handedness, colorblind status" in dialog.enabled_checkbox.toolTip()
     assert "reviewed removed electrodes" in dialog.enabled_checkbox.toolTip()
@@ -304,15 +375,15 @@ def test_project_setup_and_website_actions_are_explicit(qtbot):
     actions = []
     dialog.action_requested.connect(actions.append)
     assert not dialog.website_button.isEnabled()
-    dialog.project_id_edit.setText("01234567-89ab-cdef-0123-456789abcdef")
-    assert dialog.project_id() == "01234567-89ab-cdef-0123-456789abcdef"
+    dialog.set_studies([_study()])
+    assert dialog.project_id() == _study().project_id
     dialog.protocol_button.click()
     assert actions == ["protocol"]
     dialog.set_state(
         connected=True, enabled=False, profile="Private lab project", status="Connected.",
     )
     dialog.set_project_url("https://openfpvs.com/projects/01234567-89ab-cdef-0123-456789abcdef")
-    assert not dialog.project_id_edit.isEnabled()
+    assert not dialog.study_combo.isEnabled()
     assert not dialog.enabled_checkbox.isChecked()
     dialog.website_button.click()
     assert actions == ["protocol", "website"]
@@ -322,23 +393,28 @@ def test_project_setup_and_website_actions_are_explicit(qtbot):
 
 
 @pytest.mark.parametrize("answer", [QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No])
-def test_pending_connection_reset_is_explicit_and_identifies_selected_project(
+def test_pending_connection_reset_is_explicit_and_identifies_selected_study(
     qtbot, monkeypatch, answer,
 ):
     dialog = DataSharingDialog(configured=True)
     qtbot.addWidget(dialog)
-    project_id = "01234567-89ab-cdef-0123-456789abcdef"
+    dialog.set_studies([_study().model_copy(update={
+        "title": "<b>Literal study title</b> & review",
+    })])
+    study_title = dialog.study_title()
     questions = []
-    monkeypatch.setattr(QMessageBox, "question", lambda *args: questions.append(args) or answer)
-    assert dialog.confirm_pending_connection_reset(project_id) is (
+    monkeypatch.setattr(QMessageBox, "exec", lambda prompt: questions.append(prompt) or int(answer))
+    assert dialog.confirm_pending_connection_reset(study_title) is (
         answer == QMessageBox.StandardButton.Yes
     )
     question = questions[0]
-    assert question[1] == "Replace pending connection?"
-    assert project_id in question[2]
-    assert "previous request remains in OpenFPVS" in question[2]
-    assert "Saved sharing preferences and reports stay unchanged" in question[2]
-    assert question[-1] == QMessageBox.StandardButton.No
+    assert question.windowTitle() == "Replace pending connection?"
+    assert question.textFormat() == Qt.TextFormat.PlainText
+    assert study_title in question.text()
+    assert dialog.project_id() not in question.text()
+    assert "previous request remains in OpenFPVS" in question.text()
+    assert "Saved sharing preferences and reports stay unchanged" in question.text()
+    assert question.standardButton(question.defaultButton()) == QMessageBox.StandardButton.No
 
 
 def test_available_comparison_keeps_details_in_tooltips(qtbot):

@@ -194,9 +194,11 @@ def _isolate_qt_settings(smoke_root: Path) -> dict[str, str]:
 
 def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
     """Render synthetic dialog states without a controller, credentials or HTTP."""
-    from PySide6.QtCore import QTimer
+    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QAbstractButton, QDialog, QLabel, QMessageBox, QWidget
 
+    from fpvs_studio.core.data_sharing import SharingStudyChoice
     from fpvs_studio.core.library_origin import LibraryProjectOrigin
     from fpvs_studio.gui.data_sharing_dialog import ComparisonRow, DataSharingDialog
     from fpvs_studio.gui.library_dialog import LibraryDialog
@@ -304,63 +306,125 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
     versions.close()
 
     sharing = DataSharingDialog(configured=True)
-    sharing.project_id_edit.setText("01234567-89ab-cdef-0123-456789abcdef")
-    sharing.invitation_edit.setText("synthetic-not-a-real-lab-code")
+    study = SharingStudyChoice(
+        project_id="01234567-89ab-cdef-0123-456789abcdef",
+        title="Synthetic cross-laboratory experiment with a realistic extended title " * 2,
+        experiment_id=item.item_id, experiment_version=item.version, protocol_sha256="a" * 64,
+    )
+    second_study = study.model_copy(update={
+        "project_id": "01234567-89ab-cdef-0123-456789abcde0",
+        "title": "Second shared study with the same protocol, requiring an explicit selection",
+    })
     sharing.set_comparison([ComparisonRow(
         "Synthetic condition with a long protocol-specific display name", "synthetic-condition",
         "92.0%\n46 hits / 50 targets · 1 session",
         "89.5%\n8,950 hits / 10,000 targets · 200 sessions · 25 enrollments",
     )], scope="Same experiment, version and protocol; this enrollment is excluded.",
         notice="", details="At least 10 sessions from 3 other enrollments are required.")
-    for size in ((820, 480), (880, 540)):
-        sharing.tabs.setCurrentIndex(0)
-        sharing.set_state(
-            connected=False, enabled=False, profile="No experiment enrollment.",
-            status="A pending connection request uses a different project or lab code.",
-        )
-        record(sharing, "pending-enrollment", size, {
-            "retry_connection_available": sharing.connect_button.isEnabled(),
-            "sharing_disabled": not sharing.enabled_checkbox.isEnabled(),
-        })
-        def dismiss_pending_confirmation(state: str = f"pending-reset-{size[0]}") -> None:
-            message_box = app.activeModalWidget()
-            if not isinstance(message_box, QMessageBox):
-                raise RuntimeError("Pending enrollment confirmation did not open.")
-            default_button = message_box.defaultButton()
-            try:
-                record(message_box, state, message_box.size().toTuple(), {
-                    "default_no": default_button is not None and message_box.standardButton(
-                        default_button,
-                    ) == QMessageBox.StandardButton.No,
-                    "selected_project_visible": sharing.project_id() in message_box.text(),
-                    "pending_request_explained": "OpenFPVS" in message_box.text(),
+    for theme, background in (("dark", "#202124"), ("light", "#f4f7fb")):
+        sharing.setPalette(QPalette(QColor(background)))
+        for size in ((820, 480), (880, 540)):
+            sharing.tabs.setCurrentIndex(0)
+            sharing.set_state(
+                connected=False, enabled=False, profile="No experiment enrollment.",
+                status="No studies match this experiment. Check Lab access or refresh studies.",
+            )
+            sharing.set_studies([])
+            record(sharing, f"no-studies-{theme}", size, {
+                "no_selection": not sharing.project_id(),
+                "connect_blocked": not sharing.connect_button.isEnabled(),
+                "recovery_available": sharing.refresh_studies_button.isEnabled()
+                and sharing.lab_access_button.isEnabled(),
+            })
+            sharing.set_studies([study])
+            sharing.status_label.setText(
+                "A matching study is available. Select Connect to continue.",
+            )
+            record(sharing, f"one-study-{theme}", size, {
+                "unique_selected": sharing.project_id() == study.project_id,
+                "connect_available": sharing.connect_button.isEnabled(),
+                "full_title_available": study.title in sharing.study_combo.toolTip(),
+                "sharing_disabled": not sharing.enabled_checkbox.isEnabled(),
+            })
+            sharing.set_studies([])
+            sharing.set_studies([study, second_study])
+            sharing.status_label.setText("Choose the shared study to connect to.")
+            record(sharing, f"multiple-studies-{theme}", size, {
+                "explicit_choice_required": not sharing.project_id(),
+                "connect_blocked": not sharing.connect_button.isEnabled(),
+                "full_title_available": study.title in sharing.study_combo.itemData(
+                    0, Qt.ItemDataRole.ToolTipRole,
+                ),
+            })
+            sharing.study_combo.setCurrentIndex(1)
+            record(sharing, f"study-selected-{theme}", size, {
+                "selected_study": sharing.project_id() == second_study.project_id,
+                "connect_available": sharing.connect_button.isEnabled(),
+                "full_title_available": second_study.title in sharing.study_combo.toolTip(),
+            })
+            sharing.set_busy(True, "Finding available shared studies…")
+            record(sharing, f"discovering-{theme}", size, {
+                "choice_blocked": not sharing.study_combo.isEnabled(),
+                "connect_blocked": not sharing.connect_button.isEnabled(),
+                "refresh_blocked": not sharing.refresh_studies_button.isEnabled(),
+                "cancel_available": sharing.cancel_button.isEnabled(),
+            })
+            sharing.set_busy(False)
+            for state, status in (
+                ("approval", "This computer is awaiting administrator approval. "
+                 "Select Connect after approval."),
+                ("error", "The service is temporarily unavailable. "
+                 "Refresh studies when the connection is available."),
+                ("pending-enrollment", "A pending connection request uses a different "
+                 "study or lab connection."),
+            ):
+                sharing.set_state(connected=False, enabled=False, profile="", status=status)
+                record(sharing, f"{state}-{theme}", size, {
+                    "retry_connection_available": sharing.connect_button.isEnabled(),
+                    "refresh_available": sharing.refresh_studies_button.isEnabled(),
+                    "sharing_disabled": not sharing.enabled_checkbox.isEnabled(),
                 })
-            finally:
-                message_box.done(int(QMessageBox.StandardButton.No))
 
-        QTimer.singleShot(0, dismiss_pending_confirmation)
-        replaced = sharing.confirm_pending_connection_reset(sharing.project_id())
-        reports[-1]["checks"]["dismissed_without_replacement"] = not replaced
-        reports[-1]["ok"] = reports[-1]["ok"] and not replaced
-        sharing.set_state(
-            connected=True, enabled=True, profile=item.title + "\nProtocol SHA-256: " + "a" * 64,
-            status="Sharing is enabled.", pending=12, held=3, uploaded=9999, captures=32,
-        )
-        record(sharing, "connected", size, {
-            "sharing_enabled": sharing.enabled_checkbox.isEnabled(),
-            "retry_available": sharing.retry_button.isEnabled(),
-            "full_profile_available": "Protocol SHA-256" in sharing.profile_label.toolTip(),
-        })
-        sharing.set_busy(True, "Updating sharing settings and aggregate comparison…")
-        record(sharing, "busy", size, {
-            "retry_blocked": not sharing.retry_button.isEnabled(),
-            "opt_out_available": sharing.enabled_checkbox.isEnabled(),
-        })
-        sharing.set_busy(False)
-        sharing.tabs.setCurrentIndex(1)
-        record(sharing, "comparison", size, {
-            "comparison_present": sharing.comparison_table.rowCount() == 1,
-        })
+            def dismiss_pending_confirmation(state: str = f"pending-reset-{theme}-{size[0]}"):
+                message_box = app.activeModalWidget()
+                if not isinstance(message_box, QMessageBox):
+                    raise RuntimeError("Pending enrollment confirmation did not open.")
+                default_button = message_box.defaultButton()
+                try:
+                    record(message_box, state, message_box.size().toTuple(), {
+                        "default_no": default_button is not None and message_box.standardButton(
+                            default_button,
+                        ) == QMessageBox.StandardButton.No,
+                        "selected_study_visible": sharing.study_title() in message_box.text(),
+                        "pending_request_explained": "OpenFPVS" in message_box.text(),
+                    })
+                finally:
+                    message_box.done(int(QMessageBox.StandardButton.No))
+
+            QTimer.singleShot(0, dismiss_pending_confirmation)
+            replaced = sharing.confirm_pending_connection_reset(sharing.study_title())
+            reports[-1]["checks"]["dismissed_without_replacement"] = not replaced
+            reports[-1]["ok"] = reports[-1]["ok"] and not replaced
+            sharing.set_state(
+                connected=True, enabled=True,
+                profile=item.title + "\nProtocol SHA-256: " + "a" * 64,
+                status="Sharing is enabled.", pending=12, held=3, uploaded=9999, captures=32,
+            )
+            record(sharing, f"connected-{theme}", size, {
+                "sharing_enabled": sharing.enabled_checkbox.isEnabled(),
+                "retry_available": sharing.retry_button.isEnabled(),
+                "full_profile_available": "Protocol SHA-256" in sharing.profile_label.toolTip(),
+            })
+            sharing.set_busy(True, "Updating sharing settings and aggregate comparison…")
+            record(sharing, f"busy-{theme}", size, {
+                "retry_blocked": not sharing.retry_button.isEnabled(),
+                "opt_out_available": sharing.enabled_checkbox.isEnabled(),
+            })
+            sharing.set_busy(False)
+            sharing.tabs.setCurrentIndex(1)
+            record(sharing, f"comparison-{theme}", size, {
+                "comparison_present": sharing.comparison_table.rowCount() == 1,
+            })
     sharing.close()
     app.processEvents()
     return {"ok": all(report["ok"] for report in reports), "states": reports}

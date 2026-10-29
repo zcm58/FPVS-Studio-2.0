@@ -55,7 +55,15 @@ The sharing tooltip lists age, sex, handedness, colorblind status, reviewed elec
 opaque study/session identity and available fixation metrics. Original participant
 numbers, names, notes, EEG and individual task answers remain local. AB recall summaries
 are not uploaded; the Comparison tab remains a fixation-task comparison.
-First successful lab-code/OpenFPVS project enrollment defaults sharing on; every saved
+Opening the dialog discovers matching studies through the computer's saved Library
+enrollment. One match is selected automatically; multiple matches require a named
+selection. Connect requests the existing separately approved Results identity,
+without code or project-ID entry. Refresh studies rechecks availability; Lab access
+opens the existing Library connection workflow. Long study names expose their full
+title, version and identity through a tooltip. No match, unavailable lab access and
+pending approval have actionable status text. Discovery is a cancelable worker job,
+not a background enrollment or reporting opt-in.
+First successful study enrollment defaults sharing on; every saved
 off choice stays off. Enrollment never backfills history. App-owned jobs handle hashing,
 delivery and descriptive comparison after
 completed sessions, with opt-out/backlog release and cancel/shutdown guards.

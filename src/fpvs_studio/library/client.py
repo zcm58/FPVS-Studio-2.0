@@ -267,6 +267,18 @@ class LibraryClient:
             credential = self._load_current_credential()
             return credential.connection if credential is not None else None
 
+    def enrolled_credential(self, *, cancel_event: Event | None = None) -> DeviceCredential:
+        """Read local v2 access for a worker's same-origin request; never log or persist it.
+
+        The caller must check its destination origin. The service still authorizes
+        the requested scope and checks revocation on every protected request.
+        """
+        with self._operation(cancel_event):
+            check_cancel(cancel_event)
+            credential = self._credential()
+            check_cancel(cancel_event)
+            return credential
+
     def _load_current_credential(self) -> DeviceCredential | None:
         """Read under the cache lock; old protocol access must reconnect with a new token."""
         credential = self.store.load()

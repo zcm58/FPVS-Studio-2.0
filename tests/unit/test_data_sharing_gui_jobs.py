@@ -14,7 +14,13 @@ import pytest
 from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
-from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings, protocol_fingerprint
+from fpvs_studio.core.data_sharing import (
+    SharingProfile,
+    SharingSettings,
+    SharingStudyChoice,
+    SharingStudyChoices,
+    protocol_fingerprint,
+)
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.core.models import ProjectRecordingSettings
@@ -166,6 +172,13 @@ class _Backend:
     def enroll_project(self, *_args):
         pytest.fail("Opening a project must never enroll it")
 
+    def enroll_library_project(self, *_args):
+        pytest.fail("Opening a project must never enroll it")
+
+    def discover_project_enrollments(self, root, fingerprint, _cancel):
+        self.calls.append(("discover", root, fingerprint))
+        return SharingStudyChoices(projects=())
+
     def archive_project(self, root, fingerprint, _cancel):
         self.calls.append(("archive", root, fingerprint))
         return self.view
@@ -195,6 +208,7 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "PendingEnrollmentConflict": PendingEnrollmentConflict,
         "load_settings": load_preferences,
         "SharingView": SharingView, "ConditionAggregate": ConditionAggregate,
+        "SharingStudyChoices": SharingStudyChoices,
         "ComparisonRow": lambda **values: SimpleNamespace(**values),
         "cast": cast, "_RETRY_LIMIT": 4, "_LOGGER": logging.getLogger(__name__),
         "_STOPPING_MESSAGE": "Stopping uploads…",
@@ -490,18 +504,95 @@ def test_explicit_connect_hashes_protocol_without_automatic_enable(state):
     state.controller.opened(state.window)
     state.lifecycle.jobs[-1].run()
 
-    def enroll(root, code, fingerprint, _cancel, *, project_id=None):
-        state.backend.calls.append(("connect", root, code, fingerprint))
+    def enroll(root, project_id, fingerprint, _cancel):
+        state.backend.calls.append(("connect", root, project_id, fingerprint))
         state.backend.view = SharingView(SharingSettings(profile=_profile()))
         return state.backend.view
 
-    state.backend.enroll_project = enroll
-    state.controller._request("connect", ("lab-issued-code", ""))
+    state.backend.enroll_library_project = enroll
+    state.controller._request("connect", "01234567-89ab-cdef-0123-456789abcdef")
     state.lifecycle.jobs[-1].run()
     assert len(state.fingerprints) == 1
-    assert state.backend.calls[-1] == ("connect", state.root, "lab-issued-code", "a" * 64)
+    assert state.backend.calls[-1] == (
+        "connect", state.root, "01234567-89ab-cdef-0123-456789abcdef", "a" * 64,
+    )
     assert not state.controller._view.settings.enabled
     assert all(call[0] != "sync" for call in state.backend.calls)
+
+
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_explicit_study_discovery_hashes_without_enrolling_or_enabling(state, count):
+    state.controller.opened(state.window)
+    _finish_jobs(state)
+    choices = SharingStudyChoices(projects=tuple(
+        SharingStudyChoice(
+            project_id=f"01234567-89ab-cdef-0123-{index:012d}",
+            title=f"Study {index}", experiment_id="experiment", experiment_version="1.0",
+            protocol_sha256="a" * 64,
+        ) for index in range(count)
+    ))
+    state.backend.discover_project_enrollments = lambda *_args: choices
+    state.controller._request("discover")
+    _finish_jobs(state)
+    assert len(state.fingerprints) == 1
+    assert state.controller._studies == choices
+    assert not state.controller._view.settings.enabled
+    assert state.controller._view.settings.profile is None
+    assert not any(call[0] == "sync" for call in state.backend.calls)
+
+
+@pytest.mark.parametrize("interruption", ["cancel", "switch-project", "edit-project", "error"])
+def test_interrupted_discovery_never_leaves_stale_study_choices(state, interruption):
+    state.controller.opened(state.window)
+    _finish_jobs(state)
+    selections = []
+    state.controller.dialog = SimpleNamespace(
+        set_state=lambda **_values: None, set_project_url=lambda _url: None,
+        set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
+        set_studies=selections.append, hide=lambda: None, deleteLater=lambda: None,
+    )
+
+    def discover(*_args):
+        if interruption == "error":
+            raise DataSharingError("Open Lab access to reconnect.", code="library_authorization")
+        if interruption == "cancel":
+            state.controller._job.cancel()
+        elif interruption == "edit-project":
+            state.window.document.project = state.window.document.project.model_copy(deep=True)
+        elif interruption == "switch-project":
+            replacement = _Window(state.root / "replacement", state.window.document.project)
+            state.current[0] = replacement
+            state.controller.opened(replacement)
+        return SharingStudyChoices(projects=())
+
+    state.backend.discover_project_enrollments = discover
+    state.controller._request("discover")
+    _finish_jobs(state)
+    assert state.controller._studies is None
+    assert all(not items for items in selections)
+    assert state.controller._view.settings.profile is None
+
+
+def test_enrolled_project_refresh_uses_existing_results_access_without_library_lookup(state):
+    state.backend.view = SharingView(SharingSettings(profile=_profile(), enabled=True))
+    state.controller.opened(state.window)
+    _finish_jobs(state)
+    state.controller._request("discover")
+    _finish_jobs(state)
+    assert not any(call[0] == "discover" for call in state.backend.calls)
+    assert state.backend.calls[-1][0] == "sync"
+
+
+def test_lab_access_action_reuses_library_without_creating_a_results_request(state):
+    state.controller.opened(state.window)
+    _finish_jobs(state)
+    calls = []
+    state.controller._lab_access = lambda: calls.append("library")
+    state.controller.dialog = SimpleNamespace()
+    jobs = len(state.lifecycle.jobs)
+    state.controller._action("lab_access")
+    assert calls == ["library"]
+    assert len(state.lifecycle.jobs) == jobs
 
 
 @pytest.mark.parametrize(
@@ -510,10 +601,10 @@ def test_explicit_connect_hashes_protocol_without_automatic_enable(state):
 def test_pending_connection_reset_requires_confirmation_and_current_project(state, decision):
     state.controller.opened(state.window)
     state.lifecycle.jobs[-1].run()
-    requests, questions, cleared = [], [], []
+    requests, questions = [], []
 
-    def enroll(root, code, fingerprint, _cancel, **kwargs):
-        requests.append((root, code, fingerprint, kwargs))
+    def enroll(root, project_id, fingerprint, _cancel, **kwargs):
+        requests.append((root, project_id, fingerprint, kwargs))
         if len(requests) == 1 or decision == "retry-conflict":
             raise PendingEnrollmentConflict("b" * 64)
         state.backend.view = SharingView(SharingSettings(profile=_profile()))
@@ -529,27 +620,25 @@ def test_pending_connection_reset_requires_confirmation_and_current_project(stat
             state.window.document.project = state.window.document.project.model_copy(deep=True)
         return decision != "decline"
 
-    state.backend.enroll_project = enroll
+    state.backend.enroll_library_project = enroll
     state.controller.dialog = SimpleNamespace(
         set_state=lambda **_values: None, set_project_url=lambda _url: None,
         set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
-        confirm_pending_connection_reset=confirm, clear_invitation=lambda: cleared.append(True),
+        confirm_pending_connection_reset=confirm, study_title=lambda: "Shared study · 1.0",
+        set_studies=lambda _studies: None,
         hide=lambda: None, deleteLater=lambda: None,
     )
     project_id = "01234567-89ab-cdef-0123-456789abcdef"
-    state.controller._request("connect", ("private lab code", project_id))
+    state.controller._request("connect", project_id)
     state.lifecycle.jobs[-1].run()
-    assert questions == [project_id]
+    assert questions == ["Shared study · 1.0"]
     _finish_jobs(state)
     assert len(requests) == (2 if decision in {"confirm", "retry-conflict"} else 1)
     if decision == "confirm":
-        assert requests[-1] == (state.root, "private lab code", "a" * 64, {
-            "project_id": project_id, "reset_pending_credential_sha256": "b" * 64,
+        assert requests[-1] == (state.root, project_id, "a" * 64, {
+            "reset_pending_credential_sha256": "b" * 64,
         })
-        assert cleared == [True]
         assert not state.controller._view.settings.enabled
-    else:
-        assert not cleared
 
 
 def test_enabling_syncs_then_optout_cancels_and_outranks_queued_refresh(state):

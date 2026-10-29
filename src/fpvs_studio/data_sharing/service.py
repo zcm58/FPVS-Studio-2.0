@@ -13,6 +13,7 @@ from fpvs_studio.core.data_sharing import (
     SessionReport,
     SharingProfile,
     SharingSettings,
+    SharingStudyChoices,
     protocol_fingerprint,
 )
 from fpvs_studio.core.paths import filesystem_path, project_json_path
@@ -225,6 +226,32 @@ def enroll_project(
         reset_pending_credential_sha256=reset_pending_credential_sha256,
     )
     # A saved off choice outranks first-enrollment defaults, including a late opt-out.
+    save_enrollment_settings(root, profile)
+    return load_view(root, protocol_sha256, Event(), client=transport)
+
+
+def discover_project_enrollments(
+    root: Path, protocol_sha256: str, cancel: Event, *, client: DataSharingClient | None = None,
+) -> SharingStudyChoices:
+    """List permitted matching studies using this machine's separate Library access."""
+    return (client or DataSharingClient.configured()).discover_projects(
+        root, protocol_sha256, cancel,
+    )
+
+
+def enroll_library_project(
+    root: Path, project_id: str, protocol_sha256: str, cancel: Event,
+    *, client: DataSharingClient | None = None, reset_pending_credential_sha256: str | None = None,
+) -> SharingView:
+    transport = client or DataSharingClient.configured()
+    if load_settings(root).profile is not None:
+        raise DataSharingError(
+            "Disconnect the current enrollment before reconnecting.", code="enrollment",
+        )
+    profile = transport.enroll_from_library(
+        root, project_id, protocol_sha256, cancel,
+        reset_pending_credential_sha256=reset_pending_credential_sha256,
+    )
     save_enrollment_settings(root, profile)
     return load_view(root, protocol_sha256, Event(), client=transport)
 

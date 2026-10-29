@@ -18,7 +18,10 @@ from fpvs_studio.core.data_sharing import (
     SessionReport,
     SharingProfile,
     SharingSettings,
+    SharingStudyChoice,
+    SharingStudyChoices,
 )
+from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.data_sharing.client import (
     DataSharingClient,
     _NoRedirect,
@@ -31,6 +34,7 @@ from fpvs_studio.data_sharing.errors import (
     PendingEnrollmentConflict,
 )
 from fpvs_studio.data_sharing.storage import save_settings
+from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.models import DeviceCredential, LibraryConnection
 
 ORIGIN = "https://results.example.invalid"
@@ -44,7 +48,7 @@ def test_pending_results_approval_has_an_actionable_message():
     })
     assert error.code == "authorization"
     assert "administrator" in str(error).lower()
-    assert "same" in str(error).lower()
+    assert "choose Connect again" in str(error)
     assert "Private server text" not in str(error)
     assert not error.retryable
 
@@ -68,6 +72,14 @@ def test_storage_budget_requires_attention_and_throttling_keeps_backoff():
     (409, {"schema_version": "1.0", "error": "credential_scope_conflict", "message": "Private"},
      "enrollment_scope"),
     (409, {"schema_version": "1.0", "error": "report_conflict", "message": "Private"}, "conflict"),
+    (401, {"schema_version": "1.0", "error": "library_authorization", "message": "Private"},
+     "library_authorization"),
+    (403, {"schema_version": "1.0", "error": "library_lab_code_required", "message": "Private"},
+     "library_authorization"),
+    (403, {"schema_version": "1.0", "error": "project_not_enabled", "message": "Private"},
+     "study_unavailable"),
+    (409, {"schema_version": "1.0", "error": "too_many_projects", "message": "Private"},
+     "study_limit"),
 ])
 def test_http_budget_and_throttle_errors_are_bounded_and_close_response(
     monkeypatch, status, body, code,
@@ -158,6 +170,37 @@ class Store:
 
     def delete(self):
         self.value = None
+
+
+class LabAccess:
+    service_url = ORIGIN
+
+    def __init__(self, error=None):
+        self.value = credential().model_copy(update={"token": "l" * 64, "library_api_version": 2})
+        self.error = error
+        self.reads = 0
+
+    def enrolled_credential(self, *, cancel_event=None):
+        self.reads += 1
+        if self.error is not None:
+            raise self.error
+        return self.value
+
+
+def study_choice(**changes):
+    values = {
+        "project_id": "01234567-89ab-cdef-0123-456789abcdef", "title": "Reviewed study",
+        "experiment_id": "study", "experiment_version": "1.0", "protocol_sha256": HASH,
+    }
+    values.update(changes)
+    return SharingStudyChoice(**values)
+
+
+def linked_origin(root, **changes):
+    values = {"service_url": ORIGIN, "item_id": "study", "installed_version": "1.0",
+              "local_project_id": "local-study"}
+    values.update(changes)
+    save_library_origin(root, LibraryProjectOrigin(**values))
 
 
 def credential():
@@ -349,9 +392,171 @@ def test_openfpvs_project_enrollment_is_bound_to_selected_id(tmp_path):
     assert selected.project_id == project_id
     assert calls[0]["project_id"] == project_id
     assert calls[0]["code"] == "lab code"
-    with pytest.raises(DataSharingError, match="project ID"):
+    with pytest.raises(DataSharingError, match="valid study"):
         client.enroll(tmp_path, "lab code", HASH, Event(), project_id="../../other")
     assert len(calls) == 1
     wrong = str(uuid4())
     with pytest.raises(DataSharingError, match="different project"):
         client.enroll(tmp_path, "lab code", HASH, Event(), project_id=wrong)
+
+
+@pytest.mark.parametrize("linked", [False, True])
+@pytest.mark.parametrize("count", [0, 1, 2])
+def test_lab_discovery_is_read_only_and_sends_only_exact_scope(tmp_path, linked, count):
+    if linked:
+        linked_origin(tmp_path)
+    lab = LabAccess()
+    choices = SharingStudyChoices(projects=tuple(
+        study_choice(project_id=str(uuid4())) for _ in range(count)
+    ))
+    calls = []
+
+    def transport(method, url, body, headers, cancel):
+        calls.append((method, url, json.loads(body), headers))
+        return choices.model_dump_json().encode()
+
+    backend = DataSharingClient(
+        ORIGIN, transport=transport, library_client=lab,
+        store_factory=lambda *_: pytest.fail("Discovery must not read Results credentials"),
+    )
+    assert backend.discover_projects(tmp_path, HASH, Event()) == choices
+    assert lab.reads == 1 and len(calls) == 1
+    method, url, body, headers = calls[0]
+    assert (method, url) == ("POST", ORIGIN + "/results/v1/library/projects")
+    assert body == {"schema_version": "1.0", "protocol_sha256": HASH, **(
+        {"experiment_id": "study", "experiment_version": "1.0"} if linked else {}
+    )}
+    assert headers["Authorization"] == f"Bearer {lab.value.token}"
+    assert not (tmp_path / ".fpvs-data-sharing").exists()
+    assert not (tmp_path / "logs").exists()
+
+
+@pytest.mark.parametrize("problem", ["library-origin", "receipt-origin", "unknown-version"])
+def test_lab_discovery_rejects_configuration_before_credential_access(tmp_path, problem):
+    lab = LabAccess()
+    if problem == "library-origin":
+        lab.service_url = "https://other.example.invalid"
+    elif problem == "receipt-origin":
+        linked_origin(tmp_path, service_url="https://other.example.invalid")
+    else:
+        linked_origin(tmp_path, installed_version=None)
+    backend = DataSharingClient(
+        ORIGIN, library_client=lab,
+        transport=lambda *_: pytest.fail("Invalid scope must not reach HTTP"),
+    )
+    with pytest.raises(DataSharingError):
+        backend.discover_projects(tmp_path, HASH, Event())
+    assert lab.reads == 0
+
+
+def test_lab_discovery_accepts_canonical_managed_receipt_without_following_it(tmp_path):
+    linked_origin(tmp_path, service_url="https://fpvs.zack-murphy.com")
+    lab = LabAccess()
+    lab.service_url = "https://openfpvs.com"
+    urls = []
+    backend = DataSharingClient(
+        lab.service_url, library_client=lab,
+        transport=lambda _method, url, *_: urls.append(url) or b'{"projects":[]}',
+    )
+    assert not backend.discover_projects(tmp_path, HASH, Event()).projects
+    assert urls == ["https://openfpvs.com/results/v1/library/projects"]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("experiment_id", "other-study"), ("experiment_version", "2.0"),
+    ("protocol_sha256", "b" * 64),
+])
+def test_lab_discovery_rejects_unrelated_results(tmp_path, field, value):
+    linked_origin(tmp_path)
+    choices = SharingStudyChoices(projects=(study_choice(**{field: value}),))
+    backend = DataSharingClient(
+        ORIGIN, library_client=LabAccess(), transport=lambda *_: choices.model_dump_json().encode(),
+    )
+    with pytest.raises(DataSharingError, match="different experiment or protocol"):
+        backend.discover_projects(tmp_path, HASH, Event())
+
+
+@pytest.mark.parametrize("error,code", [
+    (LibraryAuthorizationError("private details"), "library_authorization"),
+    (LibraryCancelled(), "cancelled"), (LibraryError("private details"), "credential_store"),
+])
+def test_lab_access_failures_are_actionable_without_network(tmp_path, error, code):
+    backend = DataSharingClient(
+        ORIGIN, library_client=LabAccess(error),
+        transport=lambda *_: pytest.fail("Unusable Lab access must not reach HTTP"),
+    )
+    with pytest.raises(DataSharingError) as failure:
+        backend.discover_projects(tmp_path, HASH, Event())
+    assert failure.value.code == code and "private details" not in str(failure.value)
+
+
+def test_lab_enrollment_keeps_distinct_results_token_and_reuses_pending_approval(tmp_path):
+    linked_origin(tmp_path)
+    lab, store, calls = LabAccess(), Store(), []
+    selected = study_choice()
+
+    def transport(method, url, body, headers, _cancel):
+        calls.append((url, json.loads(body), headers))
+        if len(calls) == 1:
+            raise _status_error(403, {"schema_version": "1.0", "message": "Private",
+                                      "error": "results_approval_required"})
+        if url.endswith("/reports"):
+            return receipt_bytes(body)
+        return profile().model_copy(
+            update={"project_id": selected.project_id},
+        ).model_dump_json().encode()
+
+    backend = DataSharingClient(
+        ORIGIN, library_client=lab, store_factory=lambda *_: store, transport=transport,
+    )
+    with pytest.raises(DataSharingError, match="administrator"):
+        backend.enroll_from_library(tmp_path, selected.project_id, HASH, Event())
+    pending = store.value
+    assert pending.connection is None
+    connected = backend.enroll_from_library(tmp_path, selected.project_id, HASH, Event())
+    assert calls[0][1] == calls[1][1]
+    assert calls[0][1] == {
+        "schema_version": "1.0", "device_token": pending.token, "protocol_sha256": HASH,
+        "project_id": selected.project_id, "experiment_id": "study", "experiment_version": "1.0",
+    }
+    assert pending.token != lab.value.token
+    assert all(item[0] == ORIGIN + "/results/v1/library/enroll" for item in calls)
+    assert all(item[2]["Authorization"] == f"Bearer {lab.value.token}" for item in calls)
+    backend.submit(tmp_path, connected, report().model_dump_json().encode(), Event())
+    assert calls[-1][2]["Authorization"] == f"Bearer {pending.token}"
+    assert lab.reads == 2
+
+
+def test_library_authorization_error_does_not_delete_either_credential(tmp_path):
+    lab, store = LabAccess(), Store()
+
+    def transport(*_args):
+        raise _status_error(401, {"schema_version": "1.0", "error": "library_authorization",
+                                  "message": "Private"})
+
+    backend = DataSharingClient(
+        ORIGIN, library_client=lab, store_factory=lambda *_: store, transport=transport,
+    )
+    original = lab.value
+    with pytest.raises(DataSharingError) as failure:
+        backend.enroll_from_library(tmp_path, study_choice().project_id, HASH, Event())
+    assert failure.value.code == "library_authorization"
+    assert lab.value == original and store.value is not None and store.value.connection is None
+
+
+@pytest.mark.parametrize("changes", [
+    {"experiment_id": "other-study"}, {"experiment_version": "2.0"},
+    {"protocol_sha256": "b" * 64}, {"project_id": "11234567-89ab-cdef-0123-456789abcdef"},
+])
+def test_lab_enrollment_cannot_bind_unrelated_response(tmp_path, changes):
+    linked_origin(tmp_path)
+    selected = study_choice()
+    returned = profile().model_copy(update={"project_id": selected.project_id, **changes})
+    store = Store()
+    backend = DataSharingClient(
+        ORIGIN, library_client=LabAccess(), store_factory=lambda *_: store,
+        transport=lambda *_: returned.model_dump_json().encode(),
+    )
+    with pytest.raises(DataSharingError):
+        backend.enroll_from_library(tmp_path, selected.project_id, HASH, Event())
+    assert store.value is not None and store.value.connection is None

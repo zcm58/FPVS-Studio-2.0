@@ -76,6 +76,13 @@ isolation. The Qt-enabled `full` tier remains serial.
 
 ## Skill Routing
 
+For one-time lab access and named study selection, start with
+`data_sharing/client.py`, `gui/data_sharing_controller.py` and
+`library/client.py::enrolled_credential`. The active
+[connection plan](../exec-plans/active/one-time-lab-connection.md) links the strict
+same-origin Library-to-Results exchange. Use Library/data-sharing/GUI focused
+routes and repo precommit; sibling OpenFPVS owns permission and approval checks.
+
 For a results connection stuck after changing its study or lab code, start with
 `data_sharing/client.py` and `gui/data_sharing_controller.py`. The exact service
 scope conflict permits confirmed replacement of an unchanged pending credential;

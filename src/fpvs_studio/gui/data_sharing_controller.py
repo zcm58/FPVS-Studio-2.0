@@ -15,7 +15,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
-from fpvs_studio.core.data_sharing import protocol_fingerprint
+from fpvs_studio.core.data_sharing import SharingStudyChoices, protocol_fingerprint
 from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing import service
@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 _RETRY_LIMIT = 4
 _STOPPING_MESSAGE = "Stopping uploads… An in-flight report may already have been received."
-ActionValue = str | bool | tuple[str, str] | tuple[str, str, str] | CaptureArchiveReview | None
+ActionValue = str | bool | tuple[str, str] | CaptureArchiveReview | None
 
 
 class DataSharingController(QObject):
@@ -54,6 +54,7 @@ class DataSharingController(QObject):
         current_window: Callable[[], StudioMainWindow | None],
         backend: ModuleType | None = None,
         startup_notice: Callable[[tuple[StartupReportNotice, ...]], None] = lambda _notices: None,
+        lab_access: Callable[[], None] = lambda: None,
     ) -> None:
         super().__init__(app)
         self._backend = backend or service
@@ -68,12 +69,14 @@ class DataSharingController(QObject):
         self._startup_notices: dict[Path, StartupReportNotice] = {}
         self._startup_notified = False
         self._startup_notice = startup_notice
+        self._lab_access = lab_access
         self._off_job: UpdateJob | None = None
         self._off_error = ""
         self._launch_waiter: tuple[StudioMainWindow, Callable[[], None]] | None = None
         self._pending: tuple[str, ActionValue] | None = None
         self._generation = 0
         self._view: SharingView | None = None
+        self._studies: SharingStudyChoices | None = None
         self._protocol = ""
         self._labels: dict[str, str] = {}
         self._retries = 0
@@ -201,6 +204,7 @@ class DataSharingController(QObject):
         self.dialog = None
         self._window = window
         self._view = None
+        self._studies = None
         self._request("sync")
 
     def show(self, window: StudioMainWindow) -> None:
@@ -220,7 +224,7 @@ class DataSharingController(QObject):
         self.dialog.activateWindow()
         if self._view is not None:
             self._render()
-        self._request("sync")
+        self._request("discover")
 
     def session_started(
         self, window: StudioMainWindow, on_ready: Callable[[], None] | None = None,
@@ -273,12 +277,17 @@ class DataSharingController(QObject):
         may_sync = not window.is_launch_busy()
         generation = self._generation
         dialog = self.dialog
+        if operation == "discover":
+            self._studies = None
         if dialog is not None:
             dialog.set_busy(
-                True, "Updating sharing settings and comparison…",
+                True, "Finding studies for your lab…" if operation == "discover"
+                else "Updating sharing settings and comparison…",
             )
 
-        def work(_progress: ProgressReporter, cancel: Event) -> tuple[str, SharingView]:
+        def work(
+            _progress: ProgressReporter, cancel: Event,
+        ) -> tuple[str, SharingView, SharingStudyChoices | None]:
             if cancel.is_set():
                 raise DataSharingCancelled()
             settings = (
@@ -296,14 +305,13 @@ class DataSharingController(QObject):
             if cancel.is_set():
                 raise DataSharingCancelled()
             if operation == "connect":
-                code, project_id = cast(tuple[str, str], value)
-                result = backend.enroll_project(
-                    root, code, fingerprint, cancel, project_id=project_id or None,
+                result = backend.enroll_library_project(
+                    root, cast(str, value), fingerprint, cancel,
                 )
             elif operation == "reset_connect":
-                code, project_id, credential_sha256 = cast(tuple[str, str, str], value)
-                result = backend.enroll_project(
-                    root, code, fingerprint, cancel, project_id=project_id or None,
+                project_id, credential_sha256 = cast(tuple[str, str], value)
+                result = backend.enroll_library_project(
+                    root, project_id, fingerprint, cancel,
                     reset_pending_credential_sha256=credential_sha256,
                 )
             elif operation == "enable":
@@ -334,15 +342,19 @@ class DataSharingController(QObject):
                     result = replace(result, remote=previous_view.remote)
             else:
                 result = backend.load_view(root, fingerprint, cancel)
+            studies = None
+            if operation == "discover" and result.settings.profile is None:
+                studies = backend.discover_project_enrollments(root, fingerprint, cancel)
             if (
-                (operation in {"sync", "retry", "startup"} or (operation == "enable" and value))
+                (operation in {"sync", "retry", "startup", "discover"}
+                 or (operation == "enable" and value))
                 and result.settings.enabled and may_sync
             ):
                 result = backend.sync_project(
                     root, fingerprint, cancel, release_held=operation == "retry",
                     retry_offline=operation == "startup", fetch_comparison=operation != "startup",
                 )
-            return fingerprint, result
+            return fingerprint, result, studies
 
         job = self._lifecycle.start_task(work, keep_success_on_cancel=True)
         self._job = job
@@ -360,6 +372,8 @@ class DataSharingController(QObject):
                     _LOGGER.warning("Experiment sharing operation failed (%s)",
                                     type(outcome.error).__name__)
                     if self.dialog is not None:
+                        if operation == "discover":
+                            self.dialog.set_studies(())
                         self._render()
                         self.dialog.set_busy(False, str(outcome.error))
                         if (
@@ -367,23 +381,27 @@ class DataSharingController(QObject):
                             and isinstance(outcome.error, PendingEnrollmentConflict)
                         ):
                             reviewer = self.dialog
-                            code, project_id = cast(tuple[str, str], value)
+                            project_id = cast(str, value)
                             if (
-                                reviewer.confirm_pending_connection_reset(project_id)
+                                reviewer.confirm_pending_connection_reset(reviewer.study_title())
                                 and self._current(window) and generation == self._generation
                                 and window.document.project is original_project
                                 and self.dialog is reviewer and isValid(reviewer)
                             ):
                                 self._request("reset_connect", (
-                                    code, project_id, outcome.error.credential_sha256,
+                                    project_id, outcome.error.credential_sha256,
                                 ))
                     self._schedule_retry()
                 else:
-                    self._protocol, self._view = cast(tuple[str, SharingView], outcome.value)
+                    self._protocol, self._view, studies = cast(
+                        tuple[str, SharingView, SharingStudyChoices | None], outcome.value,
+                    )
+                    if operation == "discover":
+                        self._studies = studies
+                        if self.dialog is not None:
+                            self.dialog.set_studies(studies.projects if studies else ())
                     self._off_error = ""
                     self._labels = labels
-                    if operation in {"connect", "reset_connect"} and self.dialog is not None:
-                        self.dialog.clear_invitation()
                     self._render()
                     if operation == "protocol" and self.dialog is not None:
                         QApplication.clipboard().setText(self._protocol)
@@ -408,6 +426,8 @@ class DataSharingController(QObject):
                             )
                     self._schedule_retry()
             elif current and self.dialog is not None:
+                if operation == "discover":
+                    self.dialog.set_studies(())
                 if self._off_job is not None:
                     self.dialog.set_busy(True, _STOPPING_MESSAGE)
                     self.dialog.enabled_checkbox.setEnabled(False)
@@ -417,8 +437,12 @@ class DataSharingController(QObject):
                     self.dialog.set_busy(
                         False, "Operation canceled. Reload to check current settings.",
                     )
-            if project_changed and self._pending is None:
-                self._pending = ("load", None)
+            if project_changed:
+                self._studies = None
+                if self.dialog is not None:
+                    self.dialog.set_studies(())
+                if self._pending is None:
+                    self._pending = ("load", None)
             if operation == "startup":
                 if discarded:
                     assert self._startup_roots is not None
@@ -445,18 +469,21 @@ class DataSharingController(QObject):
         if window is None or dialog is None or not self._current(window) or window.is_launch_busy():
             return
         if action == "connect":
-            code = dialog.invitation_code()
-            if not code:
-                dialog.set_busy(False, "Enter the lab-issued invitation code.")
+            project_id = dialog.project_id()
+            if not project_id:
+                dialog.set_busy(False, "Choose a study to connect.")
                 return
-            self._request("connect", (code, dialog.project_id()))
+            self._request("connect", project_id)
+        elif action == "lab_access":
+            if self._job is None and self._off_job is None:
+                self._lab_access()
         elif action == "website":
             profile = self._view.settings.profile if self._view is not None else None
             if profile is not None and profile.project_id:
                 QDesktopServices.openUrl(QUrl(
                     f"{DataSharingClient.configured().origin}/projects/{profile.project_id}"
                 ))
-        elif action in {"retry", "disconnect", "archive", "protocol", "review"}:
+        elif action in {"retry", "disconnect", "archive", "protocol", "review", "discover"}:
             self._retries = 0
             self._request(action)
 
@@ -555,8 +582,7 @@ class DataSharingController(QObject):
             "disabled": "Sharing is off. Unsent reports are paused.",
             "off": "Sharing is off. Unsent reports are paused.",
             "not_enrolled": (
-                "Connect with a lab-issued code. "
-                "New enrollments share completed sessions automatically."
+                "Connect to a shared study using this computer's lab access."
             ),
             "protocol_mismatch": (
                 "The protocol has changed. Register this protocol before sharing resumes."
@@ -573,6 +599,15 @@ class DataSharingController(QObject):
             "failed": "A contribution needs attention. Review the connection, then retry.",
             "unavailable": "The sharing service is unavailable. Local results remain available.",
         }.get(view.status, view.status.replace("_", " ").capitalize())
+        if profile is None and self._studies is not None and not view.error and not self._off_error:
+            status = (
+                "No matching studies are enabled for your lab. Ask the administrator to enable one."
+                if not self._studies.projects else
+                "Connect to the selected study. "
+                "New enrollments share completed sessions automatically."
+                if len(self._studies.projects) == 1 else
+                "Choose the shared study for this experiment, then Connect."
+            )
         if not self._backend.configured() and not view.error and not self._off_error:
             status = "Sharing service is not configured. Local results remain available."
         dialog.set_state(

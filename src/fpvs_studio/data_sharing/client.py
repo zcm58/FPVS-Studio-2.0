@@ -24,6 +24,7 @@ from fpvs_studio.core.data_sharing import (
     DeliveryReceipt,
     SessionReport,
     SharingProfile,
+    SharingStudyChoices,
 )
 from fpvs_studio.data_sharing.credentials import sharing_credential_store
 from fpvs_studio.data_sharing.errors import (
@@ -36,8 +37,9 @@ from fpvs_studio.data_sharing.library_scope import (
     validate_library_scope,
 )
 from fpvs_studio.data_sharing.storage import _storage_lock, load_settings
+from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.credentials import CredentialStore
-from fpvs_studio.library.errors import LibraryError
+from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.models import DeviceCredential, LibraryConnection
 
 MAX_RESPONSE_BYTES = 256 * 1024
@@ -77,12 +79,37 @@ class _NoRedirect(HTTPRedirectHandler):
 
 
 def _status_error(status: int, body: object = None) -> DataSharingError:
+    if (status in (401, 403) and isinstance(body, dict)
+            and set(body) == {"schema_version", "error", "message"}
+            and body["schema_version"] == "1.0"
+            and body["error"] in ("library_authorization", "library_lab_code_required")
+            and isinstance(body["message"], str)):
+        return DataSharingError(
+            "Open Lab access and connect this computer with your lab code.",
+            code="library_authorization",
+        )
+    if (status == 403 and isinstance(body, dict)
+            and set(body) == {"schema_version", "error", "message"}
+            and body["schema_version"] == "1.0" and body["error"] == "project_not_enabled"
+            and isinstance(body["message"], str)):
+        return DataSharingError(
+            "This study no longer accepts results from your lab. "
+            "Refresh studies or contact the administrator.", code="study_unavailable",
+        )
+    if (status == 409 and isinstance(body, dict)
+            and set(body) == {"schema_version", "error", "message"}
+            and body["schema_version"] == "1.0" and body["error"] == "too_many_projects"
+            and isinstance(body["message"], str)):
+        return DataSharingError(
+            "Too many matching studies are available. "
+            "Ask the administrator to review your lab's study permissions.", code="study_limit",
+        )
     if (status == 409 and isinstance(body, dict)
             and set(body) == {"schema_version", "error", "message"}
             and body["schema_version"] == "1.0" and body["error"] == "credential_scope_conflict"
             and isinstance(body["message"], str)):
         return DataSharingError(
-            "This connection request uses a different project or lab code.",
+            "This connection request uses a different study or lab.",
             code="enrollment_scope",
         )
     if (status == 429 and isinstance(body, dict)
@@ -101,12 +128,12 @@ def _status_error(status: int, body: object = None) -> DataSharingError:
             and isinstance(body["message"], str)):
         return DataSharingError(
             "The OpenFPVS administrator must approve this results enrollment. "
-            "After approval, reconnect with the same lab code and project ID.",
+            "After approval, choose Connect again.",
             code="authorization",
         )
     if status in (401, 403):
         return DataSharingError(
-            "Results access was rejected. Reconnect with a valid lab invitation code.",
+            "Results access was rejected. Review Lab access, then reconnect to the study.",
             code="authorization",
         )
     if status == 409:
@@ -117,7 +144,7 @@ def _status_error(status: int, body: object = None) -> DataSharingError:
     if status in (400, 404, 410, 413, 422):
         return DataSharingError(
             "The registered experiment or report does not match this service. "
-            "Check its invitation and protocol version.",
+            "Check the registered study and protocol version.",
             code="protocol",
         )
     if 300 <= status < 400:
@@ -173,7 +200,7 @@ def http_transport(
     except HTTPError as error:
         error_body: object = None
         try:
-            if (error.code in (403, 409, 429)
+            if (error.code in (401, 403, 409, 429)
                     and error.headers.get_content_type() == "application/json"
                     and error.headers.get("Content-Encoding", "identity") == "identity"):
                 check_cancel(cancel)
@@ -241,10 +268,12 @@ class DataSharingClient:
         *,
         transport: Transport | None = None,
         store_factory: StoreFactory = sharing_credential_store,
+        library_client: LibraryClient | None = None,
     ) -> None:
         self.origin = _origin(service_url)
         self._transport = transport or http_transport
         self._store_factory = store_factory
+        self._library_client = library_client
 
     @classmethod
     def configured(cls) -> DataSharingClient:
@@ -271,7 +300,8 @@ class DataSharingClient:
             or credential.connection.device_id != profile.device_id
         ):
             raise DataSharingError(
-                "This machine needs its own results enrollment. Reconnect using a lab code.",
+                "This machine needs its own results enrollment. "
+                "Reconnect to the study through Data Sharing & Comparison.",
                 code="authorization",
             )
         return credential
@@ -316,9 +346,83 @@ class DataSharingClient:
         check_cancel(cancel)
         if not code.strip() or len(code) > 128:
             raise DataSharingError("Enter a valid lab invitation code.", code="invitation")
+        return self._enroll(
+            root, protocol_sha256, cancel, path="/results/v1/enroll",
+            fields={"code": code.strip(), **library_enrollment_scope(root)},
+            project_id=project_id, reset_pending_credential_sha256=reset_pending_credential_sha256,
+        )
+
+    def _library_access(
+        self, root: Path, cancel: Event,
+    ) -> tuple[dict[str, str], DeviceCredential]:
+        check_cancel(cancel)
         if not self.enabled:
             raise DataSharingError("The results service is not configured.", code="configuration")
-        scope = library_enrollment_scope(root)
+        library = self._library_client or LibraryClient()
+        if library.service_url != self.origin:
+            raise DataSharingError(
+                "Lab access and results sharing must use the same service.", code="configuration",
+            )
+        scope = library_enrollment_scope(root, service_url=self.origin)
+        try:
+            credential = library.enrolled_credential(cancel_event=cancel)
+        except LibraryCancelled:
+            raise DataSharingCancelled() from None
+        except LibraryAuthorizationError:
+            raise DataSharingError(
+                "Open Lab access and connect this computer with your lab code.",
+                code="library_authorization",
+            ) from None
+        except LibraryError:
+            raise DataSharingError(
+                "Cannot read Lab access from this computer's secure credential store.",
+                code="credential_store",
+            ) from None
+        check_cancel(cancel)
+        return scope, credential
+
+    def discover_projects(
+        self, root: Path, protocol_sha256: str, cancel: Event,
+    ) -> SharingStudyChoices:
+        scope, library = self._library_access(root, cancel)
+        payload = json.dumps({
+            "schema_version": "1.0", "protocol_sha256": protocol_sha256, **scope,
+        }, separators=(",", ":")).encode("utf-8")
+        choices = self._parse(self._request(
+            "POST", "/results/v1/library/projects", payload, cancel, library.token,
+        ), SharingStudyChoices)
+        check_cancel(cancel)
+        for project in choices.projects:
+            if project.protocol_sha256 != protocol_sha256 or any(
+                getattr(project, field) != value for field, value in scope.items()
+            ):
+                raise DataSharingError(
+                    "The service returned studies for a different experiment or protocol.",
+                    code="protocol",
+                )
+        return choices
+
+    def enroll_from_library(
+        self, root: Path, project_id: str, protocol_sha256: str, cancel: Event,
+        *, reset_pending_credential_sha256: str | None = None,
+    ) -> SharingProfile:
+        scope, library = self._library_access(root, cancel)
+        if not project_id:
+            raise DataSharingError("Choose a study before connecting.", code="project")
+        return self._enroll(
+            root, protocol_sha256, cancel, path="/results/v1/library/enroll", fields=scope,
+            project_id=project_id, authorization=library.token,
+            reset_pending_credential_sha256=reset_pending_credential_sha256,
+        )
+
+    def _enroll(
+        self, root: Path, protocol_sha256: str, cancel: Event, *, path: str,
+        fields: dict[str, str], project_id: str | None,
+        reset_pending_credential_sha256: str | None, authorization: str | None = None,
+    ) -> SharingProfile:
+        check_cancel(cancel)
+        if not self.enabled:
+            raise DataSharingError("The results service is not configured.", code="configuration")
         if project_id:
             from uuid import UUID
 
@@ -327,9 +431,9 @@ class DataSharingClient:
                     raise ValueError
             except ValueError:
                 raise DataSharingError(
-                    "Enter the OpenFPVS project ID shown on its project page.", code="project"
+                    "Choose a valid study. Refresh studies before connecting.", code="project"
                 ) from None
-            scope["project_id"] = project_id
+            fields["project_id"] = project_id
         store = self._store(root, protocol_sha256)
         try:
             with _storage_lock(root):
@@ -358,16 +462,15 @@ class DataSharingClient:
             payload = json.dumps(
                 {
                     "schema_version": "1.0",
-                    "code": code.strip(),
                     "device_token": credential.token,
                     "protocol_sha256": protocol_sha256,
-                    **scope,
+                    **fields,
                 },
                 separators=(",", ":"),
             ).encode("utf-8")
             try:
                 profile = self._parse(
-                    self._request("POST", "/results/v1/enroll", payload, cancel), SharingProfile
+                    self._request("POST", path, payload, cancel, authorization), SharingProfile
                 )
             except DataSharingError as error:
                 if error.code == "enrollment_scope" and credential.connection is None:
@@ -377,7 +480,7 @@ class DataSharingClient:
                 raise
             if profile.protocol_sha256 != protocol_sha256:
                 raise DataSharingError(
-                    "The invitation belongs to a different protocol.", code="protocol"
+                    "The selected study belongs to a different protocol.", code="protocol"
                 )
             if project_id and profile.project_id != project_id:
                 raise DataSharingError("The service returned a different project.", code="protocol")
