@@ -24,7 +24,7 @@ matching studies using that saved machine identity. A unique study is selected;
 if several match, choose the study by name, then **Connect**. No additional code
 or copied project ID is needed. Ask the administrator to approve a new results
 enrollment on its project page, then choose **Connect** again after approval.
-**Refresh studies** checks current access; **Lab access…** opens the existing
+**Refresh studies** checks current access; **Lab accessâ€¦** opens the existing
 Library connection controls when enrollment or reconnection is needed.
 review the registered study, version and field list through the study-title and sharing
 checkbox tooltips. **Automatically share completed sessions** defaults on for new
@@ -49,7 +49,7 @@ lab/code/device and study permission. Results approval or permission errors neve
 clear the Library credential. Revoking only Library access stops discovery and new
 enrollment; existing Results access keeps its separate revocation control. Revoking
 the shared lab code disables both. See the
-[one-time connection plan](exec-plans/active/one-time-lab-connection.md) for rollout.
+[one-time connection plan](exec-plans/completed/one-time-lab-connection.md) for rollout.
 
 If a pending connection belongs to a different study or lab connection, Studio offers
 **Replace pending connection?** after the service reports that exact conflict.
@@ -257,13 +257,13 @@ work separately from published Studio 2.4.5 artifacts. The common report fields 
 32-character lowercase hexadecimal `execution_id`, positive integer `visit_id`
 (at most 999,999,999), and nullable `removed_electrodes`. Null means no snapshot was
 recorded; `[]` means the launch review recorded no removed electrodes. Nonempty lists
-retain normalized uppercase unique labels, bounded to 256 labels of 1–80 characters
+retain normalized uppercase unique labels, bounded to 256 labels of 1â€“80 characters
 matching `[A-Z0-9][A-Z0-9_.+-]{0,79}`. Invalid labels/bounds require review; nothing is
 silently removed or truncated. The durable launch intent freezes this snapshot before
 presentation. Recovery never reads the project's latest participant prefill map.
 
 `participant_summary` contains exactly `schema_version: "1.0"`, an opaque canonical
-UUID `subject_id`, nullable integer `age` (1–120), nullable `sex` (`Female` or `Male`),
+UUID `subject_id`, nullable integer `age` (1â€“120), nullable `sex` (`Female` or `Male`),
 nullable `handedness` (`Right handed`, `Left handed` or `Ambidextrous`), and nullable
 boolean `colorblind`. These user-authorized fields are launch snapshots, not values
 reconstructed from later edits. A private atomic project-local PID-to-random-UUID map
@@ -302,10 +302,10 @@ capture evidence. The remote endpoint still receives completion timestamps and
 an authenticated enrollment link; these summaries are private research data,
 not an anonymous public dataset.
 
-Reports are bounded to 128 KiB, 0–4,096 occurrences (1–4,096 for legacy version 1.0)
+Reports are bounded to 128 KiB, 0â€“4,096 occurrences (1â€“4,096 for legacy version 1.0)
 and at most 512 distinct condition
 IDs. Per-occurrence integer counts are bounded to 1,000,000; booleans cannot stand
-in for counts. Refresh rates are 1–1,000 Hz and RT/window values are 0–600,000 ms.
+in for counts. Refresh rates are 1â€“1,000 Hz and RT/window values are 0â€“600,000 ms.
 Nonfinite numbers, malformed UTC timestamps and inconsistent metrics are rejected.
 The Worker also rejects duplicate JSON object keys, including escaped-equivalent
 keys, so its validated fields and D1's aggregate interpretation cannot disagree.
@@ -390,7 +390,7 @@ sizes, the read-only D1 snapshot and source-defined project/lab/service budgets.
 
 The sharing dialog displays active capture capacity against the 512-record limit.
 At capacity it reports an actionable local error while experiment execution remains
-available. **Review captures…** reads a bounded snapshot of terminal excluded
+available. **Review capturesâ€¦** reads a bounded snapshot of terminal excluded
 captures and their reason counts without HTTP. After explicit confirmation, it
 archives only those unchanged records with an exclusion reason and no outbox report.
 The reviewed project, UUIDs, contents and guarded destinations are revalidated under

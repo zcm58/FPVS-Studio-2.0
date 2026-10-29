@@ -6,7 +6,7 @@ Date: 2026-10-07
 
 ## One-time lab connection (2026-10-29)
 
-The [connection plan](one-time-lab-connection.md) replaces repeated code and
+The [connection plan](../completed/one-time-lab-connection.md) replaces repeated code and
 project-ID entry with authorized study discovery using the saved Library identity.
 Separate Results approval, credentials, saved opt-outs and upload ownership remain.
 
@@ -253,7 +253,7 @@ participant number was added to the wire contract. Toolbox reporting is also def
 - [x] OpenFPVS: 242 synthetic tests pass, including actual workerd/D1 intake and
   transactional dashboard snapshots; 27 JavaScript syntax checks and dry build pass.
 - [x] Desktop client against a local synthetic backend verifies enrollment, immutable
-  retries, receipts, comparison suppression and fresh browser totals (2 → 4 → 6).
+  retries, receipts, comparison suppression and fresh browser totals (2 â†’ 4 â†’ 6).
   Browser review covers lab/owner/anonymous views, setup disclosure and 360px/1280px
   layout without document overflow. Error/retry/bfcache guards have DOM unit coverage.
 - [x] Private pre-migration backup retained under ignored `build/project-reporting/`.

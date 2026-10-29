@@ -78,8 +78,8 @@ isolation. The Qt-enabled `full` tier remains serial.
 
 For one-time lab access and named study selection, start with
 `data_sharing/client.py`, `gui/data_sharing_controller.py` and
-`library/client.py::enrolled_credential`. The active
-[connection plan](../exec-plans/active/one-time-lab-connection.md) links the strict
+`library/client.py::enrolled_credential`. The completed
+[connection plan](../exec-plans/completed/one-time-lab-connection.md) links the strict
 same-origin Library-to-Results exchange. Use Library/data-sharing/GUI focused
 routes and repo precommit; sibling OpenFPVS owns permission and approval checks.
 
