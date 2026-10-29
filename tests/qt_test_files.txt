@@ -16,6 +16,7 @@ tests/gui/test_create_project_dialog.py
 tests/gui/test_data_sharing_dialog.py
 tests/gui/test_default_recording_setup.py
 tests/gui/test_design_setup_step.py
+tests/gui/test_duration_template_profile.py
 tests/gui/test_error_dialogs.py
 tests/gui/test_experiment_categories_gui.py
 tests/gui/test_experiment_designer.py

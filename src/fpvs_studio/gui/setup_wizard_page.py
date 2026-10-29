@@ -27,7 +27,6 @@ from fpvs_studio.core.attentional_blink_stream import describe_attentional_blink
 from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
-from fpvs_studio.core.frame_validation import FrameValidationError
 from fpvs_studio.core.masking import condition_masking, is_masking_project
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ConditionTemplateProfile
 from fpvs_studio.core.validation import condition_fixation_guidance
@@ -1386,13 +1385,16 @@ class SetupWizardPage(QWidget):
         conditions = self._document.ordered_conditions()
         if not conditions:
             return ("Estimated run time: unavailable",)
+        if (self._document.project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK
+                and self._document.project.settings.display.preferred_refresh_hz is None):
+            return ("Select a monitor refresh rate to estimate stimulation and run time.",)
 
         try:
             guidance = condition_fixation_guidance(
                 self._document.project,
                 refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
             )
-        except FrameValidationError:
+        except ValueError:
             return ("Estimated run time: unavailable for current refresh rate",)
         condition_ids = {condition.condition_id for condition in conditions}
         ordered_guidance = [row for row in guidance if row.condition_id in condition_ids]
@@ -1401,10 +1403,14 @@ class SetupWizardPage(QWidget):
         total_condition_runs = len(ordered_guidance) * block_count
         break_count = max(0, total_condition_runs - 1)
         break_seconds = break_count * _ESTIMATED_INTER_CONDITION_BREAK_SECONDS
-        total_seconds = (condition_time_seconds * block_count) + break_seconds
+        stimulation_seconds = condition_time_seconds * block_count
+        total_seconds = stimulation_seconds + break_seconds
         estimated_minutes = max(1, ceil(total_seconds / 60))
         minute_word = "minute" if estimated_minutes == 1 else "minutes"
-        return (f"Estimated run time: {estimated_minutes} {minute_word}",)
+        return (
+            f"Stimulation total: {stimulation_seconds:g} seconds",
+            f"Estimated run time: {estimated_minutes} {minute_word}",
+        )
 
     @staticmethod
     def _display_background_label(background_color: str) -> str:

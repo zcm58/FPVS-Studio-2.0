@@ -11,9 +11,11 @@ from dataclasses import dataclass
 from math import isfinite
 
 from fpvs_studio.core.compiler_support import CompileError, check_compilation_cancelled
-from fpvs_studio.core.condition_timing import effective_condition_base_hz
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.fixation_planning import seconds_to_frames
-from fpvs_studio.core.frame_validation import FrameValidationError, frames_per_stimulus
 from fpvs_studio.core.masking import MaskingSettings, condition_masking
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
@@ -124,7 +126,6 @@ def validate_compilation_workload(
     total_tasks = sum(module_work.get(identity, 0) for identity in baseline_ids)
     total_events = total_frames = total_scans = 0
     work_by_condition: dict[str, tuple[int, int, int, int]] = {}
-    cadence = project.settings.protocol.oddball_every_n
     for condition in conditions:
         check_compilation_cancelled()
         base_hz = effective_condition_base_hz(project, condition)
@@ -136,11 +137,16 @@ def validate_compilation_workload(
                 "Bundle compilation exceeds the total frames limit at the requested base rate."
             )
         try:
-            frame_count = frames_per_stimulus(refresh_hz, base_hz)
-        except FrameValidationError as exc:
+            if condition.stream_duration_seconds is not None and (
+                not isfinite(condition.stream_duration_seconds)
+                or condition.stream_duration_seconds > limits.max_total_frames / refresh_hz
+            ):
+                raise CompileError("Bundle compilation exceeds the total frames limit.")
+            timing = resolve_condition_stream_timing(project, condition, refresh_hz)
+        except (ValueError, OverflowError) as exc:
             raise CompileError(str(exc)) from exc
-        cycles = condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
-        slots = cycles * cadence
+        cycles = timing.total_oddball_cycles
+        slots = timing.total_stimuli
         settings = masking[condition.condition_id]
         scans = 0
         if settings is None:
@@ -165,7 +171,7 @@ def validate_compilation_workload(
             raise CompileError(
                 "Bundle compilation exceeds the total frames limit in the fixation lead-in."
             )
-        frames = slots * frame_count + seconds_to_frames(lead_in, refresh_hz)
+        frames = timing.total_frames + seconds_to_frames(lead_in, refresh_hz)
         tasks = sum(
             module_work.get(binding.task_id, 0)
             for binding in (*condition.pre_task_bindings, *condition.post_task_bindings)

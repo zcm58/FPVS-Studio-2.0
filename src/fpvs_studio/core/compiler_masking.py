@@ -11,7 +11,10 @@ from fpvs_studio.core.compiler_support import (
     consume_compilation_work,
     make_run_id,
 )
-from fpvs_studio.core.condition_timing import effective_condition_base_hz
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.masking import (
     MaskingEventTriggers,
@@ -85,6 +88,7 @@ def compile_masking_run(
 ) -> RunSpec:
     base_hz = effective_condition_base_hz(project, condition)
     try:
+        timing = resolve_condition_stream_timing(project, condition, refresh_hz)
         event_triggers = validate_masking_settings(project, condition, settings, refresh_hz)
         slot, soa, target_frames, mask_frames, base_frames = masking_frame_counts(
             settings,
@@ -108,8 +112,8 @@ def compile_masking_run(
     events: list[SceneEvent] = []
     marker_events: list[TriggerEvent] = []
     protocol = project.settings.protocol
-    cycles = condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
-    total_slots = cycles * protocol.oddball_every_n
+    cycles = timing.total_oddball_cycles
+    total_slots = timing.total_stimuli
     previous = previous_base_id
     for index in range(total_slots):
         check_compilation_cancelled(index)
@@ -189,7 +193,10 @@ def compile_masking_run(
         assert settings.catch_trial is not None
         trigger_code = settings.catch_trial.trigger_code
     return RunSpec(
-        schema_version="1.5.0" if is_catch_trial else "1.4.0",
+        schema_version=(
+            "1.6.0" if condition.stream_duration_seconds is not None
+            else "1.5.0" if is_catch_trial else "1.4.0"
+        ),
         run_id=run_id or make_run_id(condition.condition_id),
         project_id=project.meta.project_id,
         project_name=project.meta.name,
@@ -204,6 +211,7 @@ def compile_masking_run(
             oddball_hz=base_hz / protocol.oddball_every_n,
             total_oddball_cycles=cycles,
             total_stimuli=total_slots,
+            requested_duration_seconds=condition.stream_duration_seconds,
             stimulus_modality=StimulusModality.SCENE,
             trigger_code=trigger_code,
         ),

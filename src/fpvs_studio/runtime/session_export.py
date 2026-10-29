@@ -125,6 +125,8 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "accuracy_percent",
     "mean_rt_ms",
     "block_accuracy_percent",
+    "requested_stream_duration_seconds",
+    "resolved_stream_duration_seconds",
     "participant_session_number",
     "manual_removed_electrodes",
     "manual_removed_electrodes_recorded",
@@ -825,6 +827,8 @@ def write_session_artifacts(
             "condition_id",
             "condition_name",
             "run_id",
+            "requested_stream_duration_seconds",
+            "resolved_stream_duration_seconds",
         ],
         [
             (
@@ -834,6 +838,8 @@ def write_session_artifacts(
                 entry.condition_id,
                 entry.condition_name,
                 entry.run_id,
+                entry.run_spec.condition.requested_duration_seconds,
+                entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
             )
             for entry in ordered_entries
         ],
@@ -1318,6 +1324,9 @@ def _session_condition_history_row(
         _float_value(fixation.accuracy_percent if fixation is not None else None),
         _float_value(fixation.mean_rt_ms if fixation is not None else None),
         _float_value(block_accuracy_percent),
+        entry.run_spec.condition.requested_duration_seconds
+        if entry.run_spec.condition.requested_duration_seconds is not None else "",
+        entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
         summary.participant_metadata.manual_removed_electrodes is not None,

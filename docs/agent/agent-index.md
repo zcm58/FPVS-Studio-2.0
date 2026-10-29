@@ -560,7 +560,7 @@ the broader named-profile/display plan remains planned work.
 
 ## FPVS Condition Timing
 
-For shared frequency and confirmed condition overrides, start with
+For shared frequency, confirmed condition overrides and stream-only seconds, start with
 `core/condition_timing.py`, `gui/condition_timing_table.py` and
 `gui/session_structure_page.py`. Design displays the effective rate read-only;
 Timing & Session owns edits. Use core/compiler/GUI/project-I/O focused routes and

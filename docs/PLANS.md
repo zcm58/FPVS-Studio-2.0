@@ -20,6 +20,7 @@ Current implementation:
 
 
 
+
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -29,7 +30,6 @@ Current implementation:
 
 Concrete planned work:
 
-- [Per-condition stream duration in seconds](exec-plans/planned/per-condition-stream-duration.md)
 - [Per-condition presentation counts and constrained shuffled order](exec-plans/planned/per-condition-repeat-counts.md)
 - [Reproducible randomization with three seeds](exec-plans/planned/reproducible-randomization-controls.md)
 - [Simplified condition modifiers, post-condition questions and readable response CSV](exec-plans/planned/simple-condition-modifiers-and-post-questions.md)
@@ -40,6 +40,9 @@ Concrete planned work:
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Per-condition stream duration](exec-plans/completed/per-condition-stream-duration.md)
+(exact seconds, preserved legacy continuous streams and requested/resolved export fields; visible GUI acceptance remains separate).
 
 Recent completion: [Clear presentation frequency and confirmed condition overrides](exec-plans/completed/clear-presentation-frequency.md)
 (shared/default frequency, confirmed condition overrides and atomic duration preservation; visible GUI acceptance remains separate).

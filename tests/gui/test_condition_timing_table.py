@@ -1,15 +1,17 @@
-"""Registered frequency draft, confirmation and compact Timing & Session checks."""
+"""Registered timing drafts, confirmation and compact Timing & Session checks."""
 
 from __future__ import annotations
 
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 from tests.gui.helpers import assert_visible_children_within_parent
 
+from fpvs_studio.core.condition_timing import resolve_condition_stream_timing
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.gui.condition_timing_table import FREQUENCY_OVERRIDE_WARNING, ConditionTimingTable
-from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 
@@ -112,19 +114,110 @@ def test_invalid_frequency_draft_has_no_partial_edits_and_can_be_discarded(
 
 
 def test_frequency_change_requires_an_explicit_display_rate(qtbot, tmp_path):
-    document, _first, _second = _document(tmp_path)
+    document, first, _second = _document(tmp_path)
     document.update_display_settings(preferred_refresh_hz=None)
     original = document.project.model_copy(deep=True)
     editor = ConditionTimingTable(document)
     qtbot.addWidget(editor)
+    assert not editor.duration_spins[first].isEnabled()
+    assert editor.duration_spins[first].specialValueText() == "Select display rate"
     editor.shared_frequency_spin.setValue(4)
     assert not editor.apply_pending_edits()
     assert "Select a monitor refresh rate" in editor.error_label.text()
     assert document.project == original
+    document.update_display_settings(preferred_refresh_hz=60)
+    assert editor.duration_spins[first].isEnabled()
+    assert editor.duration_spins[first].value() == 10
+    assert document.get_condition(first).stream_duration_seconds is None
+
+
+def test_image_and_word_durations_apply_together_without_changing_exposure_targets(qtbot, tmp_path):
+    document, first, second = _document(tmp_path)
+    exposure_target = document.project.settings.condition_defaults.target_repeats_per_image
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    assert editor.apply_button.text() == "Apply timing"
+    editor.duration_spins[first].setValue(20)
+    editor.duration_spins[second].setValue(30)
+    assert document.get_condition(first).stream_duration_seconds is None
+    assert editor.apply_pending_edits()
+    assert document.get_condition(first).stream_duration_seconds == 20
+    assert document.get_condition(second).stream_duration_seconds == 30
+    for condition_id, expected in ((first, 20), (second, 30)):
+        timing = resolve_condition_stream_timing(
+            document.project, document.get_condition(condition_id), 60,
+        )
+        assert timing.duration_seconds == expected
+    assert document.project.settings.condition_defaults.target_repeats_per_image == exposure_target
+    assert "Excludes lead-in" in editor.duration_spins[first].toolTip()
+
+
+def test_explicit_seconds_replace_legacy_continuous_count_divisibility(qtbot, tmp_path):
+    document, first, _second = _document(tmp_path)
+    document.update_condition(first, sequence_count=2)
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    assert editor.duration_spins[first].value() == 20
+    editor.duration_spins[first].setValue(17.5)
+    assert editor.apply_pending_edits()
+    timing = resolve_condition_stream_timing(document.project, document.get_condition(first), 60)
+    assert timing.duration_seconds == 17.5
+    assert timing.total_oddball_cycles == 21
+
+
+def test_frequency_and_seconds_are_one_atomic_draft(qtbot, monkeypatch, tmp_path):
+    document, first, second = _document(tmp_path)
+    original = document.project.model_copy(deep=True)
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    editor.frequency_spins[first].setValue(7)
+    editor.duration_spins[first].setValue(10.5)
+    editor.duration_spins[second].setValue(0)
+    assert not editor.apply_pending_edits()
+    assert document.project == original
+    assert editor.frequency_spins[first].value() == 7
+    assert editor.duration_spins[first].value() == 10.5
+    editor.duration_spins[second].setValue(10)
+    assert editor.apply_pending_edits()
+    assert document.get_condition(first).base_hz == 7
+    assert document.get_condition(first).stream_duration_seconds == 10.5
+    assert document.get_condition(second) == original.conditions[1]
+
+
+@pytest.mark.parametrize("choose", ["button", "typed_display_text"])
+def test_5994_duration_alternatives_are_explicit_and_displayed_values_are_usable(
+    qtbot, tmp_path, choose,
+):
+    document, first, _second = _document(tmp_path)
+    document.update_display_settings(preferred_refresh_hz=59.94)
+    original = document.project.model_copy(deep=True)
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    editor.show()
+    editor.duration_spins[first].setValue(12)
+    assert not editor.apply_pending_edits()
+    assert document.project == original
+    assert editor.duration_spins[first].value() == 12
+    assert editor.duration_choice_buttons
+    button = editor.duration_choice_buttons[0]
+    displayed = button.text().removeprefix("Use ").removesuffix(" s")
+    if choose == "button":
+        button.click()
+    else:
+        edit = editor.duration_spins[first].lineEdit()
+        assert edit is not None
+        edit.selectAll()
+        qtbot.keyClicks(edit, displayed)
+        qtbot.keyClick(edit, Qt.Key.Key_Return)
+    assert editor.apply_pending_edits()
+    timing = resolve_condition_stream_timing(document.project, document.get_condition(first), 59.94)
+    assert timing.total_oddball_cycles == 14
+    assert timing.duration_seconds == pytest.approx(float(displayed), abs=1e-9)
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-@pytest.mark.parametrize("state", ["shared", "custom", "invalid"])
+@pytest.mark.parametrize("state", ["shared", "custom", "invalid", "duration_invalid", "unresolved"])
 def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
     qtbot, monkeypatch, tmp_path, background, state,
 ):
@@ -136,6 +229,8 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
     if state == "custom":
         document.update_condition_frequencies(overrides={first: 4})
+    elif state == "unresolved":
+        document.update_display_settings(preferred_refresh_hz=None)
     wizard = SetupWizardPage(
         document, load_condition_template_profiles=lambda: [],
         manage_condition_templates=lambda: [],
@@ -151,6 +246,10 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
     if state == "invalid":
         table.shared_frequency_spin.setValue(7)
         assert not wizard.flush_pending_edits()
+    elif state == "duration_invalid":
+        table.duration_spins[first].setValue(10.1)
+        assert not wizard.flush_pending_edits()
+        assert table.duration_choice_buttons
     QApplication.processEvents()
     assert wizard.size().toTuple() == (1120, 820)
     assert table.isVisible()
@@ -165,6 +264,13 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
                 assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     assert table.table.item(0, 0).toolTip() == document.get_condition(first).name
     assert table.source_labels[second].text() == "Shared"
+    if state == "unresolved":
+        assert not table.duration_spins[first].isEnabled()
+        assert all("Stimulation total:" not in line
+                   for line in wizard._review_timing_estimate_lines())
+    for button in table.duration_choice_buttons:
+        if button.isVisible():
+            assert button.width() >= button.sizeHint().width()
     if state == "custom":
         review = " ".join(line for _name, _title, lines in wizard._review_checklist_sections()
                           for line in lines)
@@ -206,3 +312,84 @@ def test_timing_frequency_changes_refresh_readonly_design_without_creating_a_dra
     assert designer.rate_spin.value() == 3
     assert designer.cycle_canvas.roles() == roles
     assert designer.has_pending_design()
+
+
+def test_authored_seconds_disable_legacy_count_editing_and_update_stimulation_total(
+    qtbot, monkeypatch, tmp_path,
+):
+    document, first, second = _document(tmp_path)
+    document.update_condition_timing(durations={first: 20, second: 30})
+    monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    wizard.conditions_page.condition_list.setCurrentRow(0)
+    wizard.conditions_page.refresh()
+    assert not wizard.conditions_page.sequence_count_spin.isEnabled()
+    assert not wizard.conditions_page.oddball_cycles_spin.isEnabled()
+    assert "Timing & Session" in wizard.conditions_page.sequence_count_spin.toolTip()
+    assert wizard._review_timing_estimate_lines()[0] == "Stimulation total: 100 seconds"
+
+
+def test_design_cadence_change_validates_authored_seconds_before_commit(qtbot, tmp_path):
+    document, first, _second = _document(tmp_path)
+    document.update_condition_timing(durations={first: 10})
+    assert document.project.settings.protocol.base_hz == 6
+    assert document.project.settings.protocol.oddball_every_n == 5
+    assert document.get_condition(first).stream_duration_seconds == 10
+    assert document.get_condition(first).oddball_cycle_repeats_per_sequence == 12
+    original = document.project.model_copy(deep=True)
+    with pytest.raises(DocumentError, match="Valid durations"):
+        document.apply_experiment_design(first, base_hz=6, slot_count=7, attentional_blink=None)
+    assert document.project == original
+    document.apply_experiment_design(first, base_hz=6, slot_count=6, attentional_blink=None)
+    assert document.project.settings.protocol.oddball_every_n == 6
+    assert document.get_condition(first).stream_duration_seconds == 10
+    assert document.get_condition(first).sequence_count == 1
+    assert document.get_condition(first).oddball_cycle_repeats_per_sequence == 10
+    timing = resolve_condition_stream_timing(document.project, document.get_condition(first), 60)
+    assert timing.duration_seconds == 10
+    assert timing.total_oddball_cycles == 10
+
+
+def test_new_condition_inherits_authored_duration_defaults_without_a_display_guess(qtbot, tmp_path):
+    document, _first, _second = _document(tmp_path)
+    document.update_display_settings(preferred_refresh_hz=None)
+    document.update_condition_defaults(stream_duration_seconds=120)
+    condition_id = document.create_condition(name="New duration template condition")
+    assert document.get_condition(condition_id).stream_duration_seconds == 120
+    assert document.project.settings.display.preferred_refresh_hz is None
+    document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
+    assert document.get_condition(condition_id).stream_duration_seconds == 120
+
+
+def test_changed_display_rate_surfaces_incompatible_authored_duration(qtbot, monkeypatch, tmp_path):
+    document, first, _second = _document(tmp_path)
+    document.update_condition_timing(durations={first: 10})
+    monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    document.update_display_settings(preferred_refresh_hz=59.94)
+    report = wizard.runtime_settings_editor.timing_report()
+    assert not report.compatible
+    assert "Valid durations" in report.errors[0]
+    assert "Valid durations" in wizard.runtime_settings_editor.timing_blocker()
+
+
+def test_word_cadence_edit_preserves_authored_seconds_atomically(tmp_path):
+    from fpvs_studio.gui.document import DocumentError
+
+    document, _first, second = _document(tmp_path)
+    document.update_condition_timing(durations={second: 10})
+    before = document.project.model_copy(deep=True)
+    with pytest.raises(DocumentError, match="Valid durations"):
+        document.update_protocol_settings(oddball_every_n=7)
+    assert document.project == before
+    document.update_protocol_settings(oddball_every_n=6)
+    assert document.get_condition(second).stream_duration_seconds == 10
+    assert document.get_condition(second).oddball_cycle_repeats_per_sequence == 10

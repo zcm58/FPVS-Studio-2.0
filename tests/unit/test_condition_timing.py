@@ -67,7 +67,8 @@ def test_override_preserves_stream_frames_and_promotes_only_the_draft(timing_pro
         timing_project, overrides={condition_id: 3}, refresh_hz=60,
     )
     assert timing_project.model_dump(mode="json") == original
-    assert draft.schema_version.value == "1.11.0"
+    assert draft.schema_version.value == "1.12.0"
+    assert draft.conditions[0].stream_duration_seconds == 120
     assert draft.conditions[0].base_hz == 3
     assert draft.conditions[0].oddball_cycle_repeats_per_sequence == 72
     assert draft.conditions[1].base_hz is None
@@ -167,6 +168,7 @@ def test_reset_to_shared_preserves_valid_duration_and_rejects_incompatible_durat
     assert restored.conditions[0].oddball_cycle_repeats_per_sequence == 144
     custom.conditions[0].base_hz = 5
     custom.conditions[0].oddball_cycle_repeats_per_sequence = 146
+    custom.conditions[0].stream_duration_seconds = 146
     original = custom.model_dump(mode="json")
     with pytest.raises(ValueError, match="Valid durations"):
         propose_condition_frequencies(custom, overrides={condition_id: None}, refresh_hz=60)

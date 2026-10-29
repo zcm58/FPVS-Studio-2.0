@@ -26,7 +26,7 @@ with Yes/No buttons, defaulting to No:
 No leaves the previous value intact. Yes applies only the selected condition's
 validated override. Offer a clear return to the shared experiment frequency.
 Changing frequency preserves the requested stream duration, not the image count;
-the [duration plan](../planned/per-condition-stream-duration.md) owns representability errors.
+the [duration plan](per-condition-stream-duration.md) owns representability errors.
 
 ## Current evidence and ownership
 

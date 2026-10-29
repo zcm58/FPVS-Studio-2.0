@@ -1,4 +1,4 @@
-"""Staged shared and condition-specific FPVS presentation frequencies."""
+"""Staged per-condition FPVS frequency and stream-duration editing."""
 
 from __future__ import annotations
 
@@ -19,8 +19,11 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.condition_timing import (
+    ConditionDurationError,
+    condition_stream_duration_seconds,
     effective_condition_base_hz,
-    propose_condition_frequencies,
+    propose_condition_timing,
+    resolve_condition_stream_timing,
 )
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
@@ -46,7 +49,11 @@ class ConditionTimingTable(QWidget):
         self._shared_hz = document.project.settings.protocol.base_hz
         self._shared_dirty = False
         self._overrides: dict[str, float | None] = {}
+        self._durations: dict[str, float] = {}
+        self._display_durations: dict[str, float] = {}
         self.frequency_spins: dict[str, QDoubleSpinBox] = {}
+        self.duration_spins: dict[str, QDoubleSpinBox] = {}
+        self.duration_choice_buttons: list[QPushButton] = []
         self.source_labels: dict[str, QLabel] = {}
         self.reset_buttons: dict[str, QPushButton] = {}
         layout = QVBoxLayout(self)
@@ -68,7 +75,7 @@ class ConditionTimingTable(QWidget):
         )
         shared.addWidget(self.shared_frequency_spin)
         shared.addStretch(1)
-        self.apply_button = QPushButton("Apply frequencies", self)
+        self.apply_button = QPushButton("Apply timing", self)
         self.apply_button.setObjectName("apply_condition_frequencies_button")
         mark_primary_action(self.apply_button)
         self.apply_button.clicked.connect(self.apply_pending_edits)
@@ -79,9 +86,11 @@ class ConditionTimingTable(QWidget):
         shared.addWidget(self.discard_button)
         shared.addWidget(self.apply_button)
         layout.addLayout(shared)
-        self.table = QTableWidget(0, 4, self)
+        self.table = QTableWidget(0, 5, self)
         self.table.setObjectName("condition_frequency_table")
-        self.table.setHorizontalHeaderLabels(["Condition", "Frequency", "Source", ""])
+        self.table.setHorizontalHeaderLabels([
+            "Condition", "Frequency", "Stream duration", "Source", "",
+        ])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
         self.table.setTextElideMode(Qt.TextElideMode.ElideRight)
@@ -90,7 +99,7 @@ class ConditionTimingTable(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(36)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in (1, 2, 3):
+        for column in (1, 2, 3, 4):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.table)
         self.error_label = QLabel(self)
@@ -101,6 +110,13 @@ class ConditionTimingTable(QWidget):
         mark_error_text(self.error_label)
         self.error_label.hide()
         layout.addWidget(self.error_label)
+        self.duration_choices = QWidget(self)
+        self.duration_choices.setObjectName("condition_duration_choices")
+        self.duration_choices_layout = QHBoxLayout(self.duration_choices)
+        self.duration_choices_layout.setContentsMargins(0, 0, 0, 0)
+        self.duration_choices_layout.setSpacing(8)
+        self.duration_choices.hide()
+        layout.addWidget(self.duration_choices)
         self.shared_frequency_spin.valueChanged.connect(self._shared_frequency_changed)
         document.project_changed.connect(self.refresh)
         self.refresh()
@@ -117,10 +133,13 @@ class ConditionTimingTable(QWidget):
         return spin
 
     def has_pending_edits(self) -> bool:
-        return self._shared_dirty or bool(self._overrides)
+        return self._shared_dirty or bool(self._overrides) or bool(self._durations)
 
     def refresh(self) -> None:
-        if self._applying or self.has_pending_edits():
+        if self._applying:
+            return
+        if self.has_pending_edits():
+            self._sync_duration_cells()
             return
         project = self._document.project
         self.setVisible(project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK)
@@ -131,6 +150,8 @@ class ConditionTimingTable(QWidget):
         conditions = self._document.ordered_conditions()
         self.table.setRowCount(len(conditions))
         self.frequency_spins.clear()
+        self.duration_spins.clear()
+        self._display_durations.clear()
         self.source_labels.clear()
         self.reset_buttons.clear()
         for row, condition in enumerate(conditions):
@@ -148,10 +169,24 @@ class ConditionTimingTable(QWidget):
             )
             self.frequency_spins[condition.condition_id] = spin
             self.table.setCellWidget(row, 1, spin)
+            duration_spin = QDoubleSpinBox(self)
+            duration_spin.setObjectName(f"condition_duration_{condition.condition_id}")
+            duration_spin.setAccessibleName(f"Stream duration in seconds for {condition.name}")
+            duration_spin.setRange(0, 1_000_000_000)
+            duration_spin.setDecimals(9)
+            duration_spin.setSuffix(" s")
+            duration_spin.setSingleStep(1)
+            duration_spin.setKeyboardTracking(False)
+            duration_spin.setMinimumWidth(124)
+            self.duration_spins[condition.condition_id] = duration_spin
+            duration_spin.valueChanged.connect(
+                lambda value, key=condition.condition_id: self._duration_changed(key, value),
+            )
+            self.table.setCellWidget(row, 2, duration_spin)
             source = QLabel(self)
             source.setMinimumWidth(64)
             self.source_labels[condition.condition_id] = source
-            self.table.setCellWidget(row, 2, source)
+            self.table.setCellWidget(row, 3, source)
             reset = QPushButton("Use shared", self)
             reset.setAutoDefault(False)
             reset.setAccessibleName(f"Use shared frequency for {condition.name}")
@@ -160,7 +195,7 @@ class ConditionTimingTable(QWidget):
             )
             mark_secondary_action(reset)
             self.reset_buttons[condition.condition_id] = reset
-            self.table.setCellWidget(row, 3, reset)
+            self.table.setCellWidget(row, 4, reset)
             self.table.setRowHeight(
                 row, max(36, spin.sizeHint().height(), reset.sizeHint().height()),
             )
@@ -170,8 +205,49 @@ class ConditionTimingTable(QWidget):
             + (36 if not conditions else 0) + 2 * self.table.frameWidth(),
         )
         self._syncing = False
+        self._sync_duration_cells()
         self._sync_rows()
         self._update_actions()
+
+    def _sync_duration_cells(self) -> None:
+        project = self._document.project
+        refresh_hz = project.settings.display.preferred_refresh_hz
+        self._syncing = True
+        for condition in self._document.ordered_conditions():
+            key = condition.condition_id
+            if key not in self.duration_spins or key in self._durations:
+                continue
+            try:
+                duration = condition_stream_duration_seconds(project, condition, refresh_hz)
+            except ValueError as error:
+                duration = None
+                duration_error = str(error)
+            else:
+                duration_error = ""
+            spin = self.duration_spins[key]
+            spin.setSpecialValueText(
+                "Select display rate" if duration is None and refresh_hz is None
+                else "Enter seconds" if duration is None else "0 s",
+            )
+            spin.setEnabled(duration is not None or refresh_hz is not None)
+            spin.setValue(duration or 0)
+            self._display_durations[key] = spin.value()
+            detail = duration_error or (
+                "Select the monitor refresh rate to resolve this condition's legacy cycle counts."
+                if duration is None else f"Requested stream: {duration:.12g} seconds."
+            )
+            if refresh_hz is not None:
+                try:
+                    actual = resolve_condition_stream_timing(project, condition, refresh_hz)
+                except ValueError as error:
+                    detail += f" {error}"
+                else:
+                    detail += f" Effective stream: {actual.duration_seconds:.12g} seconds."
+            spin.setToolTip(
+                "One stimulation stream, including blank halves and contrast modulation. "
+                "Excludes lead-in, instructions, questions, waiting and feedback. " + detail,
+            )
+        self._syncing = False
 
     def _sync_rows(self) -> None:
         self._syncing = True
@@ -219,8 +295,18 @@ class ConditionTimingTable(QWidget):
         self._sync_rows()
         self._draft_changed()
 
+    def _duration_changed(self, condition_id: str, value: float) -> None:
+        if self._syncing:
+            return
+        if value == self._display_durations[condition_id]:
+            self._durations.pop(condition_id, None)
+        else:
+            self._durations[condition_id] = value
+        self._draft_changed()
+
     def _draft_changed(self) -> None:
         self.error_label.hide()
+        self.duration_choices.hide()
         self._update_actions()
         self.draft_changed.emit()
 
@@ -231,12 +317,14 @@ class ConditionTimingTable(QWidget):
 
     def discard_pending_edits(self) -> None:
         self._overrides.clear()
+        self._durations.clear()
         self._shared_hz = self._document.project.settings.protocol.base_hz
         self._shared_dirty = False
         self._syncing = True
         self.shared_frequency_spin.setValue(self._shared_hz)
         self._syncing = False
         self.error_label.hide()
+        self.duration_choices.hide()
         self.refresh()
         self.draft_changed.emit()
 
@@ -245,14 +333,15 @@ class ConditionTimingTable(QWidget):
             return True
         shared = self.shared_frequency_spin.value() if self._shared_dirty else None
         overrides = dict(self._overrides)
+        durations = dict(self._durations)
         try:
-            propose_condition_frequencies(
+            propose_condition_timing(
                 self._document.project, shared_base_hz=shared, overrides=overrides,
+                durations=durations,
                 refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:
-            self.error_label.setText(str(error))
-            self.error_label.show()
+            self._show_timing_error(error)
             return False
         for condition_id, value in overrides.items():
             if value is None:
@@ -271,12 +360,42 @@ class ConditionTimingTable(QWidget):
                 return False
         self._applying = True
         try:
-            self._document.update_condition_frequencies(shared_base_hz=shared, overrides=overrides)
+            self._document.update_condition_timing(
+                shared_base_hz=shared, overrides=overrides, durations=durations,
+            )
         except ValueError as error:
-            self.error_label.setText(str(error))
-            self.error_label.show()
+            self._show_timing_error(error)
             return False
         finally:
             self._applying = False
         self.discard_pending_edits()
         return True
+
+    def _show_timing_error(self, error: ValueError) -> None:
+        self.error_label.setText(str(error))
+        self.error_label.show()
+        while (item := self.duration_choices_layout.takeAt(0)) is not None:
+            if widget := item.widget():
+                widget.deleteLater()
+        self.duration_choice_buttons.clear()
+        if isinstance(error, ConditionDurationError):
+            for value in error.valid_durations:
+                button = QPushButton(f"Use {value:.9f} s", self.duration_choices)
+                button.setToolTip(f"Use exactly {value:.17g} seconds, then Apply timing.")
+                button.setAccessibleName(f"Use stream duration {value:.17g} seconds")
+                mark_secondary_action(button)
+                button.clicked.connect(
+                    lambda _checked=False, key=error.condition_id, seconds=value:
+                    self._choose_duration(key, seconds),
+                )
+                self.duration_choices_layout.addWidget(button)
+                self.duration_choice_buttons.append(button)
+        self.duration_choices_layout.addStretch(1)
+        self.duration_choices.setVisible(bool(self.duration_choice_buttons))
+
+    def _choose_duration(self, condition_id: str, seconds: float) -> None:
+        self._durations[condition_id] = seconds
+        self._syncing = True
+        self.duration_spins[condition_id].setValue(seconds)
+        self._syncing = False
+        self._draft_changed()

@@ -305,35 +305,26 @@ def test_project_validation_warns_for_uneven_stimulus_repeat_distribution(
     )
 
 
-def test_project_validation_rejects_condition_repeat_mismatch(multi_condition_project) -> None:
+def test_project_validation_accepts_independent_continuous_condition_lengths(
+    multi_condition_project,
+):
     multi_condition_project.conditions[1].sequence_count = 3
 
     report = validate_project(multi_condition_project)
 
-    assert report.is_valid is False
-    assert any(
-        "Expected pair from first ordered condition" in issue.message
-        and "Condition Repeats=1" in issue.message
-        and "Actual pair for condition 'Condition 2'" in issue.message
-        and "Condition Repeats=3" in issue.message
-        and "Align all conditions before save/run." in issue.message
-        for issue in report.issues
-    )
+    assert report.is_valid
+    durations = condition_fixation_guidance(multi_condition_project, refresh_hz=60)
+    assert durations[1].condition_duration_seconds == 3 * durations[0].condition_duration_seconds
 
 
-def test_project_validation_rejects_condition_cycle_mismatch(multi_condition_project) -> None:
+def test_project_validation_accepts_independent_condition_cycle_lengths(multi_condition_project):
     multi_condition_project.conditions[2].oddball_cycle_repeats_per_sequence = 120
 
     report = validate_project(multi_condition_project)
 
-    assert report.is_valid is False
-    assert any(
-        "Expected pair from first ordered condition" in issue.message
-        and "Cycles / Condition Repeat=146" in issue.message
-        and "Actual pair for condition 'Condition 3'" in issue.message
-        and "Cycles / Condition Repeat=120" in issue.message
-        for issue in report.issues
-    )
+    assert report.is_valid
+    durations = condition_fixation_guidance(multi_condition_project, refresh_hz=60)
+    assert durations[2].condition_duration_seconds == 100
 
 
 def test_project_validation_accepts_uniform_condition_repeat_cycle_settings(

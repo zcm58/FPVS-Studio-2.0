@@ -166,7 +166,9 @@ def validate_masking_event_triggers(
     return markers
 
 
-def validate_masking_catch_trials(project: ProjectFile, conditions: list[Condition]) -> None:
+def validate_masking_catch_trials(
+    project: ProjectFile, conditions: list[Condition], *, refresh_hz: float | None = None,
+) -> None:
     """Check block-wide catch agreement and unambiguous trial-start markers."""
     explicit: dict[str, Condition] = {}
     for condition in project.conditions:
@@ -178,7 +180,7 @@ def validate_masking_catch_trials(project: ProjectFile, conditions: list[Conditi
         if settings.variant in explicit:
             raise ValueError(f"Only one explicit {settings.variant} catch condition is allowed.")
         explicit[settings.variant] = condition
-        masking_catch_source_conditions(project, condition)
+        masking_catch_source_conditions(project, condition, refresh_hz=refresh_hz)
         if any(other.condition_id != condition.condition_id
                and other.trigger_code == condition.trigger_code for other in project.conditions):
             raise ValueError(
@@ -218,6 +220,7 @@ def validate_masking_catch_trials(project: ProjectFile, conditions: list[Conditi
 
 def masking_catch_source_conditions(
     project: ProjectFile, condition: Condition, selected: list[Condition] | None = None,
+    *, refresh_hz: float | None = None,
 ) -> list[Condition]:
     """Use the selected variant's SOAs, or its project pool for a standalone catch."""
     settings = condition_masking(project, condition)
@@ -237,7 +240,10 @@ def masking_catch_source_conditions(
             f"The {settings.variant} catch condition needs an ordinary {settings.variant} "
             "condition to supply its SOA."
         )
-    from fpvs_studio.core.condition_timing import effective_condition_base_hz
+    from fpvs_studio.core.condition_timing import (
+        effective_condition_base_hz,
+        resolve_condition_stream_timing,
+    )
 
     catch_rate = effective_condition_base_hz(project, condition)
     if any(effective_condition_base_hz(project, item) != catch_rate for item in sources):
@@ -245,6 +251,24 @@ def masking_catch_source_conditions(
             "A masking catch condition and all of its SOA source conditions must use "
             "the same stimulus presentation frequency."
         )
+    target_refresh = refresh_hz if refresh_hz is not None else (
+        project.settings.display.preferred_refresh_hz
+    )
+    comparable = [condition, *sources]
+    if target_refresh is not None:
+        lengths = {
+            resolve_condition_stream_timing(project, item, target_refresh).total_frames
+            for item in comparable
+        }
+        if len(lengths) != 1:
+            raise ValueError(
+                "A masking catch and its SOA source conditions need the same stream length."
+            )
+    elif all(item.stream_duration_seconds is not None for item in comparable):
+        if len({item.stream_duration_seconds for item in comparable}) != 1:
+            raise ValueError(
+                "A masking catch and its SOA source conditions need the same stream length."
+            )
     return sources
 
 

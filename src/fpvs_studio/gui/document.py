@@ -10,6 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
 
+from fpvs_studio.core.condition_timing import propose_condition_timing
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.masking import condition_masking
@@ -363,7 +364,22 @@ class ProjectDocument(
 
         protocol = _validated_copy(self._project.settings.protocol, **updates)
         settings = _validated_copy(self._project.settings, protocol=protocol)
-        self._apply_project_update(settings=settings)
+        project = _validated_copy(self._project, settings=settings)
+        if protocol != self._project.settings.protocol:
+            durations = {
+                condition.condition_id: condition.stream_duration_seconds
+                for condition in project.conditions
+                if condition.stream_duration_seconds is not None
+            }
+            if durations:
+                try:
+                    project = propose_condition_timing(
+                        project, durations=durations,
+                        refresh_hz=project.settings.display.preferred_refresh_hz,
+                    )
+                except ValueError as error:
+                    raise DocumentError(str(error)) from error
+        self._replace_project(project)
 
     def update_session_settings(self, **updates: object) -> None:
         """Update session settings through Pydantic validation."""

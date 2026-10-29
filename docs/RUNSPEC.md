@@ -43,7 +43,8 @@ inclusive onset/exclusive offset frame windows and ordered native visual draws.
 They do not also carry a legacy stimulus sequence. A target-absent catch uses
 RunSpec 1.5.0 with `scene_stream.is_catch_trial=True`, `target_id=None` and no target
 events, while retaining the stream's duration and base/mask timing. Ordinary masking
-runs retain RunSpec 1.4.0. Catch placement and SOA selection belong to session compilation;
+runs retain RunSpec 1.4.0 when stream seconds are count-based; explicitly authored
+seconds use RunSpec 1.6.0 for ordinary and catch streams. Catch placement and SOA selection belong to session compilation;
 catch detection scoring belongs to runtime. See [Masking](MASKING.md) for the complete
 schema, trigger and result contracts.
 
@@ -85,14 +86,21 @@ not recompute protocol logic from `ProjectFile`.
 The editable project stores shared `ProtocolSettings.base_hz` (6 Hz by default),
 integer `oddball_every_n`, and optional `Condition.base_hz` overrides. A null override
 inherits the shared frequency. `core/condition_timing.py` owns effective-rate
-resolution and atomic frequency proposals. Frequency edits at a selected refresh
-target preserve the existing stream duration by changing complete cycle counts;
-incompatible edits report valid durations and leave the project unchanged. A refresh
-target is required for edits, while legacy projects without one retain their counts.
-The compiled `ConditionRunSpec.base_hz` stores the effective requested rate, and
-frame validation reports the realized rate. Projects containing an override use project
-schema 1.11.0 and portable config 1.9.0; inherited-only projects retain their prior
-versions and omit the optional condition field. Duty-cycle mode remains per condition. Project-level
+resolution, duration resolution and atomic timing proposals. Optional
+`Condition.stream_duration_seconds` stores requested stream-only seconds for one
+presentation. Without it, saved continuous sequence/cycle counts retain their meaning;
+legacy seconds remain unresolved until a valid refresh target is known.
+
+Explicit seconds must fit whole frames and complete oddball cycles at the effective
+frequency. Incompatible values are rejected with neighboring valid durations, without
+rounding or partial mutation. The stream includes blank halves and contrast modulation
+but excludes lead-in, instructions, tasks, waiting and feedback. Frequency edits preserve
+requested seconds, or the legacy duration resolved at the selected refresh target.
+`ConditionRunSpec.requested_duration_seconds` retains authored seconds in RunSpec
+schema 1.6.0 (omitted for legacy runs); resolved timing remains frame-based. Project schema 1.12.0/config 1.10.0 carry explicit seconds;
+frequency-only overrides retain project 1.11.0/config 1.9.0 capability versions.
+Inherited count-based projects retain their prior versions and omit optional fields.
+Duty-cycle mode remains per condition. Project-level
 condition-template profiles only seed defaults for authoring. Mixed Continuous Images,
 50% Blank Between Images, and image-only Contrast Modulation sessions compile into
 separate `RunSpec` entries with each condition's resolved frame counts. The contrast

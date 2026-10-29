@@ -1534,3 +1534,17 @@ labels, long condition-name tooltips, keyboard focus, pending-draft navigation a
 invalid-duration recovery. Verify that Design cannot edit the frequency, saved custom
 rates survive reopen, and requested/realized rates remain distinguishable at 59.94 Hz.
 Registered Qt coverage is maintained separately from the default non-Qt checks.
+
+### Per-condition stream duration
+
+Timing & Session groups stimulus frequency and stream duration (seconds) per image
+or word condition. Duration applies to one continuous stimulation stream, excluding
+lead-in and all participant screens/tasks. Edit a duration alone or coordinate it
+with a frequency draft, then Apply timing. Failed validation preserves every saved
+value and the draft; valid alternatives require explicit selection. Legacy conditions
+without a selected refresh target show unresolved seconds and keep their saved counts.
+
+Visible acceptance: at 1120x820 in both themes, give two conditions different valid
+lengths, reject an incompatible length, select a suggested duration at 59.94 Hz, then
+save/reopen. Change frequency with a coordinated duration draft and confirm atomic
+failure/recovery. Check long names, wrapped errors, keyboard focus and session totals.

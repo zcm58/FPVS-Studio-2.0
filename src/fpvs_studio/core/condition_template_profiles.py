@@ -13,7 +13,11 @@ from pathlib import Path
 from typing import Any
 
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
-from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, SchemaVersion
+from fpvs_studio.core.enums import (
+    ConditionTemplateSchemaVersion,
+    DutyCycleMode,
+    ExperimentCategory,
+)
 from fpvs_studio.core.experiment_categories import (
     RETIRED_IMAGE_PAIR_MESSAGE,
     experiment_category_label,
@@ -49,7 +53,8 @@ SINUSOIDAL_CONTRAST_PROFILE_ID = "sinusoidal-contrast-v1"
 ATTENTIONAL_BLINK_PROFILE_ID = "attentional-blink-v1"
 ATTENTIONAL_BLINK_STREAM_PROFILE_ID = "attentional-blink-letter-stream-v1"
 COGNITIVE_LOAD_PROFILE_ID = "cognitive-load-fpvs-v1"
-CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = SchemaVersion.V1_2
+CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = ConditionTemplateSchemaVersion.V1_2
+CONDITION_DURATION_LIBRARY_SCHEMA_VERSION = ConditionTemplateSchemaVersion.V1_3
 
 
 def _shared_fixation_defaults() -> FixationTaskSettings:
@@ -192,7 +197,13 @@ def _normalize_library(
         *sorted(user_profiles.values(), key=lambda item: item.profile_id),
     ]
     return ConditionTemplateProfileLibrary(
-        schema_version=CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION, profiles=ordered_profiles
+        schema_version=(
+            CONDITION_DURATION_LIBRARY_SCHEMA_VERSION
+            if any(profile.defaults.condition.stream_duration_seconds is not None
+                   for profile in ordered_profiles)
+            else CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION
+        ),
+        profiles=ordered_profiles,
     )
 
 
@@ -201,16 +212,19 @@ def _migrate_library_payload(
 ) -> ConditionTemplateProfileLibrary:
     """Migrate stored template snapshots without changing legacy playback defaults."""
 
-    schema_version = payload.get("schema_version", SchemaVersion.V1.value)
-    if isinstance(schema_version, SchemaVersion):
+    schema_version = payload.get("schema_version", ConditionTemplateSchemaVersion.V1.value)
+    if isinstance(schema_version, ConditionTemplateSchemaVersion):
         schema_version = schema_version.value
-    if schema_version == CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value:
+    if schema_version in {
+        CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value,
+        CONDITION_DURATION_LIBRARY_SCHEMA_VERSION.value,
+    }:
         return ConditionTemplateProfileLibrary.model_validate(payload)
-    if schema_version == SchemaVersion.V1_1.value:
+    if schema_version == ConditionTemplateSchemaVersion.V1_1.value:
         migrated = deepcopy(dict(payload))
         migrated["schema_version"] = CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value
         return ConditionTemplateProfileLibrary.model_validate(migrated)
-    if schema_version != SchemaVersion.V1.value:
+    if schema_version != ConditionTemplateSchemaVersion.V1.value:
         raise NotImplementedError(
             "Condition-template library migration from schema_version "
             f"'{schema_version}' is not implemented."
@@ -436,5 +450,6 @@ def apply_condition_defaults_to_condition(
             "duty_cycle_mode": defaults.duty_cycle_mode,
             "sequence_count": defaults.sequence_count,
             "oddball_cycle_repeats_per_sequence": defaults.oddball_cycle_repeats_per_sequence,
+            "stream_duration_seconds": defaults.stream_duration_seconds,
         }
     )

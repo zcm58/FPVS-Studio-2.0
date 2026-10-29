@@ -8,7 +8,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil, copysign, floor, isclose, isfinite
 
-from fpvs_studio.core.condition_timing import effective_condition_base_hz
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.display_geometry import visual_angle_width_cm
 from fpvs_studio.core.enums import (
@@ -444,7 +447,6 @@ def condition_fixation_guidance(
 ) -> list[ConditionFixationGuidance]:
     """Return condition-level duration and max-feasible fixation guidance."""
 
-    protocol = project.settings.protocol
     fixation = project.settings.fixation_task
     target_duration_frames = milliseconds_to_frames(
         fixation.target_duration_ms,
@@ -454,12 +456,9 @@ def condition_fixation_guidance(
 
     guidance_rows: list[ConditionFixationGuidance] = []
     for condition in sorted(project.conditions, key=lambda item: item.order_index):
-        frames_per_stimulus_value = frames_per_stimulus(
-            refresh_hz, effective_condition_base_hz(project, condition),
-        )
-        total_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-        total_stimuli = total_cycles * protocol.oddball_every_n
-        total_frames = total_stimuli * frames_per_stimulus_value
+        timing = resolve_condition_stream_timing(project, condition, refresh_hz)
+        total_cycles = timing.total_oddball_cycles
+        total_frames = timing.total_frames
         physical_max = max_supported_color_changes(
             total_frames=total_frames,
             target_duration_frames=target_duration_frames,
@@ -480,13 +479,18 @@ def condition_fixation_guidance(
     return guidance_rows
 
 
-def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRepeatRoleGuidance]:
+def condition_stimulus_repeat_guidance(
+    project: ProjectFile, *, refresh_hz: float | None = None,
+) -> list[StimulusRepeatRoleGuidance]:
     """Return per-image repeat guidance, including target-pair source exposure."""
 
     oddball_every_n = project.settings.protocol.oddball_every_n
     stimulus_sets = {item.set_id: item for item in project.stimulus_sets}
     target_repeats = project.settings.condition_defaults.target_repeats_per_image
     guidance_rows: list[StimulusRepeatRoleGuidance] = []
+    known_refresh = refresh_hz if refresh_hz is not None else (
+        project.settings.display.preferred_refresh_hz
+    )
 
     for condition in sorted(project.conditions, key=lambda item: item.order_index):
         balanced_schedule = not isinstance(
@@ -495,6 +499,15 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
         oddball_presentations = (
             condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
         )
+        if condition.stream_duration_seconds is not None:
+            if known_refresh is None:
+                continue
+            try:
+                oddball_presentations = resolve_condition_stream_timing(
+                    project, condition, known_refresh,
+                ).total_oddball_cycles
+            except ValueError:
+                continue
         role_presentations = {
             "base": oddball_presentations * (oddball_every_n - 1),
             "oddball": oddball_presentations,
@@ -567,15 +580,25 @@ def condition_stimulus_repeat_guidance(project: ProjectFile) -> list[StimulusRep
     return guidance_rows
 
 
-def validate_condition_repeat_cycle_consistency(project: ProjectFile) -> list[ValidationIssue]:
-    """Keep legacy repeat/cycle counts uniform among conditions with the same rate."""
+def validate_condition_repeat_cycle_consistency(
+    project: ProjectFile, *, refresh_hz: float | None = None,
+) -> list[ValidationIssue]:
+    """Preserve specialized AB/masking count constraints without coupling FPVS lengths."""
 
-    ordered_conditions = sorted(project.conditions, key=lambda item: item.order_index)
+    ordered_conditions = sorted(
+        (condition for condition in project.conditions
+         if condition.attentional_blink is not None
+         or condition_masking(project, condition) is not None),
+        key=lambda item: item.order_index,
+    )
     if len(ordered_conditions) <= 1:
         return []
 
     first_by_rate: dict[float, Condition] = {}
     issues: list[ValidationIssue] = []
+    known_refresh = refresh_hz if refresh_hz is not None else (
+        project.settings.display.preferred_refresh_hz
+    )
 
     for condition in ordered_conditions:
         rate = effective_condition_base_hz(project, condition)
@@ -583,6 +606,32 @@ def validate_condition_repeat_cycle_consistency(project: ProjectFile) -> list[Va
             first_by_rate[rate] = condition
             continue
         first_condition = first_by_rate[rate]
+        if (condition.stream_duration_seconds is not None
+                or first_condition.stream_duration_seconds is not None):
+            if known_refresh is None:
+                first_seconds = first_condition.stream_duration_seconds
+                condition_seconds = condition.stream_duration_seconds
+                if (first_seconds is None or condition_seconds is None
+                        or isclose(first_seconds, condition_seconds, rel_tol=0, abs_tol=1e-9)):
+                    continue
+            else:
+                try:
+                    first_timing = resolve_condition_stream_timing(
+                        project, first_condition, known_refresh,
+                    )
+                    timing = resolve_condition_stream_timing(project, condition, known_refresh)
+                except ValueError:
+                    continue
+                if first_timing.total_oddball_cycles == timing.total_oddball_cycles:
+                    continue
+            issues.append(ValidationIssue(
+                location=f"conditions.{condition.condition_id}.stream_duration_seconds",
+                message=(
+                    "Masking conditions with the same presentation frequency must use "
+                    f"matching stream durations: '{first_condition.name}' and '{condition.name}'."
+                ),
+            ))
+            continue
         expected_sequence_count = first_condition.sequence_count
         expected_cycle_repeats = first_condition.oddball_cycle_repeats_per_sequence
         if (
@@ -848,13 +897,13 @@ def validate_project(
 
     issues.extend(validate_fixation_settings(project.settings.fixation_task))
     try:
-        validate_masking_catch_trials(project, project.conditions)
+        validate_masking_catch_trials(project, project.conditions, refresh_hz=refresh_hz)
     except ValueError as exc:
         issues.append(ValidationIssue(location="condition_modifiers.masking.catch_trial",
                                       message=str(exc)))
-    issues.extend(validate_condition_repeat_cycle_consistency(project))
+    issues.extend(validate_condition_repeat_cycle_consistency(project, refresh_hz=refresh_hz))
     issues.extend(presentation_clipping_warnings(project))
-    for row in condition_stimulus_repeat_guidance(project):
+    for row in condition_stimulus_repeat_guidance(project, refresh_hz=refresh_hz):
         if row.image_count <= 0 or not row.balanced_schedule:
             continue
         role_label = {"base": "Base", "oddball": "Oddball", "t2": "T2", "isi": "ISI"}[row.role]
@@ -894,6 +943,24 @@ def validate_project(
             )
 
     for condition in project.conditions:
+        if condition.stream_duration_seconds is not None:
+            duration_refresh = refresh_hz if refresh_hz is not None else (
+                project.settings.display.preferred_refresh_hz
+            )
+            if duration_refresh is None:
+                issues.append(ValidationIssue(
+                    location=f"conditions.{condition.condition_id}.stream_duration_seconds",
+                    message="Select a monitor refresh rate to validate the stream duration.",
+                    severity=ValidationSeverity.WARNING,
+                ))
+            else:
+                try:
+                    resolve_condition_stream_timing(project, condition, duration_refresh)
+                except ValueError as duration_error:
+                    issues.append(ValidationIssue(
+                        location=f"conditions.{condition.condition_id}.stream_duration_seconds",
+                        message=str(duration_error),
+                    ))
         issues.extend(
             ValidationIssue(
                 location=f"conditions.{condition.condition_id}.attentional_blink",

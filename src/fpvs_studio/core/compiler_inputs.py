@@ -14,7 +14,8 @@ from fpvs_studio.core.compiler_assets import load_manifest, resolve_stimulus_ite
 from fpvs_studio.core.compiler_conditions import validate_selected_condition
 from fpvs_studio.core.compiler_presentation import compile_condition_presentation
 from fpvs_studio.core.compiler_schedules import StimulusScheduleItem
-from fpvs_studio.core.enums import StimulusVariant
+from fpvs_studio.core.compiler_support import CompileError
+from fpvs_studio.core.enums import ExperimentCategory, StimulusVariant
 from fpvs_studio.core.models import (
     Condition,
     ProjectFile,
@@ -24,6 +25,7 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.core.run_spec import ConditionPresentationSpec, StimulusRole
 from fpvs_studio.core.template_library import get_template
+from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 
@@ -42,6 +44,11 @@ class CompilationInputs:
         self, project: ProjectFile, *, refresh_hz: float,
         project_root: Path | None, manifest: StimulusManifest | None,
     ) -> None:
+        # Native AB retains its condition-specific burst validation and diagnostics.
+        if project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK:
+            issues = validate_condition_repeat_cycle_consistency(project, refresh_hz=refresh_hz)
+            if issues:
+                raise CompileError(" ".join(issue.message for issue in issues))
         self.project = project
         self.refresh_hz = refresh_hz
         self.project_root = project_root

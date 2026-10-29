@@ -43,6 +43,7 @@ def populate_cognitive_load_fpvs(project: ProjectFile) -> ProjectFile:
                 oddball_cycle_repeats_per_sequence=(
                     settings.condition_defaults.oddball_cycle_repeats_per_sequence
                 ),
+                stream_duration_seconds=settings.condition_defaults.stream_duration_seconds,
                 duty_cycle_mode=settings.condition_defaults.duty_cycle_mode,
                 trigger_code=(index - 1) * 2 + (2 if load else 1),
                 order_index=len(conditions),

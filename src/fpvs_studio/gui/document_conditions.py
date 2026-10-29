@@ -23,7 +23,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.condition_timing import (
     effective_condition_base_hz,
-    propose_condition_frequencies,
+    propose_condition_timing,
 )
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -239,6 +239,7 @@ class DocumentConditionMixin:
             oddball_stimulus_set_id=oddball_set_id,
             sequence_count=defaults.sequence_count,
             oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
+            stream_duration_seconds=defaults.stream_duration_seconds,
             duty_cycle_mode=defaults.duty_cycle_mode,
             trigger_code=len(ordered_conditions) + 1,
             order_index=len(ordered_conditions),
@@ -601,11 +602,21 @@ class DocumentConditionMixin:
         self, *, shared_base_hz: float | None = None,
         overrides: Mapping[str, float | None] | None = None,
     ) -> None:
-        """Apply one validated shared/condition frequency draft without partial edits."""
+        """Apply shared/condition frequency changes through the timing draft owner."""
+
+        self.update_condition_timing(shared_base_hz=shared_base_hz, overrides=overrides)
+
+    def update_condition_timing(
+        self, *, shared_base_hz: float | None = None,
+        overrides: Mapping[str, float | None] | None = None,
+        durations: Mapping[str, float] | None = None,
+    ) -> None:
+        """Apply frequencies and seconds together without partial timing changes."""
 
         try:
-            project = propose_condition_frequencies(
+            project = propose_condition_timing(
                 self._project, shared_base_hz=shared_base_hz, overrides=overrides,
+                durations=durations,
                 refresh_hz=self._project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:
@@ -655,6 +666,19 @@ class DocumentConditionMixin:
                 for item in self._project.conditions
             ],
         )
+        if slot_count != self._project.settings.protocol.oddball_every_n:
+            durations = {
+                candidate.condition_id: candidate.stream_duration_seconds
+                for candidate in project.conditions if candidate.stream_duration_seconds is not None
+            }
+            if durations:
+                try:
+                    project = propose_condition_timing(
+                        project, durations=durations,
+                        refresh_hz=project.settings.display.preferred_refresh_hz,
+                    )
+                except ValueError as error:
+                    raise DocumentError(str(error)) from error
         for candidate in project.conditions:
             problems = validate_attentional_blink_condition(
                 project,

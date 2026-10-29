@@ -98,6 +98,20 @@ def _verify_connected_refresh_rate(
 
 
 def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
+    requested_seconds = run_spec.condition.requested_duration_seconds
+    if requested_seconds is not None and (
+        run_spec.schema_version != "1.6.0"
+        or not isclose(
+            requested_seconds * run_spec.display.refresh_hz,
+            run_spec.display.total_frames,
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        )
+    ):
+        raise PreflightError(
+            "Run preflight failed because requested stream duration does not match "
+            "the compiled frame timing or schema."
+        )
     display_report = validate_display_refresh(
         run_spec.display.refresh_hz,
         duty_cycle_mode=run_spec.display.duty_cycle_mode,
@@ -489,7 +503,11 @@ def _validate_scene_timing(run_spec: RunSpec) -> None:
     targets = [event for event in scene.events if event.role == "target"]
     catch = scene.is_catch_trial is True
     expected_targets = 0 if catch else run_spec.condition.total_oddball_cycles
-    if (run_spec.schema_version != ("1.5.0" if catch else "1.4.0")
+    expected_schema = (
+        "1.6.0" if run_spec.condition.requested_duration_seconds is not None
+        else "1.5.0" if catch else "1.4.0"
+    )
+    if (run_spec.schema_version != expected_schema
             or run_spec.condition.stimulus_modality != StimulusModality.SCENE
             or run_spec.stimulus_sequence or run_spec.attentional_blink is not None
             or (scene.target_id is not None if catch else not scene.target_id)

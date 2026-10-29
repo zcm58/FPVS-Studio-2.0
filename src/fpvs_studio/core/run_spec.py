@@ -6,7 +6,7 @@ outside RunSpec."""
 
 from __future__ import annotations
 
-from math import isfinite
+from math import isclose, isfinite
 from typing import Any, Literal
 
 from pydantic import (
@@ -159,8 +159,18 @@ class ConditionRunSpec(FPVSBaseModel):
     oddball_hz: float = Field(gt=0)
     total_oddball_cycles: int = Field(ge=0)
     total_stimuli: int = Field(ge=0)
+    requested_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     stimulus_modality: StimulusModality
     trigger_code: StrictInt | None = Field(default=None, ge=0, le=255)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_requested_duration(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.requested_duration_seconds is None:
+            payload.pop("requested_duration_seconds", None)
+        return payload
 
 
 class StimulusEvent(FPVSBaseModel):
@@ -393,10 +403,21 @@ class RunSpec(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_stream_schema(self) -> RunSpec:
+        if self.condition.requested_duration_seconds is not None:
+            if self.schema_version != "1.6.0":
+                raise ValueError("Requested stream duration requires RunSpec schema 1.6.0.")
+            if self.attentional_blink is not None:
+                raise ValueError("Requested stream duration is unavailable for Attentional-Blink.")
+            if not isclose(
+                self.condition.requested_duration_seconds * self.display.refresh_hz,
+                self.display.total_frames, abs_tol=1e-6, rel_tol=0.0,
+            ):
+                raise ValueError("Requested stream duration does not match compiled stream frames.")
         if self.scene_stream is not None:
-            if self.schema_version not in {"1.4.0", "1.5.0"}:
+            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0"}:
                 raise ValueError("Scene streams require RunSpec schema 1.4.0.")
-            if self.scene_stream.is_catch_trial is not None and self.schema_version != "1.5.0":
+            if (self.scene_stream.is_catch_trial is not None
+                    and self.schema_version not in {"1.5.0", "1.6.0"}):
                 raise ValueError("Catch-trial scenes require RunSpec schema 1.5.0.")
             if self.stimulus_sequence or self.attentional_blink is not None:
                 raise ValueError("Scene streams cannot also contain a legacy stimulus stream.")

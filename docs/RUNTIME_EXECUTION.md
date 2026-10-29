@@ -1213,3 +1213,14 @@ partial pilot retains demographics and answered targets in compact mode. Old jou
 rows default to non-pilot with empty demographics. Dedicated CSV/Excel output flattens
 metadata into participant columns; JSON retains the typed nested structure. Pilot
 does not change accuracy inclusion or the reserved test-ID convention.
+
+## Authored stream duration reporting
+
+Compiled streams retain optional requested seconds alongside resolved display frames.
+Full-session `conditions.csv` and project-level `logs/session_condition_history.csv`
+include `requested_stream_duration_seconds` and `resolved_stream_duration_seconds`.
+Legacy count-based runs leave requested seconds blank; resolved seconds equal stream
+frames divided by the compiled refresh rate. These are planned stream lengths;
+measured playback remains in timing-QC records. Lead-in, participant tasks, transitions
+and feedback are excluded. Existing history rows and participant/visit identity remain
+intact when the added columns are introduced.

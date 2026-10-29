@@ -26,7 +26,10 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.attentional_blink_presets import is_attentional_blink_stream_project
 from fpvs_studio.core.attentional_blink_stream import preview_attentional_blink_stream
-from fpvs_studio.core.condition_timing import effective_condition_base_hz
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.contrast_modulation import SINUSOIDAL_NEUTRAL_BACKGROUND_COLOR
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
@@ -36,7 +39,6 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
     StimulusModality,
 )
-from fpvs_studio.core.frame_validation import frames_per_stimulus
 from fpvs_studio.core.masking import is_masking_project
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, DisplayValidationReport
 from fpvs_studio.core.validation import (
@@ -334,6 +336,17 @@ class DisplaySettingsEditor(QWidget):
                       next((report for report in reports if report.warnings), reports[0]))
         for condition in self._document.project.conditions:
             settings = condition.attentional_blink
+            if (condition.stream_duration_seconds is not None
+                    and self._document.project.settings.display.preferred_refresh_hz is not None):
+                try:
+                    resolve_condition_stream_timing(
+                        self._document.project, condition, self.current_refresh_hz(),
+                    )
+                except ValueError as error:
+                    return report.model_copy(update={
+                        "compatible": False, "errors": [str(error)],
+                        "frames_per_cycle": None, "timing_is_exact": False,
+                    })
             if isinstance(settings, AttentionalBlinkStreamSettings):
                 try:
                     preview_attentional_blink_stream(
@@ -572,22 +585,22 @@ class DisplaySettingsEditor(QWidget):
             self.refresh_hz_combo.setCurrentIndex(selected_index)
 
     def _condition_duration_text(self, frames_per_stimulus_value: int) -> str:
+        if (self._document.project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK
+                and self._document.project.settings.display.preferred_refresh_hz is None):
+            return "condition duration needs a monitor refresh rate"
         protocol = self._document.project.settings.protocol
         refresh_hz = self.current_refresh_hz()
         conditions = self._document.project.conditions
         if conditions:
-            durations = [
-                (
-                    condition.sequence_count
-                    * condition.oddball_cycle_repeats_per_sequence
-                    * protocol.oddball_every_n
-                    * frames_per_stimulus(
-                        refresh_hz, effective_condition_base_hz(self._document.project, condition),
-                    )
-                    / refresh_hz
-                )
-                for condition in conditions
-            ]
+            try:
+                durations = [
+                    resolve_condition_stream_timing(
+                        self._document.project, condition, refresh_hz,
+                    ).duration_seconds
+                    for condition in conditions
+                ]
+            except ValueError:
+                return "condition timing needs correction"
         else:
             defaults = self._document.project.settings.condition_defaults
             durations = [

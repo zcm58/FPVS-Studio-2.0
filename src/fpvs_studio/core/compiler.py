@@ -53,7 +53,10 @@ from fpvs_studio.core.compiler_tasks import (
     relocate_masking_lead_ins,
     resolve_modifier_baseline,
 )
-from fpvs_studio.core.condition_timing import effective_condition_base_hz
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.enums import SchemaVersion
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.fixation_planning import (
@@ -64,8 +67,6 @@ from fpvs_studio.core.fixation_planning import (
     seconds_to_frames,
 )
 from fpvs_studio.core.frame_validation import (
-    FrameValidationError,
-    frames_per_stimulus,
     on_off_frames,
 )
 from fpvs_studio.core.masking import (
@@ -127,10 +128,10 @@ def _compile_prepared_run(
     masking = condition_masking(project, condition)
     if condition.masking_catch:
         try:
-            validate_masking_catch_trials(project, [condition])
+            validate_masking_catch_trials(project, [condition], refresh_hz=refresh_hz)
             sources = (
                 [masking_source_condition] if masking_source_condition is not None
-                else masking_catch_source_conditions(project, condition)
+                else masking_catch_source_conditions(project, condition, refresh_hz=refresh_hz)
             )
             _validate_masking_catch_sources(project, sources, refresh_hz)
         except ValueError as exc:
@@ -152,14 +153,18 @@ def _compile_prepared_run(
     template = inputs.template
     protocol = project.settings.protocol
     base_hz = effective_condition_base_hz(project, condition)
-    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, base_hz)
+    try:
+        stream_timing = resolve_condition_stream_timing(project, condition, refresh_hz)
+    except ValueError as exc:
+        raise CompileError(str(exc)) from exc
+    frames_per_stimulus_value = stream_timing.frames_per_stimulus
     on_frames, off_frames = on_off_frames(
         frames_per_stimulus_value,
         condition.duty_cycle_mode,
     )
-    total_oddball_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-    total_stimuli = total_oddball_cycles * protocol.oddball_every_n
-    total_frames = total_stimuli * frames_per_stimulus_value
+    total_oddball_cycles = stream_timing.total_oddball_cycles
+    total_stimuli = stream_timing.total_stimuli
+    total_frames = stream_timing.total_frames
     presentation = prepared.presentation.model_copy(deep=True)
     resolved_role_presentations = prepared.role_presentations
     attentional_blink: AttentionalBlinkStreamRunSpec | None = None
@@ -265,7 +270,7 @@ def _compile_prepared_run(
 
     return RunSpec(
         schema_version=(
-            "1.3.0"
+            "1.6.0" if condition.stream_duration_seconds is not None else "1.3.0"
             if isinstance(attentional_blink, AttentionalBlinkStreamRunSpec)
             else SchemaVersion.V1_1.value
         ),
@@ -289,6 +294,7 @@ def _compile_prepared_run(
             ),
             total_oddball_cycles=total_oddball_cycles,
             total_stimuli=len(stimulus_sequence),
+            requested_duration_seconds=condition.stream_duration_seconds,
             stimulus_modality=base_set.modality,
             trigger_code=condition.trigger_code,
         ),
@@ -426,15 +432,12 @@ def _compile_session_plan(
     session_rng = random.Random(random_seed)
     task_inputs = TaskCompilationInputs(project, project_root)
     fixation_settings = project.settings.fixation_task
-    protocol = project.settings.protocol
     try:
-        condition_frame_counts = {
-            condition.condition_id: frames_per_stimulus(
-                refresh_hz, effective_condition_base_hz(project, condition),
-            )
+        condition_timings = {
+            condition.condition_id: resolve_condition_stream_timing(project, condition, refresh_hz)
             for condition in selected_conditions
         }
-    except FrameValidationError as exc:
+    except ValueError as exc:
         raise CompileError(str(exc)) from exc
     target_duration_frames = milliseconds_to_frames(
         fixation_settings.target_duration_ms,
@@ -454,7 +457,7 @@ def _compile_session_plan(
     group_conditions: list[list[tuple[Condition, bool, Condition | None]]] = []
     if masking_groups:
         try:
-            validate_masking_catch_trials(project, selected_conditions)
+            validate_masking_catch_trials(project, selected_conditions, refresh_hz=refresh_hz)
         except ValueError as exc:
             raise CompileError(str(exc)) from exc
         grouped: dict[str, list[Condition]] = {}
@@ -475,7 +478,9 @@ def _compile_session_plan(
             assert settings is not None
             if catches:
                 catch_condition = catches[0]
-                sources = masking_catch_source_conditions(project, catch_condition, pool)
+                sources = masking_catch_source_conditions(
+                    project, catch_condition, pool, refresh_hz=refresh_hz,
+                )
                 try:
                     _validate_masking_catch_sources(project, sources, refresh_hz)
                 except ValueError as exc:
@@ -516,7 +521,6 @@ def _compile_session_plan(
         for index_within_block, trial in enumerate(block_trials):
             check_compilation_cancelled()
             condition, is_catch_trial, masking_source = trial
-            frames_per_stimulus_value = condition_frame_counts[condition.condition_id]
             masking = condition_masking(project, condition)
             occurrence_index = occurrences.get(condition.condition_id, 0)
             occurrences[condition.condition_id] = occurrence_index + 1
@@ -528,11 +532,7 @@ def _compile_session_plan(
                 condition_id=condition.condition_id,
             )
             run_random_seed = session_rng.randrange(RANDOM_SEED_UPPER_BOUND)
-            condition_total_oddball_cycles = (
-                condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-            )
-            condition_total_stimuli = condition_total_oddball_cycles * protocol.oddball_every_n
-            condition_total_frames = condition_total_stimuli * frames_per_stimulus_value
+            condition_total_frames = condition_timings[condition.condition_id].total_frames
             max_supported_count = max_supported_color_changes(
                 total_frames=condition_total_frames,
                 target_duration_frames=target_duration_frames,

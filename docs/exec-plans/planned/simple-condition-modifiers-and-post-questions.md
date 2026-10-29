@@ -174,7 +174,7 @@ retain their existing contracts.
 ## Related work and exclusions
 
 Coordinate occurrence identity with [presentation counts](per-condition-repeat-counts.md)
-and preserve [stream-duration boundaries](per-condition-stream-duration.md). New question
+and preserve [stream-duration boundaries](../completed/per-condition-stream-duration.md). New question
 authoring must not consume the stimulus/condition/fixation RNG domains in the
 [seed plan](reproducible-randomization-controls.md).
 

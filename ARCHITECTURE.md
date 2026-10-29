@@ -18,7 +18,7 @@ lazily only inside the engine package.
 ## Condition timing
 
 `core/condition_timing.py` resolves shared/per-condition FPVS presentation frequency
-and validates atomic edits. Timing & Session owns authoring; compilers, previews,
+and exact stream duration, and validates atomic edits. Timing & Session owns authoring; compilers, previews,
 fixation guidance and exports use the effective condition rate. RunSpec remains
 frame-based. See [RunSpec timing](docs/RUNSPEC.md#timing-model).
 

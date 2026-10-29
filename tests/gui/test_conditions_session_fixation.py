@@ -25,7 +25,7 @@ from fpvs_studio.core.enums import DutyCycleMode, InterConditionMode, RunMode, S
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.document import _CONDITION_LENGTH_ERROR_MESSAGE, ProjectDocument
+from fpvs_studio.gui.document import ProjectDocument
 
 
 def test_project_description_typing_round_trips_without_cursor_reset(
@@ -691,7 +691,7 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     assert "\n" not in guidance
 
 
-def test_save_blocked_when_condition_repeat_cycle_values_differ(
+def test_save_preserves_different_condition_stream_durations(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -704,10 +704,11 @@ def test_save_blocked_when_condition_repeat_cycle_values_differ(
     ordered_conditions = window.document.ordered_conditions()
     assert len(ordered_conditions) == 2
 
-    window.document.update_condition(
-        ordered_conditions[1].condition_id,
-        sequence_count=ordered_conditions[0].sequence_count + 1,
-    )
+    window.document.update_display_settings(preferred_refresh_hz=60)
+    window.document.update_condition_timing(durations={
+        ordered_conditions[0].condition_id: 60,
+        ordered_conditions[1].condition_id: 120,
+    })
 
     messages: list[str] = []
 
@@ -717,16 +718,17 @@ def test_save_blocked_when_condition_repeat_cycle_values_differ(
 
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.exec", _capture_exec)
 
-    assert window.save_project() is False
-    assert window.document.dirty is True
-    assert any(_CONDITION_LENGTH_ERROR_MESSAGE in message for message in messages)
+    assert window.save_project() is True
+    assert window.document.dirty is False
+    assert messages == []
+    saved = load_project_file(window.document.project_file_path)
+    assert [condition.stream_duration_seconds for condition in saved.conditions] == [60, 120]
 
 
-def test_launch_blocked_when_condition_repeat_cycle_values_differ(
+def test_compile_accepts_different_condition_stream_durations(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Run Consistency Gate")
     _prepare_compile_ready_project(window, tmp_path / "consistency-gate-1")
@@ -734,41 +736,20 @@ def test_launch_blocked_when_condition_repeat_cycle_values_differ(
     ordered_conditions = window.document.ordered_conditions()
     assert len(ordered_conditions) == 2
 
-    window.document.update_condition(
-        ordered_conditions[1].condition_id,
-        oddball_cycle_repeats_per_sequence=(
-            ordered_conditions[0].oddball_cycle_repeats_per_sequence + 1
-        ),
-    )
-
-    messages: list[str] = []
-
-    def _capture_exec(dialog: QMessageBox) -> int:
-        messages.append(dialog.text())
-        return int(QMessageBox.StandardButton.Ok)
-
-    monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.exec", _capture_exec)
-    prompt_calls = 0
-    launch_calls = 0
-
-    def _capture_prompt() -> str:
-        nonlocal prompt_calls
-        prompt_calls += 1
-        return "00011"
-
-    def _capture_launch(*_args, **_kwargs):
-        nonlocal launch_calls
-        launch_calls += 1
-        raise AssertionError("launch_session should not be called when launch preflight fails")
-
-    monkeypatch.setattr(window.run_page, "_prompt_participant_number", _capture_prompt)
-    monkeypatch.setattr("fpvs_studio.gui.document.launch_session", _capture_launch)
-
-    window.run_page.launch_session()
-
-    assert prompt_calls == 0
-    assert launch_calls == 0
-    assert any(_CONDITION_LENGTH_ERROR_MESSAGE in message for message in messages)
+    window.document.update_display_settings(preferred_refresh_hz=60)
+    window.document.update_condition_timing(durations={
+        ordered_conditions[0].condition_id: 60,
+        ordered_conditions[1].condition_id: 120,
+    })
+    plan = window.document.compile_session(refresh_hz=60)
+    durations = {
+        entry.condition_id: entry.run_spec.total_frames / 60
+        for entry in plan.ordered_entries()
+    }
+    assert durations == {
+        ordered_conditions[0].condition_id: 60,
+        ordered_conditions[1].condition_id: 120,
+    }
 
 
 def test_new_condition_uses_project_condition_defaults(

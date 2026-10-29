@@ -1480,7 +1480,10 @@ class ConditionSetupStep(QWidget):
             return
         rows = [
             row
-            for row in condition_stimulus_repeat_guidance(self._document.project)
+            for row in condition_stimulus_repeat_guidance(
+                self._document.project,
+                refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
+            )
             if row.condition_id == condition_id
         ]
         base_row = next((row for row in rows if row.role == "base"), None)
