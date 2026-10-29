@@ -385,7 +385,9 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
                     "sharing_disabled": not sharing.enabled_checkbox.isEnabled(),
                 })
 
-            def dismiss_pending_confirmation(state: str = f"pending-reset-{theme}-{size[0]}"):
+            def dismiss_pending_confirmation(
+                state: str = f"pending-reset-{theme}-{size[0]}",
+            ) -> None:
                 message_box = app.activeModalWidget()
                 if not isinstance(message_box, QMessageBox):
                     raise RuntimeError("Pending enrollment confirmation did not open.")
