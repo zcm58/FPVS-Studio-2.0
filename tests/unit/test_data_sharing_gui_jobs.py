@@ -27,6 +27,7 @@ from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.project_service import discover_project_roots
+from fpvs_studio.core.randomization import supports_independent_randomization
 from fpvs_studio.data_sharing.errors import (
     DataSharingCancelled,
     DataSharingError,
@@ -1110,7 +1111,9 @@ def _document_launch_methods(namespace):
     methods = []
     for relative, names in (
         ("src/fpvs_studio/gui/document_runtime.py", {"compile_session", "launch_compiled_session"}),
-        ("src/fpvs_studio/gui/document.py", {"_replace_project"}),
+        ("src/fpvs_studio/gui/document.py", {
+            "_replace_project", "_randomization_signature", "randomization_settings_signature",
+        }),
     ):
         parsed = ast.parse((repository / relative).read_text(encoding="utf-8"))
         for node in ast.walk(parsed):
@@ -1255,6 +1258,7 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         "_sharing_protocol": sharing_hash, "_document_dependency": lambda _name: launch,
         "_toolbox_handoff_config": lambda *_args: {"synthetic": True},
         "category_conflict_condition_ids": lambda _project: (),
+        "supports_independent_randomization": supports_independent_randomization,
     })
     document = SimpleNamespace(
         _project=sample_project, _project_root=sample_project_root, _last_session_plan=None,
@@ -1266,6 +1270,10 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         ensure_unused_session_seed_for_launch=lambda: None,
         validation_report=lambda **_values: SimpleNamespace(is_valid=True),
         session_plan_changed=_Signal(), project_changed=_Signal(), _set_dirty=lambda _value: None,
+        _randomization_signature=namespace["_randomization_signature"],
+        randomization_settings_signature=lambda: namespace["randomization_settings_signature"](
+            document,
+        ),
     )
     plan = namespace["compile_session"](document, refresh_hz=60.0)
     if edited_after_compilation:

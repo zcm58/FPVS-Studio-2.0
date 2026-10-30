@@ -156,7 +156,7 @@ def test_unequal_presentations_compile_separate_durations_tasks_and_occurrence_i
         ]
     plan = compile_session_plan(project, refresh_hz=60, project_root=sample_project_root,
                                 random_seed=42)
-    assert plan.schema_version == "1.6.0"
+    assert plan.schema_version == "1.7.0"
     assert plan.ordering_policy == "pooled_no_adjacent"
     assert plan.block_count == 1
     assert plan.total_runs == 5
@@ -222,12 +222,16 @@ def test_historical_and_filtered_recovery_plans_keep_their_order_and_metadata(
     assert [entry.condition_presentation_index for entry in recovered.ordered_entries()] == [1, 3]
     assert [entry.condition_presentation_count for entry in recovered.ordered_entries()] == [3, 3]
     payload["schema_version"] = "1.2.0"
-    with pytest.raises(ValidationError, match="schema 1.6.0"):
+    with pytest.raises(ValidationError, match="schema 1.7.0"):
         SessionPlan.model_validate(payload)
     payload.pop("ordering_policy")
+    for key in ("randomization_mode", "randomization_seeds", "randomization_algorithm_version"):
+        payload.pop(key)
     for entry in entries:
         entry.pop("condition_presentation_index")
         entry.pop("condition_presentation_count")
+        entry["run_spec"].pop("randomization")
+        entry["run_spec"]["schema_version"] = "1.1.0"
     historical = SessionPlan.model_validate(payload)
     assert [entry.condition_id for entry in historical.ordered_entries()] == ["faces", "faces"]
     assert "ordering_policy" not in historical.model_dump()

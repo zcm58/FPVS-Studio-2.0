@@ -39,6 +39,7 @@ tests/gui/test_project_config_import_export.py
 tests/gui/test_project_update_controller.py
 tests/gui/test_project_version_dialog.py
 tests/gui/test_qt_diagnostics.py
+tests/gui/test_randomization_controls.py
 tests/gui/test_recording_setup.py
 tests/gui/test_report_bug_dialog.py
 tests/gui/test_run_page_launch.py

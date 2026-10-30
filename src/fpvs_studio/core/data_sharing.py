@@ -27,6 +27,7 @@ from fpvs_studio.core.compiler_assets import load_manifest, resolve_image_paths
 from fpvs_studio.core.execution import PARTICIPANT_HANDEDNESS_VALUES, PARTICIPANT_SEX_VALUES
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.randomization import randomization_protocol_identity
 from fpvs_studio.core.session_ordering import condition_ordering_identity
 
 MAX_REPORT_BYTES = 128 * 1024
@@ -357,6 +358,8 @@ def protocol_fingerprint(
     for field in ("serial_port", "baudrate", "pulse_width_ms", "reset_code", "reset_delay_ms"):
         settings["triggers"].pop(field, None)
     settings["session"].pop("session_seed", None)
+    for name in ("randomization_mode", "stimulus_seed", "fixation_seed"):
+        settings["session"].pop(name, None)
     asset_paths: set[str] = set()
     image_set_ids = {item.set_id for item in project.stimulus_sets if item.source_dir is not None}
     requested = {
@@ -417,6 +420,10 @@ def protocol_fingerprint(
     ordering_identity = condition_ordering_identity(project)
     if ordering_identity is not None:
         fingerprint_payload["condition_ordering"] = ordering_identity
+    randomization_identity = randomization_protocol_identity(project)
+    if randomization_identity is not None:
+        payload.pop("schema_version", None)
+        fingerprint_payload["randomization"] = randomization_identity
     encoded = json.dumps(
         fingerprint_payload,
         sort_keys=True,

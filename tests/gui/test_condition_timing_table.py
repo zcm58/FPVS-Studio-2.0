@@ -566,6 +566,7 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
     QApplication.processEvents()
     editor = wizard.session_structure_editor
+    assert not editor.randomization_editor.isVisible()
     assert editor.block_count_spin.isVisible()
     assert editor.session_layout.labelForField(editor.block_count_spin).text() == (
         "Repeats per condition"

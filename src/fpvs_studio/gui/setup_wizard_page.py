@@ -33,6 +33,11 @@ from fpvs_studio.core.models import (
     Condition,
     ConditionTemplateProfile,
 )
+from fpvs_studio.core.randomization import (
+    configured_randomization_seeds,
+    effective_randomization_mode,
+    supports_independent_randomization,
+)
 from fpvs_studio.core.session_ordering import (
     condition_presentation_counts,
     session_presentation_count,
@@ -271,6 +276,9 @@ class SetupWizardPage(QWidget):
             parent=self,
         )
         self.session_structure_page = self.session_structure_editor
+        self.session_structure_editor.randomization_editor.draft_changed.connect(
+            self.pending_edits_changed,
+        )
         self.fixation_schedule_editor = FixationSettingsEditor(
             document,
             schedule_row_behavior="disable",
@@ -554,10 +562,15 @@ class SetupWizardPage(QWidget):
             or self.project_overview_editor.has_pending_edits()
             or self.condition_setup_step.has_pending_edits()
             or self.condition_timing_table.has_pending_edits()
+            or self.session_structure_editor.randomization_editor.has_pending_edits()
         )
 
     def flush_pending_edits(self) -> bool:
         if self._condition_image_task_active():
+            return False
+        if not self.session_structure_editor.randomization_editor.apply_pending_edits():
+            self._active_step_index = self._step_index_for_key("experiment")
+            self.refresh()
             return False
         if not self.condition_timing_table.apply_pending_edits():
             self._active_step_index = self._step_index_for_key("experiment")
@@ -1338,6 +1351,16 @@ class SetupWizardPage(QWidget):
             if masking_project or letter_stream else
             f"{presentation_total} presentations · shuffled without adjacent repeats"
         )
+        seed_summary: tuple[str, ...] = ()
+        if supports_independent_randomization(project):
+            if effective_randomization_mode(project) == "fixed":
+                seeds = configured_randomization_seeds(project)
+                seed_summary = (
+                    f"Same seeds: stimuli {seeds.stimulus_seed} · "
+                    f"conditions {seeds.condition_order_seed} · fixation {seeds.fixation_seed}",
+                )
+            else:
+                seed_summary = ("New seeds for each participant; saved with the session.",)
         return (
             ("project", "Project", (project.meta.name, f"Participant tutorial: {tutorial}")),
             (
@@ -1381,6 +1404,7 @@ class SetupWizardPage(QWidget):
                 "Session",
                 (
                     session_count_summary,
+                    *seed_summary,
                     *self._review_timing_estimate_lines(),
                 ),
             ),

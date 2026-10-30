@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -309,8 +310,8 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     ]
     assert "Random order seed" not in form_labels
     assert "Condition order" in form_labels
-    assert not page.session_seed_spin.isVisible()
-    assert not page.generate_seed_button.isVisible()
+    assert page.randomization_editor.isVisible()
+    assert page.randomization_editor.generate_button.isVisible()
     assert page.seed_help_label.text() == "Pooled shuffle · no adjacent same condition"
     assert not page.block_count_spin.isVisible()
     assert page.presentation_total_label.isVisible()
@@ -322,7 +323,7 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     assert page.continue_key_edit.text() == "space"
 
 
-def test_document_new_seed_skips_completed_prior_seed(
+def test_document_new_seed_uses_the_independent_triplet_owner(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -343,24 +344,22 @@ def test_document_new_seed_skips_completed_prior_seed(
         output_dir="runs/0001",
     )
     write_json_file(project_root / "runs" / "0001" / "session_summary.json", summary)
-    seed_values = iter((101, 202))
-
-    class _DeterministicSystemRandom:
-        def randrange(self, _upper_bound: int) -> int:
-            return next(seed_values)
+    from fpvs_studio.core.randomization import RandomizationSeeds
 
     monkeypatch.setattr(
-        "fpvs_studio.gui.document.random.SystemRandom",
-        lambda: _DeterministicSystemRandom(),
+        "fpvs_studio.gui.document.generate_randomization_seeds",
+        lambda: RandomizationSeeds(condition_order_seed=202, stimulus_seed=303, fixation_seed=404),
     )
 
     generated_seed = window.document.generate_new_session_seed()
 
     assert generated_seed == 202
     assert window.document.project.settings.session.session_seed == 202
+    assert window.document.project.settings.session.stimulus_seed == 303
+    assert window.document.project.settings.session.fixation_seed == 404
 
 
-def test_compile_session_replaces_completed_prior_seed_before_launch(
+def test_fixed_compile_reuses_configured_seed_despite_completed_history(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -368,8 +367,12 @@ def test_compile_session_replaces_completed_prior_seed_before_launch(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Compile Seed History")
     _prepare_compile_ready_project(window, tmp_path / "compile-seed-history")
+    condition_id = window.document.ordered_conditions()[0].condition_id
+    window.document.update_condition_timing(presentation_counts={condition_id: 1})
     project_root = window.document.project_root
-    window.document.update_session_settings(session_seed=101)
+    window.document.update_randomization_settings(
+        mode="fixed", condition_order_seed=101, stimulus_seed=303, fixation_seed=404,
+    )
     summary = SessionExecutionSummary(
         project_id=window.document.project.meta.project_id,
         session_id="session-0000000101",
@@ -383,21 +386,15 @@ def test_compile_session_replaces_completed_prior_seed_before_launch(
         output_dir="runs/0001",
     )
     write_json_file(project_root / "runs" / "0001" / "session_summary.json", summary)
-    seed_values = iter((101, 202))
-
-    class _DeterministicSystemRandom:
-        def randrange(self, _upper_bound: int) -> int:
-            return next(seed_values)
-
     monkeypatch.setattr(
-        "fpvs_studio.gui.document.random.SystemRandom",
-        lambda: _DeterministicSystemRandom(),
+        "fpvs_studio.gui.document.generate_randomization_seeds",
+        lambda: pytest.fail("Fixed compilation must reuse the configured seeds"),
     )
 
     plan = window.document.compile_session(refresh_hz=60.0)
 
-    assert plan.random_seed == 202
-    assert window.document.project.settings.session.session_seed == 202
+    assert plan.random_seed == 101
+    assert window.document.project.settings.session.session_seed == 101
 
 
 def test_masking_recompile_refreshes_seed_without_a_completed_session(qtbot, tmp_path, monkeypatch):

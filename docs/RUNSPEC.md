@@ -44,7 +44,8 @@ They do not also carry a legacy stimulus sequence. A target-absent catch uses
 RunSpec 1.5.0 with `scene_stream.is_catch_trial=True`, `target_id=None` and no target
 events, while retaining the stream's duration and base/mask timing. Ordinary masking
 runs retain RunSpec 1.4.0 when stream seconds are count-based; explicitly authored
-seconds use RunSpec 1.6.0 for ordinary and catch streams. Catch placement and SOA selection belong to session compilation;
+seconds use RunSpec 1.6.0 for streams without independent seed provenance;
+ordinary independently seeded streams use RunSpec 1.7.0. Catch placement and SOA selection belong to session compilation;
 catch detection scoring belongs to runtime. See [Masking](MASKING.md) for the complete
 schema, trigger and result contracts.
 
@@ -372,3 +373,18 @@ rules. A blank separator has `is_blank=true`, no image/text payload, and the sam
 positive `on_frames` interval as an image separator. Engines skip image allocation
 and drawing for that phase while preserving background, fixation, timing and target
 markers. Preflight rejects blank flags on other phases or modes.
+
+## Independent seed provenance
+
+Ordinary GUI previews and sessions provide a resolved triplet and emit RunSpec 1.7
+`randomization` metadata: reuse mode, root seeds, algorithm version, condition
+presentation index and derived stimulus/fixation-count/fixation-onset seeds. Runtime
+consumes the concrete events; it introduces no new randomness. Seed provenance is
+validated against its stable namespaces and the session snapshot.
+
+Legacy standalone `compile_run_spec` calls without explicit randomization retain the
+historical explicit `random_seed` behavior for that single run. Explicit settings or a
+resolved triplet enable independent provenance. Native AB and masking retain their
+existing run contracts. Equal seeds require equal inputs/settings/refresh/algorithm
+to reproduce schedules, and cannot guarantee unique outcomes in a constrained solution
+space or identical measured hardware timing.

@@ -176,7 +176,7 @@ retain their existing contracts.
 Coordinate occurrence identity with [presentation counts](../completed/per-condition-repeat-counts.md)
 and preserve [stream-duration boundaries](../completed/per-condition-stream-duration.md). New question
 authoring must not consume the stimulus/condition/fixation RNG domains in the
-[seed plan](reproducible-randomization-controls.md).
+[seed plan](../completed/reproducible-randomization-controls.md).
 
 The older [participant results and question presentation proposal](participant-results-and-question-presentation.md)
 remains separate: a results browser, Masking/group statistics, Excel workbooks and a

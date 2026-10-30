@@ -70,6 +70,16 @@ ATTENTIONAL_BLINK_EVENTS_FILENAME = "attentional_blink_events.csv"
 ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME = "attentional_blink_stream_events_v1.csv"
 TASK_CHECKPOINT_DIRNAME = ".task-response-checkpoints"
 ADMIN_TEST_PARTICIPANT_IDS = frozenset({"0", "00"})
+RANDOMIZATION_PROVENANCE_HEADER = [
+    "randomization_mode",
+    "condition_order_seed",
+    "stimulus_seed",
+    "fixation_seed",
+    "randomization_algorithm_version",
+    "stimulus_order_seed",
+    "fixation_count_seed",
+    "fixation_onset_seed",
+]
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -129,6 +139,7 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "resolved_stream_duration_seconds",
     "condition_presentation_index",
     "condition_presentation_count",
+    *RANDOMIZATION_PROVENANCE_HEADER,
     "participant_session_number",
     "manual_removed_electrodes",
     "manual_removed_electrodes_recorded",
@@ -833,6 +844,7 @@ def write_session_artifacts(
             "resolved_stream_duration_seconds",
             "condition_presentation_index",
             "condition_presentation_count",
+            *RANDOMIZATION_PROVENANCE_HEADER,
         ],
         [
             (
@@ -846,6 +858,7 @@ def write_session_artifacts(
                 entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
                 entry.condition_presentation_index,
                 entry.condition_presentation_count,
+                *_run_randomization_values(entry.run_spec),
             )
             for entry in ordered_entries
         ],
@@ -1337,6 +1350,7 @@ def _session_condition_history_row(
         if entry.condition_presentation_index is not None else "",
         entry.condition_presentation_count
         if entry.condition_presentation_count is not None else "",
+        *_run_randomization_values(entry.run_spec),
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
         summary.participant_metadata.manual_removed_electrodes is not None,
@@ -1666,6 +1680,22 @@ def _weighted_mean_rt_ms(
         weighted_rt_sum += mean_rt_ms * hit_count
         hit_count_for_rt += hit_count
     return weighted_rt_sum / hit_count_for_rt if hit_count_for_rt > 0 else None
+
+
+def _run_randomization_values(run_spec: RunSpec) -> tuple[object, ...]:
+    provenance = run_spec.randomization
+    if provenance is None:
+        return ("",) * len(RANDOMIZATION_PROVENANCE_HEADER)
+    return (
+        provenance.mode,
+        provenance.seeds.condition_order_seed,
+        provenance.seeds.stimulus_seed,
+        provenance.seeds.fixation_seed,
+        provenance.algorithm_version,
+        provenance.stimulus_order_seed,
+        provenance.fixation_count_seed,
+        provenance.fixation_onset_seed,
+    )
 
 
 def _image_display_order_seed_text(

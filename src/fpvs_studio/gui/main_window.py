@@ -195,6 +195,7 @@ class StudioMainWindow(QMainWindow):
         self._deferred_open_tasks_started = False
         self._session_seed_ready = False
         self._session_seed_task: BackgroundTask | None = None
+        self._session_seed_generation_signature: tuple[object, ...] | None = None
         self._launch_after_session_seed_ready = False
         self._handoff_close_approved = False
         self._closing_for_handoff = False
@@ -499,8 +500,12 @@ class StudioMainWindow(QMainWindow):
         self._condition_recovery.check(automatic=True)
 
     def _start_deferred_session_seed_task(self) -> None:
+        if self.document.uses_independent_randomization:
+            self._session_seed_ready = True
+            return
         if self._session_seed_ready or self._session_seed_task is not None:
             return
+        self._session_seed_generation_signature = self.document.randomization_settings_signature()
         task = BackgroundTask(
             parent_widget=self,
             callback=self.document.generate_session_seed_for_app_launch,
@@ -513,14 +518,18 @@ class StudioMainWindow(QMainWindow):
 
     @Slot(object)
     def _on_deferred_session_seed_generated(self, result: object) -> None:
-        if not isinstance(result, int):
+        if type(result) is not int:
             LOGGER.warning(
                 "Deferred session seed generation returned unexpected result type: %s",
                 type(result).__name__,
             )
             return
-        self.document.apply_session_seed_for_app_launch(result)
-        self._session_seed_ready = True
+        if self._session_seed_generation_signature is None:
+            return
+        accepted = self.document.apply_session_seed_for_app_launch(
+            result, expected_signature=self._session_seed_generation_signature,
+        )
+        self._session_seed_ready = accepted or self.document.uses_independent_randomization
 
     @Slot(object)
     def _on_deferred_session_seed_failed(self, error: object) -> None:
@@ -529,6 +538,7 @@ class StudioMainWindow(QMainWindow):
     @Slot()
     def _on_deferred_session_seed_finished(self) -> None:
         self._session_seed_task = None
+        self._session_seed_generation_signature = None
         if self._launch_after_session_seed_ready:
             self._launch_after_session_seed_ready = False
             QTimer.singleShot(0, self._resume_deferred_launch)
@@ -956,9 +966,13 @@ class StudioMainWindow(QMainWindow):
                     participant_number, participant_details.manual_removed_electrodes,
                 )
                 self.document.save()
+            resolved_seeds = self.document.prepare_participant_randomization(
+                participant_number, participant_session_number,
+            )
             session_plan = self.document.compile_session(
                 refresh_hz=refresh_hz,
                 condition_ids=participant_details.selected_condition_ids,
+                resolved_seeds=resolved_seeds,
             )
         except Exception as error:
             _show_error_dialog(self, "Launch Blocked", error)
@@ -1025,8 +1039,9 @@ class StudioMainWindow(QMainWindow):
             if QMessageBox.question(
                 self, "Re-run with Current Setup",
                 f"The original compiled schedule for {record.condition_name} is unavailable.\n\n"
-                "Re-run this condition once using the current project settings and a new "
-                "randomized schedule? Review Setup first if settings have changed. "
+                "Create a replacement presentation using the current project settings and "
+                "seed policy? This will not reproduce the unavailable original schedule. "
+                "Review Setup first if settings have changed. "
                 "The original visit and completed outputs will be preserved.",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
                 QMessageBox.StandardButton.Cancel,
@@ -1034,16 +1049,21 @@ class StudioMainWindow(QMainWindow):
                 return
             if not self._session_seed_ready:
                 self._start_deferred_session_seed_task()
-                QMessageBox.information(
-                    self, "Preparing Re-run",
-                    "The new random order is still being prepared. Try Re-run again in a moment.",
-                )
-                return
+                if not self._session_seed_ready:
+                    QMessageBox.information(
+                        self, "Preparing Re-run",
+                        "The new random order is still being prepared. "
+                        "Try Re-run again in a moment.",
+                    )
+                    return
             try:
+                resolved_seeds = self.document.prepare_participant_randomization(
+                    record.participant_number, None,
+                )
                 replacement_plan = build_replacement_session_plan(
                     self.document.compile_session(
                         refresh_hz=self._home_launch_refresh_hz(),
-                        condition_ids=(record.condition_id,),
+                        resolved_seeds=resolved_seeds,
                     ), record.condition_id,
                 )
             except Exception as error:
@@ -1138,6 +1158,9 @@ class StudioMainWindow(QMainWindow):
         return self._prompt_participant_number()
 
     def _ensure_session_seed_ready_for_launch(self) -> bool:
+        if self.document.uses_independent_randomization:
+            self._session_seed_ready = True
+            return True
         if self._session_seed_ready:
             return True
         if self._session_seed_task is not None:
@@ -1164,6 +1187,11 @@ class StudioMainWindow(QMainWindow):
         participant_number = self._active_launch_participant_number
         if participant_number is None:
             return
+        if result.session_plan.randomization_seeds is not None:
+            self.document.finish_participant_randomization(
+                participant_number=participant_number,
+                resolved_seeds=result.session_plan.randomization_seeds,
+            )
         self._show_home_launch_summary(participant_number, result)
         self._notify_session_completed()
 

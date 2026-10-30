@@ -88,19 +88,19 @@ def _scenario(project: ProjectFile, root: Path, kind: str) -> ProjectFile:
 
 
 # Native AB retains its pre-refactor baseline from 2026-09-18. Ordinary FPVS
-# baselines now record SessionPlan 1.6 pooled ordering. Every serialized field,
+# baselines now record SessionPlan 1.7 independent randomization. Every serialized field,
 # including schedules, task orders, answer keys and seeds, contributes to the digest.
 _BASELINE_DIGESTS = {
-    ("image", 42): "4f0bbf0708dde0247be97a4adef6a3d6739236a063e4f8c059c378274bb740d6",
-    ("image", 83): "e800cf26f1434b4af241fd13686b8145436a28d6c7d088e6913ea3cfcd99cbe1",
-    ("word", 42): "c69397f75539e197c732e5a999ca4b319face22c7016da6bf76e1d9747750792",
-    ("word", 83): "429ce2e4079cbf29817150b3d08bb720cb9390066be62753d854dcb5e2e6d227",
+    ("image", 42): "52e6c7b35bd0b6f5e0acd318c9d693e59ac1e80ba69db5abba1efa85e8b75951",
+    ("image", 83): "215623f3b2f04d7c340bcc40e306a610a5fd56d8fdc71823257ac94a1b056328",
+    ("word", 42): "6d1dccc74a744ad2be48fca53353ee43ddb11447a70640c4265fe6d461577c2d",
+    ("word", 83): "a831870b141e96379ce128c09d47034f7b84e60678acc8bf55afa81579c4a6ae",
     ("ab", 42): "fe6618028685e8267b3a057153baf5f55e88560bd10c8ff8fb18f0c887136301",
     ("ab", 83): "221d8dcbc373e3055e0b2b91dabd7a6e6eed2d28f4e4b0b01f35238e8a13cba3",
-    ("counting", 42): "a812c9e4f8bca1874f5017448398d28e585eba439fd0338c91d88b54f5c65bb7",
-    ("counting", 83): "8a58cdf575e94d516a969f6b06f82f2b37351c756197cf797fa292b69dc21603",
-    ("memory", 42): "4eb685309413d3b08c4415dd4e13ab3f7115e83a11abef7f5cf5992dc235ccbf",
-    ("memory", 83): "7e2a895e80d9d31825826b1e4f87d8068eec9d38f188edb66ff4141f03cf7416",
+    ("counting", 42): "bb5891f9e60bc838cb954a3aa7544c964235a33a10d2698b5f445646d92d0a37",
+    ("counting", 83): "9e3fafdf6549c6689a7cda109be308c593953fd02883cabef275d177de9cdb1c",
+    ("memory", 42): "d17f677285f03a5918cc1e6d78ca4bf2ff7171726ef6805d3524f1942631011f",
+    ("memory", 83): "5a2b757b4ea1dfa61f41d994977708973818e24dea80fb416dab3d44ef1d6d62",
 }
 
 
@@ -110,6 +110,9 @@ _BASELINE_DIGESTS = {
 def test_complete_seeded_plan_matches_preparation_baseline(
     multi_condition_project, multi_condition_project_root, kind, seed, limits,
 ) -> None:
+    # The legacy bridge roots depend on the authored seed, independently of the
+    # condition-order override below, so fix that source input across fixture instances.
+    multi_condition_project.settings.session.session_seed = 123
     project = _scenario(multi_condition_project, multi_condition_project_root, kind)
     plan = compile_session_plan(
         project, refresh_hz=60, project_root=multi_condition_project_root,

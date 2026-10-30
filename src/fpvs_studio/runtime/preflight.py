@@ -26,7 +26,7 @@ from fpvs_studio.core.run_spec import (
     RunSpec,
     event_presentation,
 )
-from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import (
     TaskItemModality,
     TaskModuleSpec,
@@ -98,9 +98,14 @@ def _verify_connected_refresh_rate(
 
 
 def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
+    if run_spec.randomization is not None or run_spec.schema_version == "1.7.0":
+        try:
+            RunSpec.model_validate(run_spec)
+        except ValueError as exc:
+            raise PreflightError(f"Compiled randomization provenance is invalid: {exc}") from exc
     requested_seconds = run_spec.condition.requested_duration_seconds
     if requested_seconds is not None and (
-        run_spec.schema_version != "1.6.0"
+        run_spec.schema_version not in {"1.6.0", "1.7.0"}
         or not isclose(
             requested_seconds * run_spec.display.refresh_hz,
             run_spec.display.total_frames,
@@ -771,6 +776,13 @@ def preflight_session_plan(
     actual_indices = [entry.global_order_index for entry in ordered_entries]
     if actual_indices != expected_indices:
         raise PreflightError("Session preflight failed because session entry ordering is invalid.")
+    if session_plan.schema_version == "1.7.0" or session_plan.randomization_seeds is not None:
+        try:
+            SessionPlan.model_validate(session_plan)
+            for entry in ordered_entries:
+                SessionEntry.model_validate(entry)
+        except ValueError as exc:
+            raise PreflightError(f"Session randomization provenance is invalid: {exc}") from exc
     _validate_session_presentation_identity(session_plan)
     for entry in ordered_entries:
         preflight_run_spec(
@@ -804,8 +816,8 @@ def _validate_session_presentation_identity(session_plan: SessionPlan) -> None:
             raise PreflightError("Presentation identity requires a pooled session ordering policy.")
         return
     if (session_plan.ordering_policy != "pooled_no_adjacent"
-            or session_plan.schema_version != "1.6.0"):
-        raise PreflightError("Pooled presentations require SessionPlan schema 1.6.0.")
+            or session_plan.schema_version not in {"1.6.0", "1.7.0"}):
+        raise PreflightError("Pooled presentations require SessionPlan schema 1.6.0 or newer.")
     seen: dict[str, tuple[int, int]] = {}
     for entry in entries:
         index, count = entry.condition_presentation_index, entry.condition_presentation_count

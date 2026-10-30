@@ -928,6 +928,9 @@ def test_historical_session_launch_preserves_manual_inter_block_breaks(
             historical_entries = [entry.model_copy(update={
                 "block_index": block_index, "index_within_block": index,
                 "condition_presentation_index": None, "condition_presentation_count": None,
+                "run_spec": entry.run_spec.model_copy(update={
+                    "randomization": None, "schema_version": "1.1.0",
+                }),
             }) for index, entry in enumerate(group)]
             blocks.append(SessionBlock(
                 block_index=block_index, entries=historical_entries,
@@ -936,6 +939,8 @@ def test_historical_session_launch_preserves_manual_inter_block_breaks(
         session_plan = SessionPlan.model_validate(session_plan.model_copy(update={
             "schema_version": "1.2.0", "ordering_policy": None, "blocks": blocks,
             "block_count": 2,
+            "randomization_mode": None, "randomization_seeds": None,
+            "randomization_algorithm_version": None,
         }).model_dump())
 
         launch_session(

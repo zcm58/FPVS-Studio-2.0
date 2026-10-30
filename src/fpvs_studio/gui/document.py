@@ -41,6 +41,13 @@ from fpvs_studio.core.project_service import (
     rename_project,
     save_project_recording_settings,
 )
+from fpvs_studio.core.randomization import (
+    RandomizationSeeds,
+    configured_randomization_seeds,
+    effective_randomization_mode,
+    generate_randomization_seeds,
+    supports_independent_randomization,
+)
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
@@ -133,6 +140,7 @@ class ProjectDocument(
     dirty_changed = Signal(bool)
     manifest_changed = Signal()
     session_plan_changed = Signal()
+    randomization_changed = Signal()
     saved = Signal()
 
     def __init__(
@@ -154,6 +162,10 @@ class ProjectDocument(
         self._experiment_test_mode_enabled = False
         self._attentional_blink_pilot_mode_enabled = False
         self._last_session_plan: SessionPlan | None = None
+        self._pending_randomization: (
+            tuple[tuple[str, int | None], tuple[object, ...], RandomizationSeeds] | None
+        ) = None
+        self._last_resolved_randomization: RandomizationSeeds | None = None
         self._image_normalization_scan_cache: (
             tuple[
                 tuple[object, ...],
@@ -422,6 +434,8 @@ class ProjectDocument(
     def generate_new_session_seed(self) -> int:
         """Generate and persist a fresh stored random order seed."""
 
+        if self.uses_independent_randomization:
+            return self.generate_new_randomization_seeds().condition_order_seed
         seed = self._generate_unused_session_seed()
         self.update_session_settings(session_seed=seed)
         return seed
@@ -436,16 +450,28 @@ class ProjectDocument(
     def generate_session_seed_for_app_launch(self) -> int:
         """Generate a fresh random order seed without mutating the live document."""
 
+        if self.uses_independent_randomization:
+            return configured_randomization_seeds(self._project).condition_order_seed
         return self._generate_unused_session_seed()
 
-    def apply_session_seed_for_app_launch(self, seed: int) -> None:
-        """Apply an app-launch random order seed without marking the document dirty."""
+    def apply_session_seed_for_app_launch(
+        self, seed: int, *, expected_signature: tuple[object, ...] | None = None,
+    ) -> bool:
+        """Apply only a current legacy app-open result without changing authored seeds."""
 
+        if self.uses_independent_randomization or (
+            expected_signature is not None
+            and expected_signature != self.randomization_settings_signature()
+        ):
+            return False
         self._replace_session_seed_without_dirty(seed)
+        return True
 
     def ensure_unused_session_seed_for_launch(self) -> int:
         """Refresh Masking attempts; other studies retain unused preview seeds."""
 
+        if self.uses_independent_randomization:
+            return configured_randomization_seeds(self._project).condition_order_seed
         seed = self._project.settings.session.session_seed
         masking = any(condition_masking(self._project, condition) is not None
                       for condition in self._project.conditions)
@@ -453,6 +479,101 @@ class ProjectDocument(
             seed = self._generate_unused_session_seed()
             self._replace_session_seed_without_dirty(seed)
         return seed
+
+    @property
+    def uses_independent_randomization(self) -> bool:
+        """Whether this project uses the ordinary FPVS three-seed contract."""
+
+        return supports_independent_randomization(self._project)
+
+    @staticmethod
+    def _randomization_signature(project: ProjectFile) -> tuple[object, ...]:
+        session = project.settings.session
+        return (supports_independent_randomization(project), session.randomization_mode,
+                session.session_seed, session.stimulus_seed, session.fixation_seed)
+
+    def randomization_settings_signature(self) -> tuple[object, ...]:
+        """Identify settings whose edits must invalidate pending/generated launch seeds."""
+
+        return self._randomization_signature(self._project)
+
+    def update_randomization_settings(
+        self, *, mode: str | None = None, stimulus_seed: int | None = None,
+        condition_order_seed: int | None = None, fixation_seed: int | None = None,
+    ) -> None:
+        """Initialize the legacy bridge and atomically edit the three configured seeds."""
+
+        if not self.uses_independent_randomization:
+            raise DocumentError("Independent seeds are available for ordinary FPVS conditions.")
+        configured = (
+            RandomizationSeeds(
+                condition_order_seed=condition_order_seed, stimulus_seed=stimulus_seed,
+                fixation_seed=fixation_seed,
+            )
+            if (condition_order_seed is not None and stimulus_seed is not None
+                and fixation_seed is not None)
+            else configured_randomization_seeds(self._project)
+        )
+        self.update_session_settings(
+            randomization_mode=(mode if mode is not None
+                                else effective_randomization_mode(self._project)),
+            session_seed=(configured.condition_order_seed if condition_order_seed is None
+                          else condition_order_seed),
+            stimulus_seed=configured.stimulus_seed if stimulus_seed is None else stimulus_seed,
+            fixation_seed=configured.fixation_seed if fixation_seed is None else fixation_seed,
+        )
+
+    def generate_new_randomization_seeds(self, *, mode: str | None = None) -> RandomizationSeeds:
+        """Explicitly replace the configured triplet using the core generation owner."""
+
+        seeds = generate_randomization_seeds()
+        self.update_randomization_settings(
+            mode=mode, stimulus_seed=seeds.stimulus_seed,
+            condition_order_seed=seeds.condition_order_seed, fixation_seed=seeds.fixation_seed,
+        )
+        return seeds
+
+    def prepare_participant_randomization(
+        self, participant_number: str, participant_session_number: int | None,
+    ) -> RandomizationSeeds | None:
+        """Resolve once per pending participant launch and retain the triplet for retries."""
+
+        if not self.uses_independent_randomization:
+            return None
+        key = (participant_number, participant_session_number)
+        signature = self.randomization_settings_signature()
+        if self._pending_randomization is not None:
+            pending_key, pending_signature, seeds = self._pending_randomization
+            if key == pending_key and signature == pending_signature:
+                return seeds
+        seeds = (configured_randomization_seeds(self._project)
+                 if effective_randomization_mode(self._project) == "fixed"
+                 else generate_randomization_seeds())
+        self._pending_randomization = (key, signature, seeds)
+        self.randomization_changed.emit()
+        return seeds
+
+    def finish_participant_randomization(
+        self, *, participant_number: str | None = None,
+        resolved_seeds: RandomizationSeeds | None = None,
+    ) -> None:
+        """Finish a launched visit; a later participant session resolves independently."""
+
+        if self._pending_randomization is not None:
+            key, _signature, pending_seeds = self._pending_randomization
+            if ((participant_number is not None and participant_number != key[0])
+                    or (resolved_seeds is not None and resolved_seeds != pending_seeds)):
+                return
+            self._last_resolved_randomization = self._pending_randomization[2]
+            self._pending_randomization = None
+            self.randomization_changed.emit()
+
+    def resolved_randomization_status(self) -> tuple[RandomizationSeeds | None, str]:
+        """Keep configured fields distinct from a pending or last launch resolution."""
+
+        if self._pending_randomization is not None:
+            return self._pending_randomization[2], "Pending launch"
+        return self._last_resolved_randomization, "Last launch"
 
     def set_session_export_mode(self, export_mode: str) -> None:
         """Set the app-level run export mode used for future launches."""
@@ -673,6 +794,9 @@ class ProjectDocument(
                 "Conditions must match the experiment type. "
                 "Use separate experiments for FPVS Oddball Paradigm and Attentional-Blink."
             )
+        if self._randomization_signature(project) != self.randomization_settings_signature():
+            self._pending_randomization = None
+            self._last_resolved_randomization = None
         self._project = project
         self._last_session_plan = None
         self._image_normalization_scan_cache = None

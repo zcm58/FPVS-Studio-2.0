@@ -1570,3 +1570,25 @@ Visible acceptance: at 1120x820 in both themes, set A=3/B=2, confirm five separa
 presentations and their stimulation totals, then reject A=3/B=1 without mutation.
 Check required focus, long condition-name tooltips, frequency confirmation alongside
 count drafts, and masking/AB managed states.
+
+### Seed reuse and launch snapshots
+
+Timing & Session has one overall Same for every participant / New for each participant
+choice and three clearly labeled configured seeds: stimulus order (images/words),
+condition order and fixation. Generate seeds is an explicit author action. The existing
+order field remains the condition-order seed; there is no fourth independent setting.
+Pending/last-launch resolved values are shown separately from configured preview values.
+
+Fixed mode survives reopening, previews, compilation, completion history and later
+participants. Ordinary app-open workers cannot replace it, and stale results are rejected
+after policy or seed edits. New mode resolves one fresh triplet after participant/visit
+confirmation, reuses it for preflight retries, and clears it after an executed session or
+relevant author changes. Home, Run and direct document launch paths share this policy.
+Frozen occurrence recovery replays the original plan; an explicitly chosen current-setup
+replacement is a fresh compilation and is labeled accordingly.
+
+The panel applies to ordinary FPVS image/word streams. AB and masking retain their
+existing seed/group/task workflows. Visible acceptance at 1120x820 in both themes:
+switch modes, edit all three seeds including zero, generate values, reopen Fixed,
+exercise New retry/completion and stale-worker cases, and check long resolved-value
+labels without clipping. Registered Qt coverage remains opt-in.

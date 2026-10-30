@@ -912,9 +912,13 @@ class RunPage(QWidget):
                 _show_runtime_error_dialog(self, "Launch Blocked", error)
                 return
         try:
+            resolved_seeds = self._document.prepare_participant_randomization(
+                participant_number, participant_session_number,
+            )
             session_plan = self._document.compile_session(
                 refresh_hz=refresh_hz,
                 condition_ids=participant_details.selected_condition_ids,
+                resolved_seeds=resolved_seeds,
             )
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
@@ -979,6 +983,11 @@ class RunPage(QWidget):
         participant_number = self._active_launch_participant_number
         if participant_number is None:
             return
+        if result.session_plan.randomization_seeds is not None:
+            self._document.finish_participant_randomization(
+                participant_number=participant_number,
+                resolved_seeds=result.session_plan.randomization_seeds,
+            )
         self._apply_launch_summary(result.session_plan, participant_number, result.summary)
         self.session_completed.emit()
 

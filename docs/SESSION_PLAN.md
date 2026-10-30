@@ -1,8 +1,9 @@
 # SessionPlan Contract
 
 `SessionPlan` is the compiled multi-condition session contract for FPVS Studio.
-New ordinary FPVS sessions use schema `1.6.0` with pooled non-adjacent presentation
-ordering. Historical `1.2.0` sessions remain readable; masking sessions use `1.3.0` with an
+New ordinary FPVS sessions use schema `1.7.0` with independent randomization
+provenance and pooled non-adjacent presentation ordering. Schema `1.6.0` retains
+the preceding pooled-order-only contract. Historical `1.2.0` sessions remain readable; masking sessions use `1.3.0` with an
 explicit authored task flow and variant-group ordering. See [Masking](MASKING.md)
 for its `RunSpec`/project versions and first/last stream-group task scopes.
 The original embedded `RunSpec` retains its
@@ -239,3 +240,27 @@ ordering rule even to inherited totals. Historical compiled plans retain their s
 order. Exact-occurrence recovery keeps the original condition presentation index/count
 (e.g. presentation 3 of 3), even when its retry plan contains only that entry.
 Task-module repetition indices remain separate from condition presentations.
+
+## Independent randomization
+
+`core/randomization.py` resolves a frozen `RandomizationSeeds` snapshot with
+condition-order, stimulus-order and fixation roots. `SessionSettings.session_seed`
+remains the configured condition-order seed; optional `stimulus_seed`, `fixation_seed`
+and `randomization_mode` add the other domains and one overall fixed/new reuse policy.
+Legacy null settings resolve compatibly without rewriting the source project on load.
+Explicit settings use Project 1.14/config 1.12 and require the complete validated triplet.
+
+Ordinary SessionPlan 1.7 records `randomization_mode`, `randomization_seeds` and
+`randomization_algorithm_version`. Each RunSpec 1.7 records its `randomization`
+provenance. Derived stimulus, fixation-count and fixation-onset seeds use the domain
+root, stable condition ID and one-based chronological presentation index. Participant,
+visit, session/run ID and global order are excluded. Changing only condition order
+preserves the corresponding condition-occurrence streams; randomized count constraints
+that conflict with a seeded schedule are reported, not repaired by rerolling.
+
+Fixed mode reuses configured roots across participants and rejects inconsistent supplied
+snapshots. New mode resolves one fresh triplet per confirmed participant launch; preview
+compilation uses configured values and performs no entropy generation. Pending retries
+reuse their resolved snapshot. Concrete compiled schedules remain authoritative during
+recovery. Native AB, specialized masking and pre/post-task randomness retain their prior
+contracts and are outside these three controls.

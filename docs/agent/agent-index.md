@@ -569,6 +569,12 @@ Timing & Session owns edits. Use core/compiler/GUI/project-I/O focused routes an
 repo precommit. Read [RunSpec timing](../RUNSPEC.md#timing-model) for duration
 preservation and frame constraints; visible acceptance stays opt-in.
 
+For independent stimulus/order/fixation seeds, start with `core/randomization.py`,
+`gui/randomization_editor.py` and the document/main-window launch coordination.
+Use core/compiler/runtime/GUI/project-I/O focused routes, then repo precommit.
+[SessionPlan](../SESSION_PLAN.md#independent-randomization) owns namespaces/provenance;
+[Data sharing](../DATA_SHARING.md#experiment-and-protocol-identity) owns fingerprint policy.
+
 ## Planning Route
 
 - Planning map: `docs/PLANS.md`

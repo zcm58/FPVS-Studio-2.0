@@ -17,7 +17,7 @@ from pydantic import (
 )
 
 from fpvs_studio.core.enums import InterConditionMode, SchemaVersion
-from fpvs_studio.core.models import FPVSBaseModel
+from fpvs_studio.core.models import FPVSBaseModel, RandomizationAlgorithmVersion, RandomizationSeeds
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.task_models import TaskModuleSpec, task_requires_text_alignment_schema
 
@@ -75,6 +75,9 @@ class SessionEntry(FPVSBaseModel):
                 and self.condition_presentation_count is not None
                 and self.condition_presentation_index > self.condition_presentation_count):
             raise ValueError("Condition presentation index may not exceed its total count.")
+        if (self.run_spec.randomization is not None and self.condition_presentation_index
+                != self.run_spec.randomization.condition_presentation_index):
+            raise ValueError("Session and run presentation indices must match.")
         if self.run_id != self.run_spec.run_id:
             raise ValueError("SessionEntry.run_id must match run_spec.run_id.")
         if self.condition_id != self.run_spec.condition.condition_id:
@@ -118,6 +121,9 @@ class SessionPlan(FPVSBaseModel):
     total_runs: int = Field(ge=0)
     authored_task_flow: bool | None = None
     ordering_policy: Literal["pooled_no_adjacent"] | None = None
+    randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_seeds: RandomizationSeeds | None = None
+    randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_flow(
@@ -128,13 +134,40 @@ class SessionPlan(FPVSBaseModel):
             payload.pop("authored_task_flow", None)
         if self.ordering_policy is None:
             payload.pop("ordering_policy", None)
+        for name in (
+            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+        ):
+            if getattr(self, name) is None:
+                payload.pop(name, None)
         return payload
 
     @model_validator(mode="after")
     def validate_totals(self) -> SessionPlan:
         entries = [entry for block in self.blocks for entry in block.entries]
+        if self.schema_version == "1.7.0":
+            if (self.randomization_mode is None or self.randomization_seeds is None
+                    or self.randomization_algorithm_version is None):
+                raise ValueError(
+                    "Independent sessions require the resolved seed triplet and policy."
+                )
+            if (type(self.randomization_algorithm_version) is not int
+                    or self.randomization_algorithm_version != 1):
+                raise ValueError("Independent randomization algorithm version must be integer 1.")
+            RandomizationSeeds.model_validate(self.randomization_seeds.model_dump())
+            if self.random_seed != self.randomization_seeds.condition_order_seed:
+                raise ValueError("Session seed must match the resolved condition-order seed.")
+            if any(entry.run_spec.randomization is None
+                   or entry.run_spec.randomization.mode != self.randomization_mode
+                   or entry.run_spec.randomization.seeds != self.randomization_seeds
+                   or entry.run_spec.randomization.algorithm_version
+                   != self.randomization_algorithm_version for entry in entries):
+                raise ValueError("Session and run randomization provenance must match.")
+        elif (self.randomization_mode is not None or self.randomization_seeds is not None
+              or self.randomization_algorithm_version is not None
+              or any(entry.run_spec.randomization is not None for entry in entries)):
+            raise ValueError("Independent randomization requires SessionPlan schema 1.7.0.")
         has_presentations = any(entry.condition_presentation_index is not None for entry in entries)
-        if self.schema_version == "1.6.0":
+        if self.schema_version in {"1.6.0", "1.7.0"}:
             if self.ordering_policy != "pooled_no_adjacent" or any(
                 entry.condition_presentation_index is None for entry in entries
             ):
@@ -144,18 +177,18 @@ class SessionPlan(FPVSBaseModel):
         elif self.ordering_policy is not None or has_presentations:
             raise ValueError("Presentation ordering metadata requires SessionPlan schema 1.6.0.")
         if self.authored_task_flow is not None and self.schema_version not in {
-            "1.3.0", "1.4.0", "1.5.0", "1.6.0",
+            "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0",
         }:
             raise ValueError("Authored task session flow requires SessionPlan schema 1.3.0.")
         if any(entry.run_spec.scene_stream is not None
                and entry.run_spec.scene_stream.is_catch_trial
                for block in self.blocks for entry in block.entries):
-            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0"}:
+            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0", "1.7.0"}:
                 raise ValueError("Catch trials require SessionPlan schema 1.4.0.")
         if any(task_requires_text_alignment_schema(task)
                for block in self.blocks for entry in block.entries
                for task in [*entry.pre_tasks, *entry.post_tasks]):
-            if self.schema_version not in {"1.5.0", "1.6.0"}:
+            if self.schema_version not in {"1.5.0", "1.6.0", "1.7.0"}:
                 raise ValueError("Task text alignment requires SessionPlan schema 1.5.0.")
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")

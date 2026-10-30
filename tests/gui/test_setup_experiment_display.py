@@ -153,8 +153,8 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
     session.block_count_spin.setValue(3)
     assert window.document.project.settings.session.block_count == 3
     assert not window.document.project.settings.session.show_condition_title_on_screen
-    assert not session.generate_seed_button.isVisible()
-    assert not session.session_seed_spin.isVisible()
+    assert session.randomization_editor.isVisible()
+    assert session.randomization_editor.generate_button.isVisible()
     assert not session.show_condition_title_checkbox.isVisible()
 
 
@@ -873,6 +873,7 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         assert guide.progress_step_labels[3].text() == "Timing & Session"
         session = guide.session_structure_editor
         assert not guide.condition_timing_table.isVisible()
+        assert not session.randomization_editor.isVisible()
         assert not session.presentation_total_label.isVisible()
         assert session.block_count_spin.isVisible()
         assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows

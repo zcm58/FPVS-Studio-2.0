@@ -23,6 +23,10 @@ fixation guidance and exports use the effective condition rate. RunSpec remains
 frame-based. `core/session_ordering.py` owns per-condition presentation counts and
 bounded, non-adjacent pooled order; see [SessionPlan](docs/SESSION_PLAN.md). See [RunSpec timing](docs/RUNSPEC.md#timing-model).
 
+`core/randomization.py` owns independent FPVS seed domains and reuse policy;
+GUI launch coordination captures one pending triplet, while compiled/runtime contracts
+retain immutable provenance. See [SessionPlan](docs/SESSION_PLAN.md#independent-randomization).
+
 ## Package Map
 
 Automatic crash recovery/consent and the bounded sanitized outbox live in

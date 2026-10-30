@@ -396,10 +396,15 @@ def test_preflight_rejects_forged_occurrence_identity_and_reads_legacy_plans(
         _validate_session_presentation_identity(plan)
     payload = json.loads(plan.model_dump_json())
     payload.pop("ordering_policy")
+    payload.pop("randomization_mode")
+    payload.pop("randomization_seeds")
+    payload.pop("randomization_algorithm_version")
     payload["schema_version"] = "1.2.0"
     for block in payload["blocks"]:
         for entry in block["entries"]:
             entry.pop("condition_presentation_index")
             entry.pop("condition_presentation_count")
+            entry["run_spec"].pop("randomization")
+            entry["run_spec"]["schema_version"] = "1.6.0"
     legacy = SessionPlan.model_validate(payload)
     _validate_session_presentation_identity(legacy)

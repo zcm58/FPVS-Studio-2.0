@@ -303,6 +303,7 @@ def test_native_timed_pre_task_to_playback_has_no_recovery_writes(
     entry.run_spec = entry.run_spec.model_copy(
         update={
             "schema_version": "1.4.0",
+                "randomization": None,
             "condition": entry.run_spec.condition.model_copy(
                 update={"stimulus_modality": StimulusModality.SCENE}
             ),
@@ -338,6 +339,8 @@ def test_native_timed_pre_task_to_playback_has_no_recovery_writes(
     plan = SessionPlan.model_validate(
         plan.model_copy(update={
             "schema_version": "1.4.0", "authored_task_flow": True, "ordering_policy": None,
+            "randomization_mode": None, "randomization_seeds": None,
+            "randomization_algorithm_version": None,
         }).model_dump()
     )
     timing_active = False

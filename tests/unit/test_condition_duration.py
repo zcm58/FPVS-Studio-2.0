@@ -75,7 +75,7 @@ def test_independent_durations_compile_and_keep_lead_in_outside_stream(
         assert entry.run_spec.display.total_frames == requested * 60
         assert entry.run_spec.condition.requested_duration_seconds == requested
         assert entry.run_spec.pre_stream_fixation_frames == 600
-        assert entry.run_spec.schema_version == "1.6.0"
+        assert entry.run_spec.schema_version == "1.7.0"
 
 
 def test_frequency_and_seconds_are_one_atomic_recoverable_draft(duration_project):

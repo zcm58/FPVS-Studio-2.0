@@ -361,6 +361,7 @@ class RuntimeWorker:
             results: list[RunExecutionSummary], reason: str | None,
         ) -> SessionExecutionSummary:
             return SessionExecutionSummary(
+                schema_version="1.3.0" if session_plan.randomization_seeds is not None else "1.2.0",
                 project_id=session_plan.project_id,
                 session_id=session_plan.session_id,
                 engine_name=self._engine.engine_id,
@@ -369,6 +370,9 @@ class RuntimeWorker:
                 participant_session_number=participant_session_number,
                 participant_metadata=participant_metadata or ParticipantMetadata(),
                 random_seed=session_plan.random_seed,
+                randomization_mode=session_plan.randomization_mode,
+                randomization_seeds=session_plan.randomization_seeds,
+                randomization_algorithm_version=session_plan.randomization_algorithm_version,
                 started_at=results[0].started_at if results else None,
                 finished_at=results[-1].finished_at if results else None,
                 total_condition_count=session_plan.total_runs,
@@ -868,6 +872,9 @@ class RuntimeWorker:
         combined_warnings = list(warnings) + list(run_summary.warnings)
         return run_summary.model_copy(
             update={
+                "schema_version": "1.3.0" if run_spec.randomization is not None else
+                run_summary.schema_version,
+                "randomization": run_spec.randomization,
                 "session_id": session_id,
                 "engine_name": self._engine.engine_id,
                 "run_mode": _run_mode(),
@@ -1393,6 +1400,8 @@ def _build_start_aborted_summary(
     abort_reason: str = "Run aborted during the start screen.",
 ) -> RunExecutionSummary:
     return RunExecutionSummary(
+        schema_version="1.3.0" if run_spec.randomization is not None else "1.2.0",
+        randomization=run_spec.randomization,
         project_id=run_spec.project_id,
         session_id=None,
         run_id=run_spec.run_id,
@@ -1432,6 +1441,8 @@ def _build_trigger_aborted_summary(
 ) -> RunExecutionSummary:
     trigger_log = list(trigger_backend.records[trigger_start_index:])
     return RunExecutionSummary(
+        schema_version="1.3.0" if run_spec.randomization is not None else "1.2.0",
+        randomization=run_spec.randomization,
         project_id=run_spec.project_id,
         session_id=session_id,
         run_id=run_spec.run_id,

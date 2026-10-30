@@ -148,14 +148,21 @@ bytes of the selected stimulus variants and referenced task media. It uses the
 compiler's existing manifest/filesystem path resolver; unrelated files and
 unselected image variants do not enter asset provenance. Actual selected assets are
 hashed in chunks, so editing a file without updating the manifest changes the hash.
-Local project identity, dates, participant electrode bookkeeping, random seeds and
-machine connection/display geometry fields are excluded.
+Local project identity, dates, participant electrode bookkeeping, execution seed
+realizations and machine connection/display geometry fields are excluded.
 
 Ordinary FPVS protocol identity also includes the canonical `pooled_no_adjacent`
 ordering policy and its algorithm version from `core/session_ordering.py`. This
 separates new pooled sessions from historical block-order sessions even when a legacy
 project still inherits its saved global counts. AB and masking keep their existing
 identity payloads. Source projects and previously captured report bytes are not rewritten.
+
+Independent FPVS randomization identity includes effective fixed/new policy and its
+algorithm version. Fixed mode includes all three configured roots; New mode excludes
+configured/launch seed values. Raw optional mode fields and the incidental ordinary
+source capability schema version are replaced by this canonical behavior identity, so
+legacy-null and explicit-New settings remain equivalent. AB/wholly masking identities
+keep their prior payloads. Fixed seed edits intentionally change protocol identity.
 
 The GUI supplies the actual authored fingerprint as a runtime-only launch option,
 only for the document's current compiled session plan. A stale compiled plan can

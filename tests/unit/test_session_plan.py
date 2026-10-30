@@ -34,8 +34,8 @@ def test_session_plan_default_block_contains_all_conditions_once(
         random_seed=123,
     )
 
-    assert session_plan.schema_version == "1.6.0"
-    assert all(entry.run_spec.schema_version == "1.1.0" for entry in session_plan.ordered_entries())
+    assert session_plan.schema_version == "1.7.0"
+    assert all(entry.run_spec.schema_version == "1.7.0" for entry in session_plan.ordered_entries())
     assert session_plan.block_count == 1
     assert session_plan.total_runs == 4
     assert len(session_plan.blocks) == 1
@@ -318,6 +318,10 @@ def test_session_plan_randomized_fixation_counts_are_seeded_and_non_repeating(
     fixation.target_count_min = 1
     fixation.target_count_max = 3
     fixation.no_immediate_repeat_count = True
+    multi_condition_project.settings.session.randomization_mode = "fixed"
+    multi_condition_project.settings.session.session_seed = 2468
+    multi_condition_project.settings.session.stimulus_seed = 12
+    multi_condition_project.settings.session.fixation_seed = 11
 
     plan_a = compile_session_plan(
         multi_condition_project,

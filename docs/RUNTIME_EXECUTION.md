@@ -1233,3 +1233,18 @@ that identity separately from block/global order and task-module repetition. Eac
 presentation runs the existing task/transition flow independently; requested stream
 seconds apply once per entry. Exact-occurrence recovery retains the original index and
 total, while historical plans without those fields remain readable.
+
+## Independent randomization provenance
+
+Ordinary compiled sessions/results preserve reuse mode, resolved condition-order,
+stimulus and fixation root seeds and algorithm version. Full/compact condition/history
+exports also retain derived `stimulus_order_seed`, `fixation_count_seed` and
+`fixation_onset_seed`. Root values describe the participant launch; derived values describe
+one chronological condition presentation. Completed configs use the compiled snapshot,
+not later document edits. Older rows/artifacts without these fields remain readable.
+Raw task-response exports retain their existing repetition semantics.
+
+Runtime verifies provenance and plays concrete schedules. Fixed seeds may yield the
+same compiled session ID across participants; checkpoints, acquisition evidence and
+numbered exports retain participant/visit/execution identity, preserving separate records.
+Recovery uses retained seeds/events and never resolves a fresh triplet for an exact rerun.

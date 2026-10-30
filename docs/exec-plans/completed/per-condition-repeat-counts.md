@@ -19,7 +19,7 @@ changing counts or retrying indefinitely.
 
 Image order and fixation timing vary between a condition's repeats, while the
 corresponding repeat matches across participants in fixed-seed mode. The
-[randomization plan](../planned/reproducible-randomization-controls.md) owns those schedules.
+[randomization plan](reproducible-randomization-controls.md) owns those schedules.
 
 ## Current evidence and ownership
 
