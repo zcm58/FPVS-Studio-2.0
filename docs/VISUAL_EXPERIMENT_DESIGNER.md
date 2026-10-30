@@ -1,6 +1,6 @@
 # Visual FPVS Experiment Designer
 
-Updated: 2026-10-30. Guided Setup has seven steps with image selection in Conditions.
+Updated: 2026-10-30. Guided Setup has eight steps with image selection in Conditions.
 New Attentional-Blink projects use five-second bursts of white letters with green
 T1 and white T2 digits at 100/300/500 ms SOAs. The retained AB editor shows shared
 character pools, bursts per SOA, condition SOAs, a target-focused timeline, an onset bracket, and a
@@ -35,12 +35,12 @@ are retired. Old files remain readable but cannot be authored, compiled or run; 
 ## Oddball Image Designer
 
 Setup > Conditions edits names, modality, instructions, tasks and image sources in
-the seven-step `1120x820` wizard. Select a condition and use its Base Images and
+the eight-step `1120x820` wizard. Select a condition and use its Base Images and
 Oddball Images buttons to choose folders.
 The source cards show counts, resolution and full-path details with Copy path.
 There are no thumbnails, visual cycle controls or image preview in Setup. Image
 selection preserves existing cycle and timing settings. Word lists remain in
-Conditions and frequency edits remain in Timing & Session. There is no Design step.
+Conditions and frequency edits remain in Timing & Display. There is no Design step.
 
 Edit Instructions opens a modal text dialog. Save commits its text, including an
 empty value that clears the instructions; Cancel preserves the previous value.
@@ -59,7 +59,7 @@ cards and visual cycle authoring. Drag or click a source tile to add a role; sep
 folder buttons import sources without adding slots. Full paths are accessible through
 tooltips.
 
-The timeline shows equal-duration slots and the stream rate from Timing & Session.
+The timeline shows equal-duration slots and the stream rate from Timing & Display.
 Keyboard/context actions also move and remove slots. Preview
 at quarter speed illustrates the cycle; 50% Blank previews image and blank phases,
 while Contrast Modulation discloses that its slowed preview omits modulation.

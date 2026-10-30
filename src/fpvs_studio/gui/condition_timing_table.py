@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDoubleSpinBox,
@@ -28,7 +29,7 @@ from fpvs_studio.core.condition_timing import (
 )
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.masking import condition_masking
-from fpvs_studio.core.randomization import RandomizationSeeds
+from fpvs_studio.core.randomization import RandomizationSeeds, supports_independent_randomization
 from fpvs_studio.core.session_ordering import (
     active_saved_condition_order,
     effective_condition_presentation_count,
@@ -47,6 +48,7 @@ class ConditionTimingTable(QWidget):
     """Apply timing and count drafts together after validation and confirmation."""
 
     draft_changed = Signal()
+    order_edit_requested = Signal()
 
     def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -86,6 +88,14 @@ class ConditionTimingTable(QWidget):
         )
         shared.addWidget(self.shared_frequency_spin)
         shared.addStretch(1)
+        self.condition_order_button = QPushButton("Condition order...", self)
+        self.condition_order_button.setObjectName("timing_condition_order_button")
+        self.condition_order_button.setToolTip(
+            "Update the condition order together with pending presentation counts.",
+        )
+        mark_secondary_action(self.condition_order_button)
+        self.condition_order_button.clicked.connect(self.order_edit_requested)
+        shared.addWidget(self.condition_order_button)
         self.apply_button = QPushButton("Apply timing", self)
         self.apply_button.setObjectName("apply_condition_frequencies_button")
         self.apply_button.setToolTip(
@@ -147,6 +157,10 @@ class ConditionTimingTable(QWidget):
         spin.setKeyboardTracking(False)
         return spin
 
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        self.refresh()
+
     def has_pending_edits(self) -> bool:
         return (self._shared_dirty or bool(self._overrides) or bool(self._durations)
                 or bool(self._presentation_counts))
@@ -161,6 +175,7 @@ class ConditionTimingTable(QWidget):
             return
         project = self._document.project
         self.setVisible(project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK)
+        self.condition_order_button.setVisible(supports_independent_randomization(project))
         self._syncing = True
         self._shared_hz = project.settings.protocol.base_hz
         self.shared_frequency_spin.setValue(self._shared_hz)

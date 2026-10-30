@@ -404,10 +404,16 @@ def test_recovery_preserves_frozen_seeds_or_builds_explicit_current_setup_replac
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("state", ["fixed", "new", "invalid", "pending", "last"])
-def test_seed_controls_and_long_resolved_triplet_fit_timing_and_review(
+def test_seed_controls_and_long_resolved_triplet_fit_session_and_review(
     qtbot, monkeypatch, tmp_path, background, state,
 ):
-    document, _first, _second = _document(tmp_path)
+    document, first, second = _document(tmp_path)
+    document.update_condition(
+        first, name="Semantic categories with low visual similarity and high emotional salience",
+    )
+    document.update_condition(
+        second, name="Unfamiliar written words with matched lexical and perceptual properties",
+    )
     document.update_randomization_settings(
         mode="fixed" if state == "fixed" else "new", condition_order_seed=2_147_483_647,
         stimulus_seed=2_147_483_647, fixation_seed=2_147_483_647,
@@ -427,7 +433,7 @@ def test_seed_controls_and_long_resolved_triplet_fit_timing_and_review(
     wizard.setPalette(palette)
     wizard.resize(1120, 820)
     wizard.show()
-    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
     editor.seed_details_button.setChecked(state != "new")
     if state == "invalid":
@@ -440,8 +446,13 @@ def test_seed_controls_and_long_resolved_triplet_fit_timing_and_review(
             document.finish_participant_randomization()
     QApplication.processEvents()
     assert wizard.size().toTuple() == (1120, 820)
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
     assert editor.isVisible()
-    assert_visible_children_within_parent(wizard.experiment_step_surface)
+    assert not wizard.condition_timing_table.isVisible()
+    assert not wizard.runtime_settings_editor.isVisible()
+    assert not wizard.session_settings_card.title_label.isVisible()
+    assert wizard.session_structure_editor.presentation_total_label.text() == "4 total"
+    assert_visible_children_within_parent(wizard.session_step_surface)
     for edit in editor.seed_edits.values():
         if edit.isVisible():
             assert edit.width() >= edit.fontMetrics().horizontalAdvance(edit.text()) + 12
@@ -459,3 +470,52 @@ def test_seed_controls_and_long_resolved_triplet_fit_timing_and_review(
         text = " ".join(label.text() for label in wizard.review_card.findChildren(QLabel))
         assert ("Same schedules for every participant." if state == "fixed"
                 else "New seeds for each participant") in text
+
+
+@pytest.mark.parametrize("action", ["next", "back", "home", "progress"])
+def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
+    qtbot, monkeypatch, tmp_path, action,
+):
+    document, _first, _second = _document(tmp_path)
+    document.update_randomization_settings(
+        mode="fixed", condition_order_seed=22, stimulus_seed=11, fixation_seed=33,
+    )
+    home_calls = []
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [], on_return_home=lambda: home_calls.append(True),
+    )
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
+    original = document.project.model_copy(deep=True)
+    editor = wizard.session_structure_editor.randomization_editor
+    editor.seed_details_button.setChecked(True)
+    editor.seed_edits["fixation_seed"].setText("-1")
+
+    def unexpected_confirmation(*_args, **_kwargs):
+        pytest.fail("Invalid seed drafts must block navigation before opening a confirmation")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question", unexpected_confirmation,
+    )
+    if action == "progress":
+        wizard._go_to_step_from_progress(wizard._step_index_for_key("experiment"))
+    else:
+        {"next": wizard._go_next, "back": wizard._go_back, "home": wizard._return_home}[action]()
+    QApplication.processEvents()
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert editor.seed_details.isVisible()
+    assert editor.error_label.isVisible()
+    assert editor.seed_edits["fixation_seed"].text() == "-1"
+    assert wizard.has_pending_edits()
+    assert document.project == original
+    assert not home_calls
+
+    editor.seed_edits["fixation_seed"].setText("44")
+    assert wizard.flush_pending_edits()
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+    assert document.project.settings.session.fixation_seed == 44
+    assert not wizard.has_pending_edits()

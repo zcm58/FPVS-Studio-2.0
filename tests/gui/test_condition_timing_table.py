@@ -1,4 +1,4 @@
-"""Registered timing drafts, confirmation and compact Timing & Session checks."""
+"""Registered timing drafts, confirmation and compact Timing & Display checks."""
 
 from __future__ import annotations
 
@@ -260,6 +260,10 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
         table.presentation_count_spins[second].setValue(1)
         assert not wizard.flush_pending_edits()
         assert table.error_label.isVisible()
+    if state in {"invalid", "duration_invalid", "count_invalid"}:
+        wizard.open_wizard(step_key="session", allow_step_jumps=True)
+        assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+        assert wizard.has_pending_edits()
     QApplication.processEvents()
     assert wizard.size().toTuple() == (1120, 820)
     assert wizard.experiment_step_surface.content.maximumWidth() == 1040
@@ -329,14 +333,67 @@ def test_timing_frequency_changes_refresh_readonly_design_without_creating_a_dra
     assert designer.rate_spin.isReadOnly()
     assert not designer.has_pending_design()
     document.update_condition_frequencies(overrides={first: 4})
+    designer.refresh()
     assert designer.rate_spin.value() == 4
     assert not designer.has_pending_design()
     designer.cycle_canvas.add_role("base")
     roles = designer.cycle_canvas.roles()
     document.update_condition_frequencies(overrides={first: 3})
+    designer.refresh()
     assert designer.rate_spin.value() == 3
     assert designer.cycle_canvas.roles() == roles
     assert designer.has_pending_design()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_three_populated_timing_rows_fit_on_first_themed_show(
+    qtbot, tmp_path, background,
+):
+    document, first, second = _document(tmp_path)
+    document.update_condition(
+        first, name="Semantic categories with low visual similarity and high emotional salience",
+    )
+    document.update_condition(
+        second, name="Written words with matched lexical frequency and perceptual properties",
+    )
+    document.create_condition(
+        name="Unfamiliar natural objects with carefully matched stimulus characteristics",
+    )
+    document.update_condition_frequencies(overrides={first: 4})
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    palette = wizard.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    wizard.setPalette(palette)
+    wizard.resize(1120, 820)
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    wizard.show()
+    QApplication.processEvents()
+
+    timing = wizard.condition_timing_table
+    QApplication.processEvents()
+    table = timing.table
+    assert wizard.size().toTuple() == (1120, 820)
+    assert table.rowCount() == 3
+    assert table.verticalScrollBar().maximum() == 0
+    assert table.horizontalScrollBar().maximum() == 0
+    for row, condition in enumerate(document.ordered_conditions()):
+        item = table.item(row, 0)
+        assert item.toolTip() == condition.name
+        assert item.data(Qt.ItemDataRole.AccessibleTextRole) == condition.name
+        button = timing.reset_buttons[condition.condition_id]
+        assert button.isVisible()
+        assert table.rowHeight(row) >= button.sizeHint().height()
+        assert button.height() >= button.sizeHint().height()
+        top_left = button.mapTo(table.viewport(), button.rect().topLeft())
+        bottom_right = button.mapTo(table.viewport(), button.rect().bottomRight())
+        assert table.viewport().rect().contains(top_left)
+        assert table.viewport().rect().contains(bottom_right)
+        assert table.visualItemRect(item).bottom() <= table.viewport().rect().bottom()
+    assert_visible_children_within_parent(wizard.experiment_step_surface)
 
 
 def test_authored_seconds_disable_legacy_count_editing_and_update_stimulation_total(
@@ -354,7 +411,7 @@ def test_authored_seconds_disable_legacy_count_editing_and_update_stimulation_to
     wizard.conditions_page.refresh()
     assert not wizard.conditions_page.sequence_count_spin.isEnabled()
     assert not wizard.conditions_page.oddball_cycles_spin.isEnabled()
-    assert "Timing & Session" in wizard.conditions_page.sequence_count_spin.toolTip()
+    assert "Timing & Display" in wizard.conditions_page.sequence_count_spin.toolTip()
     assert wizard._review_timing_estimate_lines()[0] == "Stimulation total: 100 seconds"
 
 
@@ -516,19 +573,20 @@ def test_saved_impossible_single_condition_count_is_actionable_in_timing(
         manage_condition_templates=lambda: [],
     )
     qtbot.addWidget(wizard)
+    monkeypatch.setattr(wizard.runtime_settings_editor, "timing_is_compatible", lambda: True)
     wizard.resize(1120, 820)
     wizard.show()
     wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
     table = wizard.condition_timing_table
     assert table.presentation_count_spins[first].value() == 2
     assert table.error_label.isVisible()
-    assert not wizard._step_valid(3)
+    assert not wizard._step_valid(wizard._step_index_for_key("experiment"))
     assert wizard._current_step_blocker() == table.presentation_count_blocker()
     table.presentation_count_spins[first].setValue(1)
     assert wizard.flush_pending_edits()
     assert not table.presentation_count_blocker()
     assert not table.error_label.isVisible()
-    assert wizard._step_valid(3)
+    assert wizard._step_valid(wizard._step_index_for_key("experiment"))
 
 
 def test_new_condition_uses_template_total_presentations_for_image_and_word(qtbot, tmp_path):
@@ -563,7 +621,7 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     wizard.setPalette(palette)
     wizard.resize(1120, 820)
     wizard.show()
-    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
     QApplication.processEvents()
     editor = wizard.session_structure_editor
     assert not editor.randomization_editor.isVisible()
@@ -583,4 +641,7 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     assert table.presentation_count_spins[catch_id].value() == 1
     assert table.duration_spins["color-1"].value() == duration_draft
     assert editor.presentation_total_label.text() == "13 total"
-    assert_visible_children_within_parent(wizard.experiment_step_surface)
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert editor.isVisible()
+    assert not table.isVisible()
+    assert_visible_children_within_parent(wizard.session_step_surface)

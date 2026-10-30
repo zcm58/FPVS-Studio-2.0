@@ -226,7 +226,7 @@ class ExperimentDesignerWidget(QWidget):
         self.rate_spin = self._spin(0.01, 500.0, 4.0, " Hz")
         self.rate_spin.setAccessibleName("Stream rate in hertz")
         self.rate_spin.setReadOnly(True)
-        self.rate_spin.setToolTip("Edit stimulus presentation frequency in Timing & Session.")
+        self.rate_spin.setToolTip("Edit stimulus presentation frequency in Timing & Display.")
         self.rate_spin.setFixedWidth(82)
         cycle_header.addWidget(self.rate_spin)
         self.slot_length_label = self._label("250 ms per normal slot", "secondary")
@@ -496,7 +496,7 @@ class ExperimentDesignerWidget(QWidget):
             self.rate_spin.setValue(rate)
         self.rate_spin.setToolTip(
             f"Current stimulus frequency: {rate:.12g} Hz. "
-            "Edit stimulus presentation frequency in Timing & Session.",
+            "Edit stimulus presentation frequency in Timing & Display.",
         )
         if not self.has_pending_design():
             protocol = self._document.project.settings.protocol

@@ -161,7 +161,9 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
         if item.edit_button.property("reviewStepKey") == "session"
     )
     qtbot.mouseClick(session_edit, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    assert guide.session_structure_editor.isVisible()
+    assert not guide.runtime_settings_editor.isVisible()
     window.document.update_condition_timing(presentation_counts={
         condition.condition_id: 3 for condition in window.document.ordered_conditions()
     })

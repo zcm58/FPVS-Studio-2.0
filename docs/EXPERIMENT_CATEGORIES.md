@@ -20,7 +20,7 @@ experiment is created and appears read-only on Project. Changing category requir
 creating a new experiment. Templates carry their own category and cannot change an
 experiment's category. Editing a template preserves that category and its cadence.
 
-The seven guided steps are Project, Conditions, Timing & Session, Image Size,
+The eight guided steps are Project, Conditions, Timing & Display, Session, Image Size,
 Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size
 for native letter streams. Conditions handles identity, participant instructions/tasks,
 Base/Oddball image-folder selection and existing oddball word lists. Image selection
