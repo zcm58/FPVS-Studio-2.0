@@ -151,6 +151,12 @@ hashed in chunks, so editing a file without updating the manifest changes the ha
 Local project identity, dates, participant electrode bookkeeping, random seeds and
 machine connection/display geometry fields are excluded.
 
+Ordinary FPVS protocol identity also includes the canonical `pooled_no_adjacent`
+ordering policy and its algorithm version from `core/session_ordering.py`. This
+separates new pooled sessions from historical block-order sessions even when a legacy
+project still inherits its saved global counts. AB and masking keep their existing
+identity payloads. Source projects and previously captured report bytes are not rewritten.
+
 The GUI supplies the actual authored fingerprint as a runtime-only launch option,
 only for the document's current compiled session plan. A stale compiled plan can
 still run locally but cannot be labeled with an edited document's sharing protocol.

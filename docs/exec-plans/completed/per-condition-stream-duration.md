@@ -10,7 +10,7 @@ duration, entered in seconds in the Timing & Session condition table.
 Duration means the stimulation stream for **one presentation**. It includes blank
 halves and within-stimulus sinusoidal contrast modulation. It excludes pre-stream
 lead-in, instructions, participant tasks, waiting, breaks and feedback.
-Repeated presentations are handled by the [repeat-count plan](../planned/per-condition-repeat-counts.md).
+Repeated presentations are handled by the [repeat-count plan](per-condition-repeat-counts.md).
 
 Changing a shared or condition-specific frequency preserves the requested duration.
 If that duration cannot be represented by complete oddball cycles at the resolved

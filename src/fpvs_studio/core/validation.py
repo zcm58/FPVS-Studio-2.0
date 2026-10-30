@@ -896,6 +896,12 @@ def validate_project(
             )
 
     issues.extend(validate_fixation_settings(project.settings.fixation_task))
+    from fpvs_studio.core.session_ordering import validate_condition_presentation_counts
+
+    try:
+        validate_condition_presentation_counts(project)
+    except ValueError as exc:
+        issues.append(ValidationIssue(location="conditions.presentation_count", message=str(exc)))
     try:
         validate_masking_catch_trials(project, project.conditions, refresh_hz=refresh_hz)
     except ValueError as exc:

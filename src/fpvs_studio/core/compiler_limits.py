@@ -19,6 +19,7 @@ from fpvs_studio.core.fixation_planning import seconds_to_frames
 from fpvs_studio.core.masking import MaskingSettings, condition_masking
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
+from fpvs_studio.core.session_ordering import effective_condition_presentation_count
 from fpvs_studio.core.task_models import TaskModule
 from fpvs_studio.core.validation import (
     approved_monitor_refresh_rate,
@@ -81,7 +82,10 @@ def validate_compilation_workload(
     masking = {item.condition_id: condition_masking(project, item) for item in conditions}
     all_masking = bool(conditions) and all(value is not None for value in masking.values())
     occurrences = {
-        item.condition_id: 1 if all_masking and item.masking_catch else repetitions
+        item.condition_id: (
+            1 if all_masking and item.masking_catch
+            else effective_condition_presentation_count(project, item)
+        )
         for item in conditions
     }
     groups: dict[str, list[Condition]] = {}
@@ -99,7 +103,8 @@ def validate_compilation_workload(
     entries = sum(occurrences.values()) + len(automatic_catches)
     _require_budget("session entries", entries, limits.max_session_entries)
     # Even a selected catch-only masking group iterates the configured repetitions.
-    _require_budget("session repetitions", repetitions, limits.max_session_entries)
+    if all_masking:
+        _require_budget("session repetitions", repetitions, limits.max_session_entries)
 
     fixation = project.settings.fixation_task
     fixation_events = 0

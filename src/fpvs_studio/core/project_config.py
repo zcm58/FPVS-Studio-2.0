@@ -110,6 +110,7 @@ CONDITION_CATCH_CONFIG_SCHEMA_VERSION: Literal["1.7.0"] = "1.7.0"
 MASKING_EVENT_CONFIG_SCHEMA_VERSION: Literal["1.8.0"] = "1.8.0"
 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION: Literal["1.9.0"] = "1.9.0"
 CONDITION_DURATION_CONFIG_SCHEMA_VERSION: Literal["1.10.0"] = "1.10.0"
+CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION: Literal["1.11.0"] = "1.11.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -169,6 +170,7 @@ class ProjectConfigCondition(FPVSBaseModel):
     oddball_cycle_repeats_per_sequence: int = Field(ge=1)
     base_hz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     stream_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    presentation_count: StrictInt | None = Field(default=None, gt=0)
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     order_index: int = Field(ge=0)
     instructions: str = ""
@@ -190,6 +192,8 @@ class ProjectConfigCondition(FPVSBaseModel):
             payload.pop("base_hz", None)
         if self.stream_duration_seconds is None:
             payload.pop("stream_duration_seconds", None)
+        if self.presentation_count is None:
+            payload.pop("presentation_count", None)
         return payload
 
     @field_validator("condition_id", "base_stimulus_set_id", "oddball_stimulus_set_id")
@@ -422,7 +426,7 @@ class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
     schema_version: Literal[
-        "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0", "1.10.0",
+        "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0", "1.10.0", "1.11.0",
     ] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
@@ -452,6 +456,30 @@ class ProjectConfigFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
+        has_presentation_counts = any(
+            condition.presentation_count is not None for condition in self.conditions
+        ) or (
+            self.condition_defaults is not None
+            and self.condition_defaults.presentation_count is not None
+        )
+        if has_presentation_counts:
+            if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+                raise ValueError("Presentation counts are unavailable for Attentional-Blink.")
+            if self.schema_version != CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION:
+                raise ValueError("Presentation counts require config schema 1.11.0.")
+            masking_pre_tasks = {
+                task_id for modifier in self.condition_modifiers if modifier.masking is not None
+                for task_id in modifier.pre_task_ids
+            }
+            if any(
+                (condition.presentation_count is not None or (
+                    self.condition_defaults is not None
+                    and self.condition_defaults.presentation_count is not None
+                )) and any(binding.task_id in masking_pre_tasks
+                           for binding in condition.pre_task_bindings)
+                for condition in self.conditions
+            ):
+                raise ValueError("Presentation counts are unavailable for masking groups.")
         if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK and any(
             condition.stream_duration_seconds is not None for condition in self.conditions
         ) or (
@@ -466,7 +494,8 @@ class ProjectConfigFile(FPVSBaseModel):
             raise ValueError("Condition frequency overrides are unavailable for Attentional-Blink.")
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
-                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0", "1.10.0",
+                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
+                   "1.10.0", "1.11.0",
                }:
             raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
@@ -477,6 +506,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION,
                 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition modifiers require config schema 1.4.0 or newer.")
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
@@ -487,6 +517,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION,
                 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Native scene workflows require config schema 1.5.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
@@ -496,6 +527,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION,
                 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Masking catch trials require config schema 1.6.0.")
         if any(condition.masking_catch for condition in self.conditions) or any(
@@ -505,6 +537,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_CATCH_CONFIG_SCHEMA_VERSION, MASKING_EVENT_CONFIG_SCHEMA_VERSION,
                 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError(
                     "Catch conditions and task text alignment require config schema 1.7.0."
@@ -514,18 +547,23 @@ class ProjectConfigFile(FPVSBaseModel):
             if self.schema_version not in {
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION, CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Masking event triggers require config schema 1.8.0.")
         if any(condition.base_hz is not None for condition in self.conditions):
             if self.schema_version not in {
                 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION, CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition frequency overrides require config schema 1.9.0.")
         if any(condition.stream_duration_seconds is not None for condition in self.conditions) or (
             self.condition_defaults is not None
             and self.condition_defaults.stream_duration_seconds is not None
         ):
-            if self.schema_version != CONDITION_DURATION_CONFIG_SCHEMA_VERSION:
+            if self.schema_version not in {
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+            }:
                 raise ValueError("Stream duration overrides require config schema 1.10.0.")
         referenced = set(owned_image_references(self.task_modules, self.condition_modifiers))
         embedded = [(asset.task_id, asset.relative_path) for asset in self.task_assets]
@@ -565,7 +603,10 @@ def export_project_config(
     )
     return ProjectConfigFile(
         schema_version=(
-            CONDITION_DURATION_CONFIG_SCHEMA_VERSION
+            CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION
+            if any(item.presentation_count is not None for item in project.conditions)
+            or project.settings.condition_defaults.presentation_count is not None
+            else CONDITION_DURATION_CONFIG_SCHEMA_VERSION
             if any(item.stream_duration_seconds is not None for item in project.conditions)
             or project.settings.condition_defaults.stream_duration_seconds is not None
             else CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION
@@ -590,7 +631,8 @@ def export_project_config(
         experiment_category=project.experiment_category,
         condition_defaults=(
             project.settings.condition_defaults.model_copy(deep=True)
-            if project.settings.condition_defaults.stream_duration_seconds is not None else None
+            if (project.settings.condition_defaults.stream_duration_seconds is not None
+                or project.settings.condition_defaults.presentation_count is not None) else None
         ),
         project=ProjectConfigProject(
             project_id=project.meta.project_id,
@@ -620,6 +662,7 @@ def export_project_config(
                 oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
                 base_hz=condition.base_hz,
                 stream_duration_seconds=condition.stream_duration_seconds,
+                presentation_count=condition.presentation_count,
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=condition.order_index,
                 instructions=condition.instructions,
@@ -785,10 +828,11 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         MASKING_EVENT_CONFIG_SCHEMA_VERSION,
         CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
         CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+        CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
     }:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.10.0."
+            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.11.0."
         )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
@@ -833,7 +877,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     project = ProjectFile(
         schema_version=(
-            ProjectSchemaVersion.V1_12
+            ProjectSchemaVersion.V1_13
+            if config.schema_version == CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_12
             if config.schema_version == CONDITION_DURATION_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_11
             if config.schema_version == CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION
@@ -890,6 +936,7 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
                 oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
                 base_hz=condition.base_hz,
                 stream_duration_seconds=condition.stream_duration_seconds,
+                presentation_count=condition.presentation_count,
                 trigger_code=condition.trigger_code,
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=index,

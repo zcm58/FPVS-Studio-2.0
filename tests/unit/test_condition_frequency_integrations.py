@@ -139,7 +139,7 @@ def test_workload_frame_budget_uses_each_conditions_effective_rate(sample_projec
     project.settings.presentation.pre_stream_fixation_seconds = 0
     project.settings.fixation_task.enabled = False
     project.conditions[0].oddball_cycle_repeats_per_sequence = 1
-    limits = CompilationLimits(max_total_frames=150)
+    limits = CompilationLimits(max_total_frames=75)
     validate_compilation_workload(project, project.conditions, refresh_hz=60, limits=limits)
     project.conditions[0].base_hz = 3
     with pytest.raises(CompileError, match="total frames limit"):

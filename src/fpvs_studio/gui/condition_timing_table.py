@@ -1,4 +1,4 @@
-"""Staged per-condition FPVS frequency and stream-duration editing."""
+"""Staged per-condition FPVS timing and total-presentation editing."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QSizePolicy,
+    QSpinBox,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -26,6 +27,11 @@ from fpvs_studio.core.condition_timing import (
     resolve_condition_stream_timing,
 )
 from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.session_ordering import (
+    effective_condition_presentation_count,
+    validate_condition_presentation_counts,
+)
 from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
 from fpvs_studio.gui.document import ProjectDocument
 
@@ -36,7 +42,7 @@ FREQUENCY_OVERRIDE_WARNING = (
 
 
 class ConditionTimingTable(QWidget):
-    """Keep frequency drafts together until validation and explicit confirmation pass."""
+    """Apply timing and count drafts together after validation and confirmation."""
 
     draft_changed = Signal()
 
@@ -50,9 +56,12 @@ class ConditionTimingTable(QWidget):
         self._shared_dirty = False
         self._overrides: dict[str, float | None] = {}
         self._durations: dict[str, float] = {}
+        self._presentation_counts: dict[str, int] = {}
         self._display_durations: dict[str, float] = {}
         self.frequency_spins: dict[str, QDoubleSpinBox] = {}
         self.duration_spins: dict[str, QDoubleSpinBox] = {}
+        self.presentation_count_spins: dict[str, QSpinBox] = {}
+        self.total_stimulation_labels: dict[str, QLabel] = {}
         self.duration_choice_buttons: list[QPushButton] = []
         self.source_labels: dict[str, QLabel] = {}
         self.reset_buttons: dict[str, QPushButton] = {}
@@ -77,6 +86,9 @@ class ConditionTimingTable(QWidget):
         shared.addStretch(1)
         self.apply_button = QPushButton("Apply timing", self)
         self.apply_button.setObjectName("apply_condition_frequencies_button")
+        self.apply_button.setToolTip(
+            "Apply frequency, stream duration and presentation counts together.",
+        )
         mark_primary_action(self.apply_button)
         self.apply_button.clicked.connect(self.apply_pending_edits)
         self.discard_button = QPushButton("Discard", self)
@@ -86,10 +98,11 @@ class ConditionTimingTable(QWidget):
         shared.addWidget(self.discard_button)
         shared.addWidget(self.apply_button)
         layout.addLayout(shared)
-        self.table = QTableWidget(0, 5, self)
+        self.table = QTableWidget(0, 7, self)
         self.table.setObjectName("condition_frequency_table")
         self.table.setHorizontalHeaderLabels([
-            "Condition", "Frequency", "Stream duration", "Source", "",
+            "Condition", "Frequency", "Stream duration", "Presentations",
+            "Total stimulation", "Frequency source", "",
         ])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.NoSelection)
@@ -99,7 +112,7 @@ class ConditionTimingTable(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(36)
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        for column in (1, 2, 3, 4):
+        for column in (1, 2, 3, 4, 5, 6):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         layout.addWidget(self.table)
         self.error_label = QLabel(self)
@@ -133,13 +146,16 @@ class ConditionTimingTable(QWidget):
         return spin
 
     def has_pending_edits(self) -> bool:
-        return self._shared_dirty or bool(self._overrides) or bool(self._durations)
+        return (self._shared_dirty or bool(self._overrides) or bool(self._durations)
+                or bool(self._presentation_counts))
 
     def refresh(self) -> None:
         if self._applying:
             return
         if self.has_pending_edits():
             self._sync_duration_cells()
+            self._sync_presentation_count_cells()
+            self._update_presentation_totals()
             return
         project = self._document.project
         self.setVisible(project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK)
@@ -151,6 +167,8 @@ class ConditionTimingTable(QWidget):
         self.table.setRowCount(len(conditions))
         self.frequency_spins.clear()
         self.duration_spins.clear()
+        self.presentation_count_spins.clear()
+        self.total_stimulation_labels.clear()
         self._display_durations.clear()
         self.source_labels.clear()
         self.reset_buttons.clear()
@@ -183,10 +201,38 @@ class ConditionTimingTable(QWidget):
                 lambda value, key=condition.condition_id: self._duration_changed(key, value),
             )
             self.table.setCellWidget(row, 2, duration_spin)
+            count_spin = QSpinBox(self)
+            count_spin.setObjectName(f"condition_presentations_{condition.condition_id}")
+            count_spin.setAccessibleName(f"Total presentations for {condition.name}")
+            count_spin.setRange(1, 2_147_483_647)
+            count_spin.setKeyboardTracking(False)
+            count_spin.setToolTip(
+                "Total separate presentations, including the first. "
+                "For example, 3 presents this complete stream three times. "
+                "All presentations are shuffled together without adjacent identical conditions.",
+            )
+            count_spin.setValue(effective_condition_presentation_count(project, condition))
+            if condition_masking(project, condition) is not None:
+                count_spin.setEnabled(False)
+                count_spin.setToolTip(
+                    "Masking presentation counts follow the existing variant and catch grouping. "
+                    "Independent presentation counts are available for ordinary FPVS conditions.",
+                )
+            count_spin.valueChanged.connect(
+                lambda value, key=condition.condition_id:
+                self._presentation_count_changed(key, value),
+            )
+            self.presentation_count_spins[condition.condition_id] = count_spin
+            self.table.setCellWidget(row, 3, count_spin)
+            total_label = QLabel(self)
+            total_label.setAccessibleName(f"Total stimulation for {condition.name}")
+            total_label.setMinimumWidth(110)
+            self.total_stimulation_labels[condition.condition_id] = total_label
+            self.table.setCellWidget(row, 4, total_label)
             source = QLabel(self)
             source.setMinimumWidth(64)
             self.source_labels[condition.condition_id] = source
-            self.table.setCellWidget(row, 3, source)
+            self.table.setCellWidget(row, 5, source)
             reset = QPushButton("Use shared", self)
             reset.setAutoDefault(False)
             reset.setAccessibleName(f"Use shared frequency for {condition.name}")
@@ -195,7 +241,7 @@ class ConditionTimingTable(QWidget):
             )
             mark_secondary_action(reset)
             self.reset_buttons[condition.condition_id] = reset
-            self.table.setCellWidget(row, 4, reset)
+            self.table.setCellWidget(row, 6, reset)
             self.table.setRowHeight(
                 row, max(36, spin.sizeHint().height(), reset.sizeHint().height()),
             )
@@ -207,7 +253,30 @@ class ConditionTimingTable(QWidget):
         self._syncing = False
         self._sync_duration_cells()
         self._sync_rows()
+        self._update_presentation_totals()
         self._update_actions()
+        self.error_label.hide()
+        self.duration_choices.hide()
+        if message := self.presentation_count_blocker():
+            self.error_label.setText(message)
+            self.error_label.show()
+
+    def presentation_count_blocker(self) -> str:
+        try:
+            validate_condition_presentation_counts(self._document.project)
+        except ValueError as error:
+            return str(error)
+        return ""
+
+    def _sync_presentation_count_cells(self) -> None:
+        self._syncing = True
+        for condition in self._document.ordered_conditions():
+            key = condition.condition_id
+            if key in self.presentation_count_spins and key not in self._presentation_counts:
+                self.presentation_count_spins[key].setValue(
+                    effective_condition_presentation_count(self._document.project, condition),
+                )
+        self._syncing = False
 
     def _sync_duration_cells(self) -> None:
         project = self._document.project
@@ -304,9 +373,48 @@ class ConditionTimingTable(QWidget):
             self._durations[condition_id] = value
         self._draft_changed()
 
+    def _presentation_count_changed(self, condition_id: str, value: int) -> None:
+        if self._syncing:
+            return
+        condition = self._document.get_condition(condition_id)
+        if condition is None:
+            return
+        if value == effective_condition_presentation_count(self._document.project, condition):
+            self._presentation_counts.pop(condition_id, None)
+        else:
+            self._presentation_counts[condition_id] = value
+        self._draft_changed()
+
+    def _update_presentation_totals(self) -> None:
+        project = self._document.project
+        for condition in self._document.ordered_conditions():
+            key = condition.condition_id
+            label = self.total_stimulation_labels.get(key)
+            if label is None:
+                continue
+            count = self._presentation_counts.get(
+                key, effective_condition_presentation_count(project, condition),
+            )
+            try:
+                seconds = self._durations.get(key)
+                if seconds is None:
+                    seconds = condition_stream_duration_seconds(
+                        project, condition, project.settings.display.preferred_refresh_hz,
+                    )
+            except ValueError:
+                seconds = None
+            label.setText("Unresolved" if seconds is None else f"{count * seconds:g} s")
+            label.setToolTip(
+                "Select a monitor refresh rate and resolve stream timing to calculate the total."
+                if seconds is None else
+                f"{count} separate presentation(s) × {seconds:.12g} seconds. "
+                "Stimulation only; excludes lead-in, tasks, waiting and feedback.",
+            )
+
     def _draft_changed(self) -> None:
         self.error_label.hide()
         self.duration_choices.hide()
+        self._update_presentation_totals()
         self._update_actions()
         self.draft_changed.emit()
 
@@ -318,6 +426,7 @@ class ConditionTimingTable(QWidget):
     def discard_pending_edits(self) -> None:
         self._overrides.clear()
         self._durations.clear()
+        self._presentation_counts.clear()
         self._shared_hz = self._document.project.settings.protocol.base_hz
         self._shared_dirty = False
         self._syncing = True
@@ -334,10 +443,12 @@ class ConditionTimingTable(QWidget):
         shared = self.shared_frequency_spin.value() if self._shared_dirty else None
         overrides = dict(self._overrides)
         durations = dict(self._durations)
+        presentation_counts = dict(self._presentation_counts)
         try:
             propose_condition_timing(
                 self._document.project, shared_base_hz=shared, overrides=overrides,
                 durations=durations,
+                presentation_counts=presentation_counts,
                 refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:
@@ -362,6 +473,7 @@ class ConditionTimingTable(QWidget):
         try:
             self._document.update_condition_timing(
                 shared_base_hz=shared, overrides=overrides, durations=durations,
+                presentation_counts=presentation_counts,
             )
         except ValueError as error:
             self._show_timing_error(error)

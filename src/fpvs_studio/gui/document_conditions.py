@@ -240,6 +240,7 @@ class DocumentConditionMixin:
             sequence_count=defaults.sequence_count,
             oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
             stream_duration_seconds=defaults.stream_duration_seconds,
+            presentation_count=defaults.presentation_count,
             duty_cycle_mode=defaults.duty_cycle_mode,
             trigger_code=len(ordered_conditions) + 1,
             order_index=len(ordered_conditions),
@@ -610,13 +611,15 @@ class DocumentConditionMixin:
         self, *, shared_base_hz: float | None = None,
         overrides: Mapping[str, float | None] | None = None,
         durations: Mapping[str, float] | None = None,
+        presentation_counts: Mapping[str, int] | None = None,
     ) -> None:
-        """Apply frequencies and seconds together without partial timing changes."""
+        """Apply timing and total presentations together without partial changes."""
 
         try:
             project = propose_condition_timing(
                 self._project, shared_base_hz=shared_base_hz, overrides=overrides,
                 durations=durations,
+                presentation_counts=presentation_counts,
                 refresh_hz=self._project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:

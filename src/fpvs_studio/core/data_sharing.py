@@ -27,6 +27,7 @@ from fpvs_studio.core.compiler_assets import load_manifest, resolve_image_paths
 from fpvs_studio.core.execution import PARTICIPANT_HANDEDNESS_VALUES, PARTICIPANT_SEX_VALUES
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.session_ordering import condition_ordering_identity
 
 MAX_REPORT_BYTES = 128 * 1024
 Identifier = Annotated[
@@ -412,8 +413,12 @@ def protocol_fingerprint(
                 digest.update(chunk)
         provenance.append((relative_path, digest.hexdigest()))
     check_cancelled()
+    fingerprint_payload: dict[str, object] = {"project": payload, "assets": provenance}
+    ordering_identity = condition_ordering_identity(project)
+    if ordering_identity is not None:
+        fingerprint_payload["condition_ordering"] = ordering_identity
     encoded = json.dumps(
-        {"project": payload, "assets": provenance},
+        fingerprint_payload,
         sort_keys=True,
         separators=(",", ":"),
         ensure_ascii=False,

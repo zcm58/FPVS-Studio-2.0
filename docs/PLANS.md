@@ -21,6 +21,7 @@ Current implementation:
 
 
 
+
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -30,7 +31,6 @@ Current implementation:
 
 Concrete planned work:
 
-- [Per-condition presentation counts and constrained shuffled order](exec-plans/planned/per-condition-repeat-counts.md)
 - [Reproducible randomization with three seeds](exec-plans/planned/reproducible-randomization-controls.md)
 - [Simplified condition modifiers, post-condition questions and readable response CSV](exec-plans/planned/simple-condition-modifiers-and-post-questions.md)
 - [Optional image pool reset policy](exec-plans/planned/image-pool-reset-policy.md) (retain reset per condition run; future carryover option with user-facing pros/cons)
@@ -40,6 +40,9 @@ Concrete planned work:
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Per-condition presentation counts](exec-plans/completed/per-condition-repeat-counts.md)
+(exact totals, constrained pooled order, preserved task/recovery occurrence identity and ordering fingerprints; visible GUI acceptance remains separate).
 
 Recent completion: [Per-condition stream duration](exec-plans/completed/per-condition-stream-duration.md)
 (exact seconds, preserved legacy continuous streams and requested/resolved export fields; visible GUI acceptance remains separate).

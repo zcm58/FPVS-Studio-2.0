@@ -157,12 +157,12 @@ def test_project_schema_version_does_not_expand_unrelated_contracts() -> None:
     with pytest.raises(ValueError):
         SchemaVersion("1.3.0")
     library = ConditionTemplateProfileLibrary.model_validate(
-        {"schema_version": "1.3.0", "profiles": []}
+        {"schema_version": "1.4.0", "profiles": []}
     )
-    assert library.schema_version is ConditionTemplateSchemaVersion.V1_3
+    assert library.schema_version is ConditionTemplateSchemaVersion.V1_4
     with pytest.raises(ValidationError):
         ConditionTemplateProfileLibrary.model_validate(
-            {"schema_version": "1.4.0", "profiles": []}
+            {"schema_version": "1.5.0", "profiles": []}
         )
 
 

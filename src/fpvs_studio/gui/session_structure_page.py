@@ -17,7 +17,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.enums import InterConditionMode
+from fpvs_studio.core.enums import ExperimentCategory, InterConditionMode
+from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.session_ordering import session_presentation_count
 from fpvs_studio.gui.components import NonHomePageShell, SectionCard, configure_setup_form
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -81,6 +83,12 @@ class SessionStructureEditor(QWidget):
         self.seed_help_label.setWordWrap(True)
         self.seed_help_label.setToolTip("A new condition order is generated for each launch.")
 
+        self.presentation_total_label = QLabel(self)
+        self.presentation_total_label.setObjectName(
+            _prefixed_object_name(object_name_prefix, "presentation_total_label")
+        )
+        self.presentation_total_label.setWordWrap(True)
+
         self.inter_condition_mode_combo = QComboBox(self)
         self.inter_condition_mode_combo.setObjectName(
             _prefixed_object_name(object_name_prefix, "inter_condition_mode_combo")
@@ -137,6 +145,7 @@ class SessionStructureEditor(QWidget):
             self._form_label("Repeats per condition"),
             self.block_count_spin,
         )
+        self.session_layout.addRow(self._form_label("Presentations"), self.presentation_total_label)
         self.session_layout.addRow(self._form_label("Condition order"), self.seed_help_label)
         self.session_layout.addRow(self._form_label("Start key"), self.continue_key_edit)
         self.session_layout.addRow(
@@ -176,15 +185,28 @@ class SessionStructureEditor(QWidget):
         return label
 
     def refresh(self) -> None:
-        session = self._document.project.settings.session
+        project = self._document.project
+        session = project.settings.session
+        ab = project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        masking = any(condition_masking(project, condition) is not None
+                      for condition in project.conditions)
         count_label = self.session_layout.labelForField(self.block_count_spin)
         assert isinstance(count_label, QLabel)
         count_label.setText(
-            "Bursts per SOA" if session.randomize_across_blocks else "Repeats per condition"
+            "Bursts per SOA" if ab else "Repeats per condition"
         )
         self.seed_help_label.setText(
-            "All bursts shuffled together" if session.randomize_across_blocks else "Randomized"
+            "All bursts shuffled together" if ab else "Variant groups shuffled" if masking else
+            "Pooled shuffle · no adjacent same condition"
         )
+        self.seed_help_label.setToolTip(
+            "A new burst order is generated for each launch." if ab else
+            "Masking keeps its existing variant groups and catch presentations." if masking else
+            "All requested presentations are pooled. The same condition cannot appear twice "
+            "in a row. Edit each condition's total presentations in the table above.",
+        )
+        total = session_presentation_count(project)
+        self.presentation_total_label.setText(f"{total} total")
         with QSignalBlocker(self.block_count_spin):
             self.block_count_spin.setValue(session.block_count)
         with QSignalBlocker(self.session_seed_spin):
@@ -202,6 +224,12 @@ class SessionStructureEditor(QWidget):
         self._update_session_visibility_state()
 
     def _update_session_visibility_state(self) -> None:
+        project = self._document.project
+        ab = project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        masking = any(condition_masking(project, condition) is not None
+                      for condition in project.conditions)
+        _set_form_row_visible(self.session_layout, self.block_count_spin, ab or masking)
+        _set_form_row_visible(self.session_layout, self.presentation_total_label, not ab)
         _set_form_row_visible(self.session_layout, self.inter_condition_mode_combo, False)
         _set_form_row_visible(self.session_layout, self.break_seconds_spin, False)
         _set_form_row_visible(self.session_layout, self.continue_key_edit, True)
@@ -254,6 +282,7 @@ class SessionStructurePage(QWidget):
         self.session_seed_spin = self.editor.session_seed_spin
         self.generate_seed_button = self.editor.generate_seed_button
         self.seed_help_label = self.editor.seed_help_label
+        self.presentation_total_label = self.editor.presentation_total_label
         self.inter_condition_mode_combo = self.editor.inter_condition_mode_combo
         self.break_seconds_spin = self.editor.break_seconds_spin
         self.continue_key_edit = self.editor.continue_key_edit

@@ -83,6 +83,13 @@ from fpvs_studio.core.run_spec import (
     FixationStyleSpec,
     RunSpec,
 )
+from fpvs_studio.core.session_ordering import (
+    POOLED_ORDERING_POLICY,
+    condition_presentation_counts,
+    constrained_condition_order,
+    uses_pooled_condition_order,
+    validate_condition_presentation_counts,
+)
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskPhase, task_requires_text_alignment_schema
 from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
@@ -415,13 +422,19 @@ def _compile_session_plan(
     condition_ids: list[str] | None = None,
     manifest: StimulusManifest | None = None,
 ) -> SessionPlan:
-    """Compile repeated conditions with blockwise or session-wide seeded randomization."""
+    """Compile exact pooled FPVS presentations or the native AB/masking grouping."""
 
     try:
         require_valid_experiment_category(project)
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     selected_conditions = select_conditions(project, condition_ids)
+    try:
+        validate_condition_presentation_counts(project, selected_conditions)
+    except ValueError as exc:
+        raise CompileError(str(exc)) from exc
+    pooled_ordering = uses_pooled_condition_order(project, selected_conditions)
+    presentation_counts = condition_presentation_counts(project, selected_conditions)
     baseline_requirements = resolve_modifier_baseline(project, selected_conditions)
     if random_seed is None:
         random_seed = project.settings.session.session_seed
@@ -451,6 +464,8 @@ def _compile_session_plan(
     repetition_count = project.settings.session.block_count
     shuffle_all = project.settings.session.randomize_across_blocks
     compiled_block_count = 1 if shuffle_all else repetition_count
+    if pooled_ordering:
+        compiled_block_count = 1
     masking_groups = all(
         condition_masking(project, item) is not None for item in selected_conditions
     )
@@ -505,11 +520,20 @@ def _compile_session_plan(
     masking_occurrence_counts = Counter(
         condition.condition_id for group in group_conditions for condition, _, _ in group
     )
+    pooled_trials: list[tuple[Condition, bool, Condition | None]] = []
+    if pooled_ordering:
+        by_id = {condition.condition_id: condition for condition in selected_conditions}
+        pooled_trials = [
+            (by_id[condition_id], False, None)
+            for condition_id in constrained_condition_order(presentation_counts, rng=session_rng)
+        ]
     occurrences: dict[str, int] = {}
     for block_index in range(compiled_block_count):
         check_compilation_cancelled()
         if masking_groups:
             block_trials = group_conditions[block_index]
+        elif pooled_ordering:
+            block_trials = pooled_trials
         else:
             block_conditions = list(selected_conditions)
             if shuffle_all:
@@ -525,7 +549,8 @@ def _compile_session_plan(
             occurrence_index = occurrences.get(condition.condition_id, 0)
             occurrences[condition.condition_id] = occurrence_index + 1
             condition_occurrence_count = (
-                masking_occurrence_counts[condition.condition_id] if masking else repetition_count
+                masking_occurrence_counts[condition.condition_id] if masking else
+                presentation_counts[condition.condition_id] if pooled_ordering else repetition_count
             )
             run_id = make_session_run_id(
                 global_order_index=global_order_index,
@@ -614,13 +639,17 @@ def _compile_session_plan(
                     run_spec=run_spec,
                     pre_tasks=pre_tasks,
                     post_tasks=post_tasks,
+                    condition_presentation_index=occurrence_index + 1 if pooled_ordering else None,
+                    condition_presentation_count=(
+                        condition_occurrence_count if pooled_ordering else None
+                    ),
                     show_condition_start_gate=(
                         False if masking is not None else
                         any(task.task_id == RECALL_TASK_ID for task in post_tasks)
                         or not condition_tasks_replace_start_gate(
                             condition,
                             block_index=occurrence_index,
-                            block_count=repetition_count,
+                            block_count=condition_occurrence_count,
                             global_order_index=global_order_index,
                         )
                     ),
@@ -642,6 +671,7 @@ def _compile_session_plan(
 
     return SessionPlan(
         schema_version=(
+            "1.6.0" if pooled_ordering else
             "1.5.0" if any(task_requires_text_alignment_schema(task)
                            for block in blocks for entry in block.entries
                            for task in [*entry.pre_tasks, *entry.post_tasks])
@@ -649,6 +679,7 @@ def _compile_session_plan(
             else "1.3.0" if masking_groups else SchemaVersion.V1_2.value
         ),
         authored_task_flow=True if masking_groups else None,
+        ordering_policy=POOLED_ORDERING_POLICY if pooled_ordering else None,
         session_id=session_identifier,
         project_id=project.meta.project_id,
         project_name=project.meta.name,

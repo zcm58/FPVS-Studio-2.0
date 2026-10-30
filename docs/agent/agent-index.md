@@ -562,7 +562,9 @@ the broader named-profile/display plan remains planned work.
 
 For shared frequency, confirmed condition overrides and stream-only seconds, start with
 `core/condition_timing.py`, `gui/condition_timing_table.py` and
-`gui/session_structure_page.py`. Design displays the effective rate read-only;
+`gui/session_structure_page.py`. `core/session_ordering.py` owns presentation counts
+and constrained order; read [SessionPlan](../SESSION_PLAN.md) for occurrence/recovery
+semantics. Design displays the effective rate read-only;
 Timing & Session owns edits. Use core/compiler/GUI/project-I/O focused routes and
 repo precommit. Read [RunSpec timing](../RUNSPEC.md#timing-model) for duration
 preservation and frame constraints; visible acceptance stays opt-in.

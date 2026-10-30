@@ -124,11 +124,13 @@ def test_requested_baseline_runs_before_randomized_no_load_entry_once(
     assert baseline[0].backward_counting.duration_seconds == 30
     assert baseline[0].modifier.session_baseline
     assert baseline[0].modifier.requested_modifier_ids == ["backward-counting"]
+    single = project.model_copy(deep=True)
+    single.settings.session.block_count = 1
     assert not _baselines(
-        _compile(project, multi_condition_project_root, condition_ids=[no_load_id])
+        _compile(single, multi_condition_project_root, condition_ids=[no_load_id])
     )
     assert (
-        len(_baselines(_compile(project, multi_condition_project_root, condition_ids=[load_id])))
+        len(_baselines(_compile(single, multi_condition_project_root, condition_ids=[load_id])))
         == 1
     )
 
@@ -185,6 +187,7 @@ def test_legacy_baseline_binding_keeps_selected_no_load_behavior_and_rejects_ove
     multi_condition_project_root,
 ):
     project = multi_condition_project
+    project.settings.session.block_count = 1
     baseline = create_backward_counting_baseline_task(duration_seconds=30)
     project.task_modules = [baseline]
     for condition in project.conditions:

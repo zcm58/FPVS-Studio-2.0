@@ -1,7 +1,8 @@
 # SessionPlan Contract
 
 `SessionPlan` is the compiled multi-condition session contract for FPVS Studio.
-Ordinary sessions retain schema `1.2.0`; masking sessions use `1.3.0` with an
+New ordinary FPVS sessions use schema `1.6.0` with pooled non-adjacent presentation
+ordering. Historical `1.2.0` sessions remain readable; masking sessions use `1.3.0` with an
 explicit authored task flow and variant-group ordering. See [Masking](MASKING.md)
 for its `RunSpec`/project versions and first/last stream-group task scopes.
 The original embedded `RunSpec` retains its
@@ -30,7 +31,7 @@ SessionPlan -> runtime preflight -> runtime session flow -> engine
 
 When `condition_ids` is omitted, compilation includes every project condition. Passing
 a subset limits the compiled pool, but does not change session semantics: every selected
-condition still appears once per configured repetition, and its normal pre/post task
+condition still appears its configured total number of presentations, and its normal pre/post task
 bindings, timing, validation, preflight, and execution/export contracts remain in
 force. The GUI uses this input only for an accepted Experiment Test Mode launch; its
 selector defaults to all conditions and is not persisted in `ProjectFile` or app
@@ -77,6 +78,7 @@ Represents one compiled occurrence of one condition inside the session:
 - embedded single-condition `RunSpec`
 - compiled `pre_tasks` and `post_tasks`
 - whether the ordinary condition start gate remains visible
+- optional one-based `condition_presentation_index` and `condition_presentation_count`
 
 Each embedded `RunSpec` carries that condition's resolved timing template. A single
 `SessionPlan` may mix continuous-image and 50% blank conditions without adding
@@ -118,10 +120,18 @@ Represents one randomized block in the session:
 - randomized `condition_order`
 - compiled `entries`
 
-Ordinary sessions contain each selected condition exactly once per block.
-With `SessionSettings.randomize_across_blocks=True`, core repeats the selected
-condition pool `block_count` times and shuffles the whole pool into a single
-compiled block. New AB burst studies use this mode: authored `block_count` is
+Ordinary FPVS sessions resolve each optional `Condition.presentation_count` or inherit
+`SessionSettings.block_count` as a total (never as another multiplier). Core pools
+all occurrences into one compiled block and uses a deterministic constrained order
+with no adjacent equal condition IDs. Counts are strict positive integers. If the
+largest count `m` exceeds `N-m+1`, compilation rejects the configuration with guidance;
+no count, adjacency rule or stream duration is silently changed. `core/session_ordering.py`
+owns count resolution, feasibility and bounded arrangement.
+
+Native AB retains its existing `SessionSettings.randomize_across_blocks=True` path,
+which repeats the selected condition pool `block_count` times and shuffles it into a
+single compiled block. Specialized masking retains its grouped scheduling and rejects
+unsupported authored presentation-count overrides. New AB burst studies use this mode: authored `block_count` is
 **Bursts per SOA**, while the compiled plan's `block_count` is one. Each entry
 is one five-second burst, and `global_order_index + 1` identifies its chronological
 burst number. Saved sessions default this additive setting to false.
@@ -143,7 +153,8 @@ Top-level session fields:
 
 The current v1 policy is:
 
-- ordinary sessions include each selected condition once per randomized block
+- ordinary FPVS sessions contain exact per-condition multiplicities in one pooled,
+  non-adjacent order; per-condition occurrence indices are chronological within that order
 - sessions opting into randomization across blocks shuffle the complete balanced
   repeated pool; this removes three-condition block boundaries from AB burst order
 - current Studio GUI/runtime behavior does not honor legacy fixed-order settings
@@ -218,3 +229,13 @@ The session exports should preserve:
 - the stored random order seed
 - the planned block order for each block
 - the ordered `run_results` matching `SessionPlan.ordered_entries()`
+
+### Presentation-count compatibility and recovery
+
+Editable explicit counts use Project 1.13/config 1.11; count defaults use the narrow
+template-library 1.4 schema. Omitted counts preserve saved global totals without
+rewriting source projects merely on load. Fresh ordinary compilation applies the new
+ordering rule even to inherited totals. Historical compiled plans retain their stored
+order. Exact-occurrence recovery keeps the original condition presentation index/count
+(e.g. presentation 3 of 3), even when its retry plan contains only that entry.
+Task-module repetition indices remain separate from condition presentations.

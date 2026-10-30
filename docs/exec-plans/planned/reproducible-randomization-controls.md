@@ -22,7 +22,7 @@ If fixed schedules conflict with the existing no-equal-neighbor-count rule, repo
 the conflict rather than silently changing the fixed schedule.
 
 The condition-order seed governs the fully pooled, no-adjacent-repeat order in the
-[presentation-count plan](per-condition-repeat-counts.md). Existing stimulus balance,
+[presentation-count plan](../completed/per-condition-repeat-counts.md). Existing stimulus balance,
 repeat avoidance and fixation feasibility rules remain applicable.
 
 ## Current evidence and ownership
@@ -99,5 +99,5 @@ does not change them accidentally or claim three new controls cover unrelated ta
 
 Coordinate with [frequency overrides](../completed/clear-presentation-frequency.md),
 [stream duration](../completed/per-condition-stream-duration.md) and
-[presentation counts](per-condition-repeat-counts.md). Implementation may share
+[presentation counts](../completed/per-condition-repeat-counts.md). Implementation may share
 canonical models/helpers where needed, but each plan retains its own acceptance gate.

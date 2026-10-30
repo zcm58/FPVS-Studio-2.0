@@ -65,6 +65,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self._experiment_category = profile.experiment_category
         self._attentional_blink_layout = profile.defaults.attentional_blink_layout
         self._stream_duration_seconds = profile.defaults.condition.stream_duration_seconds
+        self._presentation_count = profile.defaults.condition.presentation_count
         self._participant_tutorial_enabled = (
             profile.defaults.fixation_task.participant_tutorial_enabled
         )
@@ -431,6 +432,7 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                     sequence_count=self.sequence_count_spin.value(),
                     oddball_cycle_repeats_per_sequence=self.oddball_cycles_spin.value(),
                     stream_duration_seconds=self._stream_duration_seconds,
+                    presentation_count=self._presentation_count,
                     target_repeats_per_image=self.target_repeats_spin.value(),
                 ),
                 display=ConditionTemplateDisplayDefaults(

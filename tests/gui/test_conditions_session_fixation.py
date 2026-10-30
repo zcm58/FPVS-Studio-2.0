@@ -311,9 +311,9 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     assert "Condition order" in form_labels
     assert not page.session_seed_spin.isVisible()
     assert not page.generate_seed_button.isVisible()
-    assert page.seed_help_label.text() == (
-        "Randomized"
-    )
+    assert page.seed_help_label.text() == "Pooled shuffle · no adjacent same condition"
+    assert not page.block_count_spin.isVisible()
+    assert page.presentation_total_label.isVisible()
     assert not page.inter_condition_mode_combo.isVisible()
     assert not page.break_seconds_spin.isVisible()
     assert not page.break_seconds_spin.isEnabled()

@@ -127,6 +127,8 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "block_accuracy_percent",
     "requested_stream_duration_seconds",
     "resolved_stream_duration_seconds",
+    "condition_presentation_index",
+    "condition_presentation_count",
     "participant_session_number",
     "manual_removed_electrodes",
     "manual_removed_electrodes_recorded",
@@ -829,6 +831,8 @@ def write_session_artifacts(
             "run_id",
             "requested_stream_duration_seconds",
             "resolved_stream_duration_seconds",
+            "condition_presentation_index",
+            "condition_presentation_count",
         ],
         [
             (
@@ -840,6 +844,8 @@ def write_session_artifacts(
                 entry.run_id,
                 entry.run_spec.condition.requested_duration_seconds,
                 entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
+                entry.condition_presentation_index,
+                entry.condition_presentation_count,
             )
             for entry in ordered_entries
         ],
@@ -1327,6 +1333,10 @@ def _session_condition_history_row(
         entry.run_spec.condition.requested_duration_seconds
         if entry.run_spec.condition.requested_duration_seconds is not None else "",
         entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
+        entry.condition_presentation_index
+        if entry.condition_presentation_index is not None else "",
+        entry.condition_presentation_count
+        if entry.condition_presentation_count is not None else "",
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
         summary.participant_metadata.manual_removed_electrodes is not None,

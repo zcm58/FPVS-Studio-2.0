@@ -19,7 +19,9 @@ from fpvs_studio.gui.condition_template_profile_editor_dialog import (
 def test_profile_editor_preserves_hidden_requested_seconds(qtbot, background):
     profile = ConditionTemplateProfile(
         profile_id="two-minute", display_name="Two minute stream",
-        defaults=ConditionTemplateDefaults(condition=ConditionDefaults(stream_duration_seconds=120)),
+        defaults=ConditionTemplateDefaults(condition=ConditionDefaults(
+            stream_duration_seconds=120, presentation_count=3,
+        )),
     )
     dialog = ConditionTemplateProfileEditorDialog(initial_profile=profile)
     qtbot.addWidget(dialog)
@@ -34,3 +36,4 @@ def test_profile_editor_preserves_hidden_requested_seconds(qtbot, background):
     dialog.description_edit.setText("Retained authored stream duration")
     saved = dialog._build_profile()
     assert saved.defaults.condition.stream_duration_seconds == 120
+    assert saved.defaults.condition.presentation_count == 3

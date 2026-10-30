@@ -87,19 +87,20 @@ def _scenario(project: ProjectFile, root: Path, kind: str) -> ProjectFile:
     return project
 
 
-# Captured from the pre-refactor compiler on 2026-09-18. Every serialized field,
-# including all schedules, task orders, answer keys and seeds, contributes to the digest.
+# Native AB retains its pre-refactor baseline from 2026-09-18. Ordinary FPVS
+# baselines now record SessionPlan 1.6 pooled ordering. Every serialized field,
+# including schedules, task orders, answer keys and seeds, contributes to the digest.
 _BASELINE_DIGESTS = {
-    ("image", 42): "786b1d71fad4db2adb7d4a134062a7dfa69fa8bd4ed9ab52e3fb17a212431846",
-    ("image", 83): "f742c97a50978cb6cf63f397022afe054da74ab2ead3a6e4af53ab7d023c2754",
-    ("word", 42): "1d861c6f8b261cfe5414f20f572bf06ff9d9e921ef88eb4a942bbd06430e5599",
-    ("word", 83): "45eb0b1ba7c05c15ec8088b4a2a46094c8cd7d135af980aee4fded1f075f2202",
+    ("image", 42): "4f0bbf0708dde0247be97a4adef6a3d6739236a063e4f8c059c378274bb740d6",
+    ("image", 83): "e800cf26f1434b4af241fd13686b8145436a28d6c7d088e6913ea3cfcd99cbe1",
+    ("word", 42): "c69397f75539e197c732e5a999ca4b319face22c7016da6bf76e1d9747750792",
+    ("word", 83): "429ce2e4079cbf29817150b3d08bb720cb9390066be62753d854dcb5e2e6d227",
     ("ab", 42): "fe6618028685e8267b3a057153baf5f55e88560bd10c8ff8fb18f0c887136301",
     ("ab", 83): "221d8dcbc373e3055e0b2b91dabd7a6e6eed2d28f4e4b0b01f35238e8a13cba3",
-    ("counting", 42): "7aab544d020aaef30b4e487424489b709220e9e22a3e99609459bbfb927d28bc",
-    ("counting", 83): "8140f5b277ab0ef3ef1807fb7ebba884d16959ba6042bfd8d4fb8791db92f6e3",
-    ("memory", 42): "42de4865f5974e7eee4bca0ba3accf57f35b9014a98ed9a09c18d5b5f51a9d49",
-    ("memory", 83): "48e6587af41574aa74b6277904e19d498caf4634839c7cb813008f47277d6648",
+    ("counting", 42): "a812c9e4f8bca1874f5017448398d28e585eba439fd0338c91d88b54f5c65bb7",
+    ("counting", 83): "8a58cdf575e94d516a969f6b06f82f2b37351c756197cf797fa292b69dc21603",
+    ("memory", 42): "4eb685309413d3b08c4415dd4e13ab3f7115e83a11abef7f5cf5992dc235ccbf",
+    ("memory", 83): "7e2a895e80d9d31825826b1e4f87d8068eec9d38f188edb66ff4141f03cf7416",
 }
 
 

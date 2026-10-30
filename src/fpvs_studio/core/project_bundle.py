@@ -72,6 +72,7 @@ from fpvs_studio.core.serialization import (
     replace_file_atomically,
     save_project_file,
 )
+from fpvs_studio.core.session_ordering import effective_condition_presentation_count
 from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, owned_image_references
 from fpvs_studio.preprocessing.inspection import (
     MAX_BUNDLE_IMAGE_BYTES,
@@ -907,9 +908,13 @@ def _staged_destination_path(staged_project_root: Path, relative_path: str) -> P
 
 
 def _validate_bundle_compilation_budget(project: ProjectFile, *, refresh_hz: float) -> None:
-    # Reserve one extra occurrence per condition for possible masking catch trials.
-    repetitions = project.settings.session.block_count + 1
-    run_count = len(project.conditions) * repetitions
+    # Reserve an extra occurrence only where masking can add a catch trial.
+    occurrences = {
+        condition.condition_id: effective_condition_presentation_count(project, condition)
+        + int(condition_masking(project, condition) is not None)
+        for condition in project.conditions
+    }
+    run_count = sum(occurrences.values())
     if run_count > MAX_BUNDLE_COMPILATION_RUNS:
         raise ProjectBundleError("Project bundle compilation workload exceeds the run limit.")
     event_count = 0
@@ -926,7 +931,7 @@ def _validate_bundle_compilation_budget(project: ProjectFile, *, refresh_hz: flo
         masking = condition_masking(project, condition)
         # Masking emits overlays, target/mask events and optional markers per slot.
         weight = len(masking.base_overlays) + 4 if masking is not None else 1
-        event_count += slots * weight * repetitions
+        event_count += slots * weight * occurrences[condition.condition_id]
         if event_count > MAX_BUNDLE_COMPILATION_EVENTS:
             raise ProjectBundleError("Project bundle compilation workload exceeds the event limit.")
     fixation = project.settings.fixation_task

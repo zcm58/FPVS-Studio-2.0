@@ -771,6 +771,7 @@ def preflight_session_plan(
     actual_indices = [entry.global_order_index for entry in ordered_entries]
     if actual_indices != expected_indices:
         raise PreflightError("Session preflight failed because session entry ordering is invalid.")
+    _validate_session_presentation_identity(session_plan)
     for entry in ordered_entries:
         preflight_run_spec(
             project_root,
@@ -792,3 +793,26 @@ def preflight_session_plan(
         engine=engine,
         runtime_options=runtime_options,
     )
+
+
+def _validate_session_presentation_identity(session_plan: SessionPlan) -> None:
+    """Check new pooled occurrence metadata while preserving historical plans/reruns."""
+    entries = session_plan.ordered_entries()
+    if session_plan.ordering_policy is None:
+        if any(entry.condition_presentation_index is not None
+               or entry.condition_presentation_count is not None for entry in entries):
+            raise PreflightError("Presentation identity requires a pooled session ordering policy.")
+        return
+    if (session_plan.ordering_policy != "pooled_no_adjacent"
+            or session_plan.schema_version != "1.6.0"):
+        raise PreflightError("Pooled presentations require SessionPlan schema 1.6.0.")
+    seen: dict[str, tuple[int, int]] = {}
+    for entry in entries:
+        index, count = entry.condition_presentation_index, entry.condition_presentation_count
+        if (type(index) is not int or type(count) is not int
+                or index < 1 or index > count):
+            raise PreflightError("Session presentation identity is missing or invalid.")
+        prior = seen.get(entry.condition_id)
+        if prior is not None and (count != prior[1] or index <= prior[0]):
+            raise PreflightError("Session presentation indices or counts are inconsistent.")
+        seen[entry.condition_id] = (index, count)

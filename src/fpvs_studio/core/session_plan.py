@@ -6,9 +6,15 @@ requests."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictInt,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.enums import InterConditionMode, SchemaVersion
 from fpvs_studio.core.models import FPVSBaseModel
@@ -46,9 +52,29 @@ class SessionEntry(FPVSBaseModel):
     pre_tasks: list[TaskModuleSpec] = Field(default_factory=list)
     post_tasks: list[TaskModuleSpec] = Field(default_factory=list)
     show_condition_start_gate: bool = True
+    condition_presentation_index: StrictInt | None = Field(default=None, ge=1)
+    condition_presentation_count: StrictInt | None = Field(default=None, ge=1)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_presentations(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.condition_presentation_index is None:
+            payload.pop("condition_presentation_index", None)
+        if self.condition_presentation_count is None:
+            payload.pop("condition_presentation_count", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_consistency(self) -> SessionEntry:
+        if ((self.condition_presentation_index is None)
+                != (self.condition_presentation_count is None)):
+            raise ValueError("Condition presentation index and count must be supplied together.")
+        if (self.condition_presentation_index is not None
+                and self.condition_presentation_count is not None
+                and self.condition_presentation_index > self.condition_presentation_count):
+            raise ValueError("Condition presentation index may not exceed its total count.")
         if self.run_id != self.run_spec.run_id:
             raise ValueError("SessionEntry.run_id must match run_spec.run_id.")
         if self.condition_id != self.run_spec.condition.condition_id:
@@ -91,6 +117,7 @@ class SessionPlan(FPVSBaseModel):
     blocks: list[SessionBlock] = Field(default_factory=list)
     total_runs: int = Field(ge=0)
     authored_task_flow: bool | None = None
+    ordering_policy: Literal["pooled_no_adjacent"] | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_flow(
@@ -99,23 +126,36 @@ class SessionPlan(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.authored_task_flow is None:
             payload.pop("authored_task_flow", None)
+        if self.ordering_policy is None:
+            payload.pop("ordering_policy", None)
         return payload
 
     @model_validator(mode="after")
     def validate_totals(self) -> SessionPlan:
+        entries = [entry for block in self.blocks for entry in block.entries]
+        has_presentations = any(entry.condition_presentation_index is not None for entry in entries)
+        if self.schema_version == "1.6.0":
+            if self.ordering_policy != "pooled_no_adjacent" or any(
+                entry.condition_presentation_index is None for entry in entries
+            ):
+                raise ValueError(
+                    "Pooled sessions require an ordering policy and presentation indices."
+                )
+        elif self.ordering_policy is not None or has_presentations:
+            raise ValueError("Presentation ordering metadata requires SessionPlan schema 1.6.0.")
         if self.authored_task_flow is not None and self.schema_version not in {
-            "1.3.0", "1.4.0", "1.5.0",
+            "1.3.0", "1.4.0", "1.5.0", "1.6.0",
         }:
             raise ValueError("Authored task session flow requires SessionPlan schema 1.3.0.")
         if any(entry.run_spec.scene_stream is not None
                and entry.run_spec.scene_stream.is_catch_trial
                for block in self.blocks for entry in block.entries):
-            if self.schema_version not in {"1.4.0", "1.5.0"}:
+            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0"}:
                 raise ValueError("Catch trials require SessionPlan schema 1.4.0.")
         if any(task_requires_text_alignment_schema(task)
                for block in self.blocks for entry in block.entries
                for task in [*entry.pre_tasks, *entry.post_tasks]):
-            if self.schema_version != "1.5.0":
+            if self.schema_version not in {"1.5.0", "1.6.0"}:
                 raise ValueError("Task text alignment requires SessionPlan schema 1.5.0.")
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")

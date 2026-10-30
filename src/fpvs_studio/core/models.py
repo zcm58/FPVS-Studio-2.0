@@ -548,6 +548,7 @@ class ConditionDefaults(FPVSBaseModel):
     sequence_count: int = Field(default=1, ge=1)
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
     stream_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    presentation_count: StrictInt | None = Field(default=None, gt=0)
     target_repeats_per_image: int = Field(default=7, ge=1)
 
     @model_serializer(mode="wrap")
@@ -557,6 +558,8 @@ class ConditionDefaults(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.stream_duration_seconds is None:
             payload.pop("stream_duration_seconds", None)
+        if self.presentation_count is None:
+            payload.pop("presentation_count", None)
         return payload
 
 
@@ -803,6 +806,7 @@ class Condition(FPVSBaseModel):
     oddball_cycle_repeats_per_sequence: int = Field(default=146, ge=1)
     base_hz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     stream_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    presentation_count: StrictInt | None = Field(default=None, gt=0)
     trigger_code: StrictInt = Field(default=1, ge=1, le=255)
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     order_index: int = Field(default=0, ge=0)
@@ -824,6 +828,8 @@ class Condition(FPVSBaseModel):
             payload.pop("base_hz", None)
         if self.stream_duration_seconds is None:
             payload.pop("stream_duration_seconds", None)
+        if self.presentation_count is None:
+            payload.pop("presentation_count", None)
         return payload
 
     @field_validator("condition_id")
@@ -871,6 +877,10 @@ class Condition(FPVSBaseModel):
         if ((self.base_hz is not None or self.stream_duration_seconds is not None)
                 and self.attentional_blink is not None):
             raise ValueError("Condition timing overrides are unavailable for Attentional-Blink.")
+        if self.presentation_count is not None and self.attentional_blink is not None:
+            raise ValueError(
+                "Per-condition presentation counts are unavailable for Attentional-Blink."
+            )
         for label, bindings in (
             ("pre", self.pre_task_bindings),
             ("post", self.post_task_bindings),
@@ -960,6 +970,15 @@ class ProjectFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> ProjectFile:
+        has_presentations = self.settings.condition_defaults.presentation_count is not None or any(
+            condition.presentation_count is not None for condition in self.conditions
+        )
+        if has_presentations:
+            if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+                raise ValueError(
+                    "Per-condition presentation counts are unavailable for Attentional-Blink."
+                )
+            self.schema_version = ProjectSchemaVersion.V1_13
         has_duration = self.settings.condition_defaults.stream_duration_seconds is not None or any(
             condition.stream_duration_seconds is not None for condition in self.conditions
         )
@@ -968,9 +987,11 @@ class ProjectFile(FPVSBaseModel):
                 raise ValueError(
                     "Condition timing overrides are unavailable for Attentional-Blink."
                 )
-            if has_duration:
+            if has_duration and self.schema_version != ProjectSchemaVersion.V1_13:
                 self.schema_version = ProjectSchemaVersion.V1_12
-            elif self.schema_version != ProjectSchemaVersion.V1_12:
+            elif self.schema_version not in {
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
+            }:
                 self.schema_version = ProjectSchemaVersion.V1_11
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
@@ -978,14 +999,14 @@ class ProjectFile(FPVSBaseModel):
                    ProjectSchemaVersion.V1_8,
                    ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10,
                    ProjectSchemaVersion.V1_11,
-                   ProjectSchemaVersion.V1_12,
+                   ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
             self.schema_version not in {
                 ProjectSchemaVersion.V1_6, ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8,
                 ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
-                ProjectSchemaVersion.V1_12,
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
             }
         ):
             raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
@@ -999,6 +1020,17 @@ class ProjectFile(FPVSBaseModel):
         if len(task_ids) != len(set(task_ids)):
             raise ValueError("Task module ids must be unique.")
         validate_condition_modifiers(self)
+        if has_presentations:
+            from fpvs_studio.core.masking import condition_masking
+
+            if any(condition_masking(self, condition) is not None and (
+                condition.presentation_count is not None
+                or self.settings.condition_defaults.presentation_count is not None
+            ) for condition in self.conditions):
+                raise ValueError(
+                    "Per-condition presentation counts are unavailable for masking groups. "
+                    "Use the session repeat count."
+                )
         from fpvs_studio.core.task_models import task_requires_scene_schema
 
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
@@ -1006,7 +1038,7 @@ class ProjectFile(FPVSBaseModel):
             if self.schema_version not in {
                 ProjectSchemaVersion.V1_7, ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9,
                 ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
-                ProjectSchemaVersion.V1_12,
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
             }:
                 raise ValueError("Masking and native task scenes require project schema 1.7.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
@@ -1014,25 +1046,26 @@ class ProjectFile(FPVSBaseModel):
             if self.schema_version not in {
                 ProjectSchemaVersion.V1_8, ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10,
                 ProjectSchemaVersion.V1_11,
-                ProjectSchemaVersion.V1_12,
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
             }:
                 raise ValueError("Masking catch trials require project schema 1.8.0.")
         if any(condition.masking_catch for condition in self.conditions):
             if self.schema_version not in {
                 ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
-                ProjectSchemaVersion.V1_12,
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
             }:
                 raise ValueError("Explicit masking catch conditions require project schema 1.9.0.")
         if any(task_requires_text_alignment_schema(task) for task in self.task_modules):
             if self.schema_version not in {
                 ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
-                ProjectSchemaVersion.V1_12,
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
             }:
                 raise ValueError("Task text alignment requires project schema 1.9.0.")
         if any(modifier.masking is not None and modifier.masking.event_triggers is not None
                for modifier in self.condition_modifiers):
             if self.schema_version not in {
-                ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11, ProjectSchemaVersion.V1_12,
+                ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
+                ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
             }:
                 raise ValueError("Masking event triggers require project schema 1.10.0.")
         return self
@@ -1095,6 +1128,9 @@ class ConditionTemplateProfile(FPVSBaseModel):
         if (self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
                 and self.defaults.condition.stream_duration_seconds is not None):
             raise ValueError("Stream duration defaults are unavailable for Attentional-Blink.")
+        if (self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+                and self.defaults.condition.presentation_count is not None):
+            raise ValueError("Presentation count defaults are unavailable for Attentional-Blink.")
         return self
 
     @field_validator("profile_id")
@@ -1125,7 +1161,11 @@ class ConditionTemplateProfileLibrary(FPVSBaseModel):
     def validate_unique_profile_ids(self) -> ConditionTemplateProfileLibrary:
         if any(profile.defaults.condition.stream_duration_seconds is not None
                for profile in self.profiles):
-            self.schema_version = ConditionTemplateSchemaVersion.V1_3
+            if self.schema_version != ConditionTemplateSchemaVersion.V1_4:
+                self.schema_version = ConditionTemplateSchemaVersion.V1_3
+        if any(profile.defaults.condition.presentation_count is not None
+               for profile in self.profiles):
+            self.schema_version = ConditionTemplateSchemaVersion.V1_4
         profile_ids = [item.profile_id for item in self.profiles]
         if len(profile_ids) != len(set(profile_ids)):
             raise ValueError("Condition template profile ids must be unique.")

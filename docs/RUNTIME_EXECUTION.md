@@ -1224,3 +1224,12 @@ frames divided by the compiled refresh rate. These are planned stream lengths;
 measured playback remains in timing-QC records. Lead-in, participant tasks, transitions
 and feedback are excluded. Existing history rows and participant/visit identity remain
 intact when the added columns are introduced.
+
+## Condition presentation identity
+
+New ordinary sessions carry chronological per-condition presentation index/count in
+SessionEntry. Full `conditions.csv` and project `session_condition_history.csv` expose
+that identity separately from block/global order and task-module repetition. Each
+presentation runs the existing task/transition flow independently; requested stream
+seconds apply once per entry. Exact-occurrence recovery retains the original index and
+total, while historical plans without those fields remain readable.

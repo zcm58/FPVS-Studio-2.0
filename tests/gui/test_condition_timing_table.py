@@ -10,6 +10,7 @@ from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.condition_timing import resolve_condition_stream_timing
 from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.session_ordering import effective_condition_presentation_count
 from fpvs_studio.gui.condition_timing_table import FREQUENCY_OVERRIDE_WARNING, ConditionTimingTable
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
@@ -217,7 +218,9 @@ def test_5994_duration_alternatives_are_explicit_and_displayed_values_are_usable
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-@pytest.mark.parametrize("state", ["shared", "custom", "invalid", "duration_invalid", "unresolved"])
+@pytest.mark.parametrize("state", [
+    "shared", "custom", "invalid", "duration_invalid", "unresolved", "counts", "count_invalid",
+])
 def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
     qtbot, monkeypatch, tmp_path, background, state,
 ):
@@ -229,6 +232,8 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
     if state == "custom":
         document.update_condition_frequencies(overrides={first: 4})
+    elif state == "counts":
+        document.update_condition_timing(presentation_counts={first: 3, second: 2})
     elif state == "unresolved":
         document.update_display_settings(preferred_refresh_hz=None)
     wizard = SetupWizardPage(
@@ -250,8 +255,14 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
         table.duration_spins[first].setValue(10.1)
         assert not wizard.flush_pending_edits()
         assert table.duration_choice_buttons
+    elif state == "count_invalid":
+        table.presentation_count_spins[first].setValue(3)
+        table.presentation_count_spins[second].setValue(1)
+        assert not wizard.flush_pending_edits()
+        assert table.error_label.isVisible()
     QApplication.processEvents()
     assert wizard.size().toTuple() == (1120, 820)
+    assert wizard.experiment_step_surface.content.maximumWidth() == 1040
     assert table.isVisible()
     assert not wizard.runtime_settings_editor.base_hz_spin.isVisible()
     assert table.geometry().bottom() < wizard.experiment_settings_card.geometry().top()
@@ -264,6 +275,20 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
                 assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     assert table.table.item(0, 0).toolTip() == document.get_condition(first).name
     assert table.source_labels[second].text() == "Shared"
+    assert table.table.columnCount() == 7
+    assert not wizard.session_structure_editor.block_count_spin.isVisible()
+    assert table.table.horizontalScrollBar().maximum() == 0
+    for column in range(1, table.table.columnCount()):
+        text = table.table.horizontalHeaderItem(column).text()
+        assert table.table.columnWidth(column) >= table.fontMetrics().horizontalAdvance(text) + 8
+    for spin in table.presentation_count_spins.values():
+        assert spin.minimum() == 1
+        assert spin.isVisible()
+        assert spin.width() >= spin.sizeHint().width()
+    if state == "counts":
+        assert table.presentation_count_spins[first].value() == 3
+        assert table.total_stimulation_labels[first].text() == "30 s"
+        assert wizard.session_structure_editor.presentation_total_label.text() == "5 total"
     if state == "unresolved":
         assert not table.duration_spins[first].isEnabled()
         assert all("Stimulation total:" not in line
@@ -393,3 +418,168 @@ def test_word_cadence_edit_preserves_authored_seconds_atomically(tmp_path):
     document.update_protocol_settings(oddball_every_n=6)
     assert document.get_condition(second).stream_duration_seconds == 10
     assert document.get_condition(second).oddball_cycle_repeats_per_sequence == 10
+
+
+def test_total_presentation_counts_apply_with_frequency_and_duration_atomically(qtbot, tmp_path):
+    document, first, second = _document(tmp_path)
+    original = document.project.model_copy(deep=True)
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    editor.show()
+    editor.shared_frequency_spin.setValue(3)
+    editor.duration_spins[first].setValue(20)
+    editor.duration_spins[second].setValue(30)
+    editor.presentation_count_spins[first].setValue(3)
+    editor.presentation_count_spins[second].setValue(1)
+    assert editor.total_stimulation_labels[first].text() == "60 s"
+    assert not editor.apply_pending_edits()
+    assert document.project == original
+    assert editor.has_pending_edits()
+    assert editor.shared_frequency_spin.value() == 3
+    assert editor.duration_spins[first].value() == 20
+    assert editor.presentation_count_spins[first].value() == 3
+    assert "Image presentation" in editor.error_label.text()
+    assert not editor.duration_choice_buttons
+
+    editor.presentation_count_spins[second].setValue(2)
+    assert editor.apply_pending_edits()
+    assert document.project.settings.protocol.base_hz == 3
+    assert document.get_condition(first).stream_duration_seconds == 20
+    assert document.get_condition(second).stream_duration_seconds == 30
+    assert document.get_condition(first).presentation_count == 3
+    assert effective_condition_presentation_count(
+        document.project, document.get_condition(second),
+    ) == 2
+    assert document.project.settings.session.block_count == original.settings.session.block_count
+    assert not editor.has_pending_edits()
+
+
+def test_count_only_edit_keeps_unresolved_legacy_stream_and_supports_discard(qtbot, tmp_path):
+    document, first, second = _document(tmp_path)
+    document.update_display_settings(preferred_refresh_hz=None)
+    before = {item.condition_id: item.model_copy(deep=True) for item in document.project.conditions}
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    assert editor.presentation_count_spins[first].value() == 2
+    assert not editor.duration_spins[first].isEnabled()
+    editor.presentation_count_spins[first].setValue(3)
+    editor.discard_button.click()
+    assert editor.presentation_count_spins[first].value() == 2
+    assert not editor.has_pending_edits()
+    editor.presentation_count_spins[first].setValue(3)
+    assert editor.apply_pending_edits()
+    assert document.project.settings.display.preferred_refresh_hz is None
+    for condition in document.project.conditions:
+        previous = before[condition.condition_id]
+        assert condition.stream_duration_seconds is None
+        assert condition.sequence_count == previous.sequence_count
+        assert condition.oddball_cycle_repeats_per_sequence == (
+            previous.oddball_cycle_repeats_per_sequence
+        )
+    assert document.get_condition(first).presentation_count == 3
+    assert document.get_condition(second) == before[second]
+    assert editor.total_stimulation_labels[first].text() == "Unresolved"
+
+
+def test_three_total_presentations_compile_as_three_separate_streams_after_reload(qtbot, tmp_path):
+    document, first, second = _document(tmp_path)
+    document.set_condition_stimulus_modality(first, modality=StimulusModality.WORD)
+    document.update_condition_words(first, role="base", words=["chair", "desk"])
+    document.update_condition_words(first, role="oddball", words=["fear", "anger"])
+    editor = ConditionTimingTable(document)
+    qtbot.addWidget(editor)
+    for condition_id in (first, second):
+        editor.duration_spins[condition_id].setValue(60)
+    editor.presentation_count_spins[first].setValue(3)
+    editor.presentation_count_spins[second].setValue(2)
+    editor.apply_button.click()
+    assert not editor.has_pending_edits()
+    assert editor.total_stimulation_labels[first].text() == "180 s"
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    plan = reopened.compile_session(refresh_hz=60)
+    entries = plan.ordered_entries()
+    assert [entry.condition_id for entry in entries] == [first, second, first, second, first]
+    assert len({entry.run_id for entry in entries}) == 5
+    assert all(entry.run_spec.display.total_frames == 3600 for entry in entries)
+    assert all(entry.run_spec.condition.requested_duration_seconds == 60 for entry in entries)
+
+
+def test_saved_impossible_single_condition_count_is_actionable_in_timing(
+    qtbot, monkeypatch, tmp_path,
+):
+    document, first, second = _document(tmp_path)
+    document.remove_condition(second)
+    monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    table = wizard.condition_timing_table
+    assert table.presentation_count_spins[first].value() == 2
+    assert table.error_label.isVisible()
+    assert not wizard._step_valid(3)
+    assert wizard._current_step_blocker() == table.presentation_count_blocker()
+    table.presentation_count_spins[first].setValue(1)
+    assert wizard.flush_pending_edits()
+    assert not table.presentation_count_blocker()
+    assert not table.error_label.isVisible()
+    assert wizard._step_valid(3)
+
+
+def test_new_condition_uses_template_total_presentations_for_image_and_word(qtbot, tmp_path):
+    document, _first, _second = _document(tmp_path)
+    document.update_condition_defaults(presentation_count=3)
+    condition_id = document.create_condition(name="Template presentations")
+    assert document.get_condition(condition_id).presentation_count == 3
+    document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
+    assert document.get_condition(condition_id).presentation_count == 3
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
+    qtbot, monkeypatch, tmp_path, background,
+):
+    from tests.unit.test_masking import masking_project
+
+    document, _first, _second = _document(tmp_path)
+    project = masking_project(("color",))
+    project.meta = document.project.meta.model_copy(deep=True)
+    project.settings.display.preferred_refresh_hz = 60
+    document.apply_condition_modifier_project(project)
+    catch_id = document.add_masking_catch_condition("color-1")
+    monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    palette = wizard.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    wizard.setPalette(palette)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    QApplication.processEvents()
+    editor = wizard.session_structure_editor
+    assert editor.block_count_spin.isVisible()
+    assert editor.session_layout.labelForField(editor.block_count_spin).text() == (
+        "Repeats per condition"
+    )
+    table = wizard.condition_timing_table
+    assert all(not spin.isEnabled() for spin in table.presentation_count_spins.values())
+    assert table.presentation_count_spins[catch_id].value() == 1
+    assert "variant and catch grouping" in table.presentation_count_spins[catch_id].toolTip()
+    duration_draft = table.duration_spins["color-1"].value() + 1
+    table.duration_spins["color-1"].setValue(duration_draft)
+    editor.block_count_spin.setValue(4)
+    assert document.project.settings.session.block_count == 4
+    assert table.presentation_count_spins["color-1"].value() == 4
+    assert table.presentation_count_spins[catch_id].value() == 1
+    assert table.duration_spins["color-1"].value() == duration_draft
+    assert editor.presentation_total_label.text() == "13 total"
+    assert_visible_children_within_parent(wizard.experiment_step_surface)

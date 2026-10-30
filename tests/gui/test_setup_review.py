@@ -109,7 +109,9 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
             source_dir=_write_image_directory(tmp_path / f"{condition_name}-oddball"),
         )
 
-    guide.session_structure_editor.block_count_spin.setValue(2)
+    window.document.update_condition_timing(presentation_counts={
+        condition.condition_id: 2 for condition in window.document.ordered_conditions()
+    })
     guide.fixation_settings_editor.fixation_enabled_checkbox.setChecked(True)
     guide.fixation_settings_editor.fixation_accuracy_checkbox.setChecked(True)
     guide.fixation_settings_editor._set_response_key("g")
@@ -123,7 +125,7 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     label_text = "\n".join(label.text() for label in review_card.findChildren(QLabel))
     assert "Review Your Experiment" in label_text
     assert "2 conditions" in label_text
-    assert "2 repeats per condition" in label_text
+    assert "4 presentations" in label_text
     assert "Accuracy tracking: On" in label_text
     assert "Response: G within" in label_text
     assert "Participant tutorial: On" in label_text
@@ -160,10 +162,12 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     )
     qtbot.mouseClick(session_edit, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
-    guide.session_structure_editor.block_count_spin.setValue(3)
+    window.document.update_condition_timing(presentation_counts={
+        condition.condition_id: 3 for condition in window.document.ordered_conditions()
+    })
     guide.open_wizard(step_key="review")
     assert any(
-        "3 repeats per condition" in label.text() for label in review_card.findChildren(QLabel)
+        "6 presentations" in label.text() for label in review_card.findChildren(QLabel)
     )
 
     prompts: list[str] = []

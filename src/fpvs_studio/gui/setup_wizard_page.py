@@ -28,7 +28,15 @@ from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.masking import condition_masking, is_masking_project
-from fpvs_studio.core.models import AttentionalBlinkStreamSettings, ConditionTemplateProfile
+from fpvs_studio.core.models import (
+    AttentionalBlinkStreamSettings,
+    Condition,
+    ConditionTemplateProfile,
+)
+from fpvs_studio.core.session_ordering import (
+    condition_presentation_counts,
+    session_presentation_count,
+)
 from fpvs_studio.core.validation import condition_fixation_guidance
 from fpvs_studio.gui.assets_pages import AssetsPage
 from fpvs_studio.gui.attentional_blink_character_size import AttentionalBlinkCharacterSizeEditor
@@ -614,7 +622,14 @@ class SetupWizardPage(QWidget):
         self.experiment_step_surface = _SetupStepSurface(
             self._experiment_settings_step_page(),
             object_name="setup_wizard_experiment_surface",
-            max_width=880,
+            max_width=(
+                880
+                if (
+                    self._document.project.experiment_category
+                    == ExperimentCategory.ATTENTIONAL_BLINK
+                )
+                else _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH
+            ),
             parent=self,
         )
         self.image_size_settings_card = self._settings_step_card(
@@ -1314,6 +1329,15 @@ class SetupWizardPage(QWidget):
             if fixation.participant_tutorial_enabled
             else "Off"
         )
+        presentation_total = session_presentation_count(project, conditions)
+        session_count_summary = (
+            f"{session.block_count} bursts per SOA · {presentation_total} total · "
+            "all shuffled together"
+            if letter_stream and session.randomize_across_blocks else
+            f"{session.block_count} group repeats · {presentation_total} presentations"
+            if masking_project or letter_stream else
+            f"{presentation_total} presentations · shuffled without adjacent repeats"
+        )
         return (
             ("project", "Project", (project.meta.name, f"Participant tutorial: {tutorial}")),
             (
@@ -1356,12 +1380,7 @@ class SetupWizardPage(QWidget):
                 "session",
                 "Session",
                 (
-                    (
-                        f"{session.block_count} bursts per SOA · "
-                        f"{session.block_count * len(conditions)} total · all shuffled together"
-                        if session.randomize_across_blocks
-                        else f"{session.block_count} repeats per condition · randomized order"
-                    ),
+                    session_count_summary,
                     *self._review_timing_estimate_lines(),
                 ),
             ),
@@ -1398,12 +1417,27 @@ class SetupWizardPage(QWidget):
             return ("Estimated run time: unavailable for current refresh rate",)
         condition_ids = {condition.condition_id for condition in conditions}
         ordered_guidance = [row for row in guidance if row.condition_id in condition_ids]
-        block_count = self._document.project.settings.session.block_count
-        condition_time_seconds = sum(row.condition_duration_seconds for row in ordered_guidance)
-        total_condition_runs = len(ordered_guidance) * block_count
+        if len(ordered_guidance) != len(conditions):
+            return ("Estimated run time: unavailable for current condition timing",)
+        counts = condition_presentation_counts(self._document.project, conditions)
+        total_condition_runs = session_presentation_count(self._document.project, conditions)
         break_count = max(0, total_condition_runs - 1)
         break_seconds = break_count * _ESTIMATED_INTER_CONDITION_BREAK_SECONDS
-        stimulation_seconds = condition_time_seconds * block_count
+        stimulation_seconds = sum(
+            row.condition_duration_seconds * counts[row.condition_id] for row in ordered_guidance
+        )
+        durations = {row.condition_id: row.condition_duration_seconds for row in ordered_guidance}
+        masking_groups: dict[str, list[Condition]] = {}
+        for condition in conditions:
+            settings = condition_masking(self._document.project, condition)
+            if settings is not None:
+                masking_groups.setdefault(settings.variant, []).append(condition)
+        for group in masking_groups.values():
+            if not any(condition.masking_catch for condition in group) and any(
+                (settings := condition_masking(self._document.project, condition)) is not None
+                and settings.catch_trial is not None for condition in group
+            ):
+                stimulation_seconds += durations[group[0].condition_id]
         total_seconds = stimulation_seconds + break_seconds
         estimated_minutes = max(1, ceil(total_seconds / 60))
         minute_word = "minute" if estimated_minutes == 1 else "minutes"
@@ -1451,7 +1485,8 @@ class SetupWizardPage(QWidget):
         if step_key == "design":
             return not self._design_setup_blocker()
         if step_key == "experiment":
-            return self.runtime_settings_editor.timing_is_compatible()
+            return (self.runtime_settings_editor.timing_is_compatible()
+                    and not self.condition_timing_table.presentation_count_blocker())
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
@@ -1473,7 +1508,8 @@ class SetupWizardPage(QWidget):
         if step_key == "design":
             return self._design_setup_blocker()
         if step_key == "experiment":
-            return self.runtime_settings_editor.timing_blocker()
+            return (self.condition_timing_table.presentation_count_blocker()
+                    or self.runtime_settings_editor.timing_blocker())
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):

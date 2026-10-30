@@ -242,7 +242,9 @@ def _build_project(project_id: str, project_name: str, *, condition_count: int) 
 def sample_project() -> ProjectFile:
     """Return a minimally valid project with one compile-ready condition."""
 
-    return _build_project("sample-project", "Sample Project", condition_count=1)
+    project = _build_project("sample-project", "Sample Project", condition_count=1)
+    project.settings.session.block_count = 1
+    return project
 
 
 @pytest.fixture

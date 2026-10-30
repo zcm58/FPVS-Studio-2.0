@@ -1,11 +1,10 @@
 # Per-Condition Presentation Counts and Shuffled Ordering
 
-Status: Planned
+Status: Completed
 
 ## Purpose and confirmed decisions
 
-Planning branch: `feat/condition-timing-and-reproducibility`. Implementation has not
-started. Make the number of complete presentations independently editable for each
+Planning branch: `feat/condition-timing-and-reproducibility`. Implemented on this feature branch. Make the number of complete presentations independently editable for each
 FPVS image or word condition in Timing & Session, beside its frequency and duration.
 
 A 60-second condition with a presentation count of 3 means **three separate
@@ -20,7 +19,7 @@ changing counts or retrying indefinitely.
 
 Image order and fixation timing vary between a condition's repeats, while the
 corresponding repeat matches across participants in fixed-seed mode. The
-[randomization plan](reproducible-randomization-controls.md) owns those schedules.
+[randomization plan](../planned/reproducible-randomization-controls.md) owns those schedules.
 
 ## Current evidence and ownership
 
@@ -81,3 +80,50 @@ count, repeat participant visits or task-module repetition. Native AB burst coun
 outside this feature and keep their existing contracts. Specialized masking/catch
 grouping must retain its scientific rules; report incompatible overrides rather than
 silently changing those rules.
+
+## Execution progress and UI brief
+
+- Frequency and duration plans are pushed as 3200a42 and 62d7064.
+- Add total presentations beside frequency/seconds in the existing Timing & Session
+  table. The author applies exact positive counts and sees condition/session totals.
+- All occurrences are pooled, with no adjacent duplicate condition. Infeasible counts
+  preserve the draft/project and identify the adjustment needed; no retry loop or fallback.
+- Legacy continuous sequence multipliers retain their meaning. Native AB burst counts
+  and specialized masking groups retain their scientific scheduling contracts.
+- Verify core/session/runtime/config/bundle behavior and source audits; maintain
+  registered GUI sizing/interaction checks without executing Qt locally.
+
+## Migration and scheduling decisions
+
+- Fresh ordinary FPVS compilation always uses pooled, non-adjacent ordering. Missing
+  per-condition counts inherit the saved global block count as a total, without an
+  additional multiplier. Counts are never silently reduced, even when a legacy
+  one-condition/two-presentation project becomes infeasible under the approved rule.
+- Previously compiled plans retain their stored order. Exact-occurrence recovery keeps
+  the original condition presentation index/count rather than recompiling a new pool.
+- AB and specialized masking retain their existing scheduling and global controls;
+  unsupported per-condition count overrides are rejected before launch.
+- SessionPlan 1.6 records the ordinary ordering policy and chronological per-condition
+  occurrence metadata. Explicit authoring counts use Project 1.13/config 1.11, and
+  count defaults use the narrow template-library 1.4 contract.
+
+## Verification result
+
+- Final compiler focused: 592 passed. Core targeted: 131 passed; new count matrix:
+  19 passed; initial affected core rerun: 147 passed/one Windows symlink skip.
+- Consumer/runtime targeted: 353 passed/two expected symlink skips before fixture
+  corrections; corrected runtime cases: 34 passed; config/count regression: 68 passed.
+- Safe repository suite: 4045 passed, 12 Windows symlink skips, nine failures and
+  43 publication setup errors. The obsolete standalone-repeat/block/budget fixtures
+  were corrected without weakening the rule; their complete affected modules passed
+  73 tests/24 subtests and 54 tests. Two transient Windows rename/lock cases passed
+  unchanged on immediate four-case rerun. No unrelated production I/O changes made.
+- Canonical ordering fingerprint supplement: 178 passed, then 71 passed after the
+  final mixed-project case. New ordinary schedules cannot share historical block-policy
+  fingerprints; AB/masking and original source/report bytes remain unchanged.
+- Final Ruff/compilation, full-source mypy, configuration and repository audits passed
+  with only the pre-existing untracked helper lint exclusions recorded in plan 1.
+- Registered GUI coverage includes atomic counts/timing, impossible configurations,
+  template defaults, AB/masking controls and 1120x820 geometry. Qt/physical display
+  checks were not run locally. Keep-awake support requested during this work remains
+  temporary and is not part of the application or committed changes.

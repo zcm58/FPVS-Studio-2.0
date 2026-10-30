@@ -155,11 +155,13 @@ and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 ## Frameless Setup layout and copy
 
 The eight-step wizard uses one task heading, without duplicate card headings. Project
-has a centered 760 px form; Timing & Session share an 880 px form; Size is 760 px.
+has a centered 760 px form; Timing & Session uses 1040 px for FPVS or 880 px for
+native AB; Size is 760 px.
 Review remains 880 px, and Conditions/Design retain wider working areas. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
-Timing & Session has two labeled, frameless groups aligned along their tops. Existing
+Timing & Session places the FPVS timing/presentation table above two labeled,
+frameless Display and Session groups aligned along their tops. Existing
 Session shortcuts and Review links open this combined step.
 
 Timing keeps refresh, Verify display and background controls. Successful frame math
@@ -1548,3 +1550,23 @@ Visible acceptance: at 1120x820 in both themes, give two conditions different va
 lengths, reject an incompatible length, select a suggested duration at 59.94 Hz, then
 save/reopen. Change frequency with a coordinated duration draft and confirm atomic
 failure/recovery. Check long names, wrapped errors, keyboard focus and session totals.
+
+### Per-condition presentation counts
+
+Timing & Session places total Presentations beside each condition's frequency and
+stream seconds. A count of three runs that stream three separate times, each with its
+normal instructions, tasks and transitions. Per-row totals and the session estimate
+report stimulation separately from participant-paced time. Apply timing validates the
+whole draft; infeasible no-adjacent-repeat counts retain every saved value and explain
+which count must be reduced or supplemented.
+
+Ordinary FPVS hides the former global-repeat row. Native AB retains Bursts per SOA;
+masking retains its group controls and displays managed counts without unsupported
+individual overrides. Existing global counts are preserved as fallback totals, so a
+single ordinary condition with two requested presentations reports an error until the
+author changes its count or adds a separating condition.
+
+Visible acceptance: at 1120x820 in both themes, set A=3/B=2, confirm five separate
+presentations and their stimulation totals, then reject A=3/B=1 without mutation.
+Check required focus, long condition-name tooltips, frequency confirmation alongside
+count drafts, and masking/AB managed states.

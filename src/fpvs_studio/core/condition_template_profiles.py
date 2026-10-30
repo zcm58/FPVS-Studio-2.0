@@ -55,6 +55,7 @@ ATTENTIONAL_BLINK_STREAM_PROFILE_ID = "attentional-blink-letter-stream-v1"
 COGNITIVE_LOAD_PROFILE_ID = "cognitive-load-fpvs-v1"
 CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION = ConditionTemplateSchemaVersion.V1_2
 CONDITION_DURATION_LIBRARY_SCHEMA_VERSION = ConditionTemplateSchemaVersion.V1_3
+CONDITION_PRESENTATION_LIBRARY_SCHEMA_VERSION = ConditionTemplateSchemaVersion.V1_4
 
 
 def _shared_fixation_defaults() -> FixationTaskSettings:
@@ -198,7 +199,10 @@ def _normalize_library(
     ]
     return ConditionTemplateProfileLibrary(
         schema_version=(
-            CONDITION_DURATION_LIBRARY_SCHEMA_VERSION
+            CONDITION_PRESENTATION_LIBRARY_SCHEMA_VERSION
+            if any(profile.defaults.condition.presentation_count is not None
+                   for profile in ordered_profiles)
+            else CONDITION_DURATION_LIBRARY_SCHEMA_VERSION
             if any(profile.defaults.condition.stream_duration_seconds is not None
                    for profile in ordered_profiles)
             else CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION
@@ -218,6 +222,7 @@ def _migrate_library_payload(
     if schema_version in {
         CONDITION_TEMPLATE_LIBRARY_SCHEMA_VERSION.value,
         CONDITION_DURATION_LIBRARY_SCHEMA_VERSION.value,
+        CONDITION_PRESENTATION_LIBRARY_SCHEMA_VERSION.value,
     }:
         return ConditionTemplateProfileLibrary.model_validate(payload)
     if schema_version == ConditionTemplateSchemaVersion.V1_1.value:
@@ -451,5 +456,6 @@ def apply_condition_defaults_to_condition(
             "sequence_count": defaults.sequence_count,
             "oddball_cycle_repeats_per_sequence": defaults.oddball_cycle_repeats_per_sequence,
             "stream_duration_seconds": defaults.stream_duration_seconds,
+            "presentation_count": defaults.presentation_count,
         }
     )

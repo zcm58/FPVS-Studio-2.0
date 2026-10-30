@@ -168,6 +168,7 @@ class PublishCatalogTests(unittest.TestCase):
             source = root / "source"
             source.mkdir()
             project = build_starter_project("Demo")
+            project.settings.session.block_count = 1
             project.settings.fixation_task.enabled = False
             project.settings.fixation_task.accuracy_task_enabled = False
             project.settings.fixation_task.participant_tutorial_enabled = False

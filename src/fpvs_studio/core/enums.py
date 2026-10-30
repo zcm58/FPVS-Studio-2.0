@@ -27,6 +27,7 @@ class ConditionTemplateSchemaVersion(StrEnum):
     V1_1 = "1.1.0"
     V1_2 = "1.2.0"
     V1_3 = "1.3.0"
+    V1_4 = "1.4.0"
 
 
 class ProjectSchemaVersion(StrEnum):
@@ -45,6 +46,7 @@ class ProjectSchemaVersion(StrEnum):
     V1_10 = "1.10.0"
     V1_11 = "1.11.0"
     V1_12 = "1.12.0"
+    V1_13 = "1.13.0"
 
 
 class ExperimentCategory(StrEnum):

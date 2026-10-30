@@ -22,6 +22,7 @@ from fpvs_studio.core.attentional_blink_presets import (
     is_attentional_blink_stream_project,
 )
 from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.session_ordering import session_presentation_count
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     LaunchSurfaceFrame,
@@ -488,12 +489,20 @@ class HomePage(QWidget):
             is_attentional_blink_stream_project(project)
             and session_settings.randomize_across_blocks
         )
-        self.block_count_label.setText("Bursts" if burst_mode else "Blocks")
-        count = session_settings.block_count * (len(ordered_conditions) if burst_mode else 1)
+        ordinary = not is_attentional_blink_stream_project(project)
+        self.block_count_label.setText(
+            "Presentations" if ordinary else "Bursts" if burst_mode else "Blocks"
+        )
+        count = (
+            session_presentation_count(project, ordered_conditions)
+            if ordinary else session_settings.block_count * (
+                len(ordered_conditions) if burst_mode else 1
+            )
+        )
         self.block_count_value.setText(str(count))
         self.block_count_value.setToolTip(
             f"{session_settings.block_count} bursts per SOA, in randomized order."
-            if burst_mode else ""
+            if burst_mode else "Total separate condition presentations." if ordinary else ""
         )
         self.fixation_task_value.setText("Enabled" if fixation_settings.enabled else "Disabled")
         recall_enabled = any(

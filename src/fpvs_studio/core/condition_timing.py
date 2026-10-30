@@ -108,6 +108,7 @@ def propose_condition_timing(
     shared_base_hz: float | None = None,
     overrides: Mapping[str, float | None] | None = None,
     durations: Mapping[str, float] | None = None,
+    presentation_counts: Mapping[str, int] | None = None,
     refresh_hz: float | None = None,
 ) -> ProjectFile:
     """Return one validated draft, preserving seconds without partial source edits."""
@@ -124,7 +125,8 @@ def propose_condition_timing(
             **draft.settings.protocol.model_dump(), "base_hz": shared_base_hz,
         })
     by_id = {condition.condition_id: condition for condition in draft.conditions}
-    for condition_id in set(overrides or {}) | set(durations or {}):
+    edited_ids = set(overrides or {}) | set(durations or {}) | set(presentation_counts or {})
+    for condition_id in edited_ids:
         if condition_id not in by_id:
             raise ValueError(f"Unknown condition '{condition_id}'.")
         updates: dict[str, object] = {}
@@ -139,11 +141,22 @@ def propose_condition_timing(
                     "greater than zero."
                 )
             updates["stream_duration_seconds"] = value
+        if condition_id in (presentation_counts or {}):
+            count = (presentation_counts or {})[condition_id]
+            if type(count) is not int or count < 1:
+                raise ValueError(
+                    f"{by_id[condition_id].name}: total presentations must be a positive integer."
+                )
+            updates["presentation_count"] = count
         by_id[condition_id] = Condition.model_validate({
             **by_id[condition_id].model_dump(), **updates,
         })
     draft.conditions = [by_id[condition.condition_id] for condition in draft.conditions]
     draft = ProjectFile.model_validate(draft.model_dump())
+    if presentation_counts is not None:
+        from fpvs_studio.core.session_ordering import validate_condition_presentation_counts
+
+        validate_condition_presentation_counts(draft)
     changed = (
         bool(durations) or draft.settings.protocol.base_hz != project.settings.protocol.base_hz
         or any(condition.base_hz != original.base_hz

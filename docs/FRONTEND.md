@@ -160,7 +160,8 @@ Visible descriptive text must help with the current field, explain a consequenti
 action, or resolve a current error. Avoid repeating the page title, control label,
 completed state or another step's settings. Design owns cycle structure and native
 AB stream rates/SOAs. Timing & Session owns ordinary FPVS shared frequency and
-confirmed per-condition overrides and stream-only seconds, plus refresh selection,
+confirmed per-condition overrides, stream-only seconds and total presentation counts,
+plus refresh selection,
 verification and background.
 The frequency table spans the form above the Display and Session groups. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
