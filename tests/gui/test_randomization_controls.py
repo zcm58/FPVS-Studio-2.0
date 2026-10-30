@@ -429,6 +429,7 @@ def test_seed_controls_and_long_resolved_triplet_fit_timing_and_review(
     wizard.show()
     wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
+    editor.seed_details_button.setChecked(state != "new")
     if state == "invalid":
         editor.seed_edits["fixation_seed"].setText("-1")
         assert not wizard.flush_pending_edits()
@@ -442,16 +443,19 @@ def test_seed_controls_and_long_resolved_triplet_fit_timing_and_review(
     assert editor.isVisible()
     assert_visible_children_within_parent(wizard.experiment_step_surface)
     for edit in editor.seed_edits.values():
-        assert edit.width() >= edit.fontMetrics().horizontalAdvance(edit.text()) + 12
+        if edit.isVisible():
+            assert edit.width() >= edit.fontMetrics().horizontalAdvance(edit.text()) + 12
     for label in editor.findChildren(QLabel):
         if label.isVisible() and label.text():
             assert label.height() >= label.heightForWidth(label.width()) if label.wordWrap() else (
                 label.width() >= label.fontMetrics().horizontalAdvance(label.text())
             )
-    assert editor.generate_button.width() >= editor.generate_button.sizeHint().width()
+    if editor.generate_button.isVisible():
+        assert editor.generate_button.width() >= editor.generate_button.sizeHint().width()
     if state != "invalid":
         wizard.open_wizard(step_key="review", allow_step_jumps=True)
         QApplication.processEvents()
         assert_visible_children_within_parent(wizard.review_step_surface)
         text = " ".join(label.text() for label in wizard.review_card.findChildren(QLabel))
-        assert ("Same seeds:" if state == "fixed" else "New seeds for each participant") in text
+        assert ("Same schedules for every participant." if state == "fixed"
+                else "New seeds for each participant") in text

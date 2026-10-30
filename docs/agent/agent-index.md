@@ -575,6 +575,14 @@ Use core/compiler/runtime/GUI/project-I/O focused routes, then repo precommit.
 [SessionPlan](../SESSION_PLAN.md#independent-randomization) owns namespaces/provenance;
 [Data sharing](../DATA_SHARING.md#experiment-and-protocol-identity) owns fingerprint policy.
 
+For the compact Condition order editor and exact saved arrangements, read
+`gui/condition_order_dialog.py`, `gui/randomization_editor.py`,
+`gui/condition_timing_table.py` and the saved-arrangements section in
+[SessionPlan](../SESSION_PLAN.md#saved-condition-arrangements). Source validation,
+preview and compilation share `core/session_ordering.py`; candidate persistence uses
+the document's canonical save path. Use compiler/GUI/project-I/O/runtime scopes and
+registered dialog sizing/atomicity checks, with the existing local Qt boundary.
+
 ## Planning Route
 
 - Planning map: `docs/PLANS.md`

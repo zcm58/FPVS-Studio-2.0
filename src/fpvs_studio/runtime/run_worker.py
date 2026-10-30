@@ -361,7 +361,10 @@ class RuntimeWorker:
             results: list[RunExecutionSummary], reason: str | None,
         ) -> SessionExecutionSummary:
             return SessionExecutionSummary(
-                schema_version="1.3.0" if session_plan.randomization_seeds is not None else "1.2.0",
+                schema_version=(
+                    "1.4.0" if session_plan.ordering_policy is not None else
+                    "1.3.0" if session_plan.randomization_seeds is not None else "1.2.0"
+                ),
                 project_id=session_plan.project_id,
                 session_id=session_plan.session_id,
                 engine_name=self._engine.engine_id,
@@ -373,6 +376,7 @@ class RuntimeWorker:
                 randomization_mode=session_plan.randomization_mode,
                 randomization_seeds=session_plan.randomization_seeds,
                 randomization_algorithm_version=session_plan.randomization_algorithm_version,
+                ordering_policy=session_plan.ordering_policy,
                 started_at=results[0].started_at if results else None,
                 finished_at=results[-1].finished_at if results else None,
                 total_condition_count=session_plan.total_runs,

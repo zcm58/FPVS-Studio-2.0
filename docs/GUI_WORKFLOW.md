@@ -1592,3 +1592,27 @@ existing seed/group/task workflows. Visible acceptance at 1120x820 in both theme
 switch modes, edit all three seeds including zero, generate values, reopen Fixed,
 exercise New retry/completion and stale-worker cases, and check long resolved-value
 labels without clipping. Registered Qt coverage remains opt-in.
+
+### Choose and save condition order
+
+Timing & Session keeps the overall Fixed/New choice visible and numerical controls
+under collapsed **Seed details**. **Condition order...** opens a plain list with
+Generate, Move up, Move down and Save. Repeated occurrences show chronological
+presentation numbers; long names remain available by tooltip. No extra setup page or
+reuse-mode switches are introduced.
+
+Generate previews a pseudorandom candidate. Manual moves retain a draft and report
+adjacent duplicates or count mismatches. Save persists the exact choice and any
+combined timing/count draft through the existing atomic project save path, selecting
+Same for every participant while preserving configured stimulus/fixation roots.
+Cancel, declined frequency confirmation, stale generation and write failure leave the
+live project and previous project file unchanged. New mode retains the choice inactive.
+A contextual Use seed-generated order action lives inside optional details.
+
+If counts or conditions invalidate a saved arrangement, open the editor and generate
+or arrange a matching list; it can save matching count/order changes together. Studio
+never silently inserts, drops or reshuffles presentations. The editor is 780x620,
+minimum 700x520; the list intentionally scrolls. Registered coverage checks both
+sizes/themes, the 1120x820 wizard with details collapsed/expanded, keyboard moves,
+validation/retry, Save/reopen and fixed-vs-inactive behavior. Visible Qt checks remain
+unperformed unless explicitly approved.

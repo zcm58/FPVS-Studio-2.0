@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import floor, isclose, isfinite
 
@@ -13,7 +13,7 @@ from fpvs_studio.core.masking import (
     masking_frame_counts,
     validate_masking_catch_trials,
 )
-from fpvs_studio.core.models import Condition, ProjectFile, ProtocolSettings
+from fpvs_studio.core.models import Condition, ProjectFile, ProtocolSettings, RandomizationSeeds
 
 
 @dataclass(frozen=True)
@@ -109,6 +109,9 @@ def propose_condition_timing(
     overrides: Mapping[str, float | None] | None = None,
     durations: Mapping[str, float] | None = None,
     presentation_counts: Mapping[str, int] | None = None,
+    saved_condition_order: Sequence[str] | None = None,
+    order_seeds: RandomizationSeeds | None = None,
+    clear_saved_condition_order: bool = False,
     refresh_hz: float | None = None,
 ) -> ProjectFile:
     """Return one validated draft, preserving seconds without partial source edits."""
@@ -120,6 +123,29 @@ def propose_condition_timing(
     )
 
     draft = project.model_copy(deep=True)
+    if saved_condition_order is not None:
+        from fpvs_studio.core.randomization import configured_randomization_seeds
+
+        if clear_saved_condition_order or isinstance(saved_condition_order, (str, bytes)):
+            raise ValueError("Supply one saved condition-order list or explicitly clear it.")
+        configured = configured_randomization_seeds(project)
+        captured = (configured if order_seeds is None else
+                    RandomizationSeeds.model_validate(order_seeds.model_dump()))
+        if (captured.stimulus_seed != configured.stimulus_seed
+                or captured.fixation_seed != configured.fixation_seed):
+            raise ValueError(
+                "Stimulus or fixation seeds changed. Reopen Condition order before saving."
+            )
+        draft.settings.session = type(draft.settings.session).model_validate({
+            **draft.settings.session.model_dump(), "randomization_mode": "fixed",
+            "session_seed": captured.condition_order_seed,
+            "stimulus_seed": captured.stimulus_seed, "fixation_seed": captured.fixation_seed,
+            "saved_condition_order": list(saved_condition_order),
+        })
+    elif order_seeds is not None:
+        raise ValueError("Order seed snapshots require a saved condition-order list.")
+    elif clear_saved_condition_order:
+        draft.settings.session.saved_condition_order = None
     if shared_base_hz is not None:
         draft.settings.protocol = ProtocolSettings.model_validate({
             **draft.settings.protocol.model_dump(), "base_hz": shared_base_hz,
@@ -157,6 +183,9 @@ def propose_condition_timing(
         from fpvs_studio.core.session_ordering import validate_condition_presentation_counts
 
         validate_condition_presentation_counts(draft)
+    from fpvs_studio.core.session_ordering import active_saved_condition_order
+
+    active_saved_condition_order(draft)
     changed = (
         bool(durations) or draft.settings.protocol.base_hz != project.settings.protocol.base_hz
         or any(condition.base_hz != original.base_hz

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -56,6 +56,7 @@ from fpvs_studio.core.paths import (
     stimulus_originals_dir,
     to_project_relative_posix,
 )
+from fpvs_studio.core.randomization import RandomizationSeeds
 from fpvs_studio.core.task_assets import copy_task_asset
 from fpvs_studio.core.task_models import (
     TaskBinding,
@@ -80,6 +81,7 @@ class DocumentConditionMixin:
 
         def _apply_project_update(self, **updates: object) -> None: ...
         def _replace_project(self, project: ProjectFile) -> None: ...
+        def _persist_project_update(self, project: ProjectFile) -> None: ...
 
     def condition_rows(self) -> list[ConditionStimulusRow]:
         """Return condition-role rows for the assets page."""
@@ -612,6 +614,10 @@ class DocumentConditionMixin:
         overrides: Mapping[str, float | None] | None = None,
         durations: Mapping[str, float] | None = None,
         presentation_counts: Mapping[str, int] | None = None,
+        saved_condition_order: Sequence[str] | None = None,
+        order_seeds: RandomizationSeeds | None = None,
+        clear_saved_condition_order: bool = False,
+        persist: bool = False,
     ) -> None:
         """Apply timing and total presentations together without partial changes."""
 
@@ -620,11 +626,16 @@ class DocumentConditionMixin:
                 self._project, shared_base_hz=shared_base_hz, overrides=overrides,
                 durations=durations,
                 presentation_counts=presentation_counts,
+                saved_condition_order=saved_condition_order, order_seeds=order_seeds,
+                clear_saved_condition_order=clear_saved_condition_order,
                 refresh_hz=self._project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:
             raise DocumentError(str(error)) from error
-        self._replace_project(project)
+        if persist:
+            self._persist_project_update(project)
+        else:
+            self._replace_project(project)
 
     def apply_experiment_design(
         self,

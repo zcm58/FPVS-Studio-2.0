@@ -140,6 +140,7 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "condition_presentation_index",
     "condition_presentation_count",
     *RANDOMIZATION_PROVENANCE_HEADER,
+    "ordering_policy",
     "participant_session_number",
     "manual_removed_electrodes",
     "manual_removed_electrodes_recorded",
@@ -845,6 +846,7 @@ def write_session_artifacts(
             "condition_presentation_index",
             "condition_presentation_count",
             *RANDOMIZATION_PROVENANCE_HEADER,
+            "ordering_policy",
         ],
         [
             (
@@ -859,6 +861,7 @@ def write_session_artifacts(
                 entry.condition_presentation_index,
                 entry.condition_presentation_count,
                 *_run_randomization_values(entry.run_spec),
+                session_plan.ordering_policy,
             )
             for entry in ordered_entries
         ],
@@ -1245,6 +1248,7 @@ def _session_condition_history_rows(
             run_results_by_id.get(entry.run_id),
             logged_at=logged_at,
             block_accuracy_percent=block_accuracy.get(entry.block_index),
+            ordering_policy=session_plan.ordering_policy,
         )
         for entry in session_plan.ordered_entries()
     ]
@@ -1257,6 +1261,7 @@ def _session_condition_history_row(
     *,
     logged_at: str,
     block_accuracy_percent: float | None,
+    ordering_policy: str | None,
 ) -> list[object]:
     fixation = run_result.fixation_task_summary if run_result is not None else None
     metadata = run_result.runtime_metadata if run_result is not None else None
@@ -1351,6 +1356,7 @@ def _session_condition_history_row(
         entry.condition_presentation_count
         if entry.condition_presentation_count is not None else "",
         *_run_randomization_values(entry.run_spec),
+        ordering_policy or "",
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
         summary.participant_metadata.manual_removed_electrodes is not None,

@@ -358,7 +358,7 @@ def protocol_fingerprint(
     for field in ("serial_port", "baudrate", "pulse_width_ms", "reset_code", "reset_delay_ms"):
         settings["triggers"].pop(field, None)
     settings["session"].pop("session_seed", None)
-    for name in ("randomization_mode", "stimulus_seed", "fixation_seed"):
+    for name in ("randomization_mode", "stimulus_seed", "fixation_seed", "saved_condition_order"):
         settings["session"].pop(name, None)
     asset_paths: set[str] = set()
     image_set_ids = {item.set_id for item in project.stimulus_sets if item.source_dir is not None}

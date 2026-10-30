@@ -174,7 +174,8 @@ def test_fixed_same_plan_preserves_schedules_and_rows_across_participants_and_vi
             repeated.participant_session_number] == [1, 1, 2]
     assert all(path.read_bytes() == data for path, data in first_files.items())
     for result in (first, second, repeated):
-        assert result.schema_version == "1.3.0"
+        assert result.schema_version == "1.4.0"
+        assert result.ordering_policy == "pooled_no_adjacent"
         assert result.randomization_mode == "fixed"
         assert result.randomization_seeds == plan.randomization_seeds
         assert result.randomization_algorithm_version == 1
@@ -213,7 +214,8 @@ def test_completed_config_uses_compiled_snapshot_instead_of_current_editable_see
     write_json_file(completed / "session_plan.json", plan)
     project.settings.session.stimulus_seed = 999
     config = export_project_config(project, sample_project_root, completed_session_dir=completed)
-    assert config.schema_version == "1.12.0"
+    assert config.schema_version == "1.13.0"
+    assert config.completed_session.ordering_policy == "pooled_no_adjacent"
     assert config.session.stimulus_seed == 999
     assert config.completed_session.randomization_seeds == RandomizationSeeds(
         condition_order_seed=31, stimulus_seed=72, fixation_seed=109,

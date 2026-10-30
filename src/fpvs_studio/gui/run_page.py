@@ -1173,6 +1173,11 @@ class RunPage(QWidget):
             f"Refresh (Hz): {session_plan.refresh_hz:.2f}",
             "Condition Start: Press Space to begin",
         ]
+        if session_plan.ordering_policy is not None:
+            lines.insert(2, "Condition Order: " + (
+                "Saved arrangement" if session_plan.ordering_policy == "saved_no_adjacent"
+                else "Generated from the condition-order seed"
+            ))
         lines.append("")
         for block in session_plan.blocks:
             lines.append(f"Block {block.block_index + 1}: " + " -> ".join(block.condition_order))

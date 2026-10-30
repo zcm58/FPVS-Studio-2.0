@@ -6,6 +6,7 @@ tests/gui/test_biosemi_port_selector.py
 tests/gui/test_biosemi_recording_persistence.py
 tests/gui/test_components.py
 tests/gui/test_condition_modifier_dialog.py
+tests/gui/test_condition_order_dialog.py
 tests/gui/test_condition_recovery_dialog.py
 tests/gui/test_condition_search.py
 tests/gui/test_condition_task_dialog.py

@@ -776,7 +776,9 @@ def preflight_session_plan(
     actual_indices = [entry.global_order_index for entry in ordered_entries]
     if actual_indices != expected_indices:
         raise PreflightError("Session preflight failed because session entry ordering is invalid.")
-    if session_plan.schema_version == "1.7.0" or session_plan.randomization_seeds is not None:
+    if session_plan.schema_version in {"1.7.0", "1.8.0"} or (
+        session_plan.randomization_seeds is not None
+    ):
         try:
             SessionPlan.model_validate(session_plan)
             for entry in ordered_entries:
@@ -815,9 +817,13 @@ def _validate_session_presentation_identity(session_plan: SessionPlan) -> None:
                or entry.condition_presentation_count is not None for entry in entries):
             raise PreflightError("Presentation identity requires a pooled session ordering policy.")
         return
-    if (session_plan.ordering_policy != "pooled_no_adjacent"
-            or session_plan.schema_version not in {"1.6.0", "1.7.0"}):
+    if (session_plan.ordering_policy not in {"pooled_no_adjacent", "saved_no_adjacent"}
+            or session_plan.schema_version not in {"1.6.0", "1.7.0", "1.8.0"}):
         raise PreflightError("Pooled presentations require SessionPlan schema 1.6.0 or newer.")
+    if session_plan.ordering_policy == "saved_no_adjacent" and (
+        session_plan.schema_version != "1.8.0"
+    ):
+        raise PreflightError("Saved ordering requires SessionPlan schema 1.8.0.")
     seen: dict[str, tuple[int, int]] = {}
     for entry in entries:
         index, count = entry.condition_presentation_index, entry.condition_presentation_count

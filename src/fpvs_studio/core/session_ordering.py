@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import random
-from collections.abc import Mapping, Sequence
+from collections import Counter
+from collections.abc import Callable, Mapping, Sequence
 from typing import Final
 
-from fpvs_studio.core.compiler_support import check_compilation_cancelled
+from fpvs_studio.core.compiler_support import check_compilation_cancelled, compilation_cancellation
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import Condition, ProjectFile
 
 POOLED_ORDERING_POLICY: Final = "pooled_no_adjacent"
 POOLED_ORDERING_ALGORITHM_VERSION: Final = 1
+SAVED_ORDERING_POLICY: Final = "saved_no_adjacent"
+SAVED_ORDERING_ALGORITHM_VERSION: Final = 1
 
 
 def uses_pooled_condition_order(
@@ -27,7 +30,7 @@ def uses_pooled_condition_order(
     )
 
 
-def condition_ordering_identity(project: ProjectFile) -> dict[str, str | int] | None:
+def condition_ordering_identity(project: ProjectFile) -> dict[str, object] | None:
     """Describe the ordinary ordering algorithm without rewriting editable projects."""
 
     # A mixed project may execute only its ordinary subset, so its identity must
@@ -38,10 +41,97 @@ def condition_ordering_identity(project: ProjectFile) -> dict[str, str | int] | 
             return None
     elif not uses_pooled_condition_order(project):
         return None
+    saved = active_saved_condition_order(project)
+    if saved is not None:
+        return {
+            "policy": SAVED_ORDERING_POLICY,
+            "algorithm_version": SAVED_ORDERING_ALGORITHM_VERSION,
+            "condition_order": saved,
+        }
     return {
         "policy": POOLED_ORDERING_POLICY,
         "algorithm_version": POOLED_ORDERING_ALGORITHM_VERSION,
     }
+
+
+def validate_saved_condition_order(
+    order: Sequence[str], counts: Mapping[str, int],
+) -> list[str]:
+    """Validate an exact authored arrangement without repairing any occurrences."""
+
+    if isinstance(order, (str, bytes)) or any(type(item) is not str for item in order):
+        raise ValueError("Saved condition order must be a list of condition IDs.")
+    if any(type(count) is not int or count < 1 for count in counts.values()):
+        raise ValueError("Total presentations must be positive integers.")
+    unknown = set(order) - set(counts)
+    if unknown:
+        raise ValueError(
+            "Saved condition order contains unknown condition IDs: "
+            f"{', '.join(sorted(unknown))}."
+        )
+    if not order or Counter(order) != dict(counts):
+        raise ValueError(
+            "Saved condition order does not match the total presentations. "
+            "Open Condition order to generate an order matching the current counts."
+        )
+    for index, (left, right) in enumerate(zip(order, order[1:], strict=False), 1):
+        if left == right:
+            raise ValueError(
+                f"Saved condition order repeats '{left}' in adjacent positions {index} and "
+                f"{index + 1}. Move a presentation so identical conditions are separated."
+            )
+    return list(order)
+
+
+def active_saved_condition_order(
+    project: ProjectFile, conditions: Sequence[Condition] | None = None,
+) -> list[str] | None:
+    """Return the exact Fixed order, rejecting invalid filtered subsets rather than repairing."""
+
+    saved = project.settings.session.saved_condition_order
+    if project.settings.session.randomization_mode != "fixed" or saved is None:
+        return None
+    if not uses_pooled_condition_order(project):
+        raise ValueError("Saved condition order is unavailable for native AB or masking groups.")
+    order = validate_saved_condition_order(saved, condition_presentation_counts(project))
+    if conditions is None:
+        return order
+    counts = condition_presentation_counts(project, conditions)
+    return validate_saved_condition_order([item for item in order if item in counts], counts)
+
+
+def preview_condition_order(
+    project: ProjectFile, *, presentation_counts: Mapping[str, int] | None = None,
+    condition_order_seed: int | None = None, cancelled: Callable[[], bool] | None = None,
+) -> list[str]:
+    """Generate an editable draft without assets, display timing or retained-order constraints."""
+
+    from fpvs_studio.core.condition_timing import propose_condition_timing
+    from fpvs_studio.core.randomization import (
+        configured_randomization_seeds,
+        supports_independent_randomization,
+    )
+
+    def check_cancelled() -> None:
+        if cancelled is not None and cancelled():
+            raise InterruptedError("Condition-order preview cancelled.")
+
+    with compilation_cancellation(check_cancelled):
+        if not supports_independent_randomization(project):
+            raise ValueError(
+                "Condition order preview is unavailable for native AB or masking groups."
+            )
+        draft = propose_condition_timing(
+            project, presentation_counts=presentation_counts, clear_saved_condition_order=True,
+        )
+        counts = condition_presentation_counts(draft)
+        if sum(counts.values()) > 10_000:
+            raise ValueError("Condition order preview supports at most 10,000 presentations.")
+        seed = (configured_randomization_seeds(project).condition_order_seed
+                if condition_order_seed is None else condition_order_seed)
+        if type(seed) is not int or not 0 <= seed < 2**31:
+            raise ValueError("Condition-order seed must be an integer from 0 to 2147483647.")
+        return constrained_condition_order(counts, rng=random.Random(seed))
 
 
 def effective_condition_presentation_count(project: ProjectFile, condition: Condition) -> int:

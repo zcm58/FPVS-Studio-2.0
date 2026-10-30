@@ -21,7 +21,7 @@ lazily only inside the engine package.
 and exact stream duration, and validates atomic edits. Timing & Session owns authoring; compilers, previews,
 fixation guidance and exports use the effective condition rate. RunSpec remains
 frame-based. `core/session_ordering.py` owns per-condition presentation counts and
-bounded, non-adjacent pooled order; see [SessionPlan](docs/SESSION_PLAN.md). See [RunSpec timing](docs/RUNSPEC.md#timing-model).
+bounded, non-adjacent generated or saved order; see [SessionPlan](docs/SESSION_PLAN.md). See [RunSpec timing](docs/RUNSPEC.md#timing-model).
 
 `core/randomization.py` owns independent FPVS seed domains and reuse policy;
 GUI launch coordination captures one pending triplet, while compiled/runtime contracts

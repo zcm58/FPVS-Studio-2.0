@@ -154,7 +154,8 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
     assert window.document.project.settings.session.block_count == 3
     assert not window.document.project.settings.session.show_condition_title_on_screen
     assert session.randomization_editor.isVisible()
-    assert session.randomization_editor.generate_button.isVisible()
+    assert session.randomization_editor.condition_order_button.isVisible()
+    assert not session.randomization_editor.seed_details.isVisible()
     assert not session.show_condition_title_checkbox.isVisible()
 
 

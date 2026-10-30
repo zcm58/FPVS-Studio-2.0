@@ -1248,3 +1248,12 @@ Runtime verifies provenance and plays concrete schedules. Fixed seeds may yield 
 same compiled session ID across participants; checkpoints, acquisition evidence and
 numbered exports retain participant/visit/execution identity, preserving separate records.
 Recovery uses retained seeds/events and never resolves a fresh triplet for an exact rerun.
+
+## Saved-order provenance
+
+Compiled sessions, schema1.4 session results, full/compact condition/history CSVs and
+completed Config1.13 snapshots record the actual `ordering_policy`. `saved_no_adjacent`
+identifies an exact chosen list; `pooled_no_adjacent` identifies seed-generated order.
+The condition-order seed remains provenance and does not alone describe a manually
+arranged list. Entry order and chronological condition presentation identity are retained.
+Older result/config formats remain readable and omitted source fields stay omitted.

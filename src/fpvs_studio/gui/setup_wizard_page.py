@@ -34,7 +34,6 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
 )
 from fpvs_studio.core.randomization import (
-    configured_randomization_seeds,
     effective_randomization_mode,
     supports_independent_randomization,
 )
@@ -718,6 +717,9 @@ class SetupWizardPage(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
         self.condition_timing_table = ConditionTimingTable(self._document, page)
+        self.session_structure_editor.randomization_editor.set_timing_table(
+            self.condition_timing_table,
+        )
         layout.addWidget(self.condition_timing_table)
         settings = QHBoxLayout()
         settings.setSpacing(32)
@@ -1354,13 +1356,15 @@ class SetupWizardPage(QWidget):
         seed_summary: tuple[str, ...] = ()
         if supports_independent_randomization(project):
             if effective_randomization_mode(project) == "fixed":
-                seeds = configured_randomization_seeds(project)
-                seed_summary = (
-                    f"Same seeds: stimuli {seeds.stimulus_seed} · "
-                    f"conditions {seeds.condition_order_seed} · fixation {seeds.fixation_seed}",
-                )
+                seed_summary = ("Same schedules for every participant.",)
+                if session.saved_condition_order is not None:
+                    session_count_summary = f"{presentation_total} presentations · saved order"
             else:
                 seed_summary = ("New seeds for each participant; saved with the session.",)
+                if session.saved_condition_order is not None:
+                    session_count_summary = (
+                        f"{presentation_total} presentations · new order (saved order inactive)"
+                    )
         return (
             ("project", "Project", (project.meta.name, f"Participant tutorial: {tutorial}")),
             (

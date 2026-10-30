@@ -1,6 +1,6 @@
 # Condition Order Preview and Saved Arrangements
 
-Status: Planned
+Status: Completed
 
 ## Purpose and confirmed decisions
 
@@ -68,7 +68,7 @@ uses fresh seeded ordering; a retained saved list is inactive in that mode.
   validation text. Use existing components and registered geometry coverage.
 - Save records the chosen arrangement and clearly switches to overall fixed reuse.
   Cancel changes no project values. Unknown IDs/count mismatches/adjacent duplicates
-  never become an accepted project/compiled session.
+  never become an accepted runnable order or compiled session.
 
 ## Verification
 
@@ -93,3 +93,41 @@ No independent per-domain reuse switches, order balancing beyond the approved
 no-adjacent rule, extra repetitions, block design tools, task-order editor, condition
 renaming or broad visual redesign. Post-condition question work remains its separate
 next plan. Update current workflow/architecture/agent routes when this feature lands.
+
+## Execution progress
+
+- Independent seeds verified/committed/pushed as becb0c6.
+- This is the fifth executed feature; post-condition questions remain the sixth.
+- Preserve the single overall Fixed/New switch. Saving captures the displayed
+  stimulus/fixation roots and candidate condition-order seed in Fixed mode, rather
+  than deriving new stimulus/fixation roots from a changed order seed.
+- A saved list represents either a generated or manually arranged exact choice.
+  In New mode it is retained but inactive. Chronological labels are renumbered
+  after moves; no durable UUID for each interchangeable same-condition occurrence.
+
+## Draft editing boundary
+
+A retained inactive list may become stale after condition/count edits. Treat it as
+an authoring draft, ignore it in New-mode execution/identity, and validate it when
+activated or explicitly saved. Adding/removing conditions must remain possible before
+the author repairs an order. Active stale choices produce an actionable blocker in
+project validation/compilation, not a silent replacement and not a blanket model-level
+barrier to every intermediate draft edit. Combined count/order Apply remains atomic.
+A contextual clear/use-seeded action may live under optional details when needed;
+it should not add clutter to the default editor.
+
+## Delivered and verified
+
+- Implemented exact saved arrangements, a pure seeded preview, atomic timing/count/order
+  saves, inactive New-mode drafts and immutable execution/export ordering provenance.
+- The default GUI has one Condition order action. Seed details stay collapsed; the
+  editor uses a plain list with Generate, Move up/down, Save and Cancel.
+- Compiler focused: 687 passed. Repository safe suite: 4197 passed, 12 expected
+  platform skips and 24 subtests passed, with one known Windows staging-folder rename
+  lock failure. The unchanged failing case passed immediately on rerun.
+- Changed-file Ruff/compilation, full-source mypy and repository/docs audits passed.
+  Unrelated user-owned untracked helper files were excluded from changed-file lint,
+  as in the earlier feature gates; their contents were preserved.
+- Registered Qt behavior/geometry coverage was added, including both themes and
+  documented minimum sizes. Qt and physical presentation checks were not run in
+  this session; visible acceptance remains a separate check.

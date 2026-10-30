@@ -98,6 +98,8 @@ from fpvs_studio.core.run_spec import (
 )
 from fpvs_studio.core.session_ordering import (
     POOLED_ORDERING_POLICY,
+    SAVED_ORDERING_POLICY,
+    active_saved_condition_order,
     condition_presentation_counts,
     constrained_condition_order,
     uses_pooled_condition_order,
@@ -482,6 +484,12 @@ def _compile_session_plan(
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     pooled_ordering = uses_pooled_condition_order(project, selected_conditions)
+    saved_order = None
+    if pooled_ordering:
+        try:
+            saved_order = active_saved_condition_order(project, selected_conditions)
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
     seed_snapshot = None
     if pooled_ordering:
         try:
@@ -582,9 +590,11 @@ def _compile_session_plan(
     pooled_trials: list[tuple[Condition, bool, Condition | None]] = []
     if pooled_ordering:
         by_id = {condition.condition_id: condition for condition in selected_conditions}
+        condition_order = (saved_order if saved_order is not None else
+                           constrained_condition_order(presentation_counts, rng=session_rng))
         pooled_trials = [
             (by_id[condition_id], False, None)
-            for condition_id in constrained_condition_order(presentation_counts, rng=session_rng)
+            for condition_id in condition_order
         ]
     occurrences: dict[str, int] = {}
     for block_index in range(compiled_block_count):
@@ -749,6 +759,7 @@ def _compile_session_plan(
 
     return SessionPlan(
         schema_version=(
+            "1.8.0" if saved_order is not None else
             "1.7.0" if seed_snapshot is not None else
             "1.5.0" if any(task_requires_text_alignment_schema(task)
                            for block in blocks for entry in block.entries
@@ -757,7 +768,8 @@ def _compile_session_plan(
             else "1.3.0" if masking_groups else SchemaVersion.V1_2.value
         ),
         authored_task_flow=True if masking_groups else None,
-        ordering_policy=POOLED_ORDERING_POLICY if pooled_ordering else None,
+        ordering_policy=(SAVED_ORDERING_POLICY if saved_order is not None else
+                         POOLED_ORDERING_POLICY if pooled_ordering else None),
         randomization_mode=(
             effective_randomization_mode(project) if seed_snapshot is not None else None
         ),

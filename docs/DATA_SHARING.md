@@ -163,6 +163,8 @@ configured/launch seed values. Raw optional mode fields and the incidental ordin
 source capability schema version are replaced by this canonical behavior identity, so
 legacy-null and explicit-New settings remain equivalent. AB/wholly masking identities
 keep their prior payloads. Fixed seed edits intentionally change protocol identity.
+An active saved condition arrangement also enters canonical ordering identity in its
+exact order. A retained inactive New-mode list is excluded, including stale drafts.
 
 The GUI supplies the actual authored fingerprint as a runtime-only launch option,
 only for the document's current compiled session plan. A stale compiled plan can

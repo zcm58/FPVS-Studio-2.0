@@ -28,7 +28,9 @@ from fpvs_studio.core.condition_timing import (
 )
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.randomization import RandomizationSeeds
 from fpvs_studio.core.session_ordering import (
+    active_saved_condition_order,
     effective_condition_presentation_count,
     validate_condition_presentation_counts,
 )
@@ -264,6 +266,7 @@ class ConditionTimingTable(QWidget):
     def presentation_count_blocker(self) -> str:
         try:
             validate_condition_presentation_counts(self._document.project)
+            active_saved_condition_order(self._document.project)
         except ValueError as error:
             return str(error)
         return ""
@@ -438,7 +441,33 @@ class ConditionTimingTable(QWidget):
         self.draft_changed.emit()
 
     def apply_pending_edits(self) -> bool:
-        if not self.has_pending_edits():
+        return self._apply_edits()
+
+    def pending_presentation_counts(self) -> dict[str, int]:
+        """Give the order editor the staged counts without committing timing."""
+
+        return dict(self._presentation_counts)
+
+    def order_edit_signature(self) -> tuple[object, ...]:
+        """Reject an order derived before source or requested counts changed."""
+
+        return (id(self._document.project), tuple(sorted(self._presentation_counts.items())))
+
+    def apply_condition_order(self, order: list[str], seeds: RandomizationSeeds) -> bool:
+        """Validate and commit an exact order with all current timing/count drafts."""
+
+        return self._apply_edits(saved_condition_order=order, order_seeds=seeds)
+
+    def clear_saved_order(self) -> bool:
+        return self._apply_edits(clear_saved_condition_order=True)
+
+    def _apply_edits(
+        self, *, saved_condition_order: list[str] | None = None,
+        order_seeds: RandomizationSeeds | None = None,
+        clear_saved_condition_order: bool = False,
+    ) -> bool:
+        if (not self.has_pending_edits() and saved_condition_order is None
+                and not clear_saved_condition_order):
             return True
         shared = self.shared_frequency_spin.value() if self._shared_dirty else None
         overrides = dict(self._overrides)
@@ -449,6 +478,8 @@ class ConditionTimingTable(QWidget):
                 self._document.project, shared_base_hz=shared, overrides=overrides,
                 durations=durations,
                 presentation_counts=presentation_counts,
+                saved_condition_order=saved_condition_order, order_seeds=order_seeds,
+                clear_saved_condition_order=clear_saved_condition_order,
                 refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:
@@ -474,8 +505,11 @@ class ConditionTimingTable(QWidget):
             self._document.update_condition_timing(
                 shared_base_hz=shared, overrides=overrides, durations=durations,
                 presentation_counts=presentation_counts,
+                saved_condition_order=saved_condition_order, order_seeds=order_seeds,
+                clear_saved_condition_order=clear_saved_condition_order,
+                persist=saved_condition_order is not None,
             )
-        except ValueError as error:
+        except (ValueError, OSError) as error:
             self._show_timing_error(error)
             return False
         finally:
@@ -483,7 +517,7 @@ class ConditionTimingTable(QWidget):
         self.discard_pending_edits()
         return True
 
-    def _show_timing_error(self, error: ValueError) -> None:
+    def _show_timing_error(self, error: ValueError | OSError) -> None:
         self.error_label.setText(str(error))
         self.error_label.show()
         while (item := self.duration_choices_layout.takeAt(0)) is not None:

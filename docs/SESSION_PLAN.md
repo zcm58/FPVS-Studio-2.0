@@ -264,3 +264,25 @@ compilation uses configured values and performs no entropy generation. Pending r
 reuse their resolved snapshot. Concrete compiled schedules remain authoritative during
 recovery. Native AB, specialized masking and pre/post-task randomness retain their prior
 contracts and are outside these three controls.
+
+## Saved condition arrangements
+
+`SessionSettings.saved_condition_order` optionally retains an exact list of condition
+IDs, including repeated presentations. In overall Fixed mode, core validates known
+IDs, exact configured multiplicities and no adjacent duplicate conditions, then compiles
+that list as SessionPlan 1.8 with `ordering_policy="saved_no_adjacent"`. RunSpec remains
+single-condition with the existing independent seed provenance. Chronological within-
+condition presentation indices are recomputed in the chosen global order, preserving
+stimulus/fixation namespaces across moves.
+
+New mode ignores a retained list and compiles seeded pooled ordering. A retained list
+may become a stale authoring draft after condition/count edits; project validation and
+compilation block an active invalid list without repairing it. Explicit order Save and
+combined count/timing/order proposals validate atomically. `preview_condition_order`
+uses a private copy, needs no assets/display and bounds work at 10,000 presentations.
+A selected subset that removes needed separators is rejected rather than reshuffled.
+Historical plans and exact-occurrence recovery retain their original order/provenance.
+
+Saved-source fields use Project 1.15/config 1.13 and are omitted when absent. They are
+project/session state, never condition-template defaults. Canonical ordering identity
+includes an active exact list and ignores an inactive New-mode list.

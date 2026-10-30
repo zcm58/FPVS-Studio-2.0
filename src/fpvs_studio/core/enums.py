@@ -48,6 +48,7 @@ class ProjectSchemaVersion(StrEnum):
     V1_12 = "1.12.0"
     V1_13 = "1.13.0"
     V1_14 = "1.14.0"
+    V1_15 = "1.15.0"
 
 
 class ExperimentCategory(StrEnum):

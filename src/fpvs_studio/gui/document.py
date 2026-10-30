@@ -490,7 +490,9 @@ class ProjectDocument(
     def _randomization_signature(project: ProjectFile) -> tuple[object, ...]:
         session = project.settings.session
         return (supports_independent_randomization(project), session.randomization_mode,
-                session.session_seed, session.stimulus_seed, session.fixation_seed)
+                session.session_seed, session.stimulus_seed, session.fixation_seed,
+                tuple(session.saved_condition_order) if session.saved_condition_order is not None
+                else None)
 
     def randomization_settings_signature(self) -> tuple[object, ...]:
         """Identify settings whose edits must invalidate pending/generated launch seeds."""
@@ -711,19 +713,30 @@ class ProjectDocument(
     def save(self) -> None:
         """Persist the current project to `project.json`."""
 
-        consistency_issues = validate_condition_repeat_cycle_consistency(self._project)
+        self._project = self._persist_project_candidate(self._project)
+        self._set_dirty(False)
+        self.saved.emit()
+        self.project_changed.emit()
+
+    def _persist_project_candidate(self, project: ProjectFile) -> ProjectFile:
+        """Use the normal atomic save workflow before adopting a validated draft."""
+
+        consistency_issues = validate_condition_repeat_cycle_consistency(project)
         if consistency_issues:
             raise DocumentError(
                 _format_validation_report(ProjectValidationReport(issues=consistency_issues))
             )
 
-        meta = _validated_copy(self._project.meta, updated_at=utc_now())
-        project = _validated_copy(self._project, meta=meta)
+        meta = _validated_copy(project.meta, updated_at=utc_now())
+        project = _validated_copy(project, meta=meta)
         save_project_file(project, self.project_file_path)
-        self._project = project
+        return project
+
+    def _persist_project_update(self, project: ProjectFile) -> None:
+        project = self._persist_project_candidate(project)
+        self._replace_project(project)
         self._set_dirty(False)
         self.saved.emit()
-        self.project_changed.emit()
 
     def accept_separated_project(self, project: ProjectFile) -> None:
         """Adopt the saved AB-only result of an explicit legacy separation."""
