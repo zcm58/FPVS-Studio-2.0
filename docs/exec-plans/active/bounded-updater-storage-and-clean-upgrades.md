@@ -2,6 +2,50 @@
 
 Status: Active
 
+## Combined download and install follow-up (October 30, 2026)
+
+The updater uses one explicit **Download and Install** action. That click authorizes
+the verified download and ensuing installation, without a second Install and Restart
+button or redundant install-confirmation prompt. The successful download job must
+finish and clean up its worker before the action continues directly to the existing
+Save callback and helper handoff. Save is called once; canceling it stops the chain
+and retains the verified cached installer for retry through the same button.
+Closing/disposal, shutdown, cancellation or failure prevents continuation.
+
+Standalone Update & Repair retains its separate repair check and uses the same
+combined action for the selected installer. Helper nonce acceptance, GitHub digest
+verification, cache and install locks, process identity and restart ownership remain
+unchanged. Studio exits only after installation commitment and local job completion.
+No version bump, build or release is part of this follow-up.
+
+Coverage uses `tests/unit/test_update_dialog_jobs.py` with fake jobs/callbacks and
+registered updater layout coverage. The visible manual path uses a fake installer
+only, at the unchanged `680x600` / `760x620` in-app sizes and `680x660` / `760x680`
+standalone sizes, and checks successful chaining, Save cancellation/cached retry,
+close/shutdown cancellation and commitment before quit. Safe source verification
+and actual installed patch/full upgrade acceptance are separate; real installation
+has not been performed for this follow-up. See the current contracts in
+[Packaging](../../PACKAGING.md#in-app-update-flow) and
+[GUI workflow](../../GUI_WORKFLOW.md#gui-test-guidance).
+
+Verification: the 16 new non-Qt orchestration regressions pass. GUI focused passes
+114 tests and docs focused passes ten; Ruff/compilation, mypy over 260 source files,
+the 14-scope config audit, repository garbage-collection checks and 65 harness,
+import-boundary, registry and verification-driver tests pass. Updates focused reports
+350 passed, seven failed and four skipped. The same seven hardlink/junction fixture
+permission failures occurred before the change (334 passed before adding coverage).
+Repo precommit was attempted and stops on six pre-existing E501 findings in the
+untracked `.codex-tmp/cognitive-load-library-2026-10-29/prepare.py` and
+`src/fpvs_studio/engines/standalone_contrast_example.py`; neither was edited.
+Registered Qt, packaged GUI and installed-upgrade acceptance remain unrun.
+
+Changed implementation owners are `gui/update_dialog.py`, `gui/updater_window.py`,
+the updater button report in `gui/packaged_smoke.py`, and the stale full-installer
+action name in `updates/helper_runtime.py`. Coverage lives in
+`tests/gui/test_update_dialog.py` and `tests/unit/test_update_dialog_jobs.py`, routed
+by `.agents/verification.toml`. Current contracts are updated in this plan, Packaging,
+GUI workflow, architecture, the agent index and the updates package guidance.
+
 ## Release-note preview follow-up (October 28, 2026)
 
 The updater preserves release-note bullet line breaks instead of joining all words
@@ -446,7 +490,9 @@ pending until a suitable environment is available.
 
 ## Non-Goals And Safety Bounds
 
-- Do not introduce automatic download or unattended installation.
+- Do not download or install from startup checks without an explicit user action.
+  Download and Install may continue from verified download to installation under
+  that click's consent and the existing Save and helper acceptance gates.
 - Do not change release-channel or prerelease-selection behavior except as needed to
   obtain trusted digest metadata.
 - Do not set Inno `UninstallLogMode=overwrite`.

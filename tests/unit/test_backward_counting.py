@@ -69,6 +69,8 @@ def test_counting_baseline_occurs_once_after_randomization_and_subset(
     _attach_counting(multi_condition_project)
     multi_condition_project.settings.session.randomize_across_blocks = shuffle_all
     for subset in (None, [multi_condition_project.conditions[-1].condition_id]):
+        if subset is not None:
+            multi_condition_project.conditions[-1].presentation_count = 1
         plan = compile_session_plan(
             multi_condition_project, refresh_hz=60, project_root=multi_condition_project_root,
             random_seed=43, condition_ids=subset,

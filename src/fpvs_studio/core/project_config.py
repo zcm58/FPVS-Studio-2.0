@@ -21,6 +21,7 @@ from pydantic import (
     Field,
     SerializerFunctionWrapHandler,
     StrictInt,
+    StrictStr,
     ValidationError,
     field_validator,
     model_serializer,
@@ -46,6 +47,7 @@ from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
     Condition,
+    ConditionDefaults,
     ConditionPresentationSettings,
     DisplaySettings,
     FPVSBaseModel,
@@ -55,6 +57,8 @@ from fpvs_studio.core.models import (
     ProjectRecordingSettings,
     ProjectSettings,
     ProtocolSettings,
+    RandomizationAlgorithmVersion,
+    RandomizationSeeds,
     SessionSettings,
     StimulusSet,
     TaskBinding,
@@ -78,18 +82,21 @@ from fpvs_studio.core.paths import (
     stimulus_originals_dir,
     task_assets_root,
 )
+from fpvs_studio.core.post_questions import validate_post_question_bindings
 from fpvs_studio.core.presentation import legacy_project_presentation_settings
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
     acquisition_profile_for_recording,
 )
+from fpvs_studio.core.run_spec import RunRandomizationSpec
 from fpvs_studio.core.serialization import (
     atomic_text_write,
     load_project_file,
     read_json_file,
     save_project_file,
 )
+from fpvs_studio.core.session_ordering import validate_saved_condition_order
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_assets import owned_image_references
 from fpvs_studio.core.task_models import (
@@ -107,6 +114,12 @@ SCENE_CONFIG_SCHEMA_VERSION: Literal["1.5.0"] = "1.5.0"
 CATCH_CONFIG_SCHEMA_VERSION: Literal["1.6.0"] = "1.6.0"
 CONDITION_CATCH_CONFIG_SCHEMA_VERSION: Literal["1.7.0"] = "1.7.0"
 MASKING_EVENT_CONFIG_SCHEMA_VERSION: Literal["1.8.0"] = "1.8.0"
+CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION: Literal["1.9.0"] = "1.9.0"
+CONDITION_DURATION_CONFIG_SCHEMA_VERSION: Literal["1.10.0"] = "1.10.0"
+CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION: Literal["1.11.0"] = "1.11.0"
+RANDOMIZATION_CONFIG_SCHEMA_VERSION: Literal["1.12.0"] = "1.12.0"
+SAVED_ORDER_CONFIG_SCHEMA_VERSION: Literal["1.13.0"] = "1.13.0"
+POST_QUESTIONS_CONFIG_SCHEMA_VERSION: Literal["1.14.0"] = "1.14.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -164,6 +177,9 @@ class ProjectConfigCondition(FPVSBaseModel):
     stimulus_variant: StimulusVariant = StimulusVariant.ORIGINAL
     sequence_count: int = Field(gt=0)
     oddball_cycle_repeats_per_sequence: int = Field(ge=1)
+    base_hz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    stream_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    presentation_count: StrictInt | None = Field(default=None, gt=0)
     duty_cycle_mode: DutyCycleMode = DutyCycleMode.CONTINUOUS
     order_index: int = Field(ge=0)
     instructions: str = ""
@@ -181,6 +197,12 @@ class ProjectConfigCondition(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if not self.masking_catch:
             payload.pop("masking_catch", None)
+        if self.base_hz is None:
+            payload.pop("base_hz", None)
+        if self.stream_duration_seconds is None:
+            payload.pop("stream_duration_seconds", None)
+        if self.presentation_count is None:
+            payload.pop("presentation_count", None)
         return payload
 
     @field_validator("condition_id", "base_stimulus_set_id", "oddball_stimulus_set_id")
@@ -255,12 +277,42 @@ class ProjectConfigSession(FPVSBaseModel):
 
     block_count: int = Field(ge=1)
     session_seed: int = Field(ge=0)
+    randomization_mode: Literal["fixed", "new"] | None = None
+    stimulus_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
+    fixation_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
+    saved_condition_order: list[StrictStr] | None = None
     randomize_conditions_per_block: bool = True
     randomize_across_blocks: bool = False
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
     inter_condition_break_seconds: float = Field(ge=0)
     continue_key: str = "space"
     show_condition_title_on_screen: bool = False
+
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_randomization_settings(cls, value: object) -> object:
+        if isinstance(value, dict) and any(
+            value.get(field) is not None
+            for field in (
+                "randomization_mode", "stimulus_seed", "fixation_seed", "saved_condition_order",
+            )
+        ):
+            # Preserve the source owner's strict seed/policy validation before coercion.
+            SessionSettings.model_validate(value)
+        return value
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_randomization(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        for field in (
+            "randomization_mode", "stimulus_seed", "fixation_seed", "saved_condition_order",
+        ):
+            if getattr(self, field) is None:
+                payload.pop(field, None)
+        return payload
 
 
 class ProjectConfigTriggers(FPVSBaseModel):
@@ -323,7 +375,17 @@ class ProjectConfigCompletedRun(FPVSBaseModel):
     condition_id: str
     condition_name: str
     random_seed: int = Field(ge=0)
+    randomization: RunRandomizationSpec | None = None
     trigger_events: list[ProjectConfigTriggerEvent] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_randomization(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.randomization is None:
+            payload.pop("randomization", None)
+        return payload
 
 
 class ProjectConfigCompletedSession(FPVSBaseModel):
@@ -331,6 +393,10 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
 
     session_id: str
     session_seed: int = Field(ge=0)
+    randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_seeds: RandomizationSeeds | None = None
+    randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
+    ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
     refresh_hz: float = Field(gt=0)
     block_orders: list[list[str]] = Field(default_factory=list)
     source_run_dir: str
@@ -348,7 +414,43 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if "manual_removed_electrodes" in self.model_fields_set:
             payload["manual_removed_electrodes"] = self.manual_removed_electrodes
+        for field in (
+            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+            "ordering_policy",
+        ):
+            if getattr(self, field) is None:
+                payload.pop(field, None)
         return payload
+
+    @model_validator(mode="after")
+    def validate_randomization_provenance(self) -> ProjectConfigCompletedSession:
+        if self.ordering_policy == "saved_no_adjacent" and (
+            self.randomization_mode != "fixed" or self.randomization_seeds is None
+        ):
+            raise ValueError("Saved ordering policy requires fixed randomization.")
+        if self.ordering_policy is not None and (
+            [identity for block in self.block_orders for identity in block]
+            != [run.condition_id for run in self.ordered_runs]
+        ):
+            raise ValueError("Completed block order must match the ordered runs.")
+        values = (self.randomization_mode, self.randomization_seeds,
+                  self.randomization_algorithm_version)
+        if any(value is not None for value in values):
+            if any(value is None for value in values):
+                raise ValueError("Completed randomization provenance requires mode and all seeds.")
+            assert self.randomization_seeds is not None
+            if self.session_seed != self.randomization_seeds.condition_order_seed:
+                raise ValueError("Completed session_seed must match its condition-order seed.")
+            if any(run.randomization is None
+                   or run.randomization.seeds != self.randomization_seeds
+                   or run.randomization.mode != self.randomization_mode
+                   or run.randomization.algorithm_version != self.randomization_algorithm_version
+                   or run.randomization.stimulus_order_seed != run.random_seed
+                   for run in self.ordered_runs):
+                raise ValueError("Completed runs must match the resolved randomization provenance.")
+        elif any(run.randomization is not None for run in self.ordered_runs):
+            raise ValueError("Completed run randomization requires session provenance.")
+        return self
 
     @field_validator("source_run_dir")
     @classmethod
@@ -413,7 +515,8 @@ class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
     schema_version: Literal[
-        "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0",
+        "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
+        "1.10.0", "1.11.0", "1.12.0", "1.13.0", "1.14.0",
     ] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
@@ -421,6 +524,7 @@ class ProjectConfigFile(FPVSBaseModel):
     producer: ProjectConfigProducer = Field(default_factory=ProjectConfigProducer)
     project: ProjectConfigProject
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
+    condition_defaults: ConditionDefaults | None = None
     stimulus_sets: list[ProjectConfigStimulusSet] = Field(default_factory=list)
     task_modules: list[TaskModule] = Field(default_factory=list)
     condition_modifiers: list[ConditionModifier] = Field(default_factory=list)
@@ -442,9 +546,94 @@ class ProjectConfigFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
+        if any(task.simple_post_questions for task in self.task_modules):
+            if self.schema_version != POST_QUESTIONS_CONFIG_SCHEMA_VERSION:
+                raise ValueError("Post-condition Questions require config schema 1.14.0.")
+            for condition in self.conditions:
+                validate_post_question_bindings(
+                    pre_bindings=condition.pre_task_bindings,
+                    post_bindings=condition.post_task_bindings, modules=self.task_modules,
+                )
+        saved_order = self.session.saved_condition_order
+        completed_policy = (self.completed_session.ordering_policy
+                            if self.completed_session is not None else None)
+        if saved_order is not None or completed_policy is not None:
+            if self.schema_version not in {
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
+                raise ValueError("Saved order/provenance requires config schema 1.13.0.")
+        if saved_order is not None:
+            masking_tasks = {task_id for modifier in self.condition_modifiers
+                             if modifier.masking is not None for task_id in modifier.pre_task_ids}
+            if (self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+                    or any(binding.task_id in masking_tasks for condition in self.conditions
+                           for binding in condition.pre_task_bindings)):
+                raise ValueError("Saved condition order is unavailable for native AB or masking.")
+            if self.session.randomization_mode == "fixed":
+                validate_saved_condition_order(saved_order, {
+                    condition.condition_id: (condition.presentation_count
+                                             if condition.presentation_count is not None
+                                             else self.session.block_count)
+                    for condition in self.conditions
+                })
+        if (self.session.randomization_mode is not None or (
+            self.completed_session is not None
+            and self.completed_session.randomization_seeds is not None
+        )):
+            if self.schema_version not in {
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
+                raise ValueError("Randomization controls require config schema 1.12.0.")
+            masking_tasks = {task_id for modifier in self.condition_modifiers
+                             if modifier.masking is not None for task_id in modifier.pre_task_ids}
+            if (self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+                    or any(binding.task_id in masking_tasks for condition in self.conditions
+                           for binding in condition.pre_task_bindings)):
+                raise ValueError("Randomization controls are unavailable for native AB or masking.")
+        has_presentation_counts = any(
+            condition.presentation_count is not None for condition in self.conditions
+        ) or (
+            self.condition_defaults is not None
+            and self.condition_defaults.presentation_count is not None
+        )
+        if has_presentation_counts:
+            if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+                raise ValueError("Presentation counts are unavailable for Attentional-Blink.")
+            if self.schema_version not in {
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION, RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
+                raise ValueError("Presentation counts require config schema 1.11.0.")
+            masking_pre_tasks = {
+                task_id for modifier in self.condition_modifiers if modifier.masking is not None
+                for task_id in modifier.pre_task_ids
+            }
+            if any(
+                (condition.presentation_count is not None or (
+                    self.condition_defaults is not None
+                    and self.condition_defaults.presentation_count is not None
+                )) and any(binding.task_id in masking_pre_tasks
+                           for binding in condition.pre_task_bindings)
+                for condition in self.conditions
+            ):
+                raise ValueError("Presentation counts are unavailable for masking groups.")
+        if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK and any(
+            condition.stream_duration_seconds is not None for condition in self.conditions
+        ) or (
+            self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            and self.condition_defaults is not None
+            and self.condition_defaults.stream_duration_seconds is not None
+        ):
+            raise ValueError("Stream duration overrides are unavailable for Attentional-Blink.")
+        if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK and any(
+            condition.base_hz is not None for condition in self.conditions
+        ):
+            raise ValueError("Condition frequency overrides are unavailable for Attentional-Blink.")
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
-                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0",
+                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
+                   "1.10.0", "1.11.0", "1.12.0", "1.13.0", "1.14.0",
                }:
             raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
@@ -453,6 +642,11 @@ class ProjectConfigFile(FPVSBaseModel):
                 CATCH_CONFIG_SCHEMA_VERSION,
                 CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION,
+                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition modifiers require config schema 1.4.0 or newer.")
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
@@ -461,6 +655,11 @@ class ProjectConfigFile(FPVSBaseModel):
                 SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
                 CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION,
+                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Native scene workflows require config schema 1.5.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
@@ -468,6 +667,11 @@ class ProjectConfigFile(FPVSBaseModel):
             if self.schema_version not in {
                 CATCH_CONFIG_SCHEMA_VERSION, CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
                 MASKING_EVENT_CONFIG_SCHEMA_VERSION,
+                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Masking catch trials require config schema 1.6.0.")
         if any(condition.masking_catch for condition in self.conditions) or any(
@@ -475,14 +679,44 @@ class ProjectConfigFile(FPVSBaseModel):
         ):
             if self.schema_version not in {
                 CONDITION_CATCH_CONFIG_SCHEMA_VERSION, MASKING_EVENT_CONFIG_SCHEMA_VERSION,
+                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError(
                     "Catch conditions and task text alignment require config schema 1.7.0."
                 )
         if any(modifier.masking is not None and modifier.masking.event_triggers is not None
                for modifier in self.condition_modifiers):
-            if self.schema_version != MASKING_EVENT_CONFIG_SCHEMA_VERSION:
+            if self.schema_version not in {
+                MASKING_EVENT_CONFIG_SCHEMA_VERSION, CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
                 raise ValueError("Masking event triggers require config schema 1.8.0.")
+        if any(condition.base_hz is not None for condition in self.conditions):
+            if self.schema_version not in {
+                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION, CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
+                raise ValueError("Condition frequency overrides require config schema 1.9.0.")
+        if any(condition.stream_duration_seconds is not None for condition in self.conditions) or (
+            self.condition_defaults is not None
+            and self.condition_defaults.stream_duration_seconds is not None
+        ):
+            if self.schema_version not in {
+                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
+                raise ValueError("Stream duration overrides require config schema 1.10.0.")
         referenced = set(owned_image_references(self.task_modules, self.condition_modifiers))
         embedded = [(asset.task_id, asset.relative_path) for asset in self.task_assets]
         if len(embedded) != len(set(embedded)):
@@ -521,7 +755,23 @@ def export_project_config(
     )
     return ProjectConfigFile(
         schema_version=(
-            MASKING_EVENT_CONFIG_SCHEMA_VERSION if any(
+            POST_QUESTIONS_CONFIG_SCHEMA_VERSION
+            if any(task.simple_post_questions for task in project.task_modules)
+            else SAVED_ORDER_CONFIG_SCHEMA_VERSION
+            if project.settings.session.saved_condition_order is not None
+            or (session_plan is not None and session_plan.ordering_policy is not None)
+            else RANDOMIZATION_CONFIG_SCHEMA_VERSION
+            if project.settings.session.randomization_mode is not None
+            or (session_plan is not None and session_plan.randomization_seeds is not None)
+            else CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION
+            if any(item.presentation_count is not None for item in project.conditions)
+            or project.settings.condition_defaults.presentation_count is not None
+            else CONDITION_DURATION_CONFIG_SCHEMA_VERSION
+            if any(item.stream_duration_seconds is not None for item in project.conditions)
+            or project.settings.condition_defaults.stream_duration_seconds is not None
+            else CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION
+            if any(condition.base_hz is not None for condition in project.conditions)
+            else MASKING_EVENT_CONFIG_SCHEMA_VERSION if any(
                 modifier.masking is not None and modifier.masking.event_triggers is not None
                 for modifier in project.condition_modifiers
             ) else CONDITION_CATCH_CONFIG_SCHEMA_VERSION if any(
@@ -539,6 +789,11 @@ def export_project_config(
                            for item in project.conditions) else "1.2.0"
         ),
         experiment_category=project.experiment_category,
+        condition_defaults=(
+            project.settings.condition_defaults.model_copy(deep=True)
+            if (project.settings.condition_defaults.stream_duration_seconds is not None
+                or project.settings.condition_defaults.presentation_count is not None) else None
+        ),
         project=ProjectConfigProject(
             project_id=project.meta.project_id,
             name=project.meta.name,
@@ -565,6 +820,9 @@ def export_project_config(
                 stimulus_variant=condition.stimulus_variant,
                 sequence_count=condition.sequence_count,
                 oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
+                base_hz=condition.base_hz,
+                stream_duration_seconds=condition.stream_duration_seconds,
+                presentation_count=condition.presentation_count,
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=condition.order_index,
                 instructions=condition.instructions,
@@ -669,7 +927,12 @@ def completed_toolbox_config(
             list(manual_removed_electrodes) if manual_removed_electrodes is not None else None
         ),
     })
-    return config.model_copy(deep=True, update={"completed_session": completed})
+    updates: dict[str, object] = {"completed_session": completed}
+    if completed.randomization_seeds is not None:
+        updates["schema_version"] = RANDOMIZATION_CONFIG_SCHEMA_VERSION
+    if completed.ordering_policy is not None:
+        updates["schema_version"] = SAVED_ORDER_CONFIG_SCHEMA_VERSION
+    return config.model_copy(deep=True, update=updates)
 
 
 def write_project_config(path: Path, config: ProjectConfigFile) -> None:
@@ -728,10 +991,15 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
         CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
         MASKING_EVENT_CONFIG_SCHEMA_VERSION,
+        CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
+        CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
+        CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
+        RANDOMIZATION_CONFIG_SCHEMA_VERSION,
+        SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
     }:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.8.0."
+            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.14.0."
         )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
@@ -776,7 +1044,19 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     project = ProjectFile(
         schema_version=(
-            ProjectSchemaVersion.V1_10
+            ProjectSchemaVersion.V1_16
+            if config.schema_version == POST_QUESTIONS_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_15
+            if config.schema_version == SAVED_ORDER_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_14
+            if config.schema_version == RANDOMIZATION_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_13
+            if config.schema_version == CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_12
+            if config.schema_version == CONDITION_DURATION_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_11
+            if config.schema_version == CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_10
             if config.schema_version == MASKING_EVENT_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_9
             if config.schema_version == CONDITION_CATCH_CONFIG_SCHEMA_VERSION
@@ -802,6 +1082,10 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
             display=_display_settings(config.display),
             presentation=config.presentation.model_copy(deep=True),
             protocol=_protocol_settings(config.protocol),
+            condition_defaults=(
+                config.condition_defaults.model_copy(deep=True)
+                if config.condition_defaults is not None else ConditionDefaults()
+            ),
             triggers=_trigger_settings(config.triggers),
             session=_session_settings(config.session),
         ),
@@ -823,6 +1107,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
                 stimulus_variant=condition.stimulus_variant,
                 sequence_count=condition.sequence_count,
                 oddball_cycle_repeats_per_sequence=(condition.oddball_cycle_repeats_per_sequence),
+                base_hz=condition.base_hz,
+                stream_duration_seconds=condition.stream_duration_seconds,
+                presentation_count=condition.presentation_count,
                 trigger_code=condition.trigger_code,
                 duty_cycle_mode=condition.duty_cycle_mode,
                 order_index=index,
@@ -1050,6 +1337,10 @@ def _session_config(session: SessionSettings) -> ProjectConfigSession:
     return ProjectConfigSession(
         block_count=session.block_count,
         session_seed=session.session_seed,
+        randomization_mode=session.randomization_mode,
+        stimulus_seed=session.stimulus_seed,
+        fixation_seed=session.fixation_seed,
+        saved_condition_order=session.saved_condition_order,
         randomize_conditions_per_block=session.randomize_conditions_per_block,
         randomize_across_blocks=session.randomize_across_blocks,
         inter_condition_mode=session.inter_condition_mode,
@@ -1145,6 +1436,10 @@ def _completed_session_config(
     return ProjectConfigCompletedSession(
         session_id=session_plan.session_id,
         session_seed=session_plan.random_seed,
+        randomization_mode=session_plan.randomization_mode,
+        randomization_seeds=session_plan.randomization_seeds,
+        randomization_algorithm_version=session_plan.randomization_algorithm_version,
+        ordering_policy=session_plan.ordering_policy,
         refresh_hz=session_plan.refresh_hz,
         block_orders=[list(block.condition_order) for block in session_plan.blocks],
         source_run_dir=source_run_dir,
@@ -1157,6 +1452,7 @@ def _completed_session_config(
                 condition_id=entry.condition_id,
                 condition_name=entry.condition_name,
                 random_seed=entry.run_spec.random_seed,
+                randomization=entry.run_spec.randomization,
                 trigger_events=[
                     ProjectConfigTriggerEvent(
                         frame_index=trigger.frame_index,
@@ -1274,6 +1570,10 @@ def _session_settings(config: ProjectConfigSession) -> SessionSettings:
     return SessionSettings(
         block_count=config.block_count,
         session_seed=config.session_seed,
+        randomization_mode=config.randomization_mode,
+        stimulus_seed=config.stimulus_seed,
+        fixation_seed=config.fixation_seed,
+        saved_condition_order=config.saved_condition_order,
         randomize_conditions_per_block=config.randomize_conditions_per_block,
         randomize_across_blocks=config.randomize_across_blocks,
         inter_condition_mode=config.inter_condition_mode,

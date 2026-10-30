@@ -20,6 +20,16 @@ class SchemaVersion(StrEnum):
     V1_2 = "1.2.0"
 
 
+class ConditionTemplateSchemaVersion(StrEnum):
+    """Supported app-level condition-template library versions."""
+
+    V1 = "1.0.0"
+    V1_1 = "1.1.0"
+    V1_2 = "1.2.0"
+    V1_3 = "1.3.0"
+    V1_4 = "1.4.0"
+
+
 class ProjectSchemaVersion(StrEnum):
     """Supported editable project-file schema versions."""
 
@@ -34,6 +44,12 @@ class ProjectSchemaVersion(StrEnum):
     V1_8 = "1.8.0"
     V1_9 = "1.9.0"
     V1_10 = "1.10.0"
+    V1_11 = "1.11.0"
+    V1_12 = "1.12.0"
+    V1_13 = "1.13.0"
+    V1_14 = "1.14.0"
+    V1_15 = "1.15.0"
+    V1_16 = "1.16.0"
 
 
 class ExperimentCategory(StrEnum):

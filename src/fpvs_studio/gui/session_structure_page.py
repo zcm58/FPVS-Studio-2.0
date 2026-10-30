@@ -8,18 +8,20 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
-    QHBoxLayout,
     QLabel,
     QLineEdit,
-    QPushButton,
     QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
-from fpvs_studio.core.enums import InterConditionMode
+from fpvs_studio.core.enums import ExperimentCategory, InterConditionMode
+from fpvs_studio.core.masking import condition_masking
+from fpvs_studio.core.randomization import supports_independent_randomization
+from fpvs_studio.core.session_ordering import session_presentation_count
 from fpvs_studio.gui.components import NonHomePageShell, SectionCard, configure_setup_form
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.randomization_editor import RandomizationEditor
 from fpvs_studio.gui.window_helpers import (
     _prefixed_object_name,
     _set_form_row_visible,
@@ -51,25 +53,7 @@ class SessionStructureEditor(QWidget):
         self.block_count_spin.setRange(1, 1000)
         self.block_count_spin.valueChanged.connect(self._apply_session_settings)
 
-        self.session_seed_spin = QSpinBox(self)
-        self.session_seed_spin.setObjectName(
-            _prefixed_object_name(object_name_prefix, "session_seed_spin")
-        )
-        self.session_seed_spin.setRange(0, 2_147_483_647)
-        self.session_seed_spin.setToolTip(
-            "Controls the randomized condition order within each block."
-        )
-        self.session_seed_spin.setVisible(False)
-
-        self.generate_seed_button = QPushButton("New Seed", self)
-        self.generate_seed_button.setObjectName(
-            _prefixed_object_name(object_name_prefix, "generate_seed_button")
-        )
-        self.generate_seed_button.setFixedWidth(96)
-        self.generate_seed_button.setToolTip(
-            "Generate a random order seed that has not been used by a completed session."
-        )
-        self.generate_seed_button.setVisible(False)
+        self.randomization_editor = RandomizationEditor(document, self)
 
         self.seed_help_label = QLabel(
             "Randomized",
@@ -80,6 +64,12 @@ class SessionStructureEditor(QWidget):
         )
         self.seed_help_label.setWordWrap(True)
         self.seed_help_label.setToolTip("A new condition order is generated for each launch.")
+
+        self.presentation_total_label = QLabel(self)
+        self.presentation_total_label.setObjectName(
+            _prefixed_object_name(object_name_prefix, "presentation_total_label")
+        )
+        self.presentation_total_label.setWordWrap(True)
 
         self.inter_condition_mode_combo = QComboBox(self)
         self.inter_condition_mode_combo.setObjectName(
@@ -121,22 +111,11 @@ class SessionStructureEditor(QWidget):
         self.session_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         self.session_layout.setHorizontalSpacing(12)
         self.session_layout.setVerticalSpacing(10)
-        self.seed_row_widget = QWidget(self)
-        self.seed_row_widget.setObjectName(
-            _prefixed_object_name(object_name_prefix, "session_seed_row")
-        )
-        self.seed_row_widget.setVisible(False)
-        self.seed_row_widget.setMinimumWidth(220)
-        seed_layout = QHBoxLayout(self.seed_row_widget)
-        seed_layout.setContentsMargins(0, 0, 0, 0)
-        seed_layout.setSpacing(8)
-        seed_layout.setAlignment(Qt.AlignmentFlag.AlignVCenter)
-        seed_layout.addWidget(self.session_seed_spin, 1, Qt.AlignmentFlag.AlignVCenter)
-        seed_layout.addWidget(self.generate_seed_button, 0, Qt.AlignmentFlag.AlignVCenter)
         self.session_layout.addRow(
             self._form_label("Repeats per condition"),
             self.block_count_spin,
         )
+        self.session_layout.addRow(self._form_label("Presentations"), self.presentation_total_label)
         self.session_layout.addRow(self._form_label("Condition order"), self.seed_help_label)
         self.session_layout.addRow(self._form_label("Start key"), self.continue_key_edit)
         self.session_layout.addRow(
@@ -159,10 +138,12 @@ class SessionStructureEditor(QWidget):
             self.session_card.card_layout.setContentsMargins(12, 10, 12, 10)
             self.session_card.card_layout.setSpacing(8)
             self.session_card.body_layout.setSpacing(8)
+            self.session_card.body_layout.addWidget(self.randomization_editor)
             self.session_card.body_layout.addLayout(self.session_layout)
             layout.addWidget(self.session_card)
         else:
             self.session_card = None
+            layout.addWidget(self.randomization_editor)
             layout.addLayout(self.session_layout)
 
         self._document.project_changed.connect(self.refresh)
@@ -176,19 +157,30 @@ class SessionStructureEditor(QWidget):
         return label
 
     def refresh(self) -> None:
-        session = self._document.project.settings.session
+        project = self._document.project
+        session = project.settings.session
+        ab = project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        masking = any(condition_masking(project, condition) is not None
+                      for condition in project.conditions)
         count_label = self.session_layout.labelForField(self.block_count_spin)
         assert isinstance(count_label, QLabel)
         count_label.setText(
-            "Bursts per SOA" if session.randomize_across_blocks else "Repeats per condition"
+            "Bursts per SOA" if ab else "Repeats per condition"
         )
         self.seed_help_label.setText(
-            "All bursts shuffled together" if session.randomize_across_blocks else "Randomized"
+            "All bursts shuffled together" if ab else "Variant groups shuffled" if masking else
+            "Pooled shuffle · no adjacent same condition"
         )
+        self.seed_help_label.setToolTip(
+            "A new burst order is generated for each launch." if ab else
+            "Masking keeps its existing variant groups and catch presentations." if masking else
+            "All requested presentations are pooled. The same condition cannot appear twice "
+            "in a row. Edit each condition's total presentations in the table above.",
+        )
+        total = session_presentation_count(project)
+        self.presentation_total_label.setText(f"{total} total")
         with QSignalBlocker(self.block_count_spin):
             self.block_count_spin.setValue(session.block_count)
-        with QSignalBlocker(self.session_seed_spin):
-            self.session_seed_spin.setValue(session.session_seed)
         with QSignalBlocker(self.inter_condition_mode_combo):
             self.inter_condition_mode_combo.setCurrentIndex(
                 self.inter_condition_mode_combo.findData(InterConditionMode.MANUAL_CONTINUE)
@@ -202,6 +194,16 @@ class SessionStructureEditor(QWidget):
         self._update_session_visibility_state()
 
     def _update_session_visibility_state(self) -> None:
+        project = self._document.project
+        ab = project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        masking = any(condition_masking(project, condition) is not None
+                      for condition in project.conditions)
+        _set_form_row_visible(self.session_layout, self.block_count_spin, ab or masking)
+        _set_form_row_visible(self.session_layout, self.presentation_total_label, not ab)
+        _set_form_row_visible(
+            self.session_layout, self.seed_help_label,
+            not supports_independent_randomization(project),
+        )
         _set_form_row_visible(self.session_layout, self.inter_condition_mode_combo, False)
         _set_form_row_visible(self.session_layout, self.break_seconds_spin, False)
         _set_form_row_visible(self.session_layout, self.continue_key_edit, True)
@@ -251,9 +253,9 @@ class SessionStructurePage(QWidget):
         layout.addWidget(self.shell)
 
         self.block_count_spin = self.editor.block_count_spin
-        self.session_seed_spin = self.editor.session_seed_spin
-        self.generate_seed_button = self.editor.generate_seed_button
+        self.randomization_editor = self.editor.randomization_editor
         self.seed_help_label = self.editor.seed_help_label
+        self.presentation_total_label = self.editor.presentation_total_label
         self.inter_condition_mode_combo = self.editor.inter_condition_mode_combo
         self.break_seconds_spin = self.editor.break_seconds_spin
         self.continue_key_edit = self.editor.continue_key_edit

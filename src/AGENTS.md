@@ -15,7 +15,8 @@ package map.
 - FPVS Oddball Paradigm defaults are 6.0 Hz and oddball every 5th stimulus (1.2 Hz).
   Attentional-Blink defaults to five-second 10 Hz letter streams with green/white
   digit targets, 100/300/500 ms SOAs and post-burst target recall;
-  the shared presentation rate is editable in Design with exact frame/SOA validation.
+  saved stream settings retain exact frame/SOA validation. The retained AB editor is
+  outside the current guided Setup workflow.
   See `docs/EXPERIMENT_CATEGORIES.md` for defaults and migration.
 - Oddball image conditions support `continuous`, `blank_50`, and `sinusoidal`.
   The visual designer maps oddball cycles to existing protocol settings. AB image

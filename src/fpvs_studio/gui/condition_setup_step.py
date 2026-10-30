@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import re
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
-from PySide6.QtCore import QSignalBlocker, QSize, Qt
+from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -54,6 +54,7 @@ from fpvs_studio.core.validation import (
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     SetupSourceCard,
+    apply_dialog_theme,
     configure_setup_form,
     mark_compact_info_action,
     mark_destructive_action,
@@ -65,6 +66,7 @@ from fpvs_studio.gui.condition_modifier_dialog import (
     condition_modifier_summary,
 )
 from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
+from fpvs_studio.gui.designer_sources import import_designer_source
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import StimulusTypeChangeRequiresConfirmation
 from fpvs_studio.gui.presentation_settings_dialog import (
@@ -80,15 +82,14 @@ from fpvs_studio.gui.window_helpers import (
     _sync_timing_template_combo,
     _timing_template_label,
 )
-from fpvs_studio.gui.workers import ProgressTask
+from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
+from fpvs_studio.preprocessing.models import StimulusSetInspectionSummary
 
-_DEFAULT_CONDITION_NAME_RE = re.compile(r"^Condition \d+$")
 _SOURCE_CARD_MIN_WIDTH = 210
 _SOURCE_CARD_HEIGHT = 160
 _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
 _SOURCE_HEADER_HEIGHT = 30
 _SOURCE_METRICS_HEIGHT = 56
-_INSTRUCTIONS_HEIGHT = 80
 _CONDITION_DETAILS_MIN_HEIGHT = 320
 _CONDITION_STEP_MIN_WIDTH = 840
 
@@ -133,13 +134,6 @@ class _ConditionSourcesRow(QWidget):
         )
 
 
-def is_guided_condition_name(value: str) -> bool:
-    """Return whether a condition name is intentional enough for guided setup."""
-
-    cleaned = value.strip()
-    return len(cleaned) >= 3 and _DEFAULT_CONDITION_NAME_RE.fullmatch(cleaned) is None
-
-
 def is_guided_trigger_code(value: int) -> bool:
     """Return whether a trigger code is acceptable in guided setup."""
 
@@ -171,6 +165,41 @@ def _configure_detail_field_widths(reference: QWidget, *fields: QWidget) -> None
         size_policy = field.sizePolicy()
         size_policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
         field.setSizePolicy(size_policy)
+
+
+class ParticipantInstructionsDialog(QDialog):
+    """Keep instruction edits local until the author selects Save."""
+
+    def __init__(
+        self, *, condition_name: str, instructions: str, parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("participant_instructions_dialog")
+        self.setWindowTitle("Participant Instructions")
+        self.setMinimumSize(520, 360)
+        self.resize(640, 460)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(12)
+        condition_label = QLabel(condition_name, self)
+        condition_label.setTextFormat(Qt.TextFormat.PlainText)
+        condition_label.setWordWrap(True)
+        layout.addWidget(condition_label)
+        self.text_edit = QTextEdit(self)
+        self.text_edit.setObjectName("participant_instructions_text")
+        self.text_edit.setAccessibleName("Participant instructions")
+        self.text_edit.setAcceptRichText(False)
+        self.text_edit.setPlainText(instructions)
+        layout.addWidget(self.text_edit, 1)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel, self,
+        )
+        self.buttons.accepted.connect(self.accept)
+        self.buttons.rejected.connect(self.reject)
+        mark_primary_action(self.buttons.button(QDialogButtonBox.StandardButton.Save))
+        mark_secondary_action(self.buttons.button(QDialogButtonBox.StandardButton.Cancel))
+        layout.addWidget(self.buttons)
+        apply_dialog_theme(self)
 
 
 class RepeatCalculatorDialog(QDialog):
@@ -327,6 +356,8 @@ def _current_images_text(row: StimulusRepeatRoleGuidance) -> str:
 class ConditionSetupStep(QWidget):
     """Focused wizard step for condition identity and linked image sources."""
 
+    busy_changed = Signal(bool)
+
     def __init__(
         self,
         document: ProjectDocument,
@@ -338,10 +369,10 @@ class ConditionSetupStep(QWidget):
         self.setMinimumWidth(_CONDITION_STEP_MIN_WIDTH)
         self._document = document
         self._load_fpvs_root_dir = load_fpvs_root_dir
-        self._pending_instruction_condition_id: str | None = None
         self._pending_base_words_condition_id: str | None = None
         self._pending_oddball_words_condition_id: str | None = None
-        self._active_task: ProgressTask | None = None
+        self._active_task: ProgressTask | BackgroundTask | None = None
+        self._import_role: str | None = None
 
         self.condition_list = QListWidget(self)
         self.condition_list.setObjectName("setup_wizard_condition_list")
@@ -397,7 +428,7 @@ class ConditionSetupStep(QWidget):
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(8)
         self.condition_list_hint = QLabel(
-            "Name your conditions. Build their image sequences in Design.", list_panel
+            "Add a condition, then choose its stimuli.", list_panel
         )
         self.condition_list_hint.setObjectName("setup_conditions_list_hint")
         self.condition_list_hint.setProperty("setupMetricLabel", "true")
@@ -445,7 +476,7 @@ class ConditionSetupStep(QWidget):
 
         self.condition_name_edit = QLineEdit(self)
         self.condition_name_edit.setObjectName("setup_wizard_condition_name_edit")
-        self.condition_name_edit.setPlaceholderText("Give this condition a descriptive name")
+        self.condition_name_edit.setPlaceholderText("Condition name")
         self.condition_name_edit.editingFinished.connect(self._apply_name)
         self.trigger_code_spin = QSpinBox(self)
         self.trigger_code_spin.setObjectName("setup_wizard_condition_trigger_code_spin")
@@ -544,19 +575,14 @@ class ConditionSetupStep(QWidget):
         )
         self.repeat_calculator_button.clicked.connect(self._open_repeat_calculator)
         mark_compact_info_action(self.repeat_calculator_button)
-        self.instructions_edit = QTextEdit(self)
-        self.instructions_edit.setObjectName("setup_wizard_condition_instructions_edit")
-        self.instructions_edit.setMinimumHeight(_INSTRUCTIONS_HEIGHT)
+        self.instructions_button = QPushButton("Edit Instructions…", self)
+        self.instructions_button.setObjectName("setup_wizard_condition_instructions_button")
+        self.instructions_button.clicked.connect(self._open_instructions)
+        mark_secondary_action(self.instructions_button)
         _configure_detail_field_widths(
             self.timing_template_combo,
             self.condition_name_edit,
-            self.instructions_edit,
         )
-        self._instructions_committer = DebouncedTextCommitter(
-            self.instructions_edit,
-            self._apply_instructions,
-        )
-        self.instructions_edit.textChanged.connect(self._schedule_instruction_commit)
 
         self.condition_details_section = QFrame(self)
         self.condition_details_section.setObjectName("setup_conditions_details_section")
@@ -597,8 +623,9 @@ class ConditionSetupStep(QWidget):
         self.presentation_mode_label = QLabel("Presentation mode", self)
         self.presentation_mode_label.setBuddy(self.timing_template_combo)
         form.addRow(self.presentation_mode_label, mode_row)
-        form.addRow(self.instructions_label, self.instructions_edit)
-        details_section_layout.addLayout(form, 1)
+        form.addRow(self.instructions_label, self.instructions_button)
+        details_section_layout.addLayout(form)
+        details_section_layout.addStretch(1)
         self.ab_stream_summary = QLabel(self)
         self.ab_stream_summary.setObjectName("setup_ab_stream_summary")
         self.ab_stream_summary.setWordWrap(True)
@@ -800,12 +827,9 @@ class ConditionSetupStep(QWidget):
         return column
 
     def refresh(self) -> None:
-        if self._instructions_committer.pending:
-            self._instructions_committer.flush()
         detail_fields = (
             self.timing_template_combo,
             self.condition_name_edit,
-            self.instructions_edit,
         )
         for field in detail_fields:
             field.ensurePolished()
@@ -887,7 +911,6 @@ class ConditionSetupStep(QWidget):
             self.condition_list_hint.show()
 
     def flush_pending_edits(self) -> None:
-        self._instructions_committer.flush()
         self._base_words_committer.flush()
         self._oddball_words_committer.flush()
 
@@ -895,19 +918,20 @@ class ConditionSetupStep(QWidget):
         condition = self._current_condition()
         pending_name = condition is not None and self.condition_name_edit.text() != condition.name
         return pending_name or any(committer.pending for committer in (
-            self._instructions_committer, self._base_words_committer, self._oddball_words_committer,
+            self._base_words_committer, self._oddball_words_committer,
         ))
+
+    def is_busy(self) -> bool:
+        return self._active_task is not None
+
+    def is_importing(self) -> bool:
+        return self.is_busy() and self._import_role is not None
 
     def focus_setup_blocker(self) -> None:
         """Select the first incomplete condition and focus its missing field."""
 
         self.flush_pending_edits()
         for condition in self._document.ordered_conditions():
-            if not is_guided_condition_name(condition.name):
-                self._select_condition(condition.condition_id)
-                self.condition_name_edit.setFocus()
-                self.condition_name_edit.selectAll()
-                return
             if not is_guided_trigger_code(condition.trigger_code):
                 self._select_condition(condition.condition_id)
                 self.trigger_code_spin.setFocus()
@@ -923,10 +947,7 @@ class ConditionSetupStep(QWidget):
                     self._select_condition(condition.condition_id)
                     self.task_button.setFocus()
                     return
-                if (
-                    stimulus_set.modality == StimulusModality.IMAGE
-                    or self._stimulus_ready(stimulus_set)
-                ):
+                if self._stimulus_ready(stimulus_set):
                     continue
                 self._select_condition(condition.condition_id)
                 field: QWidget
@@ -981,9 +1002,7 @@ class ConditionSetupStep(QWidget):
     def _condition_status_text(self, condition: Condition) -> str:
         if condition.condition_id in category_conflict_condition_ids(self._document.project):
             return "Needs separation"
-        if not is_guided_condition_name(condition.name):
-            return "Needs name"
-        elif not is_guided_trigger_code(condition.trigger_code):
+        if not is_guided_trigger_code(condition.trigger_code):
             return "Needs trigger"
         masking = condition_masking(self._document.project, condition)
         if masking is not None:
@@ -994,7 +1013,7 @@ class ConditionSetupStep(QWidget):
         if base_set is None or oddball_set is None:
             return "Missing stimulus sources"
         if base_set.modality == StimulusModality.IMAGE:
-            return "Design configured" if (
+            return "Ready" if (
                 self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set)
                 and (
                     condition.attentional_blink is None
@@ -1003,7 +1022,7 @@ class ConditionSetupStep(QWidget):
                         self._document.get_condition_stimulus_set(condition.condition_id, "t2")
                     )
                 )
-            ) else "Finish in Design"
+            ) else "Needs images"
         elif self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set):
             return "Ready"
         else:
@@ -1016,7 +1035,10 @@ class ConditionSetupStep(QWidget):
     def _refresh_editor(self, *_args: object) -> None:
         condition = self._current_condition()
         self.condition_list_hint.show()
-        enabled = condition is not None
+        enabled = condition is not None and not self.is_busy()
+        self.condition_list.setEnabled(not self.is_busy())
+        self.condition_search_edit.setEnabled(not self.is_busy())
+        self.add_condition_button.setEnabled(not self.is_busy())
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         stream = condition is not None and isinstance(
             condition.attentional_blink, AttentionalBlinkStreamSettings,
@@ -1047,7 +1069,7 @@ class ConditionSetupStep(QWidget):
         self.presentation_mode_row.setVisible(not ab and masking is None)
         self.all_conditions_section.setVisible(not ab and masking is None)
         self.instructions_label.setVisible(masking is None)
-        self.instructions_edit.setVisible(masking is None)
+        self.instructions_button.setVisible(masking is None)
         self.duplicate_condition_button.setToolTip(
             "Keeps the shared masking modifier. Use Copy for Condition in Condition Modifiers "
             "before changing only the duplicate's stimuli or questions."
@@ -1061,7 +1083,7 @@ class ConditionSetupStep(QWidget):
             self.task_button,
             self.timing_template_combo,
             self.repeat_calculator_button,
-            self.instructions_edit,
+            self.instructions_button,
             self.base_words_edit,
             self.oddball_words_edit,
             self.duplicate_condition_button,
@@ -1087,7 +1109,7 @@ class ConditionSetupStep(QWidget):
         if condition is None:
             self.condition_scope_label.setText("Add your first condition")
             self.condition_scope_label.setToolTip("")
-            self.condition_list_hint.setText("Add a condition, then build its sequence in Design.")
+            self.condition_list_hint.setText("Add a condition, then choose its stimuli.")
             self.presentation_mode_help.setText("")
             self.presentation_mode_help.hide()
             with QSignalBlocker(self.condition_name_edit):
@@ -1106,8 +1128,6 @@ class ConditionSetupStep(QWidget):
                 self.target_repeats_spin.setValue(
                     self._document.project.settings.condition_defaults.target_repeats_per_image
                 )
-            with QSignalBlocker(self.instructions_edit):
-                self.instructions_edit.clear()
             with QSignalBlocker(self.base_words_edit):
                 self.base_words_edit.clear()
             with QSignalBlocker(self.oddball_words_edit):
@@ -1160,7 +1180,6 @@ class ConditionSetupStep(QWidget):
             self.modality_combo.setEnabled(False)
             return
         modality = base_set.modality
-        named = is_guided_condition_name(condition.name)
         trigger_ready = is_guided_trigger_code(condition.trigger_code)
         base_ready = self._stimulus_ready(base_set)
         oddball_ready = self._stimulus_ready(oddball_set)
@@ -1174,7 +1193,7 @@ class ConditionSetupStep(QWidget):
             self.condition_list_hint.setText("Enter base and oddball words below, one per line.")
         else:
             self.condition_list_hint.setText(
-                "Choose image folders and build this condition's sequence in Design."
+                "Choose Base Images and Oddball Images for this condition."
             )
         contrast_mode = condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
         self.presentation_mode_help.setText(
@@ -1197,8 +1216,10 @@ class ConditionSetupStep(QWidget):
             self.target_repeats_spin.setValue(
                 self._document.project.settings.condition_defaults.target_repeats_per_image
             )
-        if not self._instructions_committer.pending:
-            _sync_text_editor_contents(self.instructions_edit, condition.instructions)
+        self.instructions_button.setToolTip(
+            "Edit saved participant instructions." if condition.instructions
+            else "Add participant instructions."
+        )
         if not self._base_words_committer.pending and not self.base_words_edit.hasFocus():
             _sync_text_editor_contents(self.base_words_edit, "\n".join(base_set.words))
         if not self._oddball_words_committer.pending and not self.oddball_words_edit.hasFocus():
@@ -1206,10 +1227,17 @@ class ConditionSetupStep(QWidget):
         self.base_words_count.setText(f"{base_set.word_count} words")
         self.oddball_words_count.setText(f"{oddball_set.word_count} words")
         word_mode = modality == StimulusModality.WORD
-        self.sources_row.hide()
+        self.sources_row.setVisible(not word_mode and not stream)
         self.words_panel.setVisible(word_mode and not stream)
         self.base_import_button.setEnabled(enabled and not word_mode)
         self.oddball_import_button.setEnabled(enabled and not word_mode)
+        for role, button in (
+            ("base", self.base_import_button), ("oddball", self.oddball_import_button),
+        ):
+            button.setText(
+                "Importing…" if self._import_role == role
+                else f"Choose {role.title()} Images..."
+            )
         self.create_control_condition_button.setToolTip(
             "Control conditions are only available for image conditions."
             if word_mode
@@ -1231,7 +1259,7 @@ class ConditionSetupStep(QWidget):
         self.task_summary_label.setText(
             condition_modifier_summary(self._document, condition.condition_id)
         )
-        self._set_checklist_statuses(named, trigger_ready, base_ready, oddball_ready)
+        self._set_checklist_statuses(True, trigger_ready, base_ready, oddball_ready)
         self._set_source_summary(base_set, role="base")
         self._set_source_summary(oddball_set, role="oddball")
         if stream:
@@ -1255,12 +1283,12 @@ class ConditionSetupStep(QWidget):
             self.ab_stream_summary.setText(
                 f"SOA {description.soa_ms:g} ms · {description.intervening_digits} distractors "
                 f"between T1 and T2 · {description.item_ms:g} ms per character.\n\n"
-                "Design controls the shared character pools and target colors. " + recall_help
+                + recall_help
             )
             self.task_button.setToolTip(
                 "Edit tasks shown before or after this condition. " + recall_help
             )
-            self.condition_list.setToolTip("Edit target separation and shared symbols in Design.")
+            self.condition_list.setToolTip("Saved Attentional-Blink condition settings.")
 
     def _set_checklist_statuses(
         self,
@@ -1269,7 +1297,7 @@ class ConditionSetupStep(QWidget):
         base_ready: bool,
         oddball_ready: bool,
     ) -> None:
-        name_status = "Complete" if named else "Enter a descriptive name"
+        name_status = "Complete" if named else ""
         trigger_status = "Complete" if trigger_ready else "Use a trigger code of 1 or higher"
         condition = self._current_condition()
         modality = None
@@ -1480,7 +1508,10 @@ class ConditionSetupStep(QWidget):
             return
         rows = [
             row
-            for row in condition_stimulus_repeat_guidance(self._document.project)
+            for row in condition_stimulus_repeat_guidance(
+                self._document.project,
+                refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
+            )
             if row.condition_id == condition_id
         ]
         base_row = next((row for row in rows if row.role == "base"), None)
@@ -1495,19 +1526,18 @@ class ConditionSetupStep(QWidget):
         )
         dialog.exec()
 
-    def _schedule_instruction_commit(self) -> None:
-        self._pending_instruction_condition_id = self.selected_condition_id()
-        self._instructions_committer.schedule()
-
-    def _apply_instructions(self) -> None:
-        condition_id = self._pending_instruction_condition_id or self.selected_condition_id()
-        self._pending_instruction_condition_id = None
-        if condition_id is None:
+    def _open_instructions(self) -> None:
+        condition = self._current_condition()
+        if condition is None or self.is_busy():
+            return
+        dialog = ParticipantInstructionsDialog(
+            condition_name=condition.name, instructions=condition.instructions, parent=self,
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         try:
             self._document.update_condition(
-                condition_id,
-                instructions=self.instructions_edit.toPlainText(),
+                condition.condition_id, instructions=dialog.text_edit.toPlainText(),
             )
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)
@@ -1584,6 +1614,8 @@ class ConditionSetupStep(QWidget):
         self._active_task.succeeded.connect(self._on_separation_succeeded)
         self._active_task.failed.connect(self._on_separation_failed)
         self._active_task.finished.connect(self._on_materialization_finished)
+        self._refresh_editor()
+        self.busy_changed.emit(True)
         self._active_task.start()
 
     def _on_separation_failed(self, error: object) -> None:
@@ -1672,7 +1704,7 @@ class ConditionSetupStep(QWidget):
 
     def _import_stimulus_folder(self, role: str) -> None:
         condition_id = self.selected_condition_id()
-        if condition_id is None:
+        if condition_id is None or self.is_busy():
             return
         directory = QFileDialog.getExistingDirectory(
             self,
@@ -1681,14 +1713,31 @@ class ConditionSetupStep(QWidget):
         )
         if not directory:
             return
+        root, source_dir = self._document.project_root, Path(directory)
+        task = BackgroundTask(
+            parent_widget=self,
+            callback=lambda: import_designer_source(root, condition_id, role, source_dir),
+        )
+        self._active_task = task
+        self._import_role = role
+        task.succeeded.connect(lambda result: self._on_source_imported(condition_id, role, result))
+        task.failed.connect(self._on_source_import_failed)
+        task.finished.connect(self._on_materialization_finished)
+        self._refresh_editor()
+        self.busy_changed.emit(True)
+        task.start()
+
+    def _on_source_imported(self, condition_id: str, role: str, result: object) -> None:
+        summary, source = cast(tuple[StimulusSetInspectionSummary, StimulusSet], result)
         try:
-            self._document.import_condition_stimulus_folder(
-                condition_id,
-                role=role,
-                source_dir=Path(directory),
+            self._document.apply_designer_source(
+                condition_id, role=role, stimulus_set=source, summary=summary,
             )
         except Exception as error:
             _show_error_dialog(self, "Stimulus Import Error", error)
+
+    def _on_source_import_failed(self, error: object) -> None:
+        _show_error_dialog(self, "Stimulus Import Error", _coerce_exception(error))
 
     def _stimulus_dialog_start_dir(self) -> Path:
         project_stimuli_dir = stimuli_dir(self._document.project_root)
@@ -1727,6 +1776,7 @@ class ConditionSetupStep(QWidget):
         )
         self._active_task = task
         self._refresh_editor()
+        self.busy_changed.emit(True)
         task.succeeded.connect(lambda _result: self.refresh())
         task.failed.connect(self._on_materialization_failed)
         task.finished.connect(self._on_materialization_finished)
@@ -1741,7 +1791,9 @@ class ConditionSetupStep(QWidget):
 
     def _on_materialization_finished(self) -> None:
         self._active_task = None
+        self._import_role = None
         self._refresh_editor()
+        self.busy_changed.emit(False)
 
     def _select_condition(self, condition_id: str) -> None:
         self.refresh()

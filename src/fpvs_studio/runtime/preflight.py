@@ -26,7 +26,7 @@ from fpvs_studio.core.run_spec import (
     RunSpec,
     event_presentation,
 )
-from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import (
     TaskItemModality,
     TaskModuleSpec,
@@ -98,6 +98,25 @@ def _verify_connected_refresh_rate(
 
 
 def _validate_display_refresh_timing(run_spec: RunSpec) -> None:
+    if run_spec.randomization is not None or run_spec.schema_version == "1.7.0":
+        try:
+            RunSpec.model_validate(run_spec)
+        except ValueError as exc:
+            raise PreflightError(f"Compiled randomization provenance is invalid: {exc}") from exc
+    requested_seconds = run_spec.condition.requested_duration_seconds
+    if requested_seconds is not None and (
+        run_spec.schema_version not in {"1.6.0", "1.7.0"}
+        or not isclose(
+            requested_seconds * run_spec.display.refresh_hz,
+            run_spec.display.total_frames,
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        )
+    ):
+        raise PreflightError(
+            "Run preflight failed because requested stream duration does not match "
+            "the compiled frame timing or schema."
+        )
     display_report = validate_display_refresh(
         run_spec.display.refresh_hz,
         duty_cycle_mode=run_spec.display.duty_cycle_mode,
@@ -489,7 +508,11 @@ def _validate_scene_timing(run_spec: RunSpec) -> None:
     targets = [event for event in scene.events if event.role == "target"]
     catch = scene.is_catch_trial is True
     expected_targets = 0 if catch else run_spec.condition.total_oddball_cycles
-    if (run_spec.schema_version != ("1.5.0" if catch else "1.4.0")
+    expected_schema = (
+        "1.6.0" if run_spec.condition.requested_duration_seconds is not None
+        else "1.5.0" if catch else "1.4.0"
+    )
+    if (run_spec.schema_version != expected_schema
             or run_spec.condition.stimulus_modality != StimulusModality.SCENE
             or run_spec.stimulus_sequence or run_spec.attentional_blink is not None
             or (scene.target_id is not None if catch else not scene.target_id)
@@ -753,6 +776,16 @@ def preflight_session_plan(
     actual_indices = [entry.global_order_index for entry in ordered_entries]
     if actual_indices != expected_indices:
         raise PreflightError("Session preflight failed because session entry ordering is invalid.")
+    if session_plan.schema_version in {"1.7.0", "1.8.0", "1.9.0"} or (
+        session_plan.randomization_seeds is not None
+    ):
+        try:
+            SessionPlan.model_validate(session_plan)
+            for entry in ordered_entries:
+                SessionEntry.model_validate(entry)
+        except ValueError as exc:
+            raise PreflightError(f"Session randomization provenance is invalid: {exc}") from exc
+    _validate_session_presentation_identity(session_plan)
     for entry in ordered_entries:
         preflight_run_spec(
             project_root,
@@ -763,6 +796,15 @@ def preflight_session_plan(
             verify_connected_refresh=False,
         )
         task_modules = [*entry.pre_tasks, *entry.post_tasks]
+        for module in task_modules:
+            if module.post_question_context is not None:
+                try:
+                    TaskModuleSpec.model_validate(module)
+                except ValueError as exc:
+                    raise PreflightError(
+                        "Post-condition Questions are incompatible with their original "
+                        f"compiled context: {exc}"
+                    ) from exc
         _validate_task_assets(
             project_root,
             task_modules,
@@ -774,3 +816,30 @@ def preflight_session_plan(
         engine=engine,
         runtime_options=runtime_options,
     )
+
+
+def _validate_session_presentation_identity(session_plan: SessionPlan) -> None:
+    """Check new pooled occurrence metadata while preserving historical plans/reruns."""
+    entries = session_plan.ordered_entries()
+    if session_plan.ordering_policy is None:
+        if any(entry.condition_presentation_index is not None
+               or entry.condition_presentation_count is not None for entry in entries):
+            raise PreflightError("Presentation identity requires a pooled session ordering policy.")
+        return
+    if (session_plan.ordering_policy not in {"pooled_no_adjacent", "saved_no_adjacent"}
+            or session_plan.schema_version not in {"1.6.0", "1.7.0", "1.8.0", "1.9.0"}):
+        raise PreflightError("Pooled presentations require SessionPlan schema 1.6.0 or newer.")
+    if session_plan.ordering_policy == "saved_no_adjacent" and (
+        session_plan.schema_version not in {"1.8.0", "1.9.0"}
+    ):
+        raise PreflightError("Saved ordering requires SessionPlan schema 1.8.0.")
+    seen: dict[str, tuple[int, int]] = {}
+    for entry in entries:
+        index, count = entry.condition_presentation_index, entry.condition_presentation_count
+        if (type(index) is not int or type(count) is not int
+                or index < 1 or index > count):
+            raise PreflightError("Session presentation identity is missing or invalid.")
+        prior = seen.get(entry.condition_id)
+        if prior is not None and (count != prior[1] or index <= prior[0]):
+            raise PreflightError("Session presentation indices or counts are inconsistent.")
+        seen[entry.condition_id] = (index, count)

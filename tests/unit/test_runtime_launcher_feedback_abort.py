@@ -15,6 +15,7 @@ from tests.unit.runtime_launcher_helpers import (
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file
+from fpvs_studio.core.session_plan import SessionBlock, SessionPlan
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.launcher import (
@@ -113,7 +114,7 @@ def test_session_launch_skips_condition_feedback_when_accuracy_task_disabled(
 
 
 
-def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
+def test_historical_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
@@ -126,6 +127,28 @@ def test_session_launch_aborts_cleanly_when_inter_block_break_is_cancelled(
             project_root=multi_condition_project_root,
             random_seed=18,
         )
+        # Retain the abort contract for historical compiled two-block sessions.
+        entries = session_plan.ordered_entries()
+        midpoint = len(entries) // 2
+        blocks = []
+        for block_index, group in enumerate((entries[:midpoint], entries[midpoint:])):
+            historical_entries = [entry.model_copy(update={
+                "block_index": block_index, "index_within_block": index,
+                "condition_presentation_index": None, "condition_presentation_count": None,
+                "run_spec": entry.run_spec.model_copy(update={
+                    "randomization": None, "schema_version": "1.1.0",
+                }),
+            }) for index, entry in enumerate(group)]
+            blocks.append(SessionBlock(
+                block_index=block_index, entries=historical_entries,
+                condition_order=[entry.condition_id for entry in historical_entries],
+            ))
+        session_plan = SessionPlan.model_validate(session_plan.model_copy(update={
+            "schema_version": "1.2.0", "ordering_policy": None, "blocks": blocks,
+            "block_count": 2,
+            "randomization_mode": None, "randomization_seeds": None,
+            "randomization_algorithm_version": None,
+        }).model_dump())
 
         summary = launch_session(
             multi_condition_project_root,

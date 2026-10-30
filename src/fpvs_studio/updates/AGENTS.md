@@ -50,8 +50,10 @@ Keep patch application, complete baseline/target verification, and recovery in I
 - Keep update downloads in user-writable cache or temp folders, never in the install
   directory or project folders.
 - Use HTTPS release and asset URLs only.
-- Keep installer launch explicit; callers must get final user confirmation before
-  executing a downloaded installer.
+- Keep installer launch explicit: the user's Download and Install click supplies
+  consent for verified download and the ensuing installation. Do not add a second
+  install button or redundant install confirmation. Preserve any project Save gate,
+  cancellation and the helper's matching nonce acceptance before execution.
 - Startup cache maintenance is best-effort and logged. Only recognized direct
   regular-file children in the exact absolute updater cache may be removed. Refuse
   linked/reparse roots, ancestors, files, and multiply-linked files; never sweep
@@ -69,7 +71,7 @@ Keep patch application, complete baseline/target verification, and recovery in I
 - Return newer releases with missing/invalid digest as available but not downloadable,
   never as up-to-date. Match exact release/asset versions, with only the documented
   published legacy filename exception.
-- Installer verification/launch is one worker stage after confirmation/save, never
+- Installer verification/launch is one worker stage after explicit consent/save, never
   a GUI-thread hash. Honor cancellation before Popen; after successful process
   creation setup owns mutations. Report installation commitment explicitly so a late
   cancellation cannot hide a failed install as cancellation before installation.

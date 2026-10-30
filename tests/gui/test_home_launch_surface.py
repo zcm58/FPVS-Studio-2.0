@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -86,6 +87,25 @@ def test_ab_home_shows_total_bursts_and_recall_tracking(qtbot, tmp_path: Path) -
     assert page.block_count_value.text() == "60"
     _assert_visible_children_within_parent(page)
     for label in (page.block_count_label, page.block_count_value, page.accuracy_task_value):
+        assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_home_counts_exact_unequal_presentations(qtbot, tmp_path, background):
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Unequal presentations")
+    first = document.create_condition(name="Faces")
+    second = document.create_condition(name="Objects")
+    document.update_condition_timing(presentation_counts={first: 3, second: 2})
+    page = HomePage(document, load_condition_template_profiles=lambda: [])
+    qtbot.addWidget(page)
+    page.setPalette(QPalette(QColor(background)))
+    page.resize(1120, 820)
+    page.show()
+    QApplication.processEvents()
+    assert page.block_count_label.text() == "Presentations"
+    assert page.block_count_value.text() == "5"
+    _assert_visible_children_within_parent(page)
+    for label in (page.block_count_label, page.block_count_value):
         assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
 
 

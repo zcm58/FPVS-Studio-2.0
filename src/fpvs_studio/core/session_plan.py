@@ -6,12 +6,18 @@ requests."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
+from pydantic import (
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictInt,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.enums import InterConditionMode, SchemaVersion
-from fpvs_studio.core.models import FPVSBaseModel
+from fpvs_studio.core.models import FPVSBaseModel, RandomizationAlgorithmVersion, RandomizationSeeds
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.task_models import TaskModuleSpec, task_requires_text_alignment_schema
 
@@ -46,9 +52,49 @@ class SessionEntry(FPVSBaseModel):
     pre_tasks: list[TaskModuleSpec] = Field(default_factory=list)
     post_tasks: list[TaskModuleSpec] = Field(default_factory=list)
     show_condition_start_gate: bool = True
+    condition_presentation_index: StrictInt | None = Field(default=None, ge=1)
+    condition_presentation_count: StrictInt | None = Field(default=None, ge=1)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_presentations(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.condition_presentation_index is None:
+            payload.pop("condition_presentation_index", None)
+        if self.condition_presentation_count is None:
+            payload.pop("condition_presentation_count", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_consistency(self) -> SessionEntry:
+        if any(task.post_question_context is not None for task in self.pre_tasks):
+            raise ValueError(
+                "Post-condition Questions must remain in the post-condition task list."
+            )
+        for task in [*self.pre_tasks, *self.post_tasks]:
+            context = task.post_question_context
+            if context is None:
+                continue
+            if (context.condition_id != self.condition_id
+                    or context.condition_name != self.condition_name
+                    or self.condition_presentation_index is not None and (
+                        context.condition_presentation_index != self.condition_presentation_index
+                        or context.condition_presentation_count != self.condition_presentation_count
+                    )):
+                raise ValueError(
+                "Post-question context must match its original condition presentation."
+            )
+        if ((self.condition_presentation_index is None)
+                != (self.condition_presentation_count is None)):
+            raise ValueError("Condition presentation index and count must be supplied together.")
+        if (self.condition_presentation_index is not None
+                and self.condition_presentation_count is not None
+                and self.condition_presentation_index > self.condition_presentation_count):
+            raise ValueError("Condition presentation index may not exceed its total count.")
+        if (self.run_spec.randomization is not None and self.condition_presentation_index
+                != self.run_spec.randomization.condition_presentation_index):
+            raise ValueError("Session and run presentation indices must match.")
         if self.run_id != self.run_spec.run_id:
             raise ValueError("SessionEntry.run_id must match run_spec.run_id.")
         if self.condition_id != self.run_spec.condition.condition_id:
@@ -91,6 +137,10 @@ class SessionPlan(FPVSBaseModel):
     blocks: list[SessionBlock] = Field(default_factory=list)
     total_runs: int = Field(ge=0)
     authored_task_flow: bool | None = None
+    ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
+    randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_seeds: RandomizationSeeds | None = None
+    randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
 
     @model_serializer(mode="wrap")
     def serialize_optional_flow(
@@ -99,23 +149,84 @@ class SessionPlan(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.authored_task_flow is None:
             payload.pop("authored_task_flow", None)
+        if self.ordering_policy is None:
+            payload.pop("ordering_policy", None)
+        for name in (
+            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+        ):
+            if getattr(self, name) is None:
+                payload.pop(name, None)
         return payload
 
     @model_validator(mode="after")
     def validate_totals(self) -> SessionPlan:
+        entries = [entry for block in self.blocks for entry in block.entries]
+        has_questions = any(task.post_question_context is not None
+                            for entry in entries for task in [*entry.pre_tasks, *entry.post_tasks])
+        if has_questions and self.schema_version != "1.9.0":
+            raise ValueError("Post-question context requires SessionPlan schema 1.9.0.")
+        if self.schema_version == "1.9.0" and not has_questions:
+            raise ValueError("SessionPlan schema 1.9.0 requires post-question context.")
+        has_randomization = (
+            self.randomization_mode is not None or self.randomization_seeds is not None
+            or self.randomization_algorithm_version is not None
+            or any(entry.run_spec.randomization is not None for entry in entries)
+        )
+        if (self.schema_version == "1.8.0" or self.ordering_policy == "saved_no_adjacent") and (
+            self.randomization_mode != "fixed"
+        ):
+            raise ValueError("Saved condition ordering requires fixed randomization mode.")
+        if self.schema_version in {"1.7.0", "1.8.0"} or (
+            self.schema_version == "1.9.0" and has_randomization
+        ):
+            if (self.randomization_mode is None or self.randomization_seeds is None
+                    or self.randomization_algorithm_version is None):
+                raise ValueError(
+                    "Independent sessions require the resolved seed triplet and policy."
+                )
+            if (type(self.randomization_algorithm_version) is not int
+                    or self.randomization_algorithm_version != 1):
+                raise ValueError("Independent randomization algorithm version must be integer 1.")
+            RandomizationSeeds.model_validate(self.randomization_seeds.model_dump())
+            if self.random_seed != self.randomization_seeds.condition_order_seed:
+                raise ValueError("Session seed must match the resolved condition-order seed.")
+            if any(entry.run_spec.randomization is None
+                   or entry.run_spec.randomization.mode != self.randomization_mode
+                   or entry.run_spec.randomization.seeds != self.randomization_seeds
+                   or entry.run_spec.randomization.algorithm_version
+                   != self.randomization_algorithm_version for entry in entries):
+                raise ValueError("Session and run randomization provenance must match.")
+        elif has_randomization:
+            raise ValueError("Independent randomization requires SessionPlan schema 1.7.0.")
+        has_presentations = any(entry.condition_presentation_index is not None for entry in entries)
+        if self.schema_version in {"1.6.0", "1.7.0", "1.8.0"} or (
+            self.schema_version == "1.9.0" and self.ordering_policy is not None
+        ):
+            expected_policy = ("saved_no_adjacent" if self.schema_version == "1.8.0"
+                               or self.schema_version == "1.9.0"
+                               and self.ordering_policy == "saved_no_adjacent"
+                               else "pooled_no_adjacent")
+            if self.ordering_policy != expected_policy or any(
+                entry.condition_presentation_index is None for entry in entries
+            ):
+                raise ValueError(
+                    "Pooled sessions require an ordering policy and presentation indices."
+                )
+        elif self.ordering_policy is not None or has_presentations:
+            raise ValueError("Presentation ordering metadata requires SessionPlan schema 1.6.0.")
         if self.authored_task_flow is not None and self.schema_version not in {
-            "1.3.0", "1.4.0", "1.5.0",
+            "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
         }:
             raise ValueError("Authored task session flow requires SessionPlan schema 1.3.0.")
         if any(entry.run_spec.scene_stream is not None
                and entry.run_spec.scene_stream.is_catch_trial
                for block in self.blocks for entry in block.entries):
-            if self.schema_version not in {"1.4.0", "1.5.0"}:
+            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0"}:
                 raise ValueError("Catch trials require SessionPlan schema 1.4.0.")
         if any(task_requires_text_alignment_schema(task)
                for block in self.blocks for entry in block.entries
                for task in [*entry.pre_tasks, *entry.post_tasks]):
-            if self.schema_version != "1.5.0":
+            if self.schema_version not in {"1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0"}:
                 raise ValueError("Task text alignment requires SessionPlan schema 1.5.0.")
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")

@@ -70,6 +70,16 @@ ATTENTIONAL_BLINK_EVENTS_FILENAME = "attentional_blink_events.csv"
 ATTENTIONAL_BLINK_STREAM_EVENTS_FILENAME = "attentional_blink_stream_events_v1.csv"
 TASK_CHECKPOINT_DIRNAME = ".task-response-checkpoints"
 ADMIN_TEST_PARTICIPANT_IDS = frozenset({"0", "00"})
+RANDOMIZATION_PROVENANCE_HEADER = [
+    "randomization_mode",
+    "condition_order_seed",
+    "stimulus_seed",
+    "fixation_seed",
+    "randomization_algorithm_version",
+    "stimulus_order_seed",
+    "fixation_count_seed",
+    "fixation_onset_seed",
+]
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -125,6 +135,12 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "accuracy_percent",
     "mean_rt_ms",
     "block_accuracy_percent",
+    "requested_stream_duration_seconds",
+    "resolved_stream_duration_seconds",
+    "condition_presentation_index",
+    "condition_presentation_count",
+    *RANDOMIZATION_PROVENANCE_HEADER,
+    "ordering_policy",
     "participant_session_number",
     "manual_removed_electrodes",
     "manual_removed_electrodes_recorded",
@@ -350,12 +366,15 @@ def compact_task_checkpoint_path(
     participant_number: str,
     session_id: str,
     participant_session_number: int | None = None,
+    execution_id: str | None = None,
 ) -> Path:
     """Return a contained, opaque checkpoint path for one compact-mode session."""
 
     identity_text = f"{participant_number}\0{session_id}"
     if participant_session_number is not None:
         identity_text += f"\0{participant_session_number}"
+    if execution_id is not None:
+        identity_text += f"\0{execution_id}"
     identity = identity_text.encode()
     filename = f"{hashlib.sha256(identity).hexdigest()[:24]}.jsonl"
     return logs_dir(project_root) / TASK_CHECKPOINT_DIRNAME / filename
@@ -825,6 +844,12 @@ def write_session_artifacts(
             "condition_id",
             "condition_name",
             "run_id",
+            "requested_stream_duration_seconds",
+            "resolved_stream_duration_seconds",
+            "condition_presentation_index",
+            "condition_presentation_count",
+            *RANDOMIZATION_PROVENANCE_HEADER,
+            "ordering_policy",
         ],
         [
             (
@@ -834,6 +859,12 @@ def write_session_artifacts(
                 entry.condition_id,
                 entry.condition_name,
                 entry.run_id,
+                entry.run_spec.condition.requested_duration_seconds,
+                entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
+                entry.condition_presentation_index,
+                entry.condition_presentation_count,
+                *_run_randomization_values(entry.run_spec),
+                session_plan.ordering_policy,
             )
             for entry in ordered_entries
         ],
@@ -1220,6 +1251,7 @@ def _session_condition_history_rows(
             run_results_by_id.get(entry.run_id),
             logged_at=logged_at,
             block_accuracy_percent=block_accuracy.get(entry.block_index),
+            ordering_policy=session_plan.ordering_policy,
         )
         for entry in session_plan.ordered_entries()
     ]
@@ -1232,6 +1264,7 @@ def _session_condition_history_row(
     *,
     logged_at: str,
     block_accuracy_percent: float | None,
+    ordering_policy: str | None,
 ) -> list[object]:
     fixation = run_result.fixation_task_summary if run_result is not None else None
     metadata = run_result.runtime_metadata if run_result is not None else None
@@ -1318,6 +1351,15 @@ def _session_condition_history_row(
         _float_value(fixation.accuracy_percent if fixation is not None else None),
         _float_value(fixation.mean_rt_ms if fixation is not None else None),
         _float_value(block_accuracy_percent),
+        entry.run_spec.condition.requested_duration_seconds
+        if entry.run_spec.condition.requested_duration_seconds is not None else "",
+        entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz,
+        entry.condition_presentation_index
+        if entry.condition_presentation_index is not None else "",
+        entry.condition_presentation_count
+        if entry.condition_presentation_count is not None else "",
+        *_run_randomization_values(entry.run_spec),
+        ordering_policy or "",
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
         summary.participant_metadata.manual_removed_electrodes is not None,
@@ -1647,6 +1689,22 @@ def _weighted_mean_rt_ms(
         weighted_rt_sum += mean_rt_ms * hit_count
         hit_count_for_rt += hit_count
     return weighted_rt_sum / hit_count_for_rt if hit_count_for_rt > 0 else None
+
+
+def _run_randomization_values(run_spec: RunSpec) -> tuple[object, ...]:
+    provenance = run_spec.randomization
+    if provenance is None:
+        return ("",) * len(RANDOMIZATION_PROVENANCE_HEADER)
+    return (
+        provenance.mode,
+        provenance.seeds.condition_order_seed,
+        provenance.seeds.stimulus_seed,
+        provenance.seeds.fixation_seed,
+        provenance.algorithm_version,
+        provenance.stimulus_order_seed,
+        provenance.fixation_count_seed,
+        provenance.fixation_onset_seed,
+    )
 
 
 def _image_display_order_seed_text(

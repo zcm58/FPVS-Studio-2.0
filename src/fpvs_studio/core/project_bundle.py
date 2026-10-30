@@ -20,6 +20,7 @@ import zipfile
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from math import isfinite
 from pathlib import Path, PurePosixPath
 from threading import Event
 from typing import Any, BinaryIO, Literal, cast
@@ -29,6 +30,7 @@ from pydantic import Field, ValidationError, field_validator
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.compiler_limits import CompilationLimits
+from fpvs_studio.core.condition_timing import resolve_condition_stream_timing
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.library_installations import library_install_status, scan_library_projects
@@ -70,6 +72,7 @@ from fpvs_studio.core.serialization import (
     replace_file_atomically,
     save_project_file,
 )
+from fpvs_studio.core.session_ordering import effective_condition_presentation_count
 from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, owned_image_references
 from fpvs_studio.preprocessing.inspection import (
     MAX_BUNDLE_IMAGE_BYTES,
@@ -904,22 +907,31 @@ def _staged_destination_path(staged_project_root: Path, relative_path: str) -> P
         raise ProjectBundleError(f"Project bundle path escapes staging: {relative_path}") from exc
 
 
-def _validate_bundle_compilation_budget(project: ProjectFile) -> None:
-    # Reserve one extra occurrence per condition for possible masking catch trials.
-    repetitions = project.settings.session.block_count + 1
-    run_count = len(project.conditions) * repetitions
+def _validate_bundle_compilation_budget(project: ProjectFile, *, refresh_hz: float) -> None:
+    # Reserve an extra occurrence only where masking can add a catch trial.
+    occurrences = {
+        condition.condition_id: effective_condition_presentation_count(project, condition)
+        + int(condition_masking(project, condition) is not None)
+        for condition in project.conditions
+    }
+    run_count = sum(occurrences.values())
     if run_count > MAX_BUNDLE_COMPILATION_RUNS:
         raise ProjectBundleError("Project bundle compilation workload exceeds the run limit.")
     event_count = 0
     for condition in project.conditions:
-        slots = (
-            condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
-            * project.settings.protocol.oddball_every_n
-        )
+        seconds = condition.stream_duration_seconds
+        if seconds is not None and (
+            not isfinite(seconds) or seconds > CompilationLimits().max_total_frames / refresh_hz
+        ):
+            raise ProjectBundleError("Project bundle compilation workload exceeds the frame limit.")
+        try:
+            slots = resolve_condition_stream_timing(project, condition, refresh_hz).total_stimuli
+        except (ValueError, OverflowError) as exc:
+            raise ProjectBundleError(f"Invalid condition stream timing: {exc}") from exc
         masking = condition_masking(project, condition)
         # Masking emits overlays, target/mask events and optional markers per slot.
         weight = len(masking.base_overlays) + 4 if masking is not None else 1
-        event_count += slots * weight * repetitions
+        event_count += slots * weight * occurrences[condition.condition_id]
         if event_count > MAX_BUNDLE_COMPILATION_EVENTS:
             raise ProjectBundleError("Project bundle compilation workload exceeds the event limit.")
     fixation = project.settings.fixation_task
@@ -940,7 +952,7 @@ def _validate_bundle_source(
     cancel_event: Event | None = None,
 ) -> None:
     _check_cancelled(cancel_event)
-    _validate_bundle_compilation_budget(project)
+    _validate_bundle_compilation_budget(project, refresh_hz=refresh_hz)
     try:
         require_valid_experiment_category(project)
     except ValueError as exc:

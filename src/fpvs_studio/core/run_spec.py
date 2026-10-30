@@ -6,7 +6,7 @@ outside RunSpec."""
 
 from __future__ import annotations
 
-from math import isfinite
+from math import isclose, isfinite
 from typing import Any, Literal
 
 from pydantic import (
@@ -30,6 +30,8 @@ from fpvs_studio.core.models import (
     FPVSBaseModel,
     ImageGeometrySettings,
     ImageResolution,
+    RandomizationAlgorithmVersion,
+    RandomizationSeeds,
     validate_color,
     validate_presentation_text_color,
     validate_project_relative_path,
@@ -159,8 +161,18 @@ class ConditionRunSpec(FPVSBaseModel):
     oddball_hz: float = Field(gt=0)
     total_oddball_cycles: int = Field(ge=0)
     total_stimuli: int = Field(ge=0)
+    requested_duration_seconds: float | None = Field(default=None, gt=0, allow_inf_nan=False)
     stimulus_modality: StimulusModality
     trigger_code: StrictInt | None = Field(default=None, ge=0, le=255)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_requested_duration(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.requested_duration_seconds is None:
+            payload.pop("requested_duration_seconds", None)
+        return payload
 
 
 class StimulusEvent(FPVSBaseModel):
@@ -362,6 +374,18 @@ class AttentionalBlinkStreamRunSpec(FPVSBaseModel):
         return self
 
 
+class RunRandomizationSpec(FPVSBaseModel):
+    """Resolved roots and stable per-condition presentation schedule seeds."""
+
+    mode: Literal["fixed", "new"]
+    seeds: RandomizationSeeds
+    algorithm_version: RandomizationAlgorithmVersion = 1
+    condition_presentation_index: StrictInt = Field(ge=1)
+    stimulus_order_seed: StrictInt = Field(ge=0, lt=2**31)
+    fixation_count_seed: StrictInt = Field(ge=0, lt=2**31)
+    fixation_onset_seed: StrictInt = Field(ge=0, lt=2**31)
+
+
 class RunSpec(FPVSBaseModel):
     """Compiled execution plan for one condition run."""
 
@@ -371,6 +395,7 @@ class RunSpec(FPVSBaseModel):
     project_name: str
     template_id: str
     random_seed: int = Field(ge=0)
+    randomization: RunRandomizationSpec | None = None
     condition: ConditionRunSpec
     display: DisplayRunSpec
     fixation: FixationStyleSpec
@@ -389,14 +414,51 @@ class RunSpec(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.scene_stream is None:
             payload.pop("scene_stream", None)
+        if self.randomization is None:
+            payload.pop("randomization", None)
         return payload
 
     @model_validator(mode="after")
     def validate_stream_schema(self) -> RunSpec:
+        if self.randomization is not None:
+            RunRandomizationSpec.model_validate(self.randomization.model_dump())
+            if self.schema_version != "1.7.0":
+                raise ValueError("Independent randomization requires RunSpec schema 1.7.0.")
+            if self.attentional_blink is not None or self.scene_stream is not None:
+                raise ValueError("Independent randomization is unavailable for native AB/masking.")
+            from fpvs_studio.core.randomization import derive_schedule_seed
+
+            provenance = self.randomization
+            for field, root, domain in (
+                ("stimulus_order_seed", provenance.seeds.stimulus_seed, "stimulus-order"),
+                ("fixation_count_seed", provenance.seeds.fixation_seed, "fixation-count"),
+                ("fixation_onset_seed", provenance.seeds.fixation_seed, "fixation-onset"),
+            ):
+                expected = derive_schedule_seed(
+                    root, domain=domain, condition_id=self.condition.condition_id,
+                    presentation_index=provenance.condition_presentation_index,
+                )
+                if getattr(provenance, field) != expected:
+                    raise ValueError("Compiled schedule seeds do not match their stable namespace.")
+            if self.random_seed != provenance.stimulus_order_seed:
+                raise ValueError("Run seed must match the derived stimulus-order seed.")
+        elif self.schema_version == "1.7.0":
+            raise ValueError("RunSpec schema 1.7.0 requires independent randomization provenance.")
+        if self.condition.requested_duration_seconds is not None:
+            if self.schema_version not in {"1.6.0", "1.7.0"}:
+                raise ValueError("Requested stream duration requires RunSpec schema 1.6.0.")
+            if self.attentional_blink is not None:
+                raise ValueError("Requested stream duration is unavailable for Attentional-Blink.")
+            if not isclose(
+                self.condition.requested_duration_seconds * self.display.refresh_hz,
+                self.display.total_frames, abs_tol=1e-6, rel_tol=0.0,
+            ):
+                raise ValueError("Requested stream duration does not match compiled stream frames.")
         if self.scene_stream is not None:
-            if self.schema_version not in {"1.4.0", "1.5.0"}:
+            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0"}:
                 raise ValueError("Scene streams require RunSpec schema 1.4.0.")
-            if self.scene_stream.is_catch_trial is not None and self.schema_version != "1.5.0":
+            if (self.scene_stream.is_catch_trial is not None
+                    and self.schema_version not in {"1.5.0", "1.6.0"}):
                 raise ValueError("Catch-trial scenes require RunSpec schema 1.5.0.")
             if self.stimulus_sequence or self.attentional_blink is not None:
                 raise ValueError("Scene streams cannot also contain a legacy stimulus stream.")

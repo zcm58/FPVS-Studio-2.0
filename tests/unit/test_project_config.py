@@ -355,6 +355,10 @@ def test_completed_config_exports_session_order_run_seeds_and_manifest_provenanc
     sample_project_root,
 ) -> None:
     sample_project.settings.session.block_count = 2
+    sample_project.conditions.append(sample_project.conditions[0].model_copy(update={
+        "condition_id": "faces-control", "name": "Faces control", "order_index": 1,
+        "trigger_code": 2,
+    }))
     sample_project.settings.triggers.oddball_trigger_code = 55
     manifest = StimulusManifest(
         project_id=sample_project.meta.project_id,

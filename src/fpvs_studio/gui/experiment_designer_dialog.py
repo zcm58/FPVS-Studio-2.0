@@ -33,6 +33,7 @@ from fpvs_studio.core.attentional_blink import (
     describe_attentional_blink,
     preview_attentional_blink,
 )
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
 from fpvs_studio.core.experiment_categories import (
     RETIRED_IMAGE_PAIR_MESSAGE,
@@ -224,6 +225,8 @@ class ExperimentDesignerWidget(QWidget):
         cycle_header.addWidget(QLabel("Stream rate", self))
         self.rate_spin = self._spin(0.01, 500.0, 4.0, " Hz")
         self.rate_spin.setAccessibleName("Stream rate in hertz")
+        self.rate_spin.setReadOnly(True)
+        self.rate_spin.setToolTip("Edit stimulus presentation frequency in Timing & Session.")
         self.rate_spin.setFixedWidth(82)
         cycle_header.addWidget(self.rate_spin)
         self.slot_length_label = self._label("250 ms per normal slot", "secondary")
@@ -341,7 +344,7 @@ class ExperimentDesignerWidget(QWidget):
         self.cycle_canvas.set_mode(self._mode)
         self.cycle_canvas.set_roles(["base"] * (protocol.oddball_every_n - 1) + [terminal])
         self.cycle_canvas.setCurrentRow(self.cycle_canvas.count() - 1)
-        self.rate_spin.setValue(protocol.base_hz)
+        self.rate_spin.setValue(effective_condition_base_hz(self._document.project, condition))
         self.target_spin.setValue(settings.t1_duration_ms)
         self.isi_spin.setValue(settings.isi_ms)
         self.set_isi_mode(settings.isi_mode)
@@ -450,8 +453,14 @@ class ExperimentDesignerWidget(QWidget):
         layout.addWidget(self.preview_note)
         self.preview_window.finished.connect(self._stop_preview)
 
-    def _draft_state(self) -> tuple[tuple[str, ...], float, float, float, int, str]:
-        return (self.cycle_canvas.roles(), self.rate_spin.value(), self.target_spin.value(),
+    def _current_frequency(self) -> float:
+        condition = self._document.get_condition(self._condition_id)
+        if condition is None:
+            raise ValueError("This condition no longer exists.")
+        return effective_condition_base_hz(self._document.project, condition)
+
+    def _draft_state(self) -> tuple[tuple[str, ...], float, float, int, str]:
+        return (self.cycle_canvas.roles(), self.target_spin.value(),
                 self.isi_spin.value(), self.t2_marker_spin.value(),
                 self.isi_mode())
 
@@ -479,16 +488,23 @@ class ExperimentDesignerWidget(QWidget):
             self._refresh_pending = True
             return
         self._refresh_pending = False
+        condition = self._document.get_condition(self._condition_id)
+        if condition is None:
+            return
+        rate = effective_condition_base_hz(self._document.project, condition)
+        with QSignalBlocker(self.rate_spin):
+            self.rate_spin.setValue(rate)
+        self.rate_spin.setToolTip(
+            f"Current stimulus frequency: {rate:.12g} Hz. "
+            "Edit stimulus presentation frequency in Timing & Session.",
+        )
         if not self.has_pending_design():
-            condition = self._document.get_condition(self._condition_id)
-            if condition is None:
-                return
             protocol = self._document.project.settings.protocol
             self._changing = True
             terminal = "target_pair" if self._mode == "attentional_blink" else "oddball"
             self.cycle_canvas.set_roles(["base"] * (protocol.oddball_every_n - 1) + [terminal])
             self.cycle_canvas.setCurrentRow(self.cycle_canvas.count() - 1)
-            self.rate_spin.setValue(protocol.base_hz)
+            self.rate_spin.setValue(effective_condition_base_hz(self._document.project, condition))
             if isinstance(condition.attentional_blink, AttentionalBlinkSettings):
                 self.target_spin.setValue(condition.attentional_blink.t1_duration_ms)
                 self.isi_spin.setValue(condition.attentional_blink.isi_ms)
@@ -732,7 +748,7 @@ class ExperimentDesignerWidget(QWidget):
         self.preview_button.setEnabled(False)
         try:
             roles = self.cycle_canvas.roles()
-            rate = self.rate_spin.value()
+            rate = self._current_frequency()
             slot_ms = 1000.0 / rate
             self.cycle_canvas.set_slot_ms(slot_ms)
             self.slot_length_label.setText(f"{slot_ms:g} ms per slot")
@@ -847,7 +863,7 @@ class ExperimentDesignerWidget(QWidget):
             ]
         else:
             self._preview_segments = []
-            slot_ms = 1000 / self.rate_spin.value()
+            slot_ms = 1000 / self._current_frequency()
             for index, role in enumerate(self.cycle_canvas.roles()):
                 image_role = "t1" if role == "oddball" else "base"
                 if self._duty_cycle_mode == DutyCycleMode.BLANK_50:
@@ -923,7 +939,8 @@ class ExperimentDesignerWidget(QWidget):
             self._applying = True
             try:
                 self._document.apply_experiment_design(
-                    self._condition_id, base_hz=self.rate_spin.value(),
+                    self._condition_id,
+                    base_hz=self._current_frequency(),
                     slot_count=self.cycle_canvas.count(), attentional_blink=settings,
                 )
             except ValueError as error:

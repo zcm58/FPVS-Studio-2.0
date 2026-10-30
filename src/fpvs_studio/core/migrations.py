@@ -30,6 +30,12 @@ def migrate_project_payload(payload: Mapping[str, Any]) -> ProjectFile:
         ProjectSchemaVersion.V1_8.value,
         ProjectSchemaVersion.V1_9.value,
         ProjectSchemaVersion.V1_10.value,
+        ProjectSchemaVersion.V1_11.value,
+        ProjectSchemaVersion.V1_12.value,
+        ProjectSchemaVersion.V1_13.value,
+        ProjectSchemaVersion.V1_14.value,
+        ProjectSchemaVersion.V1_15.value,
+        ProjectSchemaVersion.V1_16.value,
     }:
         return ProjectFile.model_validate(payload)
     if schema_version == ProjectSchemaVersion.V1_3.value:

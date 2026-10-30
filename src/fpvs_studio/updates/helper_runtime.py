@@ -403,7 +403,7 @@ class PreparedInstall:
             code = process.wait()
             if code != 0:
                 suffix = (
-                    " Use Download Full Installer to repair Studio."
+                    " Use Repair / Reinstall to select a full installer."
                     if self.downloaded.asset.kind == "patch"
                     else " Retry the full installer to repair Studio."
                 )

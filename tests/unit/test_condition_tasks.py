@@ -769,18 +769,21 @@ def test_selected_condition_retains_first_every_and_last_task_occurrences(
     condition.post_task_bindings = [
         TaskBinding(task_id="last-entry", occurrence=TaskOccurrence.LAST_OCCURRENCE)
     ]
+    separator = project.conditions[1]
+    separator.presentation_count = 2
 
     plan = compile_session_plan(
         project,
         refresh_hz=60,
         project_root=multi_condition_project_root,
         random_seed=4242,
-        condition_ids=[condition.condition_id],
+        condition_ids=[condition.condition_id, separator.condition_id],
     )
-    entries = plan.ordered_entries()
+    entries = [entry for entry in plan.ordered_entries()
+               if entry.condition_id == condition.condition_id]
 
-    assert plan.total_runs == project.settings.session.block_count
-    assert all(block.condition_order == [condition.condition_id] for block in plan.blocks)
+    assert plan.total_runs == project.settings.session.block_count + 2
+    assert len(entries) == project.settings.session.block_count
     assert [[task.task_id for task in entry.pre_tasks] for entry in entries] == [
         ["first-entry", "every-entry"],
         ["every-entry"],

@@ -40,6 +40,7 @@ def test_one_condition_keeps_modifier_baseline_and_source_unchanged(
     multi_condition_project_root,
 ):
     project = multi_condition_project
+    project.settings.session.block_count = 1
     root = multi_condition_project_root
     group = create_backward_counting_modifier()
     project.schema_version = ProjectSchemaVersion.V1_6
@@ -71,6 +72,7 @@ def test_selection_drops_unrelated_tasks(
     tmp_path, multi_condition_project, multi_condition_project_root
 ):
     project = multi_condition_project
+    project.settings.session.block_count = 1
     root = multi_condition_project_root
     _ready_project(root, project)
     chosen = next(
@@ -100,6 +102,7 @@ def test_word_condition_remains_runnable_without_unrelated_assets(
     multi_condition_project_root,
 ):
     project = multi_condition_project
+    project.settings.session.block_count = 1
     chosen = project.conditions[0]
     for pool in project.stimulus_sets:
         pool.modality = StimulusModality.WORD

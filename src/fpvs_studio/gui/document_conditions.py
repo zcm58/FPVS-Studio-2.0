@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 from uuid import uuid4
@@ -19,6 +20,10 @@ from fpvs_studio.core.condition_template_profiles import (
     apply_condition_defaults_to_condition,
     apply_condition_template_profile_to_settings,
     require_profile_category,
+)
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    propose_condition_timing,
 )
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -51,6 +56,7 @@ from fpvs_studio.core.paths import (
     stimulus_originals_dir,
     to_project_relative_posix,
 )
+from fpvs_studio.core.randomization import RandomizationSeeds
 from fpvs_studio.core.task_assets import copy_task_asset
 from fpvs_studio.core.task_models import (
     TaskBinding,
@@ -75,6 +81,7 @@ class DocumentConditionMixin:
 
         def _apply_project_update(self, **updates: object) -> None: ...
         def _replace_project(self, project: ProjectFile) -> None: ...
+        def _persist_project_update(self, project: ProjectFile) -> None: ...
 
     def condition_rows(self) -> list[ConditionStimulusRow]:
         """Return condition-role rows for the assets page."""
@@ -234,6 +241,8 @@ class DocumentConditionMixin:
             oddball_stimulus_set_id=oddball_set_id,
             sequence_count=defaults.sequence_count,
             oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
+            stream_duration_seconds=defaults.stream_duration_seconds,
+            presentation_count=defaults.presentation_count,
             duty_cycle_mode=defaults.duty_cycle_mode,
             trigger_code=len(ordered_conditions) + 1,
             order_index=len(ordered_conditions),
@@ -592,6 +601,42 @@ class DocumentConditionMixin:
         )
         self._replace_project(project)
 
+    def update_condition_frequencies(
+        self, *, shared_base_hz: float | None = None,
+        overrides: Mapping[str, float | None] | None = None,
+    ) -> None:
+        """Apply shared/condition frequency changes through the timing draft owner."""
+
+        self.update_condition_timing(shared_base_hz=shared_base_hz, overrides=overrides)
+
+    def update_condition_timing(
+        self, *, shared_base_hz: float | None = None,
+        overrides: Mapping[str, float | None] | None = None,
+        durations: Mapping[str, float] | None = None,
+        presentation_counts: Mapping[str, int] | None = None,
+        saved_condition_order: Sequence[str] | None = None,
+        order_seeds: RandomizationSeeds | None = None,
+        clear_saved_condition_order: bool = False,
+        persist: bool = False,
+    ) -> None:
+        """Apply timing and total presentations together without partial changes."""
+
+        try:
+            project = propose_condition_timing(
+                self._project, shared_base_hz=shared_base_hz, overrides=overrides,
+                durations=durations,
+                presentation_counts=presentation_counts,
+                saved_condition_order=saved_condition_order, order_seeds=order_seeds,
+                clear_saved_condition_order=clear_saved_condition_order,
+                refresh_hz=self._project.settings.display.preferred_refresh_hz,
+            )
+        except ValueError as error:
+            raise DocumentError(str(error)) from error
+        if persist:
+            self._persist_project_update(project)
+        else:
+            self._replace_project(project)
+
     def apply_experiment_design(
         self,
         condition_id: str,
@@ -600,7 +645,7 @@ class DocumentConditionMixin:
         slot_count: int,
         attentional_blink: AttentionalBlinkSettings | None,
     ) -> None:
-        """Apply one validated design and its project-wide cadence atomically."""
+        """Apply one validated design and project-wide oddball cadence atomically."""
         if self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
             raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
         condition = self.get_condition(condition_id)
@@ -611,12 +656,14 @@ class DocumentConditionMixin:
         ab = self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         if (attentional_blink is not None) != ab:
             raise DocumentError("The design must match the locked experiment type.")
+        if base_hz != effective_condition_base_hz(self._project, condition):
+            raise DocumentError("Edit stimulus presentation frequency in Timing & Session.")
         if ab and condition.attentional_blink is None:
             raise DocumentError(
                 "Separate this FPVS Oddball Paradigm condition into its own experiment first."
             )
         protocol = validated_copy(
-            self._project.settings.protocol, base_hz=base_hz, oddball_every_n=slot_count
+            self._project.settings.protocol, oddball_every_n=slot_count
         )
         updated_condition = validated_copy(
             condition,
@@ -633,6 +680,19 @@ class DocumentConditionMixin:
                 for item in self._project.conditions
             ],
         )
+        if slot_count != self._project.settings.protocol.oddball_every_n:
+            durations = {
+                candidate.condition_id: candidate.stream_duration_seconds
+                for candidate in project.conditions if candidate.stream_duration_seconds is not None
+            }
+            if durations:
+                try:
+                    project = propose_condition_timing(
+                        project, durations=durations,
+                        refresh_hz=project.settings.display.preferred_refresh_hz,
+                    )
+                except ValueError as error:
+                    raise DocumentError(str(error)) from error
         for candidate in project.conditions:
             problems = validate_attentional_blink_condition(
                 project,

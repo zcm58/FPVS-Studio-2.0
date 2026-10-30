@@ -909,7 +909,15 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     evidence = _evidence(root)
     path = root / "logs" / "acquisition" / f"{evidence.execution_id}-completed.fpvsconfig"
     completed = read_project_config(path)
-    assert completed.schema_version == config.schema_version
+    assert completed.schema_version == "1.13.0"
+    assert completed.completed_session.ordering_policy == plan.ordering_policy
+    assert completed.completed_session.randomization_mode == plan.randomization_mode
+    assert completed.completed_session.randomization_seeds == plan.randomization_seeds
+    assert (completed.completed_session.randomization_algorithm_version
+            == plan.randomization_algorithm_version)
+    assert [run.randomization for run in completed.completed_session.ordered_runs] == [
+        entry.run_spec.randomization for entry in plan.ordered_entries()
+    ]
     assert completed.toolbox.acquisition_profile == evidence.acquisition_profile
     assert completed.recording.recording_backend == backend
     assert evidence.recording.selected_backend == backend

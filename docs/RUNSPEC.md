@@ -43,13 +43,15 @@ inclusive onset/exclusive offset frame windows and ordered native visual draws.
 They do not also carry a legacy stimulus sequence. A target-absent catch uses
 RunSpec 1.5.0 with `scene_stream.is_catch_trial=True`, `target_id=None` and no target
 events, while retaining the stream's duration and base/mask timing. Ordinary masking
-runs retain RunSpec 1.4.0. Catch placement and SOA selection belong to session compilation;
+runs retain RunSpec 1.4.0 when stream seconds are count-based; explicitly authored
+seconds use RunSpec 1.6.0 for streams without independent seed provenance;
+ordinary independently seeded streams use RunSpec 1.7.0. Catch placement and SOA selection belong to session compilation;
 catch detection scoring belongs to runtime. See [Masking](MASKING.md) for the complete
 schema, trigger and result contracts.
 
 All execution timing in `RunSpec` is represented in frames.
 
-For a project-selected base rate:
+For each condition's effective base rate:
 
 - `frames_per_stimulus` is the nearest positive whole frame count to
   `refresh_hz / requested_base_hz`
@@ -82,8 +84,24 @@ the compiled refresh target before playback.
 Runtime and engines must consume these compiled frame counts directly. They do
 not recompute protocol logic from `ProjectFile`.
 
-The editable project stores project-wide `base_hz` and integer `oddball_every_n`
-settings plus duty-cycle mode per condition. Project-level
+The editable project stores shared `ProtocolSettings.base_hz` (6 Hz by default),
+integer `oddball_every_n`, and optional `Condition.base_hz` overrides. A null override
+inherits the shared frequency. `core/condition_timing.py` owns effective-rate
+resolution, duration resolution and atomic timing proposals. Optional
+`Condition.stream_duration_seconds` stores requested stream-only seconds for one
+presentation. Without it, saved continuous sequence/cycle counts retain their meaning;
+legacy seconds remain unresolved until a valid refresh target is known.
+
+Explicit seconds must fit whole frames and complete oddball cycles at the effective
+frequency. Incompatible values are rejected with neighboring valid durations, without
+rounding or partial mutation. The stream includes blank halves and contrast modulation
+but excludes lead-in, instructions, tasks, waiting and feedback. Frequency edits preserve
+requested seconds, or the legacy duration resolved at the selected refresh target.
+`ConditionRunSpec.requested_duration_seconds` retains authored seconds in RunSpec
+schema 1.6.0 (omitted for legacy runs); resolved timing remains frame-based. Project schema 1.12.0/config 1.10.0 carry explicit seconds;
+frequency-only overrides retain project 1.11.0/config 1.9.0 capability versions.
+Inherited count-based projects retain their prior versions and omit optional fields.
+Duty-cycle mode remains per condition. Project-level
 condition-template profiles only seed defaults for authoring. Mixed Continuous Images,
 50% Blank Between Images, and image-only Contrast Modulation sessions compile into
 separate `RunSpec` entries with each condition's resolved frame counts. The contrast
@@ -355,3 +373,18 @@ rules. A blank separator has `is_blank=true`, no image/text payload, and the sam
 positive `on_frames` interval as an image separator. Engines skip image allocation
 and drawing for that phase while preserving background, fixation, timing and target
 markers. Preflight rejects blank flags on other phases or modes.
+
+## Independent seed provenance
+
+Ordinary GUI previews and sessions provide a resolved triplet and emit RunSpec 1.7
+`randomization` metadata: reuse mode, root seeds, algorithm version, condition
+presentation index and derived stimulus/fixation-count/fixation-onset seeds. Runtime
+consumes the concrete events; it introduces no new randomness. Seed provenance is
+validated against its stable namespaces and the session snapshot.
+
+Legacy standalone `compile_run_spec` calls without explicit randomization retain the
+historical explicit `random_seed` behavior for that single run. Explicit settings or a
+resolved triplet enable independent provenance. Native AB and masking retain their
+existing run contracts. Equal seeds require equal inputs/settings/refresh/algorithm
+to reproduce schedules, and cannot guarantee unique outcomes in a constrained solution
+space or identical measured hardware timing.

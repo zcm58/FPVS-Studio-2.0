@@ -16,6 +16,7 @@ from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.models import ProjectFile, ProjectRecordingSettings, ProjectValidationReport
 from fpvs_studio.core.project_config import export_project_config
+from fpvs_studio.core.randomization import RandomizationSeeds
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
     ConditionFixationGuidance,
@@ -116,6 +117,13 @@ class DocumentRuntimeMixin:
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
+        def prepare_participant_randomization(
+            self, participant_number: str, participant_session_number: int | None,
+        ) -> RandomizationSeeds | None: ...
+        def finish_participant_randomization(
+            self, *, participant_number: str | None = None,
+            resolved_seeds: RandomizationSeeds | None = None,
+        ) -> None: ...
 
     def recording_launch_options(self) -> dict[str, object]:
         """Resolve the effective recording device into runtime-only launch options."""
@@ -168,6 +176,7 @@ class DocumentRuntimeMixin:
         *,
         refresh_hz: float,
         condition_ids: Sequence[str] | None = None,
+        resolved_seeds: RandomizationSeeds | None = None,
     ) -> SessionPlan:
         """Compile the current project into a session plan."""
 
@@ -181,6 +190,7 @@ class DocumentRuntimeMixin:
                 refresh_hz=refresh_hz,
                 project_root=self._project_root,
                 condition_ids=(list(condition_ids) if condition_ids is not None else None),
+                resolved_seeds=resolved_seeds,
             )
         except (CompileError, ValidationError, ValueError) as exc:
             raise DocumentError(str(exc)) from exc
@@ -209,10 +219,11 @@ class DocumentRuntimeMixin:
         refresh_hz: float,
         engine_name: str = EngineName.PSYCHOPY.value,
         decode_image_assets: bool = False,
+        resolved_seeds: RandomizationSeeds | None = None,
     ) -> SessionPlan:
         """Compile and preflight the current session launch."""
 
-        session_plan = self.compile_session(refresh_hz=refresh_hz)
+        session_plan = self.compile_session(refresh_hz=refresh_hz, resolved_seeds=resolved_seeds)
         self.preflight_compiled_session(
             session_plan,
             engine_name=engine_name,
@@ -370,9 +381,13 @@ class DocumentRuntimeMixin:
     ) -> tuple[SessionPlan, LaunchSummary]:
         """Compile and launch the current session through the runtime boundary."""
 
+        resolved_seeds = self.prepare_participant_randomization(
+            participant_number, participant_session_number,
+        )
         session_plan = self.prepare_session_launch(
             refresh_hz=refresh_hz,
             engine_name=engine_name,
+            resolved_seeds=resolved_seeds,
         )
         summary = self.launch_compiled_session(
             session_plan,
@@ -383,6 +398,10 @@ class DocumentRuntimeMixin:
             fullscreen=fullscreen,
             engine_name=engine_name,
         )
+        if resolved_seeds is not None:
+            self.finish_participant_randomization(
+                participant_number=participant_number, resolved_seeds=resolved_seeds,
+            )
         return session_plan, summary
 
     def next_participant_session_number(self, participant_number: str) -> int:

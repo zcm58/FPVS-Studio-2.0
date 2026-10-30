@@ -19,6 +19,7 @@ from fpvs_studio.core.condition_modifiers import (
 )
 from fpvs_studio.core.models import Condition, ProjectFile
 from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.post_questions import compile_post_question_context
 from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec, RunSpec
 from fpvs_studio.core.session_plan import SessionEntry
 from fpvs_studio.core.task_models import (
@@ -29,6 +30,7 @@ from fpvs_studio.core.task_models import (
     ImageMemoryRole,
     ImageMemorySpec,
     ModifierProvenance,
+    PostQuestionnaireContext,
     TaskBinding,
     TaskLayoutMode,
     TaskModule,
@@ -60,7 +62,8 @@ def relocate_masking_lead_ins(entries: list[SessionEntry]) -> None:
                 if step.step_id != "masking-break-fixation":
                     continue
                 if (
-                    module_index != len(current.post_tasks) - 1
+                    any(task.post_question_context is None
+                        for task in current.post_tasks[module_index + 1:])
                     or step_index != len(module.steps) - 1
                     or module.repeat_count != 1
                     or any(item.branch_rules or item.repeat_count != 1 for item in module.steps)
@@ -158,6 +161,13 @@ def compile_condition_tasks(
     compiled: list[TaskModuleSpec] = []
     for binding_index, binding in enumerate(bindings):
         check_compilation_cancelled()
+        bound_module = modules.get(binding.task_id)
+        if bound_module is not None and bound_module.simple_post_questions and (
+            phase != TaskPhase.POST_CONDITION or binding.occurrence != TaskOccurrence.EVERY_ENTRY
+        ):
+            raise CompileError(
+                "Post-condition Questions must run after every condition presentation."
+            )
         if not _binding_applies(
             binding,
             block_index=block_index,
@@ -193,6 +203,19 @@ def compile_condition_tasks(
             run_id=run_id,
         )
         owner = inputs.owners.get(module.task_id)
+        post_question_context = None
+        if module.simple_post_questions:
+            if owner is not None:
+                raise CompileError(
+                "Post-condition Questions must use a separate after-only module."
+            )
+            try:
+                post_question_context = compile_post_question_context(
+                    module, condition_id=condition.condition_id, condition_name=condition.name,
+                    presentation_index=block_index + 1, presentation_count=block_count,
+                )
+            except ValueError as exc:
+                raise CompileError(str(exc)) from exc
         compiled.append(
             _compile_task_module(
                 module,
@@ -204,6 +227,7 @@ def compile_condition_tasks(
                 memory_spec=memory_spec,
                 source_steps=memory_steps,
                 modifier=_modifier_provenance(owner) if owner else None,
+                post_question_context=post_question_context,
             )
         )
     if phase == TaskPhase.POST_CONDITION:
@@ -624,7 +648,12 @@ def _compile_task_module(
     memory_spec: ImageMemorySpec | None = None,
     source_steps: list[TaskStep] | None = None,
     modifier: ModifierProvenance | None = None,
+    post_question_context: PostQuestionnaireContext | None = None,
 ) -> TaskModuleSpec:
+    if module.simple_post_questions and post_question_context is None:
+        raise CompileError(
+                "Post-condition Questions require the original compiled assignment context."
+            )
     rng = random.Random(random_seed)
     if source_steps is None:
         source_steps = backward_counting_steps(counting_spec) if counting_spec else module.steps
@@ -648,6 +677,7 @@ def _compile_task_module(
         backward_counting=counting_spec,
         image_memory=memory_spec,
         modifier=modifier,
+        post_question_context=post_question_context,
     )
 
 

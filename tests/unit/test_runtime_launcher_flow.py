@@ -25,6 +25,7 @@ from fpvs_studio.core.execution import (
 from fpvs_studio.core.models import DisplayValidationReport
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import read_json_file
+from fpvs_studio.core.session_plan import SessionBlock, SessionPlan
 from fpvs_studio.engines.base import FixationTutorialAttemptResult
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -312,13 +313,7 @@ def test_launch_session_runs_all_entries_with_stub_engine_and_reuses_session_win
     assert all(
         item["continue_prompt"] == "Press Space to begin." for item in captures["transitions"]
     )
-    assert captures["block_breaks"] == [
-        {
-            "completed_block_index": 0,
-            "total_block_count": session_plan.block_count,
-            "next_block_index": 1,
-        }
-    ]
+    assert captures.get("block_breaks", []) == []
     assert captures["completion_screens"] == [
         {
             "completed_condition_count": session_plan.total_runs,
@@ -912,7 +907,7 @@ def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled
     assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
 
 
-def test_session_launch_inserts_manual_inter_block_break_between_non_final_blocks(
+def test_historical_session_launch_preserves_manual_inter_block_breaks(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
@@ -925,6 +920,28 @@ def test_session_launch_inserts_manual_inter_block_break_between_non_final_block
             project_root=multi_condition_project_root,
             random_seed=17,
         )
+        # Historical compiled block plans remain executable without recompilation.
+        entries = session_plan.ordered_entries()
+        midpoint = len(entries) // 2
+        blocks = []
+        for block_index, group in enumerate((entries[:midpoint], entries[midpoint:])):
+            historical_entries = [entry.model_copy(update={
+                "block_index": block_index, "index_within_block": index,
+                "condition_presentation_index": None, "condition_presentation_count": None,
+                "run_spec": entry.run_spec.model_copy(update={
+                    "randomization": None, "schema_version": "1.1.0",
+                }),
+            }) for index, entry in enumerate(group)]
+            blocks.append(SessionBlock(
+                block_index=block_index, entries=historical_entries,
+                condition_order=[entry.condition_id for entry in historical_entries],
+            ))
+        session_plan = SessionPlan.model_validate(session_plan.model_copy(update={
+            "schema_version": "1.2.0", "ordering_policy": None, "blocks": blocks,
+            "block_count": 2,
+            "randomization_mode": None, "randomization_seeds": None,
+            "randomization_algorithm_version": None,
+        }).model_dump())
 
         launch_session(
             multi_condition_project_root,
@@ -1005,8 +1022,12 @@ def test_session_launch_preserves_instruction_text_verbatim(
     finally:
         unregister_engine("stub-verbatim")
 
-    assert captures["condition_instructions"][0] == exact_text
-    assert captures["transitions"][0]["body"].startswith(f"{exact_text}\n\n")
+    indices = [index for index, entry in enumerate(session_plan.ordered_entries())
+               if entry.condition_id == multi_condition_project.conditions[0].condition_id]
+    assert indices
+    assert all(captures["condition_instructions"][index] == exact_text for index in indices)
+    assert all(captures["transitions"][index]["body"].startswith(f"{exact_text}\n\n")
+               for index in indices)
 
 
 def test_session_launch_preflight_rejects_missing_assets_before_engine_run(

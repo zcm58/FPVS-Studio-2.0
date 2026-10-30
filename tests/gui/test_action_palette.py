@@ -358,43 +358,6 @@ def _activate_home_from_palette(qtbot, window):
     assert not dialog.isVisible()
 
 
-@pytest.mark.parametrize("accept,discard_succeeds", [(False, True), (True, True), (True, False)])
-def test_palette_home_respects_design_discard_confirmation(
-    qtbot, controller, tmp_path, monkeypatch, accept, discard_succeeds,
-):
-    _, window = open_created_project(controller, qtbot, tmp_path, "Draft design exit")
-    window.show_setup_wizard(step_key="design", allow_step_jumps=True)
-    wizard = window.setup_wizard_page
-    design = wizard.design_setup_step
-    state = {"pending": True}
-    discarded, applied, prompts = [], [], []
-    monkeypatch.setattr(design, "has_pending_design", lambda: state["pending"])
-    monkeypatch.setattr(design, "apply_pending_design", lambda: applied.append(True) or False)
-
-    def discard():
-        discarded.append(True)
-        if discard_succeeds:
-            state["pending"] = False
-        return discard_succeeds
-
-    def confirm(_parent, title, message, *_args):
-        prompts.append((title, message))
-        return QMessageBox.StandardButton.Yes if accept else QMessageBox.StandardButton.No
-
-    monkeypatch.setattr(design, "discard_pending_design", discard)
-    monkeypatch.setattr(QMessageBox, "question", confirm)
-    _activate_home_from_palette(qtbot, window)
-
-    assert len(prompts) == 1
-    assert prompts[0][0] == "Unapplied Design"
-    assert "Discard" in prompts[0][1]
-    assert discarded == ([True] if accept else [])
-    assert applied == []
-    assert state["pending"] is not (accept and discard_succeeds)
-    expected_surface = window.home_page if accept and discard_succeeds else wizard
-    assert window.main_stack.currentWidget() is expected_surface
-
-
 @pytest.mark.parametrize("accept", [False, True])
 def test_palette_home_keeps_incomplete_setup_confirmation(
     qtbot, controller, tmp_path, monkeypatch, accept,
@@ -494,15 +457,15 @@ def _set_busy(monkeypatch, window, state):
         monkeypatch.setattr(window, "_bundle_import_processing_active", True)
     elif state == "condition-images":
         monkeypatch.setattr(window.setup_wizard_page, "_condition_image_task_active", lambda: True)
-    elif state == "design-images":
-        monkeypatch.setattr(window.setup_wizard_page.design_setup_step, "is_busy", lambda: True)
+    elif state == "condition-import":
+        monkeypatch.setattr(window.setup_wizard_page.condition_setup_step, "is_busy", lambda: True)
     else:
         monkeypatch.setattr(window.image_resizer_page, "_active_task", object())
 
 
 @pytest.mark.parametrize("state", [
     "launch", "launch-after-seed", "bundle-export", "bundle-import",
-    "condition-images", "design-images", "resizer",
+    "condition-images", "condition-import", "resizer",
 ])
 def test_main_window_busy_guards_block_opening_and_late_dispatch(
     qtbot, controller, tmp_path, monkeypatch, state,

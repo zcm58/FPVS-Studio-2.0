@@ -11,11 +11,15 @@ from dataclasses import dataclass
 from math import isfinite
 
 from fpvs_studio.core.compiler_support import CompileError, check_compilation_cancelled
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.fixation_planning import seconds_to_frames
-from fpvs_studio.core.frame_validation import FrameValidationError, frames_per_stimulus
 from fpvs_studio.core.masking import MaskingSettings, condition_masking
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
+from fpvs_studio.core.session_ordering import effective_condition_presentation_count
 from fpvs_studio.core.task_models import TaskModule
 from fpvs_studio.core.validation import (
     approved_monitor_refresh_rate,
@@ -74,23 +78,14 @@ def validate_compilation_workload(
             "Bundle validation refresh rate must be an approved value: "
             f"{approved_monitor_refresh_rates_text()}."
         )
-    base_hz = project.settings.protocol.base_hz
-    if not isfinite(base_hz) or base_hz <= 0:
-        raise CompileError("Bundle base rate must be a positive finite number.")
-    raw_frames = refresh_hz / base_hz
-    if not isfinite(raw_frames) or raw_frames > limits.max_total_frames:
-        raise CompileError(
-            "Bundle compilation exceeds the total frames limit at the requested base rate."
-        )
-    try:
-        frame_count = frames_per_stimulus(refresh_hz, base_hz)
-    except FrameValidationError as exc:
-        raise CompileError(str(exc)) from exc
     repetitions = project.settings.session.block_count
     masking = {item.condition_id: condition_masking(project, item) for item in conditions}
     all_masking = bool(conditions) and all(value is not None for value in masking.values())
     occurrences = {
-        item.condition_id: 1 if all_masking and item.masking_catch else repetitions
+        item.condition_id: (
+            1 if all_masking and item.masking_catch
+            else effective_condition_presentation_count(project, item)
+        )
         for item in conditions
     }
     groups: dict[str, list[Condition]] = {}
@@ -108,7 +103,8 @@ def validate_compilation_workload(
     entries = sum(occurrences.values()) + len(automatic_catches)
     _require_budget("session entries", entries, limits.max_session_entries)
     # Even a selected catch-only masking group iterates the configured repetitions.
-    _require_budget("session repetitions", repetitions, limits.max_session_entries)
+    if all_masking:
+        _require_budget("session repetitions", repetitions, limits.max_session_entries)
 
     fixation = project.settings.fixation_task
     fixation_events = 0
@@ -135,11 +131,27 @@ def validate_compilation_workload(
     total_tasks = sum(module_work.get(identity, 0) for identity in baseline_ids)
     total_events = total_frames = total_scans = 0
     work_by_condition: dict[str, tuple[int, int, int, int]] = {}
-    cadence = project.settings.protocol.oddball_every_n
     for condition in conditions:
         check_compilation_cancelled()
-        cycles = condition.sequence_count * condition.oddball_cycle_repeats_per_sequence
-        slots = cycles * cadence
+        base_hz = effective_condition_base_hz(project, condition)
+        if not isfinite(base_hz) or base_hz <= 0:
+            raise CompileError("Bundle base rate must be a positive finite number.")
+        raw_frames = refresh_hz / base_hz
+        if not isfinite(raw_frames) or raw_frames > limits.max_total_frames:
+            raise CompileError(
+                "Bundle compilation exceeds the total frames limit at the requested base rate."
+            )
+        try:
+            if condition.stream_duration_seconds is not None and (
+                not isfinite(condition.stream_duration_seconds)
+                or condition.stream_duration_seconds > limits.max_total_frames / refresh_hz
+            ):
+                raise CompileError("Bundle compilation exceeds the total frames limit.")
+            timing = resolve_condition_stream_timing(project, condition, refresh_hz)
+        except (ValueError, OverflowError) as exc:
+            raise CompileError(str(exc)) from exc
+        cycles = timing.total_oddball_cycles
+        slots = timing.total_stimuli
         settings = masking[condition.condition_id]
         scans = 0
         if settings is None:
@@ -164,7 +176,7 @@ def validate_compilation_workload(
             raise CompileError(
                 "Bundle compilation exceeds the total frames limit in the fixation lead-in."
             )
-        frames = slots * frame_count + seconds_to_frames(lead_in, refresh_hz)
+        frames = timing.total_frames + seconds_to_frames(lead_in, refresh_hz)
         tasks = sum(
             module_work.get(binding.task_id, 0)
             for binding in (*condition.pre_task_bindings, *condition.post_task_bindings)

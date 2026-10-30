@@ -6,18 +6,30 @@ and serialization shape, not scoring flow control or presentation behavior."""
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import ConfigDict, Field, StrictBool, StrictInt, field_validator, model_validator
+from pydantic import (
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StrictBool,
+    StrictInt,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.brainproducts import BrainProductsAmplifier
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import (
     FPVSBaseModel,
+    RandomizationAlgorithmVersion,
+    RandomizationSeeds,
     normalize_manual_removed_electrodes,
     validate_project_relative_path,
 )
 from fpvs_studio.core.recording_hardware import AcquisitionProfile
+from fpvs_studio.core.run_spec import RunRandomizationSpec
 from fpvs_studio.core.task_models import TaskResponseRecord
 
 FixationOutcome = Literal["hit", "miss"]
@@ -440,6 +452,7 @@ class RunExecutionSummary(FPVSBaseModel):
     """Execution result for one `RunSpec` playback."""
 
     schema_version: str = SchemaVersion.V1_2.value
+    randomization: RunRandomizationSpec | None = None
     project_id: str
     session_id: str | None = None
     run_id: str
@@ -472,6 +485,15 @@ class RunExecutionSummary(FPVSBaseModel):
     task_responses: list[TaskResponseRecord] = Field(default_factory=list)
     output_dir: str | None = None
 
+    @model_serializer(mode="wrap")
+    def serialize_optional_randomization(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.randomization is None:
+            payload.pop("randomization", None)
+        return payload
+
     @field_validator("participant_number")
     @classmethod
     def validate_participant_number(cls, value: str | None) -> str | None:
@@ -486,6 +508,8 @@ class RunExecutionSummary(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_task_abort_metadata(self) -> RunExecutionSummary:
+        if self.randomization is not None and self.schema_version != "1.3.0":
+            raise ValueError("Run randomization provenance requires result schema 1.3.0.")
         abort_details = (
             self.task_abort_stage,
             self.task_abort_id,
@@ -513,6 +537,10 @@ class SessionExecutionSummary(FPVSBaseModel):
     participant_session_number: StrictInt | None = Field(default=None, ge=1)
     participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
     random_seed: int | None = Field(default=None, ge=0)
+    randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_seeds: RandomizationSeeds | None = None
+    randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
+    ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     total_condition_count: int = Field(default=0, ge=0)
@@ -524,6 +552,48 @@ class SessionExecutionSummary(FPVSBaseModel):
     realized_block_orders: list[list[str]] = Field(default_factory=list)
     run_results: list[RunExecutionSummary] = Field(default_factory=list)
     output_dir: str | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_randomization(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        for field in (
+            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+            "ordering_policy",
+        ):
+            if getattr(self, field) is None:
+                payload.pop(field, None)
+        return payload
+
+    @model_validator(mode="after")
+    def validate_randomization_provenance(self) -> SessionExecutionSummary:
+        if self.ordering_policy is not None:
+            if self.schema_version != "1.4.0":
+                raise ValueError("Session ordering policy requires result schema 1.4.0.")
+            if self.ordering_policy == "saved_no_adjacent" and (
+                self.randomization_mode != "fixed" or self.randomization_seeds is None
+            ):
+                raise ValueError("Saved session ordering requires fixed randomization.")
+        values = (self.randomization_mode, self.randomization_seeds,
+                  self.randomization_algorithm_version)
+        if any(value is not None for value in values):
+            if self.schema_version not in {"1.3.0", "1.4.0"} or any(
+                value is None for value in values
+            ):
+                raise ValueError("Session randomization provenance requires result schema 1.3.0.")
+            assert self.randomization_seeds is not None
+            if self.random_seed != self.randomization_seeds.condition_order_seed:
+                raise ValueError(
+                    "Session random_seed must match its resolved condition-order seed."
+                )
+            if any(run.randomization is None
+                   or run.randomization.seeds != self.randomization_seeds
+                   or run.randomization.mode != self.randomization_mode
+                   or run.randomization.algorithm_version != self.randomization_algorithm_version
+                   for run in self.run_results):
+                raise ValueError("Run results must match the session randomization provenance.")
+        return self
 
     @field_validator("participant_number")
     @classmethod

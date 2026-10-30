@@ -15,6 +15,23 @@ project models and compiles engine-neutral execution contracts. Runtime coordina
 sessions; presentation is isolated behind an engine interface, with PsychoPy loaded
 lazily only inside the engine package.
 
+## Condition timing
+
+`core/condition_timing.py` resolves shared/per-condition FPVS presentation frequency
+and exact stream duration, and validates atomic edits. Timing & Session owns authoring; compilers, previews,
+fixation guidance and exports use the effective condition rate. RunSpec remains
+frame-based. `core/session_ordering.py` owns per-condition presentation counts and
+bounded, non-adjacent generated or saved order; see [SessionPlan](docs/SESSION_PLAN.md). See [RunSpec timing](docs/RUNSPEC.md#timing-model).
+
+`core/randomization.py` owns independent FPVS seed domains and reuse policy;
+GUI launch coordination captures one pending triplet, while compiled/runtime contracts
+retain immutable provenance. See [SessionPlan](docs/SESSION_PLAN.md#independent-randomization).
+
+`core/post_questions.py` owns simple after-condition questionnaire definitions and
+original compiled context. GUI editors reuse ordinary task controls; runtime derives
+the project-root response CSV from retained task journals and context through
+`runtime/post_condition_responses.py`. See [Post-condition Questions](docs/POST_CONDITION_QUESTIONS.md).
+
 ## Package Map
 
 Automatic crash recovery/consent and the bounded sanitized outbox live in
@@ -127,26 +144,29 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
   starts with manual creation or Library download. Manual creation offers FPVS Oddball
   Paradigm and disabled Standard FPVS, then project details; Library downloads reuse
-  bundle import. Setup composes eight model-backed pages (Project, Conditions, Design,
+  bundle import. Setup composes seven model-backed pages (Project, Conditions,
   Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
   discovery consumes path snapshots and canceled/stale results cannot update a closed dialog.
   GUI documents/windows
-  are constructed after completion on the GUI thread. Authoring save feedback and
-  per-editor thumbnail reuse are specified in `docs/GUI_WORKFLOW.md`.
+  are constructed after completion on the GUI thread. Authoring save feedback is
+  specified in `docs/GUI_WORKFLOW.md`.
   `gui/update_lifecycle.py` also owns ordinary GUI tasks and the reusable presentation
   thread through shutdown. `gui/thread_completion.py` waits for native cleanup outside
   the GUI thread before releasing Python worker wrappers and reporting completion.
   Conditions confirms populated image/word switches before the document replaces only
-  the selected condition's source associations. Its list and text editors expand
-  vertically within the shared wizard surface; see `docs/GUI_WORKFLOW.md`.
-  Design embeds a shared category-specific visual editor. Setup's Next action applies
-  the draft through the existing navigation gate; the standalone host retains Apply.
+  the selected condition's source associations. It owns per-condition Base/Oddball
+  folder buttons, worker-backed fresh imports and normalization on leaving the step.
+  Participant instructions use a Save/Cancel dialog; default and short names use
+  core's existing nonempty schema. There is no guided Design page or image preview.
+  Timing & Session retains frequency authoring. Native AB settings are preserved;
+  its editor source and the optional standalone image designer remain outside Setup.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
   Oddball Apply uses existing protocol settings. AB image pairs are retired, with
   guards in category validation, authoring, runtime preflight and direct engine launch.
-  New AB bursts use `gui/attentional_blink_stream_designer.py`, shared native
+  The retained `gui/attentional_blink_stream_designer.py` handles AB burst editing,
+  shared native
   letter/digit pools, editable bursts per SOA and presentation rate, and onset-to-onset
   SOAs. `core/attentional_blink_stream.py` owns
   the exact character grid and seeded symbol sampling shared with the designer;
@@ -157,7 +177,7 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   compiled answer keys refer to each entry's actual targets. Existing native studies
   retain their saved character pools and blockwise session behavior.
   Explicit repeated-target studies retain a complete burst grid, repeated target
-  identities and optional first-T2 omission. Core owns exact retiming; Design
+  identities and optional first-T2 omission. Core owns exact retiming; the retained editor
   preserves the authored duration/onsets, and runtime groups observed target pairs
   separately. See the repeated-target contract in `docs/EXPERIMENT_CATEGORIES.md`.
   Opt-in all-character AB markers use a separate neutral condition-marker flip;
@@ -225,6 +245,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   recovery, and target verification. The retained full Python verifier uses scoped
   directory pins and reusable Windows bindings. Typed phase events keep progress and
   installation commitment separate from GUI presentation.
+  The GUI's explicit Download and Install action chains verified download to the
+  existing Save gate and helper handoff after worker cleanup, with cancellation and
+  shutdown guards; there is no second install confirmation or install button.
   Inno posts actual installation percentages to the managed updater window; the
   notification is display-only. Completion still requires setup exit, registration
   verification and restart; see `docs/PACKAGING.md`.
@@ -417,7 +440,8 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   `<FPVS Studio Root>/.fpvs-studio/templates/`, outside experiment projects.
 - Project-facing paths remain project-relative POSIX strings.
 - The independent updater imports no runtime or experiment engine. Studio saves through
-  its existing GUI callback before accepting a handoff; the helper never edits projects.
+  its existing GUI callback before accepting a handoff authorized by the explicit
+  Download and Install action; the helper never edits projects.
   Installer/download trust, private IPC, and recovery rules live in `docs/PACKAGING.md`.
 - `tests/unit/test_import_boundaries.py` checks documented internal restrictions,
   including relative imports and aliased authoring-model use, without importing modules.

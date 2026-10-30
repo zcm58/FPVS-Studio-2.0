@@ -13,6 +13,7 @@ from PySide6.QtGui import QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QLabel,
     QMessageBox,
@@ -41,10 +42,40 @@ from fpvs_studio.core.models import (
 from fpvs_studio.gui.controller import StudioController
 
 
-def _open_image_design_step(qtbot, guide) -> None:
-    qtbot.waitUntil(lambda: not guide.design_setup_step.is_busy())
-    guide.open_wizard(step_key="design")
-    qtbot.waitUntil(lambda: not guide.design_setup_step.is_busy())
+@pytest.fixture
+def condition_import_tasks(monkeypatch):
+    tasks = []
+
+    class DeferredImportTask(QObject):
+        succeeded = Signal(object)
+        failed = Signal(object)
+        finished = Signal()
+
+        def __init__(self, *, parent_widget, callback):
+            super().__init__(parent_widget)
+            self._callback = callback
+
+        def start(self):
+            tasks.append(self)
+
+        def complete(self):
+            try:
+                result = self._callback()
+            except Exception as error:
+                self.failed.emit(error)
+            else:
+                self.succeeded.emit(result)
+            finally:
+                self.finished.emit()
+
+    monkeypatch.setattr("fpvs_studio.gui.condition_setup_step.BackgroundTask", DeferredImportTask)
+    return tasks
+
+
+def _open_condition_images_step(qtbot, guide) -> None:
+    qtbot.waitUntil(lambda: not guide.condition_setup_step.is_busy())
+    guide.open_wizard(step_key="conditions")
+    qtbot.waitUntil(lambda: not guide.condition_setup_step.is_busy())
     guide.refresh()
 
 
@@ -64,7 +95,7 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     step.condition_name_edit.setText("Faces")
     step.condition_name_edit.editingFinished.emit()
     step.trigger_code_spin.setValue(42)
-    step.instructions_edit.setPlainText("Look at each image.")
+    window.document.update_condition(condition_id, instructions="Look at each image.")
 
     qtbot.mouseClick(step.duplicate_condition_button, Qt.MouseButton.LeftButton)
 
@@ -80,7 +111,7 @@ def test_setup_wizard_conditions_step_duplicates_metadata_without_images(
     oddball_set = window.document.get_condition_stimulus_set(duplicated_id, "oddball")
     assert base_set.image_count == 0
     assert oddball_set.image_count == 0
-    assert "Finish in Design" in step.condition_list.currentItem().toolTip()
+    assert "images" in step.condition_list.currentItem().toolTip().lower()
     assert "Continuous Display" in step.condition_list.currentItem().text()
 
 
@@ -130,7 +161,7 @@ def test_setup_wizard_conditions_step_authors_word_condition(
     assert next_button.isEnabled()
 
 
-def test_setup_wizard_design_next_scans_images_without_blocking_gui(
+def test_setup_wizard_conditions_next_scans_images_without_blocking_gui(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -213,13 +244,13 @@ def test_setup_wizard_design_next_scans_images_without_blocking_gui(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "async-oddball"),
     )
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
 
     assert len(background_tasks) == 1
     assert background_tasks[0].started is True
     assert scan_calls == 0
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert guide.setup_wizard_next_button.isEnabled()
 
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
@@ -227,7 +258,7 @@ def test_setup_wizard_design_next_scans_images_without_blocking_gui(
 
     assert progress_tasks == []
     assert scan_calls == 0
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert not guide.setup_wizard_next_button.isEnabled()
     assert guide.setup_wizard_next_hint_label.text() == "Checking image readiness..."
 
@@ -238,7 +269,7 @@ def test_setup_wizard_design_next_scans_images_without_blocking_gui(
     qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
 
 
-def test_setup_wizard_design_next_uses_cached_background_image_check(
+def test_setup_wizard_conditions_next_uses_cached_background_image_check(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -313,7 +344,7 @@ def test_setup_wizard_design_next_uses_cached_background_image_check(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "cached-oddball"),
     )
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
 
     assert background_calls == 1
@@ -433,7 +464,7 @@ def test_setup_wizard_confirms_populated_modality_switch(
     _assert_visible_children_within_parent(step)
 
 
-def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_trigger(
+def test_setup_wizard_conditions_step_accepts_default_and_short_names_with_positive_trigger(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -449,20 +480,21 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     QApplication.processEvents()
     condition_id = step.selected_condition_id()
     assert isinstance(condition_id, str)
-    assert "Needs name" in step.condition_list.currentItem().toolTip()
+    assert "Needs name" not in step.condition_list.currentItem().toolTip()
+    assert window.document.get_condition(condition_id).name == "Condition 1"
     assert "Continuous Display" in step.condition_list.currentItem().text()
     assert not guide.step_status_label.isVisible()
     assert not step.base_source_card.status_badge.isVisible()
     assert not step.oddball_source_card.status_badge.isVisible()
-    assert step.name_check_status.text() == "Enter a descriptive name"
+    assert step.name_check_status.text() == "Complete"
     assert step.base_check_status.text() == "Base Images Not Selected"
     assert step.oddball_check_status.text() == "Oddball Images Not Selected"
     assert not next_button.isEnabled()
 
-    for invalid_name in ("A", "AB", "Condition 3"):
-        guide._document.update_condition(condition_id, name=invalid_name)
+    for valid_name in ("A", "AB", "Condition 3"):
+        guide._document.update_condition(condition_id, name=valid_name)
         QApplication.processEvents()
-        assert step.name_check_status.text() == "Enter a descriptive name"
+        assert step.name_check_status.text() == "Complete"
         assert not next_button.isEnabled()
 
     guide._document.update_condition(condition_id, name="Dog")
@@ -480,8 +512,8 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     assert step.trigger_check_status.text() == "Complete"
     assert step.base_check_status.text() == "Base Images Not Selected"
     assert step.oddball_check_status.text() == "Oddball Images Not Selected"
-    assert next_button.isEnabled()
-    assert not step.sources_row.isVisible()
+    assert not next_button.isEnabled()
+    assert step.sources_row.isVisible()
 
     base_dir = _write_image_directory(tmp_path / "gated-condition-base")
     oddball_dir = _write_image_directory(tmp_path / "gated-condition-oddball")
@@ -495,6 +527,71 @@ def test_setup_wizard_conditions_step_requires_descriptive_name_and_positive_tri
     assert step.base_check_status.text() == "Complete"
     assert step.oddball_check_status.text() == "Complete"
     assert next_button.isEnabled()
+
+
+@pytest.mark.parametrize(
+    ("action", "draft", "expected"),
+    [
+        (QDialogButtonBox.StandardButton.Cancel, "Discard this draft.",
+         "Original instructions.\n\nWait."),
+        (
+            QDialogButtonBox.StandardButton.Save,
+            "Read the next screen.\n\nThen press Space.",
+            "Read the next screen.\n\nThen press Space.",
+        ),
+        (QDialogButtonBox.StandardButton.Save, "", ""),
+    ],
+)
+@pytest.mark.parametrize("dialog_size", [(520, 360), (640, 460)])
+def test_participant_instructions_dialog_saves_cancels_and_clears_only_its_condition(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch,
+    action, draft, expected, dialog_size,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Participant Instructions")
+    step = window.setup_wizard_page.condition_setup_step
+    window.show_setup_wizard(step_key="conditions")
+    first = window.document.create_condition(
+        name="Semantic categories with familiar and unfamiliar exemplars " * 2,
+    )
+    second = window.document.create_condition(name="Second condition")
+    original = "Original instructions.\n\nWait."
+    window.document.update_condition(first, instructions=original)
+    window.document.update_condition(second, instructions="Keep this condition's instructions.")
+    step._select_condition(first)
+    opened = []
+
+    def edit_dialog(dialog):
+        opened.append(dialog)
+        qtbot.addWidget(dialog)
+        assert dialog.text_edit.toPlainText() == original
+        dialog.text_edit.setPlainText(draft)
+        assert window.document.get_condition(first).instructions == original
+        dialog.resize(*dialog_size)
+        dialog.show()
+        QApplication.processEvents()
+        assert (dialog.width(), dialog.height()) == dialog_size
+        _assert_visible_children_within_parent(dialog)
+        for label in dialog.findChildren(QLabel):
+            if label.isVisible() and label.wordWrap():
+                assert label.heightForWidth(label.width()) <= label.height()
+        buttons = dialog.findChild(QDialogButtonBox)
+        assert buttons is not None
+        assert buttons.button(QDialogButtonBox.StandardButton.Save) is not None
+        assert buttons.button(QDialogButtonBox.StandardButton.Cancel) is not None
+        buttons.button(action).click()
+        return dialog.result()
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.ParticipantInstructionsDialog.exec", edit_dialog,
+    )
+    step.instructions_button.click()
+    assert len(opened) == 1
+    assert window.document.get_condition(first).instructions == expected
+    assert window.document.get_condition(second).instructions == (
+        "Keep this condition's instructions."
+    )
+    assert not hasattr(step, "instructions_edit")
+    assert not step.has_pending_edits()
 
 
 def test_setup_wizard_condition_timing_template_updates_selected_condition_only(
@@ -688,21 +785,20 @@ def test_setup_wizard_conditions_step_keeps_metadata_geometry_for_incomplete_con
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Geometry")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     window.show_setup_wizard(step_key="conditions")
     first = window.document.create_condition(name="Faces")
     step._select_condition(first)
     QApplication.processEvents()
     metadata_size = step.condition_details_section.size()
-    instructions_size = step.instructions_edit.size()
+    instructions_size = step.instructions_button.size()
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
     assert step.condition_details_section.size() == metadata_size
-    assert step.instructions_edit.size() == instructions_size
-    assert step.instructions_edit.height() >= 80
-    assert not step.sources_row.isVisible()
-    assert step.condition_name_edit.width() == step.instructions_edit.width()
-    assert "Design" in step.condition_list_hint.text()
+    assert step.instructions_button.size() == instructions_size
+    assert step.instructions_button.isVisible()
+    assert step.sources_row.isVisible()
+    assert "Design" not in step.condition_list_hint.text()
     _assert_visible_children_within_parent(step.condition_details_section)
     _assert_visible_children_within_parent(step)
 
@@ -735,8 +831,8 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     else:
         step.base_words_edit.setPlainText("familiar category exemplar\n" * 40)
         step.flush_pending_edits()
-    step.instructions_edit.setPlainText(
-        "Look at each stimulus and follow the task instructions. " * 20
+    window.document.update_condition(
+        condition_id, instructions="Look at each stimulus and follow the task instructions. " * 20,
     )
     step.flush_pending_edits()
     QApplication.processEvents()
@@ -759,13 +855,14 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     for parent in (step, step.condition_details_section, step.all_conditions_section):
         _assert_visible_children_within_parent(parent)
     if modality == StimulusModality.IMAGE:
+        assert step.sources_row.isVisible()
         for card in (step.base_source_card, step.oddball_source_card):
             _assert_visible_children_within_parent(card)
     else:
         _assert_visible_children_within_parent(step.words_panel)
 
 
-def test_legacy_source_details_preserves_full_project_path(
+def test_condition_source_details_preserves_full_project_path(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -776,7 +873,7 @@ def test_legacy_source_details_preserves_full_project_path(
     monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
     _, window = _open_created_project(controller, qtbot, tmp_path, "Inspectable Sources")
     step = window.setup_wizard_page.condition_setup_step
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     window.show_setup_wizard(step_key="conditions")
     condition_id = window.document.create_condition()
     step._select_condition(condition_id)
@@ -790,8 +887,7 @@ def test_legacy_source_details_preserves_full_project_path(
     expected_path = str(window.document.project_root / source.source_dir)
     button = step.base_source_card.source_details_button
     assert button.isEnabled()
-    # Hidden compatibility source details remain usable by the existing advanced editor.
-    assert not step.sources_row.isVisible()
+    assert step.sources_row.isVisible()
     button.click()
     QApplication.processEvents()
     dialog = step.base_source_card.findChild(
@@ -823,7 +919,7 @@ def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialo
     window.activateWindow()
     QApplication.processEvents()
     step.focus_setup_blocker()
-    assert step.condition_name_edit.hasFocus()
+    assert step.base_import_button.hasFocus()
     window.document.update_condition(condition_id, name="Animal words")
     step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
     step.base_words_edit.setPlainText("cat\ndog")
@@ -909,11 +1005,12 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
         qtbot.waitUntil(lambda: step.condition_search_edit.y() == 0)
         assert (window.width(), window.height()) == window_size
         assert step.condition_list.count() == 6
-        assert step.instructions_edit.toPlainText() == instructions
-        assert step.instructions_edit.height() >= 80
+        assert window.document.get_condition(selected_id).instructions == instructions
+        assert step.instructions_button.isVisible()
         assert not step.condition_list_hint.isVisible()
         assert step.condition_list_hint.text() == ""
         assert step.words_panel.isVisible() == (modality == StimulusModality.WORD)
+        assert step.sources_row.isVisible() == (modality == StimulusModality.IMAGE)
         trigger_edit = step.trigger_code_spin.lineEdit()
         assert trigger_edit is not None
         assert trigger_edit.width() >= trigger_edit.fontMetrics().horizontalAdvance(
@@ -964,15 +1061,14 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
         if modality == StimulusModality.WORD and window_size[1] >= 960:
             assert step.base_words_edit.height() > 124
             assert step.oddball_words_edit.height() > 124
-            assert step.instructions_edit.height() > 80
-        instructions_bottom = step.instructions_edit.mapTo(
-            step.condition_details_section, step.instructions_edit.rect().bottomLeft()
+        instructions_bottom = step.instructions_button.mapTo(
+            step.condition_details_section, step.instructions_button.rect().bottomLeft()
         ).y()
         assert instructions_bottom <= step.condition_details_section.height() - 4
         assert not guide.shell.page_container.scroll_area.verticalScrollBar().isEnabled()
 
 
-def test_setup_wizard_design_next_silently_advances_when_images_are_uniform(
+def test_setup_wizard_conditions_next_silently_advances_when_images_are_uniform(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -996,7 +1092,7 @@ def test_setup_wizard_design_next_silently_advances_when_images_are_uniform(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "uniform-oddball"),
     )
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
 
     def _unexpected_dialog(*_args, **_kwargs):
@@ -1009,14 +1105,14 @@ def test_setup_wizard_design_next_silently_advances_when_images_are_uniform(
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ProgressTask", _ImmediateProgressTask)
 
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
     qtbot.waitUntil(lambda: guide.step_stack.currentWidget() is guide.experiment_step_surface)
 
 
-def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
+def test_setup_wizard_conditions_next_normalizes_mixed_images_before_advancing(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1044,7 +1140,7 @@ def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
         ),
     )
     original_oddball = window.document.get_condition_stimulus_set(condition_id, "oddball")
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
 
     class _AcceptDialog:
@@ -1061,7 +1157,7 @@ def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
     monkeypatch.setattr("fpvs_studio.gui.setup_wizard_page.ImageNormalizationDialog", _AcceptDialog)
 
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
@@ -1084,7 +1180,7 @@ def test_setup_wizard_design_next_normalizes_mixed_images_before_advancing(
     )
 
 
-def test_setup_wizard_design_next_preserves_uniform_non_square_images(
+def test_setup_wizard_conditions_next_preserves_uniform_non_square_images(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1116,7 +1212,7 @@ def test_setup_wizard_design_next_preserves_uniform_non_square_images(
         role="oddball",
         source_dir=oddball_dir,
     )
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
 
     def _unexpected_dialog(*_args, **_kwargs):
@@ -1170,7 +1266,7 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
         ),
     )
     guide.refresh()
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
     assert guide.setup_wizard_next_button.isEnabled()
     normalization_scan = guide._document.scan_condition_image_normalization()
@@ -1201,7 +1297,7 @@ def test_setup_wizard_preserves_different_uniform_base_and_oddball_rectangles(
     assert oddball.resolution is not None and oddball.resolution.as_tuple() == (158, 197)
 
 
-def test_setup_wizard_design_next_stays_put_when_normalization_is_cancelled(
+def test_setup_wizard_conditions_next_stays_put_when_normalization_is_cancelled(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1225,7 +1321,7 @@ def test_setup_wizard_design_next_stays_put_when_normalization_is_cancelled(
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "cancel-oddball"),
     )
-    _open_image_design_step(qtbot, guide)
+    _open_condition_images_step(qtbot, guide)
     QApplication.processEvents()
 
     class _RejectDialog:
@@ -1243,15 +1339,126 @@ def test_setup_wizard_design_next_stays_put_when_normalization_is_cancelled(
         "base",
     ).source_dir
     guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
 
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert (
         window.document.get_condition_stimulus_set(condition_id, "base").source_dir
         == before_source_dir
     )
+
+
+@pytest.mark.parametrize("role", ["base", "oddball"])
+def test_condition_image_import_is_worker_backed_and_keeps_other_sources(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch, condition_import_tasks, role,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Image Imports")
+    step = window.setup_wizard_page.condition_setup_step
+    window.show_setup_wizard(step_key="conditions")
+    first = window.document.create_condition(name="First condition")
+    second = window.document.create_condition(name="Second condition")
+    step._select_condition(first)
+    original_first = window.document.get_condition(first).model_dump()
+    original_second = window.document.get_condition(second).model_dump()
+    other_role = "oddball" if role == "base" else "base"
+    other_source = window.document.get_condition_stimulus_set(first, other_role).model_dump()
+    folder = _write_image_directory(tmp_path / f"selected-{role}", count=3)
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(folder))
+    button = step.base_import_button if role == "base" else step.oddball_import_button
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+
+    assert len(condition_import_tasks) == 1
+    assert step._active_task is condition_import_tasks[0]
+    assert window.document.get_condition(first).model_dump() == original_first
+    assert not step.base_import_button.isEnabled()
+    assert not step.oddball_import_button.isEnabled()
+    assert not step.condition_list.isEnabled()
+    assert not step.add_condition_button.isEnabled()
+    second_row = step.condition_list.item(1)
+    qtbot.mouseClick(
+        step.condition_list.viewport(), Qt.MouseButton.LeftButton,
+        pos=step.condition_list.visualItemRect(second_row).center(),
+    )
+    assert step.selected_condition_id() == first
+    condition_import_tasks[0].complete()
+
+    source = window.document.get_condition_stimulus_set(first, role)
+    assert source.image_count == 3
+    assert step._active_task is None
+    assert step.condition_list.isEnabled()
+    assert step.base_import_button.isEnabled()
+    assert step.oddball_import_button.isEnabled()
+    assert window.document.get_condition(second).model_dump() == original_second
+    assert window.document.get_condition_stimulus_set(first, other_role).model_dump() == (
+        other_source
+    )
+    assert (window.document.project_root / source.source_dir).is_dir()
+    card = step.base_source_card if role == "base" else step.oddball_source_card
+    assert card.source_details_button.isEnabled()
+    assert any(label.text() == "3 images" for label in card.findChildren(QLabel))
+
+    replacement = _write_image_directory(tmp_path / f"replacement-{role}", count=1)
+    (replacement / "stimulus-01.png").rename(replacement / "replacement.png")
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(replacement))
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    condition_import_tasks[-1].complete()
+    replaced = window.document.get_condition_stimulus_set(first, role)
+    assert replaced.set_id != source.set_id
+    assert replaced.image_count == 1
+    retained_set = next(
+        item for item in window.document.manifest.sets if item.set_id == replaced.set_id
+    )
+    assert [Path(item.source.relative_path).name for item in retained_set.assets] == [
+        "replacement.png"
+    ]
+    assert len(list((window.document.project_root / source.source_dir).glob("*.png"))) == 3
+    assert window.document.get_condition(second).model_dump() == original_second
+
+
+def test_failed_condition_image_import_preserves_sources_and_allows_retry(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch, condition_import_tasks,
+) -> None:
+    from fpvs_studio.gui.designer_sources import import_designer_source
+
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Import Retry")
+    step = window.setup_wizard_page.condition_setup_step
+    window.show_setup_wizard(step_key="conditions")
+    condition_id = window.document.create_condition(name="Source images")
+    step._select_condition(condition_id)
+    folder = _write_image_directory(tmp_path / "retry-images", count=3)
+    before = window.document.project.model_dump()
+    calls, errors = [], []
+
+    def import_source(*args):
+        calls.append(args)
+        if len(calls) == 1:
+            raise ValueError("The selected folder contains an unreadable image.")
+        return import_designer_source(*args)
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.import_designer_source", import_source,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step._show_error_dialog",
+        lambda _parent, title, error: errors.append((title, str(error))),
+    )
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(folder))
+    step.base_import_button.click()
+    condition_import_tasks[-1].complete()
+    assert errors == [
+        ("Stimulus Import Error", "The selected folder contains an unreadable image.")
+    ]
+    assert window.document.project.model_dump() == before
+    assert step._active_task is None
+    assert step.base_import_button.isEnabled()
+    assert step.condition_list.isEnabled()
+    step.base_import_button.click()
+    condition_import_tasks[-1].complete()
+    assert len(errors) == 1
+    assert window.document.get_condition_stimulus_set(condition_id, "base").image_count == 3
+    assert step._active_task is None
 
 
 def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
@@ -1259,14 +1466,14 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
     controller: StudioController,
     tmp_path: Path,
     monkeypatch,
+    condition_import_tasks,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Wizard Image Picker")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
     guide.open_wizard(step_key="conditions")
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
-    guide.open_wizard(step_key="images")
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
     calls: list[tuple[str, str]] = []
 
@@ -1279,10 +1486,14 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
         _capture_directory,
     )
 
+    before = window.document.project.model_dump()
     step.base_import_button.click()
     step.oddball_import_button.click()
 
-    assert not step.sources_row.isVisible()
+    assert step.sources_row.isVisible()
+    assert condition_import_tasks == []
+    assert step._active_task is None
+    assert window.document.project.model_dump() == before
     expected_start = str(window.document.project_root / "stimuli")
     assert calls == [
         ("Choose Base Stimulus Folder", expected_start),

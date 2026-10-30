@@ -1,8 +1,11 @@
 """Privacy allowlist, metric conservation and protocol identity regressions."""
 
+import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 from unittest.mock import Mock
 from uuid import uuid4
 
@@ -10,6 +13,8 @@ import pytest
 from pydantic import ValidationError
 
 from fpvs_studio.core import data_sharing
+from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
+from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.data_sharing import (
     ComparisonCondition,
     ComparisonSnapshot,
@@ -22,6 +27,9 @@ from fpvs_studio.core.data_sharing import (
     SharingStudyChoices,
     protocol_fingerprint,
 )
+from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.masking_presets import create_masking_modifier
+from fpvs_studio.core.models import ProjectFile
 
 
 def test_study_discovery_contract_bounds_and_unique_identity():
@@ -249,6 +257,76 @@ def test_protocol_excludes_identity_seeds_and_machine_settings(sample_project, s
     assert protocol_fingerprint(project, sample_project_root) == before
     project.settings.fixation_task.response_window_seconds += 0.1
     assert protocol_fingerprint(project, sample_project_root) != before
+
+
+def _captured_protocol_payload(monkeypatch, project, root):
+    captured = {}
+
+    def dumps(payload, **kwargs):
+        captured.update(payload)
+        return json.dumps(payload, **kwargs)
+
+    with monkeypatch.context() as context:
+        context.setattr(data_sharing, "json", SimpleNamespace(dumps=dumps))
+        fingerprint = protocol_fingerprint(project, root)
+    return fingerprint, captured
+
+
+def _historical_protocol_digest(payload):
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"),
+                         ensure_ascii=False, allow_nan=False)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+
+
+def test_legacy_source_fingerprint_distinguishes_pooled_algorithm_without_rewriting_source(
+    sample_project, sample_project_root, monkeypatch,
+):
+    assert all(condition.presentation_count is None for condition in sample_project.conditions)
+    source = sample_project.model_dump_json()
+    fingerprint, payload = _captured_protocol_payload(
+        monkeypatch, sample_project, sample_project_root,
+    )
+    assert payload["condition_ordering"] == {
+        "policy": "pooled_no_adjacent", "algorithm_version": 1,
+    }
+    historical = {key: value for key, value in payload.items() if key != "condition_ordering"}
+    assert fingerprint != _historical_protocol_digest(historical)
+    assert sample_project.model_dump_json() == source
+    sample_project.settings.session.session_seed += 1
+    assert protocol_fingerprint(sample_project, sample_project_root) == fingerprint
+
+
+@pytest.mark.parametrize("kind", ["ab", "masking"])
+def test_native_grouped_protocol_identity_remains_unchanged(
+    sample_project, sample_project_root, monkeypatch, kind,
+):
+    if kind == "ab":
+        project = populate_attentional_blink_stream(ProjectFile(
+            meta=sample_project.meta.model_copy(deep=True),
+            experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+        ))
+    else:
+        project = assign_modifier(
+            sample_project, create_masking_modifier(variant="color"), ["faces"],
+        )
+    fingerprint, payload = _captured_protocol_payload(monkeypatch, project, sample_project_root)
+    assert set(payload) == {"project", "assets"}
+    assert fingerprint == _historical_protocol_digest(payload)
+
+
+def test_mixed_project_identity_covers_its_executable_ordinary_subset(
+    sample_project, sample_project_root, monkeypatch,
+):
+    sample_project.conditions.append(sample_project.conditions[0].model_copy(deep=True, update={
+        "condition_id": "masked", "name": "Masked", "order_index": 1,
+    }))
+    project = assign_modifier(
+        sample_project, create_masking_modifier(variant="color"), ["masked"],
+    )
+    _, payload = _captured_protocol_payload(monkeypatch, project, sample_project_root)
+    assert payload["condition_ordering"] == {
+        "policy": "pooled_no_adjacent", "algorithm_version": 1,
+    }
 
 
 def test_protocol_detects_actual_asset_edits_and_ignores_unrelated_files(

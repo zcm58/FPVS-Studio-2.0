@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality, StimulusVariant
 from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.models import Condition, StimulusSet
@@ -515,6 +516,13 @@ class ConditionsPage(QWidget):
             self.sequence_count_spin.setValue(condition.sequence_count)
         with QSignalBlocker(self.oddball_cycles_spin):
             self.oddball_cycles_spin.setValue(condition.oddball_cycle_repeats_per_sequence)
+        count_editable = condition.stream_duration_seconds is None
+        for spin in (self.sequence_count_spin, self.oddball_cycles_spin):
+            spin.setEnabled(count_editable)
+            spin.setToolTip(
+                _CYCLE_HELP_TEXT if count_editable
+                else "Edit stream duration in Timing & Session."
+            )
         with QSignalBlocker(self.target_repeats_spin):
             self.target_repeats_spin.setValue(
                 self._document.project.settings.condition_defaults.target_repeats_per_image
@@ -529,9 +537,10 @@ class ConditionsPage(QWidget):
             selected_mode=condition.duty_cycle_mode,
         )
         protocol = self._document.project.settings.protocol
+        base_hz = effective_condition_base_hz(self._document.project, condition)
         self.template_info_label.setText(
-            f"{template.display_name}: base {protocol.base_hz:g} Hz, oddball every "
-            f"{protocol.oddball_every_n} stimuli ({protocol.oddball_hz:g} Hz)."
+            f"{template.display_name}: base {base_hz:g} Hz, oddball every "
+            f"{protocol.oddball_every_n} stimuli ({base_hz / protocol.oddball_every_n:g} Hz)."
         )
         if masking is not None:
             self.selected_condition_note.setText(
@@ -555,11 +564,14 @@ class ConditionsPage(QWidget):
         assert base_set is not None and oddball_set is not None
         repeat_guidance = {
             (row.condition_id, row.role): row
-            for row in condition_stimulus_repeat_guidance(self._document.project)
+            for row in condition_stimulus_repeat_guidance(
+                self._document.project,
+                refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
+            )
         }
         self._set_source_panel(
             stimulus_set=base_set,
-            guidance=repeat_guidance[(condition.condition_id, "base")],
+            guidance=repeat_guidance.get((condition.condition_id, "base")),
             role_label="Base",
             state_label=self.base_source_state,
             source_value=self.base_source_value,
@@ -570,7 +582,7 @@ class ConditionsPage(QWidget):
         )
         self._set_source_panel(
             stimulus_set=oddball_set,
-            guidance=repeat_guidance[(condition.condition_id, "oddball")],
+            guidance=repeat_guidance.get((condition.condition_id, "oddball")),
             role_label="Oddball",
             state_label=self.oddball_source_state,
             source_value=self.oddball_source_value,
@@ -584,7 +596,7 @@ class ConditionsPage(QWidget):
         self,
         *,
         stimulus_set: StimulusSet,
-        guidance: StimulusRepeatRoleGuidance,
+        guidance: StimulusRepeatRoleGuidance | None,
         role_label: str,
         state_label: StatusBadgeLabel,
         source_value: PathValueLabel,
@@ -617,7 +629,10 @@ class ConditionsPage(QWidget):
         )
         source_value.set_path_text(source_label, max_length=74)
         count_value.setText(count_text)
-        repeat_guidance_value.setText(_repeat_guidance_text(guidance, role_label=role_label))
+        repeat_guidance_value.setText(
+            _repeat_guidance_text(guidance, role_label=role_label) if guidance is not None
+            else "Review stream timing in Timing & Session."
+        )
         resolution_value.setText(resolution_text)
         variants_value.setText(variants_text)
 

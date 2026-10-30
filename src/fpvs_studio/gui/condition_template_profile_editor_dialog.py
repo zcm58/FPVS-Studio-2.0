@@ -64,6 +64,8 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         profile = initial_profile or self._default_profile()
         self._experiment_category = profile.experiment_category
         self._attentional_blink_layout = profile.defaults.attentional_blink_layout
+        self._stream_duration_seconds = profile.defaults.condition.stream_duration_seconds
+        self._presentation_count = profile.defaults.condition.presentation_count
         self._participant_tutorial_enabled = (
             profile.defaults.fixation_task.participant_tutorial_enabled
         )
@@ -99,9 +101,19 @@ class ConditionTemplateProfileEditorDialog(QDialog):
         self.sequence_count_spin = QSpinBox(self)
         self.sequence_count_spin.setObjectName("condition_profile_sequence_count_spin")
         self.sequence_count_spin.setRange(1, 10000)
+        self.sequence_count_spin.setEnabled(self._stream_duration_seconds is None)
+        if self._stream_duration_seconds is not None:
+            self.sequence_count_spin.setToolTip(
+                "This profile retains its authored stream duration."
+            )
         self.oddball_cycles_spin = QSpinBox(self)
         self.oddball_cycles_spin.setObjectName("condition_profile_oddball_cycles_spin")
         self.oddball_cycles_spin.setRange(1, 10000)
+        self.oddball_cycles_spin.setEnabled(self._stream_duration_seconds is None)
+        if self._stream_duration_seconds is not None:
+            self.oddball_cycles_spin.setToolTip(
+                "This profile retains its authored stream duration."
+            )
         self.target_repeats_spin = QSpinBox(self)
         self.target_repeats_spin.setObjectName("condition_profile_target_repeats_per_image_spin")
         self.target_repeats_spin.setRange(1, 10000)
@@ -419,6 +431,8 @@ class ConditionTemplateProfileEditorDialog(QDialog):
                     duty_cycle_mode=self.duty_cycle_combo.currentData(),
                     sequence_count=self.sequence_count_spin.value(),
                     oddball_cycle_repeats_per_sequence=self.oddball_cycles_spin.value(),
+                    stream_duration_seconds=self._stream_duration_seconds,
+                    presentation_count=self._presentation_count,
                     target_repeats_per_image=self.target_repeats_spin.value(),
                 ),
                 display=ConditionTemplateDisplayDefaults(

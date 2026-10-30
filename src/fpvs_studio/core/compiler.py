@@ -53,6 +53,10 @@ from fpvs_studio.core.compiler_tasks import (
     relocate_masking_lead_ins,
     resolve_modifier_baseline,
 )
+from fpvs_studio.core.condition_timing import (
+    effective_condition_base_hz,
+    resolve_condition_stream_timing,
+)
 from fpvs_studio.core.enums import SchemaVersion
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.fixation_planning import (
@@ -63,8 +67,6 @@ from fpvs_studio.core.fixation_planning import (
     seconds_to_frames,
 )
 from fpvs_studio.core.frame_validation import (
-    FrameValidationError,
-    frames_per_stimulus,
     on_off_frames,
 )
 from fpvs_studio.core.masking import (
@@ -72,14 +74,36 @@ from fpvs_studio.core.masking import (
     masking_catch_source_conditions,
     validate_masking_catch_trials,
 )
-from fpvs_studio.core.models import AttentionalBlinkStreamSettings, Condition, ProjectFile
+from fpvs_studio.core.models import (
+    AttentionalBlinkStreamSettings,
+    Condition,
+    ProjectFile,
+    RandomizationSeeds,
+)
 from fpvs_studio.core.presentation import resolve_pre_stream_fixation_seconds
+from fpvs_studio.core.randomization import (
+    RANDOMIZATION_ALGORITHM_VERSION,
+    effective_randomization_mode,
+    resolve_randomization_seeds,
+    run_randomization_spec,
+    supports_independent_randomization,
+)
 from fpvs_studio.core.run_spec import (
     AttentionalBlinkStreamRunSpec,
     ConditionRunSpec,
     DisplayRunSpec,
     FixationStyleSpec,
+    RunRandomizationSpec,
     RunSpec,
+)
+from fpvs_studio.core.session_ordering import (
+    POOLED_ORDERING_POLICY,
+    SAVED_ORDERING_POLICY,
+    active_saved_condition_order,
+    condition_presentation_counts,
+    constrained_condition_order,
+    uses_pooled_condition_order,
+    validate_condition_presentation_counts,
 )
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskPhase, task_requires_text_alignment_schema
@@ -95,10 +119,12 @@ def compile_run_spec(
     refresh_hz: float,
     condition_id: str | None = None,
     project_root: Path | None = None,
-    random_seed: int = 0,
+    random_seed: int | None = None,
     run_id: str | None = None,
     realized_target_count: int | None = None,
     manifest: StimulusManifest | None = None,
+    resolved_seeds: RandomizationSeeds | None = None,
+    condition_presentation_index: int = 1,
 ) -> RunSpec:
     """Compile one project condition into a dedicated frame-based RunSpec."""
 
@@ -107,11 +133,27 @@ def compile_run_spec(
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     condition = select_condition(project, condition_id)
+    randomization = None
+    if resolved_seeds is not None or project.settings.session.randomization_mode is not None:
+        if not supports_independent_randomization(project, [condition]):
+            raise CompileError("Independent randomization is unavailable for native AB/masking.")
+        try:
+            seeds = resolve_randomization_seeds(
+                project, resolved_seeds=resolved_seeds, condition_order_seed=random_seed,
+            )
+            randomization = run_randomization_spec(
+                project, seeds, condition_id=condition.condition_id,
+                presentation_index=condition_presentation_index,
+            )
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
+        random_seed = randomization.stimulus_order_seed
     return _compile_prepared_run(
         CompilationInputs(project, refresh_hz=refresh_hz, project_root=project_root,
                           manifest=manifest),
-        condition, random_seed=random_seed, run_id=run_id,
+        condition, random_seed=random_seed if random_seed is not None else 0, run_id=run_id,
         realized_target_count=realized_target_count,
+        randomization=randomization,
     )
 
 
@@ -121,15 +163,16 @@ def _compile_prepared_run(
     previous_base_id: str | None = None,
     is_catch_trial: bool = False,
     masking_source_condition: Condition | None = None,
+    randomization: RunRandomizationSpec | None = None,
 ) -> RunSpec:
     project, refresh_hz = inputs.project, inputs.refresh_hz
     masking = condition_masking(project, condition)
     if condition.masking_catch:
         try:
-            validate_masking_catch_trials(project, [condition])
+            validate_masking_catch_trials(project, [condition], refresh_hz=refresh_hz)
             sources = (
                 [masking_source_condition] if masking_source_condition is not None
-                else masking_catch_source_conditions(project, condition)
+                else masking_catch_source_conditions(project, condition, refresh_hz=refresh_hz)
             )
             _validate_masking_catch_sources(project, sources, refresh_hz)
         except ValueError as exc:
@@ -150,14 +193,19 @@ def _compile_prepared_run(
     _ = inputs.manifest
     template = inputs.template
     protocol = project.settings.protocol
-    frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
+    base_hz = effective_condition_base_hz(project, condition)
+    try:
+        stream_timing = resolve_condition_stream_timing(project, condition, refresh_hz)
+    except ValueError as exc:
+        raise CompileError(str(exc)) from exc
+    frames_per_stimulus_value = stream_timing.frames_per_stimulus
     on_frames, off_frames = on_off_frames(
         frames_per_stimulus_value,
         condition.duty_cycle_mode,
     )
-    total_oddball_cycles = condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
-    total_stimuli = total_oddball_cycles * protocol.oddball_every_n
-    total_frames = total_stimuli * frames_per_stimulus_value
+    total_oddball_cycles = stream_timing.total_oddball_cycles
+    total_stimuli = stream_timing.total_stimuli
+    total_frames = stream_timing.total_frames
     presentation = prepared.presentation.model_copy(deep=True)
     resolved_role_presentations = prepared.role_presentations
     attentional_blink: AttentionalBlinkStreamRunSpec | None = None
@@ -207,13 +255,24 @@ def _compile_prepared_run(
         target_duration_frames=target_duration_frames,
         min_gap_frames=min_gap_frames,
     )
-    run_rng = random.Random(random_seed)
+    run_rng = random.Random(
+        randomization.fixation_onset_seed if randomization is not None else random_seed,
+    )
+    count_rng = (random.Random(randomization.fixation_count_seed)
+                 if randomization is not None else run_rng)
+    if randomization is not None and realized_target_count is not None:
+        expected_count = resolve_realized_target_count(
+            fixation_settings, rng=random.Random(randomization.fixation_count_seed),
+            previous_count=None, max_supported_count=max_supported_count,
+        )
+        if realized_target_count != expected_count:
+            raise CompileError("Fixation count disagrees with its independent seed schedule.")
     resolved_target_count = (
         realized_target_count
         if realized_target_count is not None
         else resolve_realized_target_count(
             fixation_settings,
-            rng=run_rng,
+            rng=count_rng,
             previous_count=None,
             max_supported_count=max_supported_count,
         )
@@ -263,7 +322,8 @@ def _compile_prepared_run(
 
     return RunSpec(
         schema_version=(
-            "1.3.0"
+            "1.7.0" if randomization is not None else
+            "1.6.0" if condition.stream_duration_seconds is not None else "1.3.0"
             if isinstance(attentional_blink, AttentionalBlinkStreamRunSpec)
             else SchemaVersion.V1_1.value
         ),
@@ -272,21 +332,23 @@ def _compile_prepared_run(
         project_name=project.meta.name,
         template_id=template.template_id,
         random_seed=random_seed,
+        randomization=randomization,
         condition=ConditionRunSpec(
             condition_id=condition.condition_id,
             name=condition.name,
             show_title_on_screen=project.settings.session.show_condition_title_on_screen,
             template_id=template.template_id,
             instructions_text=condition.instructions or None,
-            base_hz=protocol.base_hz,
+            base_hz=base_hz,
             oddball_every_n=protocol.oddball_every_n,
             oddball_hz=(
-                protocol.base_hz / attentional_blink.target_interval_slots
+                base_hz / attentional_blink.target_interval_slots
                 if attentional_blink is not None and attentional_blink.target_interval_slots
-                else protocol.oddball_hz
+                else base_hz / protocol.oddball_every_n
             ),
             total_oddball_cycles=total_oddball_cycles,
             total_stimuli=len(stimulus_sequence),
+            requested_duration_seconds=condition.stream_duration_seconds,
             stimulus_modality=base_set.modality,
             trigger_code=condition.trigger_code,
         ),
@@ -380,6 +442,7 @@ def compile_session_plan(
     manifest: StimulusManifest | None = None,
     limits: CompilationLimits | None = None,
     cancel_check: Callable[[], None] | None = None,
+    resolved_seeds: RandomizationSeeds | None = None,
 ) -> SessionPlan:
     """Compile a session, optionally bounding untrusted input and honoring cancellation."""
     with compilation_cancellation(
@@ -394,6 +457,7 @@ def compile_session_plan(
             project, refresh_hz=refresh_hz, project_root=project_root,
             random_seed=random_seed, session_id=session_id, condition_ids=condition_ids,
             manifest=manifest,
+            resolved_seeds=resolved_seeds,
         )
 
 
@@ -406,14 +470,38 @@ def _compile_session_plan(
     session_id: str | None = None,
     condition_ids: list[str] | None = None,
     manifest: StimulusManifest | None = None,
+    resolved_seeds: RandomizationSeeds | None = None,
 ) -> SessionPlan:
-    """Compile repeated conditions with blockwise or session-wide seeded randomization."""
+    """Compile exact pooled FPVS presentations or the native AB/masking grouping."""
 
     try:
         require_valid_experiment_category(project)
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     selected_conditions = select_conditions(project, condition_ids)
+    try:
+        validate_condition_presentation_counts(project, selected_conditions)
+    except ValueError as exc:
+        raise CompileError(str(exc)) from exc
+    pooled_ordering = uses_pooled_condition_order(project, selected_conditions)
+    saved_order = None
+    if pooled_ordering:
+        try:
+            saved_order = active_saved_condition_order(project, selected_conditions)
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
+    seed_snapshot = None
+    if pooled_ordering:
+        try:
+            seed_snapshot = resolve_randomization_seeds(
+                project, resolved_seeds=resolved_seeds, condition_order_seed=random_seed,
+            )
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
+        random_seed = seed_snapshot.condition_order_seed
+    elif resolved_seeds is not None or project.settings.session.randomization_mode is not None:
+        raise CompileError("Independent randomization is unavailable for native AB/masking.")
+    presentation_counts = condition_presentation_counts(project, selected_conditions)
     baseline_requirements = resolve_modifier_baseline(project, selected_conditions)
     if random_seed is None:
         random_seed = project.settings.session.session_seed
@@ -424,10 +512,12 @@ def _compile_session_plan(
     session_rng = random.Random(random_seed)
     task_inputs = TaskCompilationInputs(project, project_root)
     fixation_settings = project.settings.fixation_task
-    protocol = project.settings.protocol
     try:
-        frames_per_stimulus_value = frames_per_stimulus(refresh_hz, protocol.base_hz)
-    except FrameValidationError as exc:
+        condition_timings = {
+            condition.condition_id: resolve_condition_stream_timing(project, condition, refresh_hz)
+            for condition in selected_conditions
+        }
+    except ValueError as exc:
         raise CompileError(str(exc)) from exc
     target_duration_frames = milliseconds_to_frames(
         fixation_settings.target_duration_ms,
@@ -441,13 +531,15 @@ def _compile_session_plan(
     repetition_count = project.settings.session.block_count
     shuffle_all = project.settings.session.randomize_across_blocks
     compiled_block_count = 1 if shuffle_all else repetition_count
+    if pooled_ordering:
+        compiled_block_count = 1
     masking_groups = all(
         condition_masking(project, item) is not None for item in selected_conditions
     )
     group_conditions: list[list[tuple[Condition, bool, Condition | None]]] = []
     if masking_groups:
         try:
-            validate_masking_catch_trials(project, selected_conditions)
+            validate_masking_catch_trials(project, selected_conditions, refresh_hz=refresh_hz)
         except ValueError as exc:
             raise CompileError(str(exc)) from exc
         grouped: dict[str, list[Condition]] = {}
@@ -468,7 +560,9 @@ def _compile_session_plan(
             assert settings is not None
             if catches:
                 catch_condition = catches[0]
-                sources = masking_catch_source_conditions(project, catch_condition, pool)
+                sources = masking_catch_source_conditions(
+                    project, catch_condition, pool, refresh_hz=refresh_hz,
+                )
                 try:
                     _validate_masking_catch_sources(project, sources, refresh_hz)
                 except ValueError as exc:
@@ -493,11 +587,22 @@ def _compile_session_plan(
     masking_occurrence_counts = Counter(
         condition.condition_id for group in group_conditions for condition, _, _ in group
     )
+    pooled_trials: list[tuple[Condition, bool, Condition | None]] = []
+    if pooled_ordering:
+        by_id = {condition.condition_id: condition for condition in selected_conditions}
+        condition_order = (saved_order if saved_order is not None else
+                           constrained_condition_order(presentation_counts, rng=session_rng))
+        pooled_trials = [
+            (by_id[condition_id], False, None)
+            for condition_id in condition_order
+        ]
     occurrences: dict[str, int] = {}
     for block_index in range(compiled_block_count):
         check_compilation_cancelled()
         if masking_groups:
             block_trials = group_conditions[block_index]
+        elif pooled_ordering:
+            block_trials = pooled_trials
         else:
             block_conditions = list(selected_conditions)
             if shuffle_all:
@@ -513,18 +618,22 @@ def _compile_session_plan(
             occurrence_index = occurrences.get(condition.condition_id, 0)
             occurrences[condition.condition_id] = occurrence_index + 1
             condition_occurrence_count = (
-                masking_occurrence_counts[condition.condition_id] if masking else repetition_count
+                masking_occurrence_counts[condition.condition_id] if masking else
+                presentation_counts[condition.condition_id] if pooled_ordering else repetition_count
             )
             run_id = make_session_run_id(
                 global_order_index=global_order_index,
                 condition_id=condition.condition_id,
             )
-            run_random_seed = session_rng.randrange(RANDOM_SEED_UPPER_BOUND)
-            condition_total_oddball_cycles = (
-                condition.oddball_cycle_repeats_per_sequence * condition.sequence_count
+            randomization = (
+                run_randomization_spec(
+                    project, seed_snapshot, condition_id=condition.condition_id,
+                    presentation_index=occurrence_index + 1,
+                ) if seed_snapshot is not None else None
             )
-            condition_total_stimuli = condition_total_oddball_cycles * protocol.oddball_every_n
-            condition_total_frames = condition_total_stimuli * frames_per_stimulus_value
+            run_random_seed = (randomization.stimulus_order_seed if randomization is not None
+                               else session_rng.randrange(RANDOM_SEED_UPPER_BOUND))
+            condition_total_frames = condition_timings[condition.condition_id].total_frames
             max_supported_count = max_supported_color_changes(
                 total_frames=condition_total_frames,
                 target_duration_frames=target_duration_frames,
@@ -533,10 +642,21 @@ def _compile_session_plan(
             try:
                 realized_target_count = resolve_realized_target_count(
                     fixation_settings,
-                    rng=session_rng,
-                    previous_count=previous_realized_target_count,
+                    rng=(random.Random(randomization.fixation_count_seed)
+                         if randomization is not None else session_rng),
+                    previous_count=(None if randomization is not None
+                                    else previous_realized_target_count),
                     max_supported_count=max_supported_count,
                 )
+                if (randomization is not None and fixation_settings.enabled
+                        and fixation_settings.target_count_mode == "randomized"
+                        and fixation_settings.no_immediate_repeat_count
+                        and realized_target_count == previous_realized_target_count):
+                    raise CompileError(
+                        "Independent fixation schedules conflict with the no-equal-neighbor-count "
+                        "rule. Change the fixation seed or disable that count constraint; "
+                        "the seeded count will not be rerolled."
+                    )
                 run_spec = _compile_prepared_run(
                     inputs, condition,
                     random_seed=run_random_seed,
@@ -547,6 +667,7 @@ def _compile_session_plan(
                     ),
                     is_catch_trial=is_catch_trial,
                     masking_source_condition=masking_source,
+                    randomization=randomization,
                 )
                 if masking is not None and run_spec.scene_stream is not None:
                     base_events = [event for event in run_spec.scene_stream.events
@@ -606,13 +727,17 @@ def _compile_session_plan(
                     run_spec=run_spec,
                     pre_tasks=pre_tasks,
                     post_tasks=post_tasks,
+                    condition_presentation_index=occurrence_index + 1 if pooled_ordering else None,
+                    condition_presentation_count=(
+                        condition_occurrence_count if pooled_ordering else None
+                    ),
                     show_condition_start_gate=(
                         False if masking is not None else
                         any(task.task_id == RECALL_TASK_ID for task in post_tasks)
                         or not condition_tasks_replace_start_gate(
                             condition,
                             block_index=occurrence_index,
-                            block_count=repetition_count,
+                            block_count=condition_occurrence_count,
                             global_order_index=global_order_index,
                         )
                     ),
@@ -634,6 +759,11 @@ def _compile_session_plan(
 
     return SessionPlan(
         schema_version=(
+            "1.9.0" if any(task.post_question_context is not None
+                           for block in blocks for entry in block.entries
+                           for task in [*entry.pre_tasks, *entry.post_tasks]) else
+            "1.8.0" if saved_order is not None else
+            "1.7.0" if seed_snapshot is not None else
             "1.5.0" if any(task_requires_text_alignment_schema(task)
                            for block in blocks for entry in block.entries
                            for task in [*entry.pre_tasks, *entry.post_tasks])
@@ -641,6 +771,15 @@ def _compile_session_plan(
             else "1.3.0" if masking_groups else SchemaVersion.V1_2.value
         ),
         authored_task_flow=True if masking_groups else None,
+        ordering_policy=(SAVED_ORDERING_POLICY if saved_order is not None else
+                         POOLED_ORDERING_POLICY if pooled_ordering else None),
+        randomization_mode=(
+            effective_randomization_mode(project) if seed_snapshot is not None else None
+        ),
+        randomization_seeds=seed_snapshot,
+        randomization_algorithm_version=(
+            RANDOMIZATION_ALGORITHM_VERSION if seed_snapshot is not None else None
+        ),
         session_id=session_identifier,
         project_id=project.meta.project_id,
         project_name=project.meta.name,

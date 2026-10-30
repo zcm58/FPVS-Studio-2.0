@@ -43,9 +43,10 @@ tests = [
   "tests/unit/test_persistent_worker_routing.py",
   "tests/unit/test_crash_reporting_gui_jobs.py",
   "tests/unit/test_project_update_jobs.py",
+  "tests/unit/test_update_dialog_jobs.py",
 ]
 full_tests = ["tests/gui"]
-include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py", "tests/unit/test_gui_launch_lifecycle.py", "tests/unit/test_persistent_worker_routing.py", "tests/unit/test_default_recording_preferences.py", "tests/unit/test_crash_reporting_gui_jobs.py", "tests/unit/test_project_update_jobs.py"]
+include = ["src/fpvs_studio/gui/**", "tests/gui/**", "tests/unit/test_bundle_open_setup.py", "tests/unit/test_gui_launch_lifecycle.py", "tests/unit/test_persistent_worker_routing.py", "tests/unit/test_default_recording_preferences.py", "tests/unit/test_crash_reporting_gui_jobs.py", "tests/unit/test_project_update_jobs.py", "tests/unit/test_update_dialog_jobs.py"]
 manual_smoke = [
   "Launch FPVS Studio normally in a visible Windows session.",
   "Exercise the changed surface at its documented minimum/default size and check for clipping.",
@@ -54,6 +55,17 @@ manual_smoke = [
 [scopes.core]
 checks = []
 tests = [
+  "tests/unit/test_post_questions.py",
+  "tests/unit/test_saved_condition_order.py",
+  "tests/unit/test_saved_order_integrations.py",
+  "tests/unit/test_randomization.py",
+  "tests/unit/test_randomization_integrations.py",
+  "tests/unit/test_condition_presentations.py",
+  "tests/unit/test_condition_presentation_integrations.py",
+  "tests/unit/test_condition_duration_integrations.py",
+  "tests/unit/test_condition_timing.py",
+  "tests/unit/test_condition_duration.py",
+  "tests/unit/test_condition_frequency_integrations.py",
   "tests/unit/test_brainproducts_timing.py",
   "tests/unit/test_models.py",
   "tests/unit/test_project_bundle_update.py",
@@ -78,12 +90,23 @@ full_tests = [
   "tests/unit/test_document_conditions.py",
   "tests/unit/test_document_summary_refresh.py",
 ]
-include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py", "tests/unit/test_brainproducts_timing.py", "tests/unit/test_project_bundle_update.py"]
+include = ["tests/unit/test_post_questions.py", "tests/unit/test_saved_condition_order.py", "tests/unit/test_saved_order_integrations.py", "tests/unit/test_randomization.py", "src/fpvs_studio/core/randomization.py", "tests/unit/test_randomization_integrations.py", "src/fpvs_studio/core/session_ordering.py", "tests/unit/test_condition_presentations.py", "tests/unit/test_condition_presentation_integrations.py", "tests/unit/test_condition_duration_integrations.py", "src/fpvs_studio/core/condition_timing.py", "tests/unit/test_condition_timing.py", "tests/unit/test_condition_duration.py", "tests/unit/test_condition_frequency_integrations.py", "tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/**", "tests/unit/test_models.py", "tests/unit/test_validation.py", "tests/unit/test_fixation_settings.py", "tests/unit/test_condition_tasks.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_document_*.py", "tests/unit/test_experiment_design.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_attentional_blink*.py", "tests/unit/test_windows_paths.py", "tests/unit/test_brainproducts_timing.py", "tests/unit/test_project_bundle_update.py"]
 manual_smoke = []
 
 [scopes.compiler]
 checks = []
 tests = [
+  "tests/unit/test_post_questions.py",
+  "tests/unit/test_saved_condition_order.py",
+  "tests/unit/test_saved_order_integrations.py",
+  "tests/unit/test_randomization.py",
+  "tests/unit/test_randomization_integrations.py",
+  "tests/unit/test_condition_presentations.py",
+  "tests/unit/test_condition_presentation_integrations.py",
+  "tests/unit/test_condition_duration_integrations.py",
+  "tests/unit/test_condition_timing.py",
+  "tests/unit/test_condition_duration.py",
+  "tests/unit/test_condition_frequency_integrations.py",
   "tests/unit/test_masking_event_markers.py",
   "tests/unit/test_masking.py",
   "tests/unit/test_masking_catch_conditions.py",
@@ -100,12 +123,24 @@ tests = [
   "tests/unit/test_condition_modifiers.py",
 ]
 full_tests = []
-include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/compiler*.py", "src/fpvs_studio/core/attentional_blink_stream.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_attentional_blink_stream_core.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py", "tests/unit/test_windows_image_paths.py"]
+include = ["tests/unit/test_post_questions.py", "tests/unit/test_saved_condition_order.py", "tests/unit/test_saved_order_integrations.py", "tests/unit/test_randomization.py", "src/fpvs_studio/core/randomization.py", "tests/unit/test_randomization_integrations.py", "src/fpvs_studio/core/session_ordering.py", "tests/unit/test_condition_presentations.py", "tests/unit/test_condition_presentation_integrations.py", "tests/unit/test_condition_duration_integrations.py", "src/fpvs_studio/core/condition_timing.py", "tests/unit/test_condition_timing.py", "tests/unit/test_condition_duration.py", "tests/unit/test_condition_frequency_integrations.py", "tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/compiler*.py", "src/fpvs_studio/core/attentional_blink_stream.py", "src/fpvs_studio/core/run_spec.py", "src/fpvs_studio/core/session_plan.py", "tests/unit/test_compiler*.py", "tests/unit/test_attentional_blink_stream_core.py", "tests/unit/test_contrast_modulation.py", "tests/unit/test_session_plan.py", "tests/unit/test_windows_image_paths.py"]
 manual_smoke = []
 
 [scopes."project-io"]
 checks = []
 tests = [
+  "tests/unit/test_post_questions.py",
+  "tests/unit/test_post_condition_responses.py",
+  "tests/unit/test_saved_condition_order.py",
+  "tests/unit/test_saved_order_integrations.py",
+  "tests/unit/test_randomization.py",
+  "tests/unit/test_randomization_integrations.py",
+  "tests/unit/test_condition_presentations.py",
+  "tests/unit/test_condition_presentation_integrations.py",
+  "tests/unit/test_condition_duration_integrations.py",
+  "tests/unit/test_condition_timing.py",
+  "tests/unit/test_condition_duration.py",
+  "tests/unit/test_condition_frequency_integrations.py",
   "tests/unit/test_masking_event_marker_io.py",
   "tests/unit/test_library_installations.py",
   "tests/unit/test_library_origin.py",
@@ -126,7 +161,7 @@ tests = [
   "tests/unit/test_modifier_presets.py",
 ]
 full_tests = []
-include = ["tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/serialization.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_serialization.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
+include = ["tests/unit/test_post_questions.py", "tests/unit/test_post_condition_responses.py", "tests/unit/test_saved_condition_order.py", "tests/unit/test_saved_order_integrations.py", "tests/unit/test_randomization.py", "src/fpvs_studio/core/randomization.py", "tests/unit/test_randomization_integrations.py", "src/fpvs_studio/core/session_ordering.py", "tests/unit/test_condition_presentations.py", "tests/unit/test_condition_presentation_integrations.py", "tests/unit/test_condition_duration_integrations.py", "src/fpvs_studio/core/condition_timing.py", "tests/unit/test_condition_timing.py", "tests/unit/test_condition_duration.py", "tests/unit/test_condition_frequency_integrations.py", "tests/unit/test_masking_catch_conditions.py", "src/fpvs_studio/core/project*.py", "src/fpvs_studio/core/serialization.py", "src/fpvs_studio/core/library_publish.py", "src/fpvs_studio/core/task_assets.py", "src/fpvs_studio/core/template_library.py", "src/fpvs_studio/core/condition_template_profiles.py", "src/fpvs_studio/core/attentional_blink_presets.py", "src/fpvs_studio/core/modifier_presets.py", "tests/unit/test_serialization.py", "tests/unit/test_modifier_presets.py", "tests/unit/test_attentional_blink_presets.py", "tests/unit/test_project*.py", "tests/unit/test_library_publish.py", "tests/unit/test_experiment_categories.py", "tests/unit/test_template_library.py", "tests/unit/test_condition_template_profiles.py"]
 manual_smoke = []
 
 [scopes.library]
@@ -237,6 +272,15 @@ manual_smoke = [
 [scopes.runtime]
 checks = []
 tests = [
+  "tests/unit/test_post_question_lifecycle.py",
+  "tests/unit/test_post_condition_responses.py",
+  "tests/unit/test_saved_condition_order.py",
+  "tests/unit/test_saved_order_integrations.py",
+  "tests/unit/test_randomization_integrations.py",
+  "tests/unit/test_condition_presentations.py",
+  "tests/unit/test_condition_presentation_integrations.py",
+  "tests/unit/test_condition_duration_integrations.py",
+  "tests/unit/test_condition_duration_preflight.py",
   "tests/unit/test_condition_recovery.py",
   "tests/unit/test_masking_runtime.py",
   "tests/unit/test_masking_catch_preflight.py",
@@ -263,7 +307,7 @@ tests = [
   "tests/unit/test_memory_modifier_runtime.py",
 ]
 full_tests = []
-include = ["src/fpvs_studio/runtime/**", "tests/unit/test_condition_recovery.py", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py", "tests/unit/test_attentional_blink*_runtime.py", "tests/unit/test_windows_image_paths.py"]
+include = ["tests/unit/test_post_question_lifecycle.py", "tests/unit/test_post_condition_responses.py", "tests/unit/test_saved_condition_order.py", "tests/unit/test_saved_order_integrations.py", "src/fpvs_studio/core/randomization.py", "tests/unit/test_randomization_integrations.py", "src/fpvs_studio/core/session_ordering.py", "tests/unit/test_condition_presentations.py", "tests/unit/test_condition_presentation_integrations.py", "tests/unit/test_condition_duration_integrations.py", "tests/unit/test_condition_duration_preflight.py", "src/fpvs_studio/runtime/**", "tests/unit/test_condition_recovery.py", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py", "tests/unit/test_attentional_blink*_runtime.py", "tests/unit/test_windows_image_paths.py"]
 manual_smoke = []
 
 [scopes.engine]
@@ -300,6 +344,7 @@ checks = []
 tests = [
   "tests/unit/test_update_cache.py",
   "tests/unit/test_update_check.py",
+  "tests/unit/test_update_dialog_jobs.py",
   "tests/unit/test_update_download.py",
   "tests/unit/test_update_helper.py",
   "tests/unit/test_update_patch.py",

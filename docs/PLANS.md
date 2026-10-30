@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -35,6 +34,30 @@ Concrete planned work:
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Conditions authoring consolidation](exec-plans/completed/conditions-authoring-consolidation.md)
+(seven-step Setup, per-condition image folders and modal instructions; visible Qt acceptance remains separate).
+
+Recent completion: [Setup image source selection](exec-plans/completed/setup-image-source-selection.md)
+(simple per-condition Base/Oddball folders without image previews; visible Qt acceptance remains separate).
+
+Recent completion: [Simplified modifiers and post-condition questions](exec-plans/completed/simple-condition-modifiers-and-post-questions.md)
+(simple Yes/No authoring, retained answer journals and cumulative project-root CSV; visible GUI acceptance remains separate).
+
+Recent completion: [Condition order preview and saved manual arrangements](exec-plans/completed/condition-order-preview-and-manual-order.md)
+(exact reusable arrangements, compact preview/reordering and atomic saves; visible GUI acceptance remains separate).
+
+Recent completion: [Independent randomization and seed reuse](exec-plans/completed/reproducible-randomization-controls.md)
+(three domains, one Fixed/New policy, pending launch snapshots and immutable full/compact provenance; visible GUI acceptance remains separate).
+
+Recent completion: [Per-condition presentation counts](exec-plans/completed/per-condition-repeat-counts.md)
+(exact totals, constrained pooled order, preserved task/recovery occurrence identity and ordering fingerprints; visible GUI acceptance remains separate).
+
+Recent completion: [Per-condition stream duration](exec-plans/completed/per-condition-stream-duration.md)
+(exact seconds, preserved legacy continuous streams and requested/resolved export fields; visible GUI acceptance remains separate).
+
+Recent completion: [Clear presentation frequency and confirmed condition overrides](exec-plans/completed/clear-presentation-frequency.md)
+(shared/default frequency, confirmed condition overrides and atomic duration preservation; visible GUI acceptance remains separate).
 
 Recent completion: [actiCHamp parallel-port output](exec-plans/completed/actichamp-parallel-port.md)
 (explicit Windows LPT connection, metadata-only detection, checked installed-driver

@@ -1213,3 +1213,58 @@ partial pilot retains demographics and answered targets in compact mode. Old jou
 rows default to non-pilot with empty demographics. Dedicated CSV/Excel output flattens
 metadata into participant columns; JSON retains the typed nested structure. Pilot
 does not change accuracy inclusion or the reserved test-ID convention.
+
+## Authored stream duration reporting
+
+Compiled streams retain optional requested seconds alongside resolved display frames.
+Full-session `conditions.csv` and project-level `logs/session_condition_history.csv`
+include `requested_stream_duration_seconds` and `resolved_stream_duration_seconds`.
+Legacy count-based runs leave requested seconds blank; resolved seconds equal stream
+frames divided by the compiled refresh rate. These are planned stream lengths;
+measured playback remains in timing-QC records. Lead-in, participant tasks, transitions
+and feedback are excluded. Existing history rows and participant/visit identity remain
+intact when the added columns are introduced.
+
+## Condition presentation identity
+
+New ordinary sessions carry chronological per-condition presentation index/count in
+SessionEntry. Full `conditions.csv` and project `session_condition_history.csv` expose
+that identity separately from block/global order and task-module repetition. Each
+presentation runs the existing task/transition flow independently; requested stream
+seconds apply once per entry. Exact-occurrence recovery retains the original index and
+total, while historical plans without those fields remain readable.
+
+## Independent randomization provenance
+
+Ordinary compiled sessions/results preserve reuse mode, resolved condition-order,
+stimulus and fixation root seeds and algorithm version. Full/compact condition/history
+exports also retain derived `stimulus_order_seed`, `fixation_count_seed` and
+`fixation_onset_seed`. Root values describe the participant launch; derived values describe
+one chronological condition presentation. Completed configs use the compiled snapshot,
+not later document edits. Older rows/artifacts without these fields remain readable.
+Raw task-response exports retain their existing repetition semantics.
+
+Runtime verifies provenance and plays concrete schedules. Fixed seeds may yield the
+same compiled session ID across participants; checkpoints, acquisition evidence and
+numbered exports retain participant/visit/execution identity, preserving separate records.
+Recovery uses retained seeds/events and never resolves a fresh triplet for an exact rerun.
+
+## Saved-order provenance
+
+Compiled sessions, schema1.4 session results, full/compact condition/history CSVs and
+completed Config1.13 snapshots record the actual `ordering_policy`. `saved_no_adjacent`
+identifies an exact chosen list; `pooled_no_adjacent` identifies seed-generated order.
+The condition-order seed remains provenance and does not alone describe a manually
+arranged list. Entry order and chronological condition presentation identity are retained.
+Older result/config formats remain readable and omitted source fields stay omitted.
+
+## Readable post-condition responses
+
+Explicit Post-condition Questions retain their original compiled context and existing
+answer journals in both export modes. Runtime reconciles submitted answers after task
+exceptions, then derives project-root `post_condition_responses.csv` outside playback.
+The CSV separates stream completion, question status and session finalization; locked
+views preserve prior data and can be rebuilt through the GUI. Original journals remain
+canonical and never enter authored bundles/configs or generic summaries. See
+[Post-condition Questions](POST_CONDITION_QUESTIONS.md) for schema, identity, recovery,
+privacy and visible acceptance details.

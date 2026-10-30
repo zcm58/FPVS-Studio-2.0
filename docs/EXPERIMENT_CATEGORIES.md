@@ -20,14 +20,17 @@ experiment is created and appears read-only on Project. Changing category requir
 creating a new experiment. Templates carry their own category and cannot change an
 experiment's category. Editing a template preserves that category and its cadence.
 
-The guided steps are Project, Conditions, Design, Timing & Session, Image Size,
+The seven guided steps are Project, Conditions, Timing & Session, Image Size,
 Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size
-for native letter streams. Conditions handles identity,
-participant instructions/tasks and existing oddball word lists. Design embeds the
-shared visual image editor and image-folder selection for the selected condition.
-Image intake/normalization occurs when advancing from Design. Word-list presentation
+for native letter streams. Conditions handles identity, participant instructions/tasks,
+Base/Oddball image-folder selection and existing oddball word lists. Image selection
+has no previews or visual cycle editing. Edit Instructions opens a Save/Cancel text
+dialog; empty Save clears the instructions, while Cancel preserves them. Default and
+short condition names are accepted under core's existing nonempty name schema.
+Image intake/normalization occurs when advancing from Conditions. Word-list presentation
 rates remain editable in Timing. Shared display, session, fixation and response
-surfaces retain their existing ownership.
+surfaces retain their existing ownership. There is no guided Design section; native
+AB settings remain unchanged and its editor source is retained outside Setup.
 
 The fixation cross is off by default. Users can enable it in Setup > Fixation;
 opening an existing project preserves its saved choice. Oddball defaults are unchanged.
@@ -49,7 +52,7 @@ Fixation detection is disabled. The preset uses 24 bursts per SOA, giving 120 se
 of EEG per SOA and 72 bursts (360 seconds of stimulus presentation) overall.
 Response time is additional. **Bursts per SOA** is editable in the GUI.
 
-Design shows a shared editable presentation rate, character sources, SOAs, intervening-letter counts, and
+The retained AB editor shows a shared editable presentation rate, character sources, SOAs, intervening-letter counts, and
 a target-focused timeline with labelled T1/T2 and an onset-to-onset bracket. A quarter-speed
 preview illustrates the sequence. Native text height is edited in Character Size;
 Timing checks the selected display's exact frame grid at the authored presentation
@@ -90,7 +93,7 @@ T1s 2-6 at the existing 100/300/500 ms SOAs. Its nominal T2 slots are 22/24/26
 per SOA yield 216 seconds per SOA and 648 seconds of stream presentation overall.
 The two existing recall questions remain one answer per distinct target identity.
 
-Design preserves the burst duration, first T1 time and repetition interval during
+The retained AB editor preserves the burst duration, first T1 time and repetition interval during
 rate/SOA edits through core's exact retiming helper. An incompatible new grid is
 rejected without rounding. The preview brackets the first complete pair, reports
 both target counts, and exposes all target positions in its accessible description.
@@ -106,12 +109,11 @@ or deleting their images. They cannot be saved, exported, compiled or run. Creat
 new Attentional-Blink experiment; timing and stimuli are never silently converted.
 Mixed projects containing retired image pairs cannot use the separation action.
 
-Design edits apply before switching conditions, leaving the step or saving. Invalid
-drafts remain visible for correction. Folder imports continue to use workers and
+Guided Setup preserves saved native AB settings without opening or applying the
+retained AB editor. Image-folder imports use workers and
 update project-owned sources immediately, including long Windows paths. Scientific
 timing and source-validation rules stay in core, not widget handlers.
-Embedded thumbnail decoding waits until Design is visible; edits and saves on other
-pages keep source counts current without starting hidden image jobs.
+Setup image selection refreshes source metadata without decoding thumbnails.
 
 ## Legacy projects and separation
 

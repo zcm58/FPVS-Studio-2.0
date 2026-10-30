@@ -885,6 +885,16 @@ class TaskModule(TaskBaseModel):
     steps: list[TaskStep] = Field(default_factory=list)
     backward_counting: BackwardCountingConfig | None = None
     image_memory: ImageMemoryConfig | None = None
+    simple_post_questions: bool = Field(default=False, strict=True)
+
+    @model_serializer(mode="wrap")
+    def serialize_simple_flow_marker(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = handler(self)
+        if not self.simple_post_questions:
+            payload.pop("simple_post_questions", None)
+        return payload
 
     @field_validator("task_id")
     @classmethod
@@ -898,6 +908,10 @@ class TaskModule(TaskBaseModel):
 
     @model_validator(mode="after")
     def validate_steps(self) -> TaskModule:
+        if self.simple_post_questions:
+            from fpvs_studio.core.post_questions import validate_simple_post_questionnaire
+
+            validate_simple_post_questionnaire(self)
         if self.image_memory is not None:
             if self.backward_counting is not None or self.repeat_count != 1:
                 raise ValueError("Image-memory modules have one activity and run once.")
@@ -1045,6 +1059,83 @@ class TaskStepSpec(TaskStep):
     realized_question_option_orders: dict[str, list[str]] = Field(default_factory=dict)
 
 
+class PostQuestionOption(TaskOption):
+    """Immutable original answer label and identity, independent of display shuffle."""
+
+    model_config = ConfigDict(frozen=True)
+
+
+class PostQuestionDefinition(TaskBaseModel):
+    """Immutable authored question meaning and version retained with compiled execution."""
+
+    model_config = ConfigDict(frozen=True)
+
+    question_id: str
+    kind: TaskQuestionKind
+    prompt: str
+    required: bool = True
+    options: tuple[PostQuestionOption, ...] = Field(default_factory=tuple)
+    randomize_options: bool = False
+    min_selections: int | None = None
+    max_selections: int | None = None
+    min_value: float | None = None
+    max_value: float | None = None
+    step: float | None = None
+    min_label: str | None = None
+    max_label: str | None = None
+    max_text_length: int = 2_000
+    correct_text: str | None = None
+    step_id: str
+    definition_version: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @field_validator("step_id")
+    @classmethod
+    def validate_context_step_id(cls, value: str) -> str:
+        return validate_task_slug(value, field_name="Question step id")
+
+    @model_validator(mode="after")
+    def validate_authored_version(self) -> PostQuestionDefinition:
+        from fpvs_studio.core.post_questions import question_definition_version
+
+        payload = self.model_dump(mode="json", exclude={"step_id", "definition_version"})
+        question = TaskQuestion.model_validate(payload)
+        if payload != question.model_dump(mode="json"):
+            raise ValueError("Post-question context must retain the validated authored definition.")
+        if self.definition_version != question_definition_version(question):
+            raise ValueError(
+                "Post-question definition version does not match the original question."
+            )
+        return self
+
+
+class PostQuestionnaireContext(TaskBaseModel):
+    """Original assignment context for one condition presentation, never a task repeat."""
+
+    model_config = ConfigDict(frozen=True)
+
+    task_id: str
+    task_name: str
+    condition_id: str
+    condition_name: str
+    condition_presentation_index: int = Field(ge=1, strict=True)
+    condition_presentation_count: int = Field(ge=1, strict=True)
+    questions: tuple[PostQuestionDefinition, ...] = Field(min_length=1)
+
+    @field_validator("task_id", "condition_id")
+    @classmethod
+    def validate_context_ids(cls, value: str) -> str:
+        return validate_task_slug(value, field_name="Post-question context id")
+
+    @model_validator(mode="after")
+    def validate_context(self) -> PostQuestionnaireContext:
+        if self.condition_presentation_index > self.condition_presentation_count:
+            raise ValueError("Question context presentation index exceeds its original count.")
+        ids = [question.question_id for question in self.questions]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Question context identities must be unique inside one module.")
+        return self
+
+
 class TaskModuleSpec(TaskBaseModel):
     """Compiled module attached to one concrete session entry."""
 
@@ -1058,9 +1149,23 @@ class TaskModuleSpec(TaskBaseModel):
     backward_counting: BackwardCountingSpec | None = None
     image_memory: ImageMemorySpec | None = None
     modifier: ModifierProvenance | None = None
+    post_question_context: PostQuestionnaireContext | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_question_context(
+        self, handler: SerializerFunctionWrapHandler,
+    ) -> dict[str, object]:
+        payload: dict[str, object] = handler(self)
+        if self.post_question_context is None:
+            payload.pop("post_question_context", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_repeat_capacity(self) -> TaskModuleSpec:
+        if self.post_question_context is not None:
+            from fpvs_studio.core.post_questions import validate_compiled_post_questions
+
+            validate_compiled_post_questions(self)
         validate_task_module_repeat_capacity(self)
         return self
 

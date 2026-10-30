@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+
 import pytest
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
@@ -32,8 +34,8 @@ def test_session_plan_default_block_contains_all_conditions_once(
         random_seed=123,
     )
 
-    assert session_plan.schema_version == "1.2.0"
-    assert all(entry.run_spec.schema_version == "1.1.0" for entry in session_plan.ordered_entries())
+    assert session_plan.schema_version == "1.7.0"
+    assert all(entry.run_spec.schema_version == "1.7.0" for entry in session_plan.ordered_entries())
     assert session_plan.block_count == 1
     assert session_plan.total_runs == 4
     assert len(session_plan.blocks) == 1
@@ -74,7 +76,7 @@ def test_session_plan_preserves_mixed_condition_timing(
     assert blank_display.off_frames == blank_display.frames_per_stimulus // 2
 
 
-def test_session_plan_two_block_randomization_is_deterministic_for_fixed_seed(
+def test_session_plan_pooled_randomization_is_deterministic_for_fixed_seed(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
@@ -91,16 +93,14 @@ def test_session_plan_two_block_randomization_is_deterministic_for_fixed_seed(
         random_seed=42,
     )
 
-    assert len(plan_a.blocks) == 2
+    assert len(plan_a.blocks) == 1
     assert plan_a.total_runs == 8
     assert _block_orders(plan_a) == _block_orders(plan_b)
-    for block in plan_a.blocks:
-        assert sorted(block.condition_order) == [
-            "condition-1",
-            "condition-2",
-            "condition-3",
-            "condition-4",
-        ]
+    order = plan_a.blocks[0].condition_order
+    assert Counter(order) == {
+        condition.condition_id: 2 for condition in multi_condition_project.conditions
+    }
+    assert all(left != right for left, right in zip(order, order[1:], strict=False))
 
 
 def test_session_plan_reproducibility_and_seed_variation(
@@ -140,6 +140,9 @@ def test_session_plan_reshuffles_images_each_time_condition_is_shown(
     sample_project_root,
 ) -> None:
     sample_project.settings.session.block_count = 2
+    sample_project.conditions.append(sample_project.conditions[0].model_copy(update={
+        "condition_id": "separator", "name": "Separator", "order_index": 1,
+    }))
 
     session_plan = compile_session_plan(
         sample_project,
@@ -147,9 +150,9 @@ def test_session_plan_reshuffles_images_each_time_condition_is_shown(
         project_root=sample_project_root,
         random_seed=42,
     )
-    entries = session_plan.ordered_entries()
+    entries = [entry for entry in session_plan.ordered_entries() if entry.condition_id == "faces"]
     base_orders = [
-        [event.image_path for event in entry.run_spec.stimulus_sequence if event.role == "base"][:3]
+        [event.image_path for event in entry.run_spec.stimulus_sequence if event.role == "base"]
         for entry in entries
     ]
 
@@ -220,7 +223,7 @@ def test_session_plan_supports_image_and_word_conditions_together(
     assert {event.text for event in word_events if event.role == "base"} == {"cat", "dog"}
 
 
-def test_session_plan_randomizes_blocks_even_when_legacy_flag_is_false(
+def test_session_plan_pools_even_when_legacy_block_flags_are_false(
     multi_condition_project,
     multi_condition_project_root,
 ) -> None:
@@ -233,10 +236,12 @@ def test_session_plan_randomizes_blocks_even_when_legacy_flag_is_false(
         random_seed=42,
     )
 
-    assert _block_orders(session_plan) == [
-        ["condition-3", "condition-2", "condition-4", "condition-1"],
-        ["condition-4", "condition-2", "condition-3", "condition-1"],
-    ]
+    order = session_plan.blocks[0].condition_order
+    assert len(session_plan.blocks) == 1
+    assert Counter(order) == {
+        condition.condition_id: 2 for condition in multi_condition_project.conditions
+    }
+    assert all(left != right for left, right in zip(order, order[1:], strict=False))
 
 
 def test_session_plan_transition_settings_force_space_start_metadata(
@@ -313,6 +318,10 @@ def test_session_plan_randomized_fixation_counts_are_seeded_and_non_repeating(
     fixation.target_count_min = 1
     fixation.target_count_max = 3
     fixation.no_immediate_repeat_count = True
+    multi_condition_project.settings.session.randomization_mode = "fixed"
+    multi_condition_project.settings.session.session_seed = 2468
+    multi_condition_project.settings.session.stimulus_seed = 12
+    multi_condition_project.settings.session.fixation_seed = 11
 
     plan_a = compile_session_plan(
         multi_condition_project,

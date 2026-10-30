@@ -525,8 +525,9 @@ Installed users can use `File > Check for Updates`. FPVS Studio also runs one si
 startup check after the Welcome window appears. Both routes call `HelperClient` from
 the existing app-owned worker lifecycle. A private helper process checks GitHub Releases
 and returns current/latest versions, notes, and a candidate package type/size without a
-full installation scan. The helper downloads the selected package only after the user
-chooses `Download Update`, verifying its GitHub SHA-256 and size as part of transfer/reuse.
+full installation scan. The user chooses `Download and Install` to authorize the
+selected package's verified download and ensuing installation in one action. The
+helper verifies its GitHub SHA-256 and size as part of transfer/reuse.
 Source development uses the same entry in a separate Python process; packaged Studio
 requires the bundled helper. A source process cannot identify itself as the installed
 Studio process for an installation handoff.
@@ -572,8 +573,13 @@ and promotion. Competing attempts report that the cache is busy. Canceled or int
 downloads are discarded; a retry starts from zero. Uninstall cleans only recognized
 app-owned cache files under the same lock, and removes the cache directory only if empty.
 
-On `Install and Restart`, Studio asks for final confirmation and saves through its existing
-GUI callback. The staged helper reacquires the official GitHub asset identity, verifies
+After a successful verified download and worker cleanup, the same action continues
+directly to installation; there is no separate Install and Restart button or second
+install-confirmation prompt. Studio calls its existing GUI Save callback once before
+handoff. Canceling Save stops the chain and retains the verified cached installer;
+the same Download and Install button retries installation. Closing or destroying the
+dialog, application shutdown, cancellation or download failure prevents that continuation.
+The staged helper reacquires the official GitHub asset identity, verifies
 cached bytes, and pins a Windows process handle for the exact registered Studio executable.
 Private messages have a versioned, bounded schema. The helper sends a fresh ready nonce;
 Studio must accept that nonce before the helper can proceed. Studio exits only after its
@@ -598,7 +604,8 @@ cannot terminate it.
 
 The standalone **Update & Repair** window works without opening Studio. It derives the
 installed version from registration and offers an explicit full installer, including
-same-version reinstallation; older versions are rejected. The full repair path remains
+same-version reinstallation; older versions are rejected. Its repair check remains a
+separate action, followed by the same Download and Install flow. The full repair path remains
 available when a patch is incompatible or Studio cannot start. It requires a registered
 installation; first installation uses the full installer normally. All Studio instances
 must be closed before standalone installation. User projects, settings, templates, run
@@ -630,6 +637,8 @@ Registered Qt coverage requires a separately approved safe visible environment.
 The updates route includes `test_update_helper.py` for IPC, staging, registration, locks,
 and handoff, plus `test_updater_main.py` for the GUI-free diagnostic entry. Candidate
 selection and deferred-download/managed-launch checks remain in `test_update_patch.py`.
+`tests/unit/test_update_dialog_jobs.py` exercises the combined download/install action
+with fake jobs and callbacks, including Save cancellation/retry and close/shutdown guards.
 The shared Inno `CurInstallProgressChanged` callback reports actual installation
 percentages for patches and full installers. Managed setup receives `/PROGRESSWND`
 with the updater's native window handle and posts `WM_APP + 1` (`0x8001`), once per
@@ -658,7 +667,8 @@ remaining real-install acceptance and the read-only installed-file parity checke
 Before release, use a disposable Windows VM or separate test account to verify:
 
 - fresh install and visible updater layout in ready, busy, cancellation, error, and
-  downloaded states; Close, Escape, the window close control, and app quit during work
+  downloaded states; the single Download and Install action, Save cancellation and
+  cached retry, plus Close, Escape, the window close control, and app quit during work
 - fresh 1.3.0 to the new version, plus an earlier published release to 1.3.0 to the new
   version; compare owned payload files/hashes against a fresh new-version installation
 - a genuinely historical obsolete-file sentinel is removed, while an unrelated file

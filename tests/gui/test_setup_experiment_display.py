@@ -153,8 +153,9 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
     session.block_count_spin.setValue(3)
     assert window.document.project.settings.session.block_count == 3
     assert not window.document.project.settings.session.show_condition_title_on_screen
-    assert not session.generate_seed_button.isVisible()
-    assert not session.session_seed_spin.isVisible()
+    assert session.randomization_editor.isVisible()
+    assert session.randomization_editor.condition_order_button.isVisible()
+    assert not session.randomization_editor.seed_details.isVisible()
     assert not session.show_condition_title_checkbox.isVisible()
 
 
@@ -364,7 +365,7 @@ def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
     editor = guide.runtime_settings_editor
 
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(60.0))
-    editor.base_hz_spin.setValue(120.0)
+    window.document.update_protocol_settings(base_hz=120.0)
     QApplication.processEvents()
 
     assert editor.timing_is_compatible() is False
@@ -872,9 +873,14 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         assert "SOAs" in editor.refresh_hz_combo.toolTip()
         assert guide.progress_step_labels[3].text() == "Timing & Session"
         session = guide.session_structure_editor
+        assert not guide.condition_timing_table.isVisible()
+        assert not session.randomization_editor.isVisible()
+        assert not session.presentation_total_label.isVisible()
+        assert session.block_count_spin.isVisible()
         assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
         assert session.block_count_spin.width() == editor.refresh_hz_combo.width() == 240
         label = session.session_layout.labelForField(session.block_count_spin)
+        assert label.text() == "Bursts per SOA"
         assert label.mapTo(session, label.rect().bottomLeft()).y() < (
             session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
         )

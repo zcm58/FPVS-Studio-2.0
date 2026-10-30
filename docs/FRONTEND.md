@@ -73,29 +73,37 @@ interaction.
   with `Ctrl+F`. Conditions has a name/trigger filter that retains the selected
   editor context. Interaction and sizing contracts live in
   [GUI workflow](GUI_WORKFLOW.md#action-discovery-and-condition-search).
-- Setup Wizard is the guided setup/editing surface at `1120x820`. Its eight steps are
-  Project, Conditions, Design, Timing & Session, Image Size (Character Size for native AB),
-  Fixation, Response, and Review. All steps share the Design page's frameless
+- Setup Wizard is the guided setup/editing surface at `1120x820`. Its seven steps are
+  Project, Conditions, Timing & Session, Image Size (Character Size for native AB),
+  Fixation, Response, and Review. All steps share the frameless
   shell, left-aligned task heading, step count, and stable progress
   stepper. Bottom navigation remains at the window edge with no divider. Forms retain
   bounded readable widths. All steps must fit without clipping or required scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
-  triggers, instructions, modality selection, image-folder assignment, typed word-list
+  triggers, instructions, modality selection, Base/Oddball image-folder selection, typed word-list
   authoring, control-condition creation, and image normalization. It uses compact list
   rows and source cards, separating `All conditions` repeat settings from
   `This condition` fields. Image sources have keyboard-accessible full-path details
-  and copy. Conditions uses the available vertical space for its list, instructions
+  and copy. The highlighted condition's Base Images and Oddball Images buttons open
+  folder pickers and use worker-backed fresh-source imports without image previews.
+  Instructions use an Edit Instructions dialog with Save/Cancel; empty Save clears
+  the instructions and Cancel preserves them. Default and short condition names
+  are accepted subject to core's existing nonempty name schema.
+  Conditions uses the available vertical space for its list
   and word editors; other compact steps retain centered content. Ready Conditions
   has aligned navigator/editor tops, with search above the list and no routine hint. See
   [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
-  dimensions within a set are handled by the guided normalization flow before leaving
-  Conditions. Control-condition creation and normalization stay image-only paths. A
+  dimensions within a set are handled by the guided normalization flow when advancing
+  from Conditions. Control-condition creation and normalization stay image-only paths. A
   condition-level `FPVS Condition Modifiers` dialog groups participant activities
-  and exposes local presets while preserving the eight-step wizard. The existing
+  and exposes local presets while preserving the seven-step wizard. The existing
   detailed task editor remains available for custom screens and questionnaires;
   task media is staged until Apply and stored beneath the active project's
   `stimuli/task-assets/<task-id>/`. See `CONDITION_MODIFIERS.md`.
+- Setup has no Design section. Timing & Session retains frequency edits. Saved AB
+  settings are preserved; the retained native AB editor and standalone image visual
+  editor remain outside the guided workflow.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
@@ -139,8 +147,8 @@ interaction.
 - Add or update registered pytest-qt no-clipping coverage at the documented
   minimum/default size, with realistic long content and relevant dynamic states.
 - Setup Wizard layout changes must update compact no-clipping coverage in
-  `tests/gui/test_setup_wizard_shell.py` for all eight steps at `1120x820`, plus the
-  native AB matrix in `tests/gui/test_attentional_blink_stream_designer.py`.
+  `tests/gui/test_setup_wizard_shell.py` for all seven steps at `1120x820` and affected
+  Conditions/dialog coverage. Retained AB-editor tests remain separate from Setup.
 - Do not run Qt unless the user approves a safe visible environment. Use the optional
   `full` tier with explicit opt-in, and do not use offscreen execution.
 - Run `./scripts/verify.ps1 -Scope repo -Tier precommit` when GUI changes
@@ -155,15 +163,19 @@ explanations and technical detail in tooltips instead of subtitles and help para
 Preserve participant-authored instructions and information needed for the current decision.
 
 Use one task heading per step. Compact forms are horizontally centered at bounded
-widths; Conditions and Design keep their wider workspaces. Field labels belong close
+widths; Conditions keeps its wider workspace. Field labels belong close
 to their controls: Project and Timing use stacked labels, while denser forms align
 labels consistently against the input column. Shared form treatment lives in
 `components.configure_setup_form`; retain the frameless shell and bottom navigation.
 
 Visible descriptive text must help with the current field, explain a consequential
 action, or resolve a current error. Avoid repeating the page title, control label,
-completed state or another step's settings. Design owns stream rates and SOAs;
-Timing owns refresh selection, verification and background. Show a concise verification
+completed state or another step's settings. Conditions owns source selection and
+the participant-instructions dialog. Timing & Session owns ordinary FPVS shared frequency and
+confirmed per-condition overrides, stream-only seconds and total presentation counts,
+plus refresh selection,
+verification and background.
+The frequency table spans the form above the Display and Session groups. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
 Do not repeat Timing's inline blocker in the footer. Participant-authored instructions
 and actual validation rules are preserved.
