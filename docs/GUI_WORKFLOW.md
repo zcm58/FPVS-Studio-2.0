@@ -1220,6 +1220,15 @@ preprocessing services but must not silently mutate the active project.
   workflow stack, which takes ownership. The shared setup-theme helper skips unchanged
   stylesheets so parenting and palette events do not repeatedly restyle the entire
   wizard. Theme changes, all eight pages, and existing navigation gates remain active.
+- Main-window styles use the palette observer in `gui/components.py` and pass their
+  fresh palette to an existing Setup page after handling `ApplicationPaletteChange`
+  in `event()`; Qt does not route that application event through `changeEvent()`.
+  The shared shell's header/footer styles also observe palette changes so heading
+  text remains readable when the existing page changes mode.
+  Switch dark/light/dark with an existing Setup window and Welcome open; the native
+  Windows caption and buttons, menu, Home and Setup must agree on the current mode.
+  Maximize and restore while checking. Registered shell/Welcome checks cover this
+  transition; Windows 11 coverage reads the native caption's dark-mode state.
 - Display and image-size settings editing lives in
   `src/fpvs_studio/gui/runtime_settings_page.py`; refresh/background controls stay
   separate from visual-angle geometry controls.

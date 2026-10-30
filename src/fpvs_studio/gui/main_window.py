@@ -482,6 +482,15 @@ class StudioMainWindow(QMainWindow):
     def _apply_chrome_styles(self) -> None:
         apply_studio_theme(self)
 
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        # Qt resolves application palettes here without calling changeEvent().
+        if event.type() == QEvent.Type.ApplicationPaletteChange:
+            wizard = getattr(self, "_setup_wizard_page", None)
+            if wizard is not None:
+                wizard.setPalette(self.palette())
+        return handled
+
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)
         if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):

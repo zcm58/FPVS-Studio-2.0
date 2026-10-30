@@ -49,6 +49,7 @@ from fpvs_studio.core.project_service import create_project
 from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.application import create_application
+from fpvs_studio.gui.components import welcome_window_stylesheet
 from fpvs_studio.gui.condition_template_manager_dialog import (
     ConditionTemplateManagerDialog,
     ConditionTemplateProfileEditorDialog,
@@ -56,6 +57,7 @@ from fpvs_studio.gui.condition_template_manager_dialog import (
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog
+from fpvs_studio.gui.packaged_smoke import _verification_palette
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 from fpvs_studio.gui.welcome_window import WelcomeWindow
@@ -80,6 +82,30 @@ class _DeferredBackgroundTask(QObject):
     def run_successfully(self) -> None:
         self.succeeded.emit(self._callback())
         self.finished.emit()
+
+
+def test_existing_welcome_window_follows_application_palette(qtbot, qapp) -> None:
+    original_palette = qapp.palette()
+    try:
+        qapp.setPalette(_verification_palette(dark=True))
+        welcome = WelcomeWindow()
+        qtbot.addWidget(welcome)
+        welcome.resize(1120, 720)
+        welcome.show()
+        for dark in (True, False, True):
+            qapp.setPalette(_verification_palette(dark=dark))
+            QApplication.processEvents()
+            qtbot.waitUntil(
+                lambda: welcome.styleSheet() == welcome_window_stylesheet(qapp.palette()),
+                timeout=2000,
+            )
+            assert welcome.isVisible()
+            assert welcome.manage_projects_button.isVisible()
+            assert welcome.windowFlags() & Qt.WindowType.WindowCloseButtonHint
+            assert not welcome.windowFlags() & Qt.WindowType.FramelessWindowHint
+    finally:
+        qapp.setPalette(original_palette)
+        QApplication.processEvents()
 
 
 def test_welcome_window_smoke(qtbot, controller: StudioController, monkeypatch) -> None:

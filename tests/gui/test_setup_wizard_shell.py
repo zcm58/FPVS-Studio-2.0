@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import ctypes
+import sys
 from pathlib import Path
 
 import pytest
@@ -30,10 +32,111 @@ from tests.gui.helpers import (
 )
 
 from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.gui.components import (
+    home_page_stylesheet,
+    setup_wizard_stylesheet,
+    studio_theme_stylesheet,
+)
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.packaged_smoke import _verification_palette
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
+
+
+def test_existing_main_window_follows_application_palette_and_keeps_native_chrome(
+    qtbot, qapp, controller: StudioController, tmp_path: Path,
+) -> None:
+    original_palette = qapp.palette()
+    style_hints = qapp.styleHints()
+    original_color_scheme = style_hints.colorScheme()
+    native_dark_mode = None
+    if sys.platform == "win32" and sys.getwindowsversion().build >= 22000:
+        native_dark_mode = ctypes.WinDLL("dwmapi").DwmGetWindowAttribute
+        native_dark_mode.argtypes = [
+            ctypes.c_void_p, ctypes.c_uint, ctypes.c_void_p, ctypes.c_uint,
+        ]
+        native_dark_mode.restype = ctypes.c_long
+
+    def assert_native_frame(window: QWidget, dark: bool) -> None:
+        native_buttons = (
+            Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
+        assert window.windowFlags() & native_buttons == native_buttons
+        assert not window.windowFlags() & Qt.WindowType.FramelessWindowHint
+        if native_dark_mode is not None:
+            enabled = ctypes.c_int32()
+            result = native_dark_mode(
+                int(window.winId()), 20, ctypes.byref(enabled), ctypes.sizeof(enabled),
+            )
+            assert result == 0
+            assert bool(enabled.value) is dark
+
+    try:
+        style_hints.setColorScheme(Qt.ColorScheme.Dark)
+        qapp.setPalette(_verification_palette(dark=True))
+        _, window = _open_created_project(controller, qtbot, tmp_path, "Theme Switching")
+        window.show_setup_wizard(allow_step_jumps=True)
+        wizard = window.setup_wizard_page
+        window.resize(1120, 820)
+        window.show()
+        for phase, dark in (("initial dark", True), ("light", False), ("return dark", True)):
+            style_hints.setColorScheme(Qt.ColorScheme.Dark if dark else Qt.ColorScheme.Light)
+            qapp.setPalette(_verification_palette(dark=dark))
+            QApplication.processEvents()
+            theme = resolve_studio_theme(qapp.palette())
+            assert wizard.isVisible()
+
+            def assert_application_theme(current_phase: str = phase) -> None:
+                main_matches = window.styleSheet() == studio_theme_stylesheet(qapp.palette())
+                setup_matches = wizard.styleSheet() == setup_wizard_stylesheet(qapp.palette())
+                heading_matches = wizard.shell.title_label.palette().color(
+                    QPalette.ColorRole.WindowText,
+                ).name() == resolve_studio_theme(qapp.palette()).text_primary
+                assert main_matches, f"{current_phase}: main window stylesheet"
+                assert setup_matches, f"{current_phase}: Setup stylesheet"
+                assert heading_matches, f"{current_phase}: Setup heading text"
+
+            qtbot.waitUntil(assert_application_theme, timeout=2000)
+            window.show_home()
+            QApplication.processEvents()
+            assert window.home_page.isVisible()
+            qtbot.waitUntil(
+                lambda: window.home_page.styleSheet() == home_page_stylesheet(qapp.palette()),
+                timeout=2000,
+            )
+            assert window.main_stack.palette().color(QPalette.ColorRole.Window).name() == (
+                theme.page_background
+            )
+            assert window.menuBar().isVisible()
+            assert window.menuBar().palette().color(QPalette.ColorRole.Window) == (
+                qapp.palette().color(QPalette.ColorRole.Window)
+            )
+            assert window.menuBar().palette().color(QPalette.ColorRole.WindowText).name() == (
+                theme.text_primary
+            )
+            window.show_setup_wizard(allow_step_jumps=True)
+            QApplication.processEvents()
+            assert window.setup_wizard_page is wizard
+            assert_native_frame(window, dark)
+            window.showMaximized()
+            qtbot.waitUntil(window.isMaximized)
+            QApplication.processEvents()
+            assert_native_frame(window, dark)
+            window.showNormal()
+            qtbot.waitUntil(lambda: not window.isMaximized())
+            QApplication.processEvents()
+            assert_native_frame(window, dark)
+    finally:
+        if original_color_scheme == Qt.ColorScheme.Unknown:
+            style_hints.unsetColorScheme()
+        else:
+            style_hints.setColorScheme(original_color_scheme)
+        qapp.setPalette(original_palette)
+        QApplication.processEvents()
 
 
 def test_edit_setup_does_not_reapply_unchanged_theme(

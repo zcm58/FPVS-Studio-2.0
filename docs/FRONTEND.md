@@ -69,6 +69,9 @@ interaction.
   launch action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
+- Main-window styles use the shared palette observer and refresh the existing Setup
+  page's palette. Application theme changes use fresh colors so the client area stays aligned
+  with Qt's native Windows title bar and minimize/maximize/close controls.
 - File > Find Action opens searchable existing commands
   with `Ctrl+F`. Conditions has a name/trigger filter that retains the selected
   editor context. Interaction and sizing contracts live in

@@ -1931,7 +1931,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
 
 
 def apply_studio_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(studio_theme_stylesheet(widget.palette()))
+    _apply_palette_stylesheet(widget, studio_theme_stylesheet)
 
 
 def launch_surface_frame_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
@@ -2109,7 +2109,7 @@ def non_home_shell_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
 
 
 def apply_non_home_shell_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(non_home_shell_stylesheet(widget.palette()))
+    _apply_palette_stylesheet(widget, non_home_shell_stylesheet)
 
 
 def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:

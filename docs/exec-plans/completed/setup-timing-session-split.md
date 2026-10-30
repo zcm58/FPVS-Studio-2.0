@@ -87,3 +87,29 @@ modules subsequently passed in fresh visible processes with a 90-second per-test
 Automatic approval review rejected cleanup of the generated capture-project folders,
 stating "blocked by policy". Those temporary `build/test_env/setup-split-visual*`
 folders remain. Screenshots and the precommit log are retained as verification evidence.
+
+## Light-mode native title bar follow-up (2026-10-30)
+
+The native Windows caption already followed Qt's application mode. Existing Main and
+Setup styles could retain the previous mode, however, and the shared Setup heading
+could remain white after entering light mode. Main now uses the existing palette
+observer, passes the resolved palette to an existing Setup page from `event()` after
+Qt handles `ApplicationPaletteChange`, and the shared shell observes palette changes.
+Native minimize/maximize/close controls remain Windows-owned.
+
+Registered Main/Welcome checks exercise dark/light/dark with complete application
+color schemes and palettes, readable heading/menu text, existing Home/Setup, native
+Windows 11 dark-caption state, maximize/restore and normal window-button flags.
+Both original defects reproduced in controls: the old Main helper stayed dark in
+light mode, and the old shell helper kept the light-mode heading white. The five
+final visible cases passed, including unchanged-style caching and all eight steps
+at `1120x820` in both themes. Native full-window captures were inspected at 100%
+scaling; client-only `QWidget.grab()` captures are insufficient for caption acceptance.
+
+The safe backend suite passed again: 4,372 tests and 24 subtests passed, with 13
+Windows symlink-privilege skips. Final GUI-only event/header refinements were covered
+by the visible cases plus refreshed focused/static checks, rather than repeating the
+unchanged backend suite. GUI focused passed 136 tests, docs focused passed ten, and
+mypy over 261 files, GC, Ruff and compilation passed. The follow-up changes are in
+`gui/components.py`, `gui/main_window.py`, the registered shell/Welcome test modules,
+and the current frontend/workflow contracts.
