@@ -1,4 +1,4 @@
-"""App-owned, opt-in installation and on-open checks for Library project versions."""
+"""App-owned automatic discovery and opt-in installation of Library project versions."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Event
 from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, Qt, QTimer
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
@@ -72,6 +72,13 @@ class ProjectUpdateController(QObject):
         self._result: ProjectUpdateResult | None = None
         self._generation = 0
         self._importing = False
+        self._offered: set[tuple[str, str, str, str, str]] = set()
+        self._poll_timer = QTimer(self)
+        self._poll_timer.setInterval(5 * 60 * 1000)
+        self._poll_timer.timeout.connect(self._automatic_check)
+        self._offer_timer = QTimer(self)
+        self._offer_timer.setSingleShot(True)
+        self._offer_timer.timeout.connect(self._try_offer)
 
     def _current(self, window: StudioMainWindow) -> bool:
         return (
@@ -81,6 +88,9 @@ class ProjectUpdateController(QObject):
         )
 
     def opened(self, window: StudioMainWindow) -> None:
+        if self._lifecycle.is_shutting_down:
+            return
+        self._offer_timer.stop()
         self._generation += 1
         self._window = window
         self._result = None
@@ -88,17 +98,67 @@ class ProjectUpdateController(QObject):
             self.dialog.hide()
             self.dialog.deleteLater()
         self.dialog = None
+        self._poll_timer.start()
         self._queue_check(window, automatic=True)
+
+    def _automatic_check(self) -> None:
+        window = self._window
+        if window is None or not self._current(window):
+            self._poll_timer.stop()
+            return
+        if (
+            self._job is not None or self._importing or window.is_launch_busy()
+            or (self.dialog is not None and self.dialog.isVisible())
+        ):
+            return
+        self._queue_check(window, automatic=True)
+
+    def _offer_key(self) -> tuple[str, str, str, str, str] | None:
+        result, window = self._result, self._window
+        if (
+            result is None or window is None or result.status != "update_available"
+            or result.origin is None or not result.origin.auto_check
+            or result.latest_item is None
+        ):
+            return None
+        return (str(window.document.project_root), result.origin.service_url,
+                result.latest_item.item_id, result.latest_item.version, result.latest_item.sha256)
+
+    def _try_offer(self) -> None:
+        window = self._window
+        key = self._offer_key()
+        if window is None or not self._current(window) or key is None or key in self._offered:
+            return
+        if (
+            self._job is not None or self._importing or window.is_launch_busy()
+            or QApplication.applicationState() != Qt.ApplicationState.ApplicationActive
+            or QApplication.activeModalWidget() is not None
+            or QApplication.activeWindow() not in (None, window, self.dialog)
+        ):
+            self._offer_timer.start(1000)
+            return
+        self._offered.add(key)
+        self._ensure_dialog(window)
+        # Reuse the checked candidate; opening an automatic offer does not issue
+        # another request or begin a download.
+        assert self._result is not None
+        self._checked(_Checked(self._result))
+        assert self.dialog is not None
+        self.dialog.show()
+
+    def _ensure_dialog(self, window: StudioMainWindow) -> None:
+        if self.dialog is None:
+            self.dialog = ProjectVersionDialog(window.document.project.meta.name, parent=window)
+            self.dialog.action_requested.connect(self._action)
+            self.dialog.closing.connect(self._close)
 
     def show(self, window: StudioMainWindow) -> None:
         if self._importing or self._lifecycle.is_shutting_down or window.is_launch_busy():
             return
         if window is not self._window:
             self.opened(window)
-        if self.dialog is None:
-            self.dialog = ProjectVersionDialog(window.document.project.meta.name, parent=window)
-            self.dialog.action_requested.connect(self._action)
-            self.dialog.closing.connect(self._close)
+        self._ensure_dialog(window)
+        assert self.dialog is not None
         self.dialog.show()
         self.dialog.raise_()
         self.dialog.activateWindow()
@@ -150,7 +210,9 @@ class ProjectUpdateController(QObject):
                 catalog = self.client.catalog(cancel_event=cancel)
             return _Checked(result, catalog)
 
-        self._start(check, self._checked, "Checking for a newer project version…")
+        self._start(check,
+                    lambda value: self._checked(value, automatic=automatic),
+                    "Checking for a newer project version…")
 
     def _start(
         self, callback: UpdateCallback, completed: Callable[[object], None], message: str,
@@ -198,7 +260,7 @@ class ProjectUpdateController(QObject):
         if pending is not None:
             self._queue_check(pending[0], automatic=pending[1])
 
-    def _checked(self, value: object) -> None:
+    def _checked(self, value: object, *, automatic: bool = False) -> None:
         checked = cast(_Checked, value)
         self._result = checked.result
         result = checked.result
@@ -219,6 +281,12 @@ class ProjectUpdateController(QObject):
                 message if result.status in {"update_available", "incompatible", "version_unknown"}
                 and latest is not None else ""
             )
+            key = self._offer_key()
+            if key is not None:
+                if self.dialog is not None and self.dialog.isVisible():
+                    self._offered.add(key)
+                elif automatic:
+                    self._offer_timer.start(0)
 
     def _action(self, action: str) -> None:
         if action == "cancel":
@@ -355,6 +423,8 @@ class ProjectUpdateController(QObject):
         self._action("cancel")
 
     def _shutdown(self) -> None:
+        self._poll_timer.stop()
+        self._offer_timer.stop()
         self._pending_check = None
         if self._job is not None:
             self._job.cancel()

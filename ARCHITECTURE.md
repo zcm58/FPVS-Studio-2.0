@@ -38,8 +38,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   uses receipt identity for version checks. `core/library_installations.py` scans
   installed metadata; `library/installations.py` gates payload downloads and explicit
   updates. The bundle importer also blocks repeated recorded releases at commit.
-  On-open checks and explicit separate-project installation use
-  `gui/project_update_controller.py`. Version review explains collection risks and
+  On-open/periodic checks, foreground-safe update offers and explicit separate-project
+  installation use `gui/project_update_controller.py`. Version review explains collection risks and
   preserves the choice to keep the current version; see the Library contract.
   Private content and the independent Cloudflare service live in
   `zcm58/OpenFPVS-Website`; that service checks live release-asset availability

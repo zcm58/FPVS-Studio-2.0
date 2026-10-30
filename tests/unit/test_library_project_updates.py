@@ -1,6 +1,11 @@
 """Semantic project-version selection never needs an installed release to remain listed."""
 
+import ast
+from collections import namedtuple
+from pathlib import Path
 from threading import Event
+from types import MethodType, SimpleNamespace
+from typing import cast
 
 import pytest
 
@@ -8,6 +13,163 @@ from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryCatalog, LibraryItem
 from fpvs_studio.library.project_updates import check_project_update, select_project_update
+
+
+@pytest.fixture
+def discovery():
+    """Run real coordination methods without importing Qt or accessing a network."""
+    gui = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui"
+    source = gui / "project_update_controller.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"))
+    controller = next(n for n in tree.body if isinstance(n, ast.ClassDef)
+                      and n.name == "ProjectUpdateController")
+    names = {"_current", "_automatic_check", "_offer_key", "_try_offer", "_checked", "_shutdown"}
+    methods = [n for n in controller.body if isinstance(n, ast.FunctionDef) and n.name in names]
+    flags = SimpleNamespace(visible=True, foreground=1, modal=None, active=None, busy=False)
+
+    def timer():
+        calls = []
+        return SimpleNamespace(calls=calls, start=lambda *args: calls.append(args),
+                               stop=lambda: calls.append("stop"))
+
+    checked = namedtuple("Checked", "result catalog", defaults=[None])
+    # Inject a fake under the source's imported application symbol. No Qt import
+    # or widget construction is performed by these coordinator tests.
+    application_name = next(
+        alias.asname or alias.name for node in tree.body
+        if isinstance(node, ast.ImportFrom) and node.module == "PySide6.QtWidgets"
+        for alias in node.names
+    )
+    namespace = {
+        "cast": cast, "_Checked": checked, "isValid": lambda _window: True,
+        "Qt": SimpleNamespace(ApplicationState=SimpleNamespace(ApplicationActive=1)),
+        application_name: SimpleNamespace(
+            applicationState=lambda: flags.foreground,
+            activeModalWidget=lambda: flags.modal, activeWindow=lambda: flags.active,
+        ),
+    }
+    module = ast.Module(body=[
+        ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
+        *methods,
+    ], type_ignores=[])
+    exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
+    notices, requests, states = [], [], []
+    window = SimpleNamespace(document=SimpleNamespace(project_root=Path("synthetic-project")),
+                             isVisible=lambda: flags.visible,
+                             is_launch_busy=lambda: flags.busy,
+                             set_project_update_notice=notices.append)
+    context = SimpleNamespace(
+        _window=window, _current_window=lambda: window, _result=None,
+        _lifecycle=SimpleNamespace(is_shutting_down=False), _job=None, _importing=False,
+        _offered=set(), _pending_check=None, dialog=None,
+        _poll_timer=timer(), _offer_timer=timer(),
+        _message=lambda result: result.message,
+        _queue_check=lambda window, **kwargs: requests.append((window, kwargs)),
+    )
+    for name in names:
+        setattr(context, name, MethodType(namespace[name], context))
+
+    def ensure_dialog(_window):
+        if context.dialog is None:
+            dialog = SimpleNamespace(
+                visible=False, set_state=lambda **kwargs: states.append(kwargs),
+            )
+            dialog.isVisible = lambda: dialog.visible
+            dialog.show = lambda: setattr(dialog, "visible", True)
+            context.dialog = dialog
+
+    context._ensure_dialog = ensure_dialog
+    return SimpleNamespace(controller=context, flags=flags, requests=requests, notices=notices,
+                           checked=checked, states=states)
+
+
+def test_automatic_discovery_offers_new_version_without_install_and_deduplicates(discovery):
+    d, c = discovery, discovery.controller
+    result = select_project_update(origin(), catalog(item("1.1.0")))
+    c._checked(d.checked(result), automatic=True)
+    assert c._offer_timer.calls == [(0,)]
+    c._try_offer()
+    assert c.dialog.visible
+    assert d.states[-1]["can_install"]
+    assert d.requests == []  # Showing the checked candidate does not re-fetch/download.
+    c.dialog.visible = False
+    c._checked(d.checked(result), automatic=True)
+    c._try_offer()
+    assert not c.dialog.visible
+    newer = select_project_update(origin(), catalog(item("1.2.0")))
+    c._checked(d.checked(newer), automatic=True)
+    c._try_offer()
+    assert c.dialog.visible
+    assert d.states[-1]["latest"].version == "1.2.0"
+
+
+@pytest.mark.parametrize("reason", ["busy", "modal", "background", "other-window", "job", "import"])
+def test_automatic_discovery_defers_offer_until_safe(discovery, reason):
+    d, c = discovery, discovery.controller
+    c._result = select_project_update(origin(), catalog(item("1.1.0")))
+    if reason == "busy":
+        d.flags.busy = True
+    elif reason == "modal":
+        d.flags.modal = object()
+    elif reason == "background":
+        d.flags.foreground = 0
+    elif reason == "other-window":
+        d.flags.active = object()
+    elif reason == "job":
+        c._job = object()
+    else:
+        c._importing = True
+    c._try_offer()
+    assert c.dialog is None
+    assert c._offered == set()
+    assert c._offer_timer.calls == [(1000,)]
+    d.flags.busy, d.flags.modal, d.flags.foreground, d.flags.active = False, None, 1, None
+    c._job, c._importing = None, False
+    c._try_offer()
+    assert c.dialog.visible
+
+
+@pytest.mark.parametrize("status", ["unlinked", "disabled", "unavailable", "current"])
+def test_non_update_results_never_open_automatic_offer(discovery, status):
+    from fpvs_studio.library.project_updates import ProjectUpdateResult
+
+    c = discovery.controller
+    c._checked(discovery.checked(ProjectUpdateResult(status)), automatic=True)
+    c._try_offer()
+    assert c.dialog is None
+
+
+def test_opt_out_stale_window_and_shutdown_suppress_automatic_offer(discovery):
+    c = discovery.controller
+    c._result = select_project_update(origin(auto_check=False), catalog(item("1.1.0")))
+    c._try_offer()
+    assert c.dialog is None
+    c._result = select_project_update(origin(), catalog(item("1.1.0")))
+    discovery.flags.visible = False
+    c._try_offer()
+    c._automatic_check()
+    assert c.dialog is None and discovery.requests == []
+    assert c._poll_timer.calls[-1] == "stop"
+    c._shutdown()
+    assert c._offer_timer.calls[-1] == "stop"
+
+
+@pytest.mark.parametrize("blocked", [None, "busy", "job", "import", "dialog"])
+def test_polling_only_queues_idle_automatic_worker(discovery, blocked):
+    c = discovery.controller
+    if blocked == "busy":
+        discovery.flags.busy = True
+    elif blocked == "job":
+        c._job = object()
+    elif blocked == "import":
+        c._importing = True
+    elif blocked == "dialog":
+        c._ensure_dialog(c._window)
+        c.dialog.show()
+    c._automatic_check()
+    assert bool(discovery.requests) == (blocked is None)
+    if blocked is None:
+        assert discovery.requests[0][1] == {"automatic": True}
 
 
 def origin(**changes):

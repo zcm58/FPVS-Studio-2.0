@@ -7,7 +7,7 @@ from threading import Event
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import QApplication, QWidget
 from tests.gui.helpers import assert_visible_children_within_parent
 from tests.unit.test_library_installations import project as installed_project
@@ -153,6 +153,9 @@ def updates(qapp, qtbot, monkeypatch, tmp_path):
     current = [window]
     lifecycle = _Lifecycle(qapp)
     monkeypatch.setattr(module, "update_lifecycle", lambda _app: lifecycle)
+    monkeypatch.setattr(module.QApplication, "activeWindow", lambda: None)
+    monkeypatch.setattr(module.QApplication, "applicationState",
+                        lambda: Qt.ApplicationState.ApplicationActive)
     io_calls = []
     origins = {tmp_path: _origin()}
 
@@ -205,7 +208,8 @@ def test_open_check_is_deferred_coalesced_and_never_installs(updates):
     assert any("1.0.1" in notice for notice in state.window.notices)
     assert state.client.download_calls == []
     assert state.handoffs == []
-    assert state.controller.dialog is None
+    assert state.controller.dialog is not None
+    assert state.controller.dialog.isVisible()
 
 
 def test_keep_current_version_preserves_origin_and_does_not_install(updates):
@@ -233,6 +237,85 @@ def test_keep_current_version_preserves_origin_and_does_not_install(updates):
     assert state.io_calls == []
     assert state.client.download_calls == []
     assert state.handoffs == []
+
+
+def test_periodic_checks_find_later_publication_and_offer_each_version_once(updates, monkeypatch):
+    state = updates
+    state.origins[state.root] = _origin().model_copy(update={"installed_version": "1.0.1"})
+    state.controller.opened(state.window)
+    state.lifecycle.drain()
+    assert state.controller.dialog is None
+    assert state.controller._poll_timer.interval() == 300000
+
+    def published(version):
+        monkeypatch.setattr(state.client, "catalog", lambda **_kwargs: LibraryCatalog(
+            schema_version="1.0", library_name="Lab",
+            items=[_item().model_copy(update={"version": version})],
+        ))
+
+    published("1.0.2")
+    state.controller._poll_timer.timeout.emit()
+    state.lifecycle.drain()
+    dialog = state.controller.dialog
+    assert dialog is not None and dialog.isVisible()
+    assert "1.0.2" in dialog.versions_label.text()
+    dialog.close()
+    state.controller._poll_timer.timeout.emit()
+    state.lifecycle.drain()
+    assert not dialog.isVisible()
+    published("1.0.3")
+    state.controller._poll_timer.timeout.emit()
+    state.lifecycle.drain()
+    assert dialog.isVisible()
+    assert "1.0.3" in dialog.versions_label.text()
+    assert state.client.download_calls == []
+    assert state.handoffs == []
+
+
+@pytest.mark.parametrize("reason", ["presentation", "modal", "background"])
+def test_automatic_offer_waits_until_safe(updates, monkeypatch, reason):
+    state = updates
+    if reason == "presentation":
+        state.window.launch_busy = True
+    elif reason == "modal":
+        monkeypatch.setattr(module.QApplication, "activeModalWidget", lambda: state.window)
+    else:
+        monkeypatch.setattr(module.QApplication, "applicationState",
+                            lambda: Qt.ApplicationState.ApplicationInactive)
+    state.controller.opened(state.window)
+    state.lifecycle.drain()
+    assert state.controller.dialog is None
+    assert state.controller._offer_timer.isActive()
+    state.window.launch_busy = False
+    monkeypatch.setattr(module.QApplication, "activeModalWidget", lambda: None)
+    monkeypatch.setattr(module.QApplication, "applicationState",
+                        lambda: Qt.ApplicationState.ApplicationActive)
+    state.controller._try_offer()
+    assert state.controller.dialog.isVisible()
+    assert state.client.download_calls == []
+
+
+def test_disabled_automatic_checks_do_not_query_or_offer_on_timer(updates):
+    state = updates
+    state.origins[state.root] = _origin(auto_check=False)
+    state.controller.opened(state.window)
+    state.lifecycle.drain()
+    state.controller._poll_timer.timeout.emit()
+    state.lifecycle.drain()
+    assert state.client.catalog_calls == 0
+    assert state.controller.dialog is None
+
+
+def test_periodic_check_does_not_cancel_manual_work_and_shutdown_stops_timers(updates):
+    state = updates
+    state.controller.show(state.window)
+    job = state.lifecycle.pending[0]
+    state.controller._poll_timer.timeout.emit()
+    assert not job.cancel_event.is_set()
+    assert len(state.lifecycle.pending) == 1
+    state.lifecycle.request_shutdown()
+    assert not state.controller._poll_timer.isActive()
+    assert not state.controller._offer_timer.isActive()
 
 
 def test_latest_version_already_installed_elsewhere_disables_update(updates):

@@ -63,7 +63,7 @@ class ProjectVersionDialog(QDialog):
         self.versions_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.versions_label)
         self.auto_check_checkbox = QCheckBox(
-            "Check for updates on open", self,
+            "Check for updates automatically", self,
         )
         self.auto_check_checkbox.setObjectName("project_version_auto_check")
         self.auto_check_checkbox.clicked.connect(

@@ -200,9 +200,12 @@ destination review, new-folder import and display-settings flow. Imported projec
 independent editable copies; Setup and production preflight remain required. Individual
 condition imports are deferred to Phase 2.
 
-Library-linked projects check for a newer version when opened and show a passive
-Home notice. **File > Update Project Version...** also checks manually, controls
-checks on open, and links earlier downloads explicitly. Installing a newer version
+Library-linked projects check for newer versions on open and every five minutes
+while idle. Eligible versions show a Home notice and an automatic update-review
+offer. Offers wait for presentation/other dialogs and background use to
+finish, and are shown once per project/release in a Studio session.
+**File > Update Project Version...** also checks manually, controls automatic
+checks, and links earlier downloads explicitly. Installing a newer version
 opens a separate project through ordinary import review; local edits and participant
 data stay in the current project. Review explains the risk of changing an experiment
 after collection begins and offers **Keep current version** or **Download separately**.

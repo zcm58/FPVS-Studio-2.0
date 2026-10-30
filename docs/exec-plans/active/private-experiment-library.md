@@ -4,6 +4,35 @@ Status: Active
 
 Date: 2026-09-16
 
+## Automatic project update offers (October 30, 2026)
+
+The user requests automatic detection and offers for newly published versions,
+followed by commit/push after pulling remote changes. The task is to discover a
+newer release of the explicitly linked experiment and let the user review/download
+it separately. Existing project edits, participant data, receipt identity, Library
+permissions, compatibility checks and download/import guards remain authoritative.
+
+The existing nonmodal version dialog remains `760x680` / `820x720`. The app-owned
+controller checks on open and every five minutes while idle. It defers offers during
+presentation, modal/other active dialogs and background use, respects opt-out, avoids
+interrupting existing jobs, and offers a project/release only once per Studio session.
+Dismissal does not disable discovery of a later release. Nothing downloads until the
+user explicitly chooses it. Unlinked/unknown-version projects require explicit review;
+unrelated new items and unpublished submissions are not inferred as updates.
+
+Verification covers periodic discovery, version deduplication, deferral, opt-out,
+closed/replaced windows and shutdown with fake jobs/catalogs and real coordinator
+methods. Registered Qt tests cover the visible offer and existing dialog geometry;
+Qt execution remains unrun. Manual smoke: open an older linked project in an approved
+visible session, publish a newer version of that same item, and wait for a check.
+Dismiss it, verify no repeat for that release, then publish a later version. Repeat
+while presenting, in another dialog, offline and with automatic checks disabled.
+
+Verification passed: Library focused (416 with three Windows symlink-permission
+skips), GUI focused (98), docs focused (10), Ruff/compilation and mypy over 249
+source modules. Repo precommit passes 3,980 non-Qt tests with 12 Windows permission
+skips. Registered Qt and actual Library publication/receiver smoke remain unrun.
+
 ## One-time lab connection (October 29, 2026)
 
 The [connection plan](../completed/one-time-lab-connection.md) extends the saved Library machine

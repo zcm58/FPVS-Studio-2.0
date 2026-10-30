@@ -97,7 +97,7 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
         assert "participant data" in control.toolTip()
     assert dialog.install_button.text() == "Download separately"
     assert dialog.check_button.text() == "Check for updates"
-    assert dialog.auto_check_checkbox.text() == "Check for updates on open"
+    assert dialog.auto_check_checkbox.text() == "Check for updates automatically"
     assert dialog.auto_check_checkbox.isVisible() == (state not in {"unlinked", "relink"})
     assert dialog.close_button.text() == "Keep current version"
     assert dialog.close_button.isVisible() == (state != "busy")

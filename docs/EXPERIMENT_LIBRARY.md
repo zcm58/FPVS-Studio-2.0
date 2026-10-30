@@ -240,10 +240,15 @@ Current deployment acceptance is recorded in the
 
 ## Project version checks
 
-Opening a linked project checks the Library once in an app-owned worker. There is no
-periodic polling or automatic installation. A newer release adds a passive Home notice;
-**Review update...** and **File > Update Project Version...** open the same nonmodal
-dialog. Checks never take focus or open a dialog during presentation. Offline, revoked
+Opening a linked project checks the Library in an app-owned worker, then rechecks
+every five minutes while that project is open and idle. A newer compatible published
+version eligible for download opens the nonmodal update-review dialog once per project and
+release during a Studio session. The offer waits until presentation, modal dialogs
+and other active windows finish, and Studio is in the foreground. A dismissed version
+is not offered again in that session; a later release can be offered. Existing open
+review/download work is not interrupted by polling. There is no automatic installation.
+The Home notice, **Review update...** and **File > Update Project Version...** retain
+manual access. Offline, revoked
 or unavailable service states do not block project opening or claim the project is current.
 
 The dialog shows the installed and latest versions, release description and minimum
@@ -292,14 +297,16 @@ This also applies to ordinary imports of bundles downloaded through the website.
 Use the version dialog to link one explicitly; enter its installed version only when
 known, otherwise leave it unknown. Studio never guesses from a title or folder name.
 **Change library link...** can correct an association. The project-local checkbox
-controls checks on open; the manual Check action still works when automatic checks are off.
+controls both on-open and periodic automatic checks; the manual Check action still
+works when automatic checks are off. New unrelated experiments and unpublished review
+uploads are not updates to a linked project.
 
 `library/project_updates.py` compares semantic versions by item identity, so removal of
 the installed release does not prevent discovery of a newer one. Changed bytes under the
 same version and ambiguous equivalent versions are reported explicitly. The saved
 service origin cannot redirect credentials or requests away from the configured client.
 `gui/project_update_controller.py` owns jobs, cancellation, stale-window suppression,
-passive notices and explicit import handoff. The dialog minimum/default is `760x680` /
+automatic offers, notices and explicit import handoff. The dialog minimum/default is `760x680` /
 `820x720`; Home notice acceptance includes `760x520` and `1120x720` with long content.
 
 ## Service and access boundary
