@@ -273,7 +273,7 @@ class DesignSetupStep(QWidget):
         if source.modality == StimulusModality.WORD and not stream:
             self._show_message(
                 "This condition uses word lists. Edit its words in Conditions and its "
-                "presentation rate in Timing & Session."
+                "presentation rate in Timing & Display."
             )
             return
         if stream:

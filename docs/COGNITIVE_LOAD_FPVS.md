@@ -10,7 +10,7 @@ Setup > Conditions and check both variants before collecting data; subsequent ed
 condition timing or source assignments remain ordinary independent condition edits.
 
 The default is 6 Hz, an oddball every fifth image, and 108 cycles: 90 seconds of
-image presentation at a compatible display rate. Timing & Session controls adjust
+image presentation at a compatible display rate. Timing & Display controls adjust
 that duration. Fixation response monitoring and the tutorial are disabled, with a
 visible fixation cross and zero pre-stream lead-in. These are editable study defaults.
 The six variants use condition trigger codes 1–6; the ordinary oddball marker is 55.

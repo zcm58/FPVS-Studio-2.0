@@ -94,7 +94,7 @@ def _refresh_verification(
     )
 
 
-def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
+def test_setup_wizard_separates_timing_session_and_image_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -111,7 +111,7 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
     assert "fullscreen" in editor.refresh_verification_notice.text()
     assert "will not start" in editor.refresh_verification_notice.text()
     assert not guide.image_display_size_editor.isVisible()
-    assert guide.session_structure_editor.isVisible()
+    assert not guide.session_structure_editor.isVisible()
     assert not editor.runtime_background_scope_label.isVisible()
     editor._on_refresh_detection_succeeded(
         _refresh_verification(60_000, 1_001, 59.94, 59.94)
@@ -120,6 +120,7 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
 
     pages = (
         ("experiment", guide.experiment_step_surface, editor),
+        ("session", guide.session_step_surface, guide.session_structure_editor),
         ("image_size", guide.image_size_step_surface, guide.image_display_size_editor),
     )
     for width, height in ((1120, 820), (1180, 860)):
@@ -129,7 +130,7 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
             QApplication.processEvents()
             assert guide.step_stack.currentWidget() is surface
             assert page_editor.isVisible()
-            assert guide.session_structure_editor.isVisible() == (key == "experiment")
+            assert guide.session_structure_editor.isVisible() == (key == "session")
             assert all(
                 not other_editor.isVisible()
                 for other_key, _, other_editor in pages
@@ -147,7 +148,8 @@ def test_setup_wizard_combines_timing_and_session_with_separate_image_size(
                     ), label.objectName()
 
     guide.open_wizard(step_key="session")
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    assert not guide.session_settings_card.title_label.isVisible()
     session = guide.session_structure_editor
     assert session.block_count_spin.value() == 2
     session.block_count_spin.setValue(3)
@@ -866,24 +868,15 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         assert editor.timing_summary_label.isHidden()
         assert guide.experiment_settings_card.title_label.isVisible()
         assert guide.experiment_settings_card.title_label.text() == "Display"
-        assert guide.session_settings_card.title_label.isVisible()
+        assert not guide.session_structure_editor.isVisible()
         assert not guide.experiment_settings_card.subtitle_label.isVisible()
         assert "Verify" in editor.timing_status_label.text()
         assert not guide.setup_wizard_next_hint_label.isVisible()
         assert "SOAs" in editor.refresh_hz_combo.toolTip()
-        assert guide.progress_step_labels[3].text() == "Timing & Session"
+        timing_index = guide._step_index_for_key("experiment")
+        assert guide.progress_step_labels[timing_index].text() == "Timing & Display"
         session = guide.session_structure_editor
         assert not guide.condition_timing_table.isVisible()
-        assert not session.randomization_editor.isVisible()
-        assert not session.presentation_total_label.isVisible()
-        assert session.block_count_spin.isVisible()
-        assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
-        assert session.block_count_spin.width() == editor.refresh_hz_combo.width() == 240
-        label = session.session_layout.labelForField(session.block_count_spin)
-        assert label.text() == "Bursts per SOA"
-        assert label.mapTo(session, label.rect().bottomLeft()).y() < (
-            session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
-        )
         for field in (editor.refresh_hz_combo.parentWidget(),
                       editor.runtime_background_color_combo):
             label = editor.form_layout.labelForField(field)
@@ -892,6 +885,27 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
             assert field_top.y() > label_bottom.y()
             assert field_top.y() - label_bottom.y() <= 16
             assert field_top.x() == label_bottom.x()
+        _assert_visible_children_within_parent(guide.experiment_step_surface)
+
+        guide.open_wizard(step_key="session", allow_step_jumps=True)
+        QApplication.processEvents()
+        assert guide.step_stack.currentWidget() is guide.session_step_surface
+        assert not editor.isVisible()
+        assert not guide.session_settings_card.title_label.isVisible()
+        assert session.isVisible()
+        assert not session.randomization_editor.isVisible()
+        assert not session.presentation_total_label.isVisible()
+        assert session.block_count_spin.isVisible()
+        assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+        assert session.block_count_spin.width() == 240
+        label = session.session_layout.labelForField(session.block_count_spin)
+        assert label.text() == "Bursts per SOA"
+        assert label.mapTo(session, label.rect().bottomLeft()).y() < (
+            session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
+        )
+        _assert_visible_children_within_parent(guide.session_step_surface)
+        guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+        QApplication.processEvents()
         before = document.project.model_dump()
         editor.refresh()
         assert document.project.model_dump() == before

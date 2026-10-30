@@ -23,9 +23,13 @@ backend-driven.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.
-- Keep the seven guided steps in order: Project, Conditions, Timing & Session,
-  Image Size, Fixation, Response, Review. Budget all steps for `1120x820` without required
-  scrolling. Timing retains the `experiment` navigation key for internal callers.
+- Keep the eight guided steps in order: Project, Conditions, Timing & Display,
+  Session, Image Size (Character Size for native AB), Fixation, Response, Review.
+  Budget all steps for `1120x820` without required scrolling. Timing retains the
+  `experiment` navigation key and timing/display/runtime aliases; `session` targets
+  the separate Session page. Keep frequency/duration/presentation counts and display
+  controls on Timing, with seeds, condition order, totals and AB/masking repeats/start
+  key on Session.
 - Preserve Home setup actions: ready projects expose `Edit Setup`, incomplete projects
   expose `Complete Setup`, and first-time setup opens at the earliest incomplete step
   without enabling arbitrary step jumps.

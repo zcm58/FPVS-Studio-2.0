@@ -147,7 +147,7 @@ def find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) ->
 
 
 def prepare_compile_ready_project(window: Any, tmp_path: Path) -> None:
-    """Add one condition and import base/oddball image folders."""
+    """Add one feasible presentation and import base/oddball image folders."""
 
     window.conditions_page._add_condition()
     base_dir = write_image_directory(tmp_path / "base")
@@ -160,6 +160,7 @@ def prepare_compile_ready_project(window: Any, tmp_path: Path) -> None:
         role="oddball",
         source_dir=oddball_dir,
     )
+    window.document.update_condition_timing(presentation_counts={condition_id: 1})
 
 
 def configure_fixation_task(

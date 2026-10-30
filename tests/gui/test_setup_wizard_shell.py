@@ -126,14 +126,15 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 7
-    assert wizard.step_stack.count() == 7
+    assert len(wizard.progress_steps.step_items) == 8
+    assert wizard.step_stack.count() == 8
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
     assert not hasattr(wizard, "design_step_surface")
     assert not hasattr(wizard, "design_setup_step")
     assert wizard.experiment_step_surface.property("setupStepSurface") == "true"
+    assert wizard.session_step_surface.property("setupStepSurface") == "true"
     assert wizard.fixation_step_surface.property("setupStepSurface") == "true"
     assert wizard.response_step_surface.property("setupStepSurface") == "true"
     assert wizard.review_step_surface.property("setupStepSurface") == "true"
@@ -152,7 +153,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
     assert "Design" not in step_metadata_text
-    assert "Timing" in step_metadata_text
+    assert "Timing & Display" in step_metadata_text
     assert "Image Size" in step_metadata_text
     assert "Session" in step_metadata_text
     assert "Display Settings" not in step_metadata_text
@@ -162,10 +163,12 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_3_timing_session") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_5_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_6_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_7_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_timing_display") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_4_session") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_5_image_size") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_6_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
     assert next_hint is not None
@@ -204,6 +207,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
         "project",
         "conditions",
         "experiment",
+        "session",
         "image_size",
         "fixation",
         "response",
@@ -226,7 +230,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.property("launchSurfaceRoot") == "true"
     assert wizard.step_card.property("launchSurfaceFrame") == "true"
     assert wizard.step_card.property("sectionCard") == "false"
-    assert wizard.step_count_label.text() == "Step 1 of 7"
+    assert wizard.step_count_label.text() == "Step 1 of 8"
     assert 'QFrame[launchSurfaceFrame="true"]' in wizard.styleSheet()
     assert "QFrame#non_home_shell_content_frame" in wizard.styleSheet()
     assert "QWidget#page_container_scroll_content" in wizard.styleSheet()
@@ -271,6 +275,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         "project",
         "conditions",
         "experiment",
+        "session",
         "image_size",
         "fixation",
         "response",
@@ -278,13 +283,25 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     ):
         wizard.open_wizard(step_key=step_key)
         QApplication.processEvents()
-        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 7"
+        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
         assert wizard.step_count_label.isVisible()
         assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
         assert "border-top" not in wizard.styleSheet()
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
         assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
+        _assert_balanced_setup_stepper(wizard)
+        _assert_visible_children_within_parent(wizard.progress_steps)
+        for title, label, item in zip(
+            ("Project", "Conditions", "Timing & Display", "Session", "Image Size",
+             "Fixation", "Response", "Review"),
+            wizard.progress_step_labels,
+            wizard.progress_steps.step_items,
+            strict=True,
+        ):
+            assert title in item.accessibleName()
+            assert label.text() == title or label.toolTip() == title
+            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
         if step_key == "project":
             checkbox = wizard.project_overview_editor.repeat_participant_sessions_checkbox
             assert checkbox.isVisible()
@@ -296,6 +313,14 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.condition_setup_step.presentation_button.isVisible()
             assert wizard.condition_setup_step.base_import_button.isVisible()
             assert wizard.condition_setup_step.oddball_import_button.isVisible()
+        elif step_key == "experiment":
+            assert wizard.condition_timing_table.isVisible()
+            assert wizard.runtime_settings_editor.isVisible()
+            assert not wizard.session_structure_editor.isVisible()
+        elif step_key == "session":
+            assert wizard.session_structure_editor.isVisible()
+            assert not wizard.condition_timing_table.isVisible()
+            assert not wizard.runtime_settings_editor.isVisible()
         elif step_key == "image_size":
             assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()
@@ -628,7 +653,10 @@ def test_edit_setup_stepper_can_jump_to_any_step(
     QApplication.processEvents()
 
     guide = reopened.setup_wizard_page
-    qtbot.mouseClick(guide.progress_steps.step_circles[5], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(
+        guide.progress_steps.step_circles[guide._step_index_for_key("response")],
+        Qt.MouseButton.LeftButton,
+    )
     assert guide.step_stack.currentWidget() is guide.response_step_surface
 
     qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)
@@ -724,11 +752,11 @@ def test_importing_condition_images_blocks_navigation_and_flush(
     "category", [ExperimentCategory.FPVS_ODDBALL, ExperimentCategory.COGNITIVE_LOAD_FPVS,
                  ExperimentCategory.ATTENTIONAL_BLINK],
 )
-def test_all_categories_use_seven_setup_steps_without_constructing_design(
+def test_all_categories_use_eight_setup_steps_without_constructing_design(
     qtbot, tmp_path: Path, category, monkeypatch,
 ) -> None:
     document = ProjectDocument.create_new(
-        parent_dir=tmp_path, project_name="Seven setup steps", experiment_category=category,
+        parent_dir=tmp_path, project_name="Eight setup steps", experiment_category=category,
     )
     protocol = document.project.settings.protocol.model_dump()
     conditions = [condition.model_dump() for condition in document.ordered_conditions()]
@@ -749,9 +777,9 @@ def test_all_categories_use_seven_setup_steps_without_constructing_design(
     guide.open_wizard(step_key="design")
     QApplication.processEvents()
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
-    assert guide.step_stack.count() == 7
-    assert len(guide.progress_steps.step_items) == 7
-    assert guide.step_count_label.text() == "Step 2 of 7"
+    assert guide.step_stack.count() == 8
+    assert len(guide.progress_steps.step_items) == 8
+    assert guide.step_count_label.text() == "Step 2 of 8"
     assert "Design" not in " ".join(item.toolTip() for item in guide.progress_steps.step_items)
     assert not hasattr(guide, "design_setup_step")
     assert not hasattr(guide, "design_step_surface")

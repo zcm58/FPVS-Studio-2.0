@@ -657,7 +657,7 @@ class DocumentConditionMixin:
         if (attentional_blink is not None) != ab:
             raise DocumentError("The design must match the locked experiment type.")
         if base_hz != effective_condition_base_hz(self._project, condition):
-            raise DocumentError("Edit stimulus presentation frequency in Timing & Session.")
+            raise DocumentError("Edit stimulus presentation frequency in Timing & Display.")
         if ab and condition.attentional_blink is None:
             raise DocumentError(
                 "Separate this FPVS Oddball Paradigm condition into its own experiment first."

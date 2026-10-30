@@ -438,7 +438,7 @@ focused routes and repo precommit. Defaults remain single-pair bursts.
 
 The retained `gui/attentional_blink_stream_designer.py` edits the shared rate through
 the atomic `gui/document_conditions.py` apply method, alongside **Bursts per SOA**.
-It is outside the current seven-step guided Setup; saved AB settings are preserved
+It is outside the current eight-step guided Setup; saved AB settings are preserved
 and no replacement AB authoring route is added in the Conditions consolidation.
 Core owns exact five-second burst, character, SOA and display-frame compatibility in
 `core/attentional_blink_stream.py`. `core/attentional_blink_presets.py` owns the new
@@ -491,9 +491,17 @@ AB preview reuse is scoped to one update in `gui/attentional_blink_stream_design
 do not cache mutable project validation across edits. See the responsiveness contract
 and manual smoke path in `docs/GUI_WORKFLOW.md`.
 
-The seven-step Setup flow and shared dialog acceptance sizes are documented in
+The eight-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
 focused route for edits and the repo precommit tier for shared component changes.
+The current split is tracked in
+[the Timing & Display/Session plan](../exec-plans/active/setup-timing-session-split.md).
+Start with `gui/setup_wizard_page.py`, `gui/runtime_settings_page.py` and
+`gui/session_structure_page.py`. Timing retains `experiment` and timing/display/runtime
+aliases; `session` opens Session. Keep the frequency/duration/presentation table and
+display on Timing; seeds, condition order, totals and AB/masking repeats/start key
+belong on Session. Registered shell, display and Review coverage checks both pages
+at `1120x820`, including expanded seeds, long names and display error/verified states.
 Current category and retained editor contracts are documented in
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md); implementation history is
 in the completed plans directory.
@@ -509,7 +517,7 @@ controls and worker-backed fresh imports; it has no thumbnails, cycle canvas or
 image preview. Imports block navigation and condition switching; normalization runs
 when leaving Conditions. Edit Instructions opens a Save/Cancel text dialog. Default
 and short names use core's existing nonempty schema with no custom descriptive-name
-rule. Frequency edits remain in Timing & Session. There is no guided Design step.
+rule. Frequency edits remain in Timing & Display. There is no guided Design step.
 For the retained standalone image and native AB editor source, read
 [`VISUAL_EXPERIMENT_DESIGNER.md`](../VISUAL_EXPERIMENT_DESIGNER.md) and
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md). Category is fixed at creation;
@@ -535,7 +543,7 @@ image/word features remain FPVS Oddball Paradigm. Legacy conflicts require expli
 Use GUI/core/compiler/runtime/engine focused verification and registered
 `tests/gui/test_experiment_designer.py`, `tests/gui/test_setup_conditions.py`,
 category and wizard modules for approved visible acceptance. Check the complete
-seven-step `1120x820` wizard in both themes,
+eight-step `1120x820` wizard in both themes,
 plus the expanded `1448x1086` mockup size. Check source-folder hit targets, long-path
 access, import retry, per-condition isolation and instruction Save/Cancel/clear.
 Next validates Conditions before the image-readiness handoff; the standalone editor
@@ -599,7 +607,7 @@ For shared frequency, confirmed condition overrides and stream-only seconds, sta
 `gui/session_structure_page.py`. `core/session_ordering.py` owns presentation counts
 and constrained order; read [SessionPlan](../SESSION_PLAN.md) for occurrence/recovery
 semantics. Conditions retains the existing timing-template controls;
-Timing & Session owns edits. Use core/compiler/GUI/project-I/O focused routes and
+Timing & Display owns edits; Session owns randomization, order and totals. Use core/compiler/GUI/project-I/O focused routes and
 repo precommit. Read [RunSpec timing](../RUNSPEC.md#timing-model) for duration
 preservation and frame constraints; visible acceptance stays opt-in.
 

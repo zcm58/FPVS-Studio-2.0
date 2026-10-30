@@ -295,6 +295,121 @@ def test_structural_edits_keep_stale_fixed_order_visible_and_repairable(
     assert not table.presentation_count_blocker()
 
 
+def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
+    qtbot, monkeypatch, tmp_path, preview_jobs,
+):
+    document, first, second = _document(tmp_path)
+    document.update_condition_timing(
+        saved_condition_order=[first, second, first, second],
+        order_seeds=configured_randomization_seeds(document.project), persist=True,
+    )
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    monkeypatch.setattr(wizard.runtime_settings_editor, "timing_is_compatible", lambda: True)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    before = document.project.model_copy(deep=True)
+    table = wizard.condition_timing_table
+    table.presentation_count_spins[first].setValue(3)
+    QApplication.processEvents()
+    assert wizard.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+    assert "current counts" in table.error_label.text()
+    assert table.pending_presentation_counts() == {first: 3}
+    assert document.project == before
+    dialogs = []
+
+    def generate_and_save(dialog):
+        qtbot.addWidget(dialog)
+        dialogs.append(dialog)
+        dialog.show()
+        QApplication.processEvents()
+        assert not dialog.save_button.isEnabled()
+        assert dialog._pending_counts == {first: 3}
+        dialog.generate_button.click()
+        preview_jobs[-1].complete()
+        assert dialog._order == [first, second, first, second, first]
+        assert document.project == before
+        dialog.save_button.click()
+        assert dialog.result() == int(dialog.DialogCode.Accepted)
+        return dialog.result()
+
+    monkeypatch.setattr(ConditionOrderDialog, "exec", generate_and_save)
+    assert table.condition_order_button.isVisible()
+    qtbot.mouseClick(table.condition_order_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert len(dialogs) == 1
+    assert not table.has_pending_edits()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.get_condition(first).presentation_count == 3
+    assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
+    assert wizard.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+
+
+def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
+    qtbot, monkeypatch, tmp_path, preview_jobs,
+):
+    document, first, second = _document(tmp_path)
+    document.update_condition_timing(
+        saved_condition_order=[first, second, first, second],
+        order_seeds=configured_randomization_seeds(document.project), persist=True,
+    )
+    third = document.create_condition(name="New condition missing from the saved order")
+    document.save()
+    document = ProjectDocument.open_existing(document.project_root)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    monkeypatch.setattr(wizard.runtime_settings_editor, "timing_is_compatible", lambda: True)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    QApplication.processEvents()
+    before = document.project.model_copy(deep=True)
+    table = wizard.condition_timing_table
+    assert "current counts" in table.presentation_count_blocker()
+    assert not wizard.setup_wizard_next_button.isEnabled()
+    dialogs = []
+
+    def generate_and_save(dialog):
+        qtbot.addWidget(dialog)
+        dialogs.append(dialog)
+        dialog.show()
+        QApplication.processEvents()
+        assert not dialog.save_button.isEnabled()
+        assert "current counts" in dialog.error_label.text()
+        dialog.generate_button.click()
+        preview_jobs[-1].complete()
+        assert all(
+            dialog._order.count(condition_id) == 2 for condition_id in (first, second, third)
+        )
+        assert document.project == before
+        dialog.save_button.click()
+        assert dialog.result() == int(dialog.DialogCode.Accepted)
+        return dialog.result()
+
+    monkeypatch.setattr(ConditionOrderDialog, "exec", generate_and_save)
+    assert table.condition_order_button.isVisible()
+    qtbot.mouseClick(table.condition_order_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert len(dialogs) == 1
+    assert not table.presentation_count_blocker()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
+    assert wizard.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+
+
 @pytest.mark.parametrize("seconds", [0, 20])
 def test_order_save_validates_frequency_duration_and_count_drafts_together(
     qtbot, monkeypatch, tmp_path, preview_jobs, seconds,
@@ -389,7 +504,7 @@ def test_main_order_action_and_optional_seed_details_fit_wizard(
     wizard.setPalette(palette)
     wizard.resize(1120, 820)
     wizard.show()
-    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
     assert not editor.seed_details_button.isChecked()
     editor.seed_details_button.setChecked(expanded)
@@ -400,7 +515,7 @@ def test_main_order_action_and_optional_seed_details_fit_wizard(
     assert editor.clear_saved_order_button.isVisible() == expanded
     assert "inactive" in editor.condition_order_button.toolTip()
     assert "saved arrangement" in editor.seed_edits["condition_order_seed"].toolTip()
-    assert_visible_children_within_parent(wizard.experiment_step_surface)
+    assert_visible_children_within_parent(wizard.session_step_surface)
     if expanded:
         editor.clear_saved_order_button.click()
         assert document.project.settings.session.saved_condition_order is None

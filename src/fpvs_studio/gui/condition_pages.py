@@ -521,7 +521,7 @@ class ConditionsPage(QWidget):
             spin.setEnabled(count_editable)
             spin.setToolTip(
                 _CYCLE_HELP_TEXT if count_editable
-                else "Edit stream duration in Timing & Session."
+                else "Edit stream duration in Timing & Display."
             )
         with QSignalBlocker(self.target_repeats_spin):
             self.target_repeats_spin.setValue(
@@ -631,7 +631,7 @@ class ConditionsPage(QWidget):
         count_value.setText(count_text)
         repeat_guidance_value.setText(
             _repeat_guidance_text(guidance, role_label=role_label) if guidance is not None
-            else "Review stream timing in Timing & Session."
+            else "Review stream timing in Timing & Display."
         )
         resolution_value.setText(resolution_text)
         variants_value.setText(variants_text)

@@ -18,7 +18,7 @@ lazily only inside the engine package.
 ## Condition timing
 
 `core/condition_timing.py` resolves shared/per-condition FPVS presentation frequency
-and exact stream duration, and validates atomic edits. Timing & Session owns authoring; compilers, previews,
+and exact stream duration, and validates atomic edits. Timing & Display owns authoring; compilers, previews,
 fixation guidance and exports use the effective condition rate. RunSpec remains
 frame-based. `core/session_ordering.py` owns per-condition presentation counts and
 bounded, non-adjacent generated or saved order; see [SessionPlan](docs/SESSION_PLAN.md). See [RunSpec timing](docs/RUNSPEC.md#timing-model).
@@ -144,8 +144,8 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
   starts with manual creation or Library download. Manual creation offers FPVS Oddball
   Paradigm and disabled Standard FPVS, then project details; Library downloads reuse
-  bundle import. Setup composes seven model-backed pages (Project, Conditions,
-  Timing & Session, Image Size, Fixation,
+  bundle import. Setup composes eight model-backed pages (Project, Conditions,
+  Timing & Display, Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
   discovery consumes path snapshots and canceled/stale results cannot update a closed dialog.
@@ -160,7 +160,10 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   folder buttons, worker-backed fresh imports and normalization on leaving the step.
   Participant instructions use a Save/Cancel dialog; default and short names use
   core's existing nonempty schema. There is no guided Design page or image preview.
-  Timing & Session retains frequency authoring. Native AB settings are preserved;
+  Timing & Display retains frequency, duration, presentation-count and display authoring;
+  Session owns seeds, condition order, totals and AB/masking repeats/start key.
+  Timing keeps the `experiment` key and timing/display/runtime aliases; `session`
+  addresses the separate Session page. Native AB settings are preserved;
   its editor source and the optional standalone image designer remain outside Setup.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
   Oddball Apply uses existing protocol settings. AB image pairs are retired, with

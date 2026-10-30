@@ -154,15 +154,16 @@ and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 
 ## Frameless Setup layout and copy
 
-The seven-step wizard uses one task heading, without duplicate card headings. Project
-has a centered 760 px form; Timing & Session uses 1040 px for FPVS or 880 px for
-native AB; Size is 760 px.
+The eight-step wizard uses one task heading, without duplicate card headings. Project
+has a centered 760 px form; Timing & Display uses 1040 px for FPVS or 880 px for
+native AB; Session and Size are 760 px.
 Review remains 880 px, and Conditions retains its wider working area. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
-Timing & Session places the FPVS timing/presentation table above two labeled,
-frameless Display and Session groups aligned along their tops. Existing
-Session shortcuts and Review links open this combined step.
+Timing & Display places the FPVS timing/presentation table above the frameless
+Display group. Session places seeds, condition order and session totals on a separate
+page, with managed AB/masking repeats and the fixed start key. Session shortcuts and
+Review links open Session; timing/display/runtime aliases continue to open Timing.
 
 Timing keeps refresh, Verify display and background controls. Successful frame math
 and SOA recaps are available through the refresh tooltip, with measured monitor detail
@@ -362,7 +363,7 @@ Registered coverage: `test_hidden_page_refresh.py`, `test_manage_projects_respon
 Run GUI focused and repo precommit checks without Qt. In an approved visible session:
 
 1. Edit several Setup fields, then return Home and revisit Run; confirm current names,
-   summaries and readiness. Check all seven Setup steps at `1120x820`.
+   summaries and readiness. Check all eight Setup steps at `1120x820`.
 2. Verify saved AB settings survive guided Setup without opening its retained editor.
    Separate AB-editor tests cover rate/SOA drafts, character pools, errors and preview.
 3. Open Manage Projects at `860x520` in both themes with many projects. Check loading,
@@ -403,11 +404,11 @@ letter distractor/T1 digit/T2 digit sources, editable onset-to-onset SOAs, and a
 labelled target-focused timeline. Default SOAs are 100/300/500 ms at 10 Hz, with 0/2/4
 intervening letters. The default 24 bursts per SOA yields 120 seconds of EEG per SOA
 and 72 bursts in a shuffled session. Home shows the total burst count and T1/T2
-recall tracking; Timing & Session uses the same persisted burst count.
+recall tracking; Session uses the same persisted burst count.
 Character Size edits native text height. Timing validates exact
 frame compatibility. The post-condition questionnaire button reuses the condition
 task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
-This editor source remains outside the current seven-step guided Setup. Setup has
+This editor source remains outside the current eight-step guided Setup. Setup has
 no Design section and preserves saved AB settings; an AB authoring replacement is
 deferred. The details and editor acceptance cases below describe the retained editor.
 
@@ -428,7 +429,7 @@ with an explanation; this does not change the authored rate or runtime validatio
 Visible acceptance at `1120x820`, in both themes: open an AB study, enter 20 Hz,
 confirm 50 ms characters, 100 characters per five-second burst and unchanged SOAs.
 Change bursts per SOA to 20; confirm 100 seconds per SOA and 60 total bursts.
-Apply, save and reopen to confirm persistence in the retained editor, Timing & Session and Home.
+Apply, save and reopen to confirm persistence in the retained editor, Session and Home.
 On a saved legacy native study, 7.5 Hz with SOAs `133.33333333333334`, `400`, and
 `666.6666666666666` ms remains supported when frame-compatible; new five-second
 bursts reject rates that cannot represent their duration and target positions exactly.
@@ -487,7 +488,7 @@ runs before leaving Conditions. Canceling the
 folder picker leaves the saved sources unchanged, and failed imports show an inline
 error that clears after a successful retry. Missing sources block progression.
 Image selection preserves the existing cycle and timing; frequency authoring remains
-in Timing & Session. Default and short condition names are accepted under core's
+in Timing & Display. Default and short condition names are accepted under core's
 existing nonempty schema. Edit Instructions opens a modal text dialog; Save commits
 the text, empty Save clears it and Cancel preserves the previous instructions.
 
@@ -506,7 +507,7 @@ Visible acceptance must cover both categories and themes, realistic long names/p
 folder-picker cancellation, replacement and per-condition source isolation, import
 failure/retry and busy navigation. AB and standalone checks also cover invalid/sub-frame
 timing, draft switching, apply/discard, pending workers and preview stop/close.
-The seven-step wizard must fit
+The eight-step wizard must fit
 `1120x820`. The optional standalone designer retains `1040x760` minimum and
 `1400x920` default dimensions bounded by available screen space.
 
@@ -544,7 +545,8 @@ The authoring window is organized around two user-facing modes:
     workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Timing & Session, Image Size, Fixation, Response, Review
+  - ordered steps: Project, Conditions, Timing & Display, Session, Image Size
+    (Character Size for native AB), Fixation, Response, Review
   - `Next` is disabled until the active step is complete, with a compact footer hint
     naming the current blocker; Project and Conditions also offer `Show field` to
     focus the missing input, with image/word-specific source wording
@@ -558,7 +560,7 @@ The authoring window is organized around two user-facing modes:
   - all guided steps use the shared frameless shell, left-aligned task heading,
     step count, and stable progress/navigation positions; content is vertically centered with
     bounded form widths, and the bottom navigation has no horizontal divider
-  - all seven setup steps must fit inside the compact `1120x820` setup window
+  - all eight setup steps must fit inside the compact `1120x820` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -575,12 +577,12 @@ The authoring window is organized around two user-facing modes:
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition; it is
     enabled by default for new projects and by the one-time migration of older projects
-  - Timing and Session share one step with two frameless groups, Display and Session; Image Size retains `Configure Presentation...`
+  - Timing & Display and Session are separate frameless steps; Image Size retains `Configure Presentation...`
     for the full draft-based presentation editor
   - Timing exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), `Verify display`, derived rate/frame counts/condition duration, and
     presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
-    required when any image condition uses Contrast Modulation. Timing & Session owns
+    required when any image condition uses Contrast Modulation. Timing & Display owns
     the shared stimulus presentation frequency and inherited/custom rates for image
     and word conditions. A condition override
     requires the explicit Yes/No warning (No by default); Use shared restores inheritance.
@@ -603,9 +605,11 @@ The authoring window is organized around two user-facing modes:
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
     size and 2 px line width
-  - the Session step exposes repeats per condition and the fixed Space start key;
-    condition names remain internal during participant transition screens, and condition
-    order is always randomized automatically for each launch
+  - the Session step exposes seed reuse/details, condition order, session totals,
+    managed AB/masking repeats and the fixed Space start key. Ordinary FPVS presentation
+    counts stay on Timing & Display. Condition names remain internal during participant
+    transition screens; fixed/new seed policy and exact saved arrangements retain their
+    existing behavior
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
@@ -777,8 +781,9 @@ The authoring window is organized around two user-facing modes:
 
 Detailed Conditions remains available internally for existing document bindings, but it
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
-Timing & Session, Image Size, Fixation, and Response are separate guided setup pages.
-Existing `session` navigation links open Timing & Session; its internal key is `experiment`.
+Timing & Display, Session, Image Size, Fixation, and Response are separate guided setup pages.
+Timing retains the `experiment` key and timing/display/runtime aliases; `session`
+navigation links open the separate Session page.
 The Run / Runtime page remains a launch, readiness, and session-preview surface,
 not a display-engine configuration step.
 Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
@@ -1214,7 +1219,7 @@ preprocessing services but must not silently mutate the active project.
   state. The main window assembles the wizard before attaching it to the styled
   workflow stack, which takes ownership. The shared setup-theme helper skips unchanged
   stylesheets so parenting and palette events do not repeatedly restyle the entire
-  wizard. Theme changes, all seven pages, and existing navigation gates remain active.
+  wizard. Theme changes, all eight pages, and existing navigation gates remain active.
 - Display and image-size settings editing lives in
   `src/fpvs_studio/gui/runtime_settings_page.py`; refresh/background controls stay
   separate from visual-angle geometry controls.
@@ -1403,7 +1408,7 @@ For GUI coverage:
   image selection, instruction dialogs and the import/normalization handoff,
   `test_experiment_designer.py` for standalone visual editing, and
   `test_experiment_categories_gui.py` for category-specific controls,
-  `test_setup_experiment_display.py` for display/session/image-size settings,
+  `test_setup_experiment_display.py` for timing/display, Session and image-size settings,
   `test_setup_review.py` for review/return behavior, `test_home_launch_surface.py`
   for Home, `test_run_page_launch.py` for launch wiring, and
   `test_image_resizer_page.py` for the utility page
@@ -1535,13 +1540,13 @@ Fixation displays the effective smallest count limit, identifies the limiting co
 and explains count adjustments caused by changed durations; full per-condition limits
 remain accessible in the tooltip.
 
-For visible acceptance on Windows, walk all seven steps at `1120x820` in both themes,
+For visible acceptance on Windows, walk all eight steps at `1120x820` in both themes,
 then repeat at the normal expanded size and available 125/150% scaling. Include long
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect
 default and one-character names, both image-folder pickers, import failure/retry,
 and instruction Save/Cancel/clear at both dialog sizes. Confirm saved AB settings are
-unchanged through all seven steps. Inspect
+unchanged through all eight steps. Inspect
 Settings, Presentation, and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
@@ -1572,7 +1577,7 @@ setup edits. Check Recording Setup at `700x640` and Settings in both themes.
 ### Presentation frequency acceptance
 
 In an approved visible Windows session, open image and word projects at 1120x820
-in both themes. In Timing & Session, apply a shared frequency, decline and accept a
+in both themes. In Timing & Display, apply a shared frequency, decline and accept a
 condition-specific override, then use the shared value again. Check inherited/custom
 labels, long condition-name tooltips, keyboard focus, pending-draft navigation and
 invalid-duration recovery. Verify that Conditions preserves the frequency, saved custom
@@ -1581,7 +1586,7 @@ Registered Qt coverage is maintained separately from the default non-Qt checks.
 
 ### Per-condition stream duration
 
-Timing & Session groups stimulus frequency and stream duration (seconds) per image
+Timing & Display groups stimulus frequency and stream duration (seconds) per image
 or word condition. Duration applies to one continuous stimulation stream, excluding
 lead-in and all participant screens/tasks. Edit a duration alone or coordinate it
 with a frequency draft, then Apply timing. Failed validation preserves every saved
@@ -1595,15 +1600,15 @@ failure/recovery. Check long names, wrapped errors, keyboard focus and session t
 
 ### Per-condition presentation counts
 
-Timing & Session places total Presentations beside each condition's frequency and
+Timing & Display places total Presentations beside each condition's frequency and
 stream seconds. A count of three runs that stream three separate times, each with its
 normal instructions, tasks and transitions. Per-row totals and the session estimate
 report stimulation separately from participant-paced time. Apply timing validates the
 whole draft; infeasible no-adjacent-repeat counts retain every saved value and explain
 which count must be reduced or supplemented.
 
-Ordinary FPVS hides the former global-repeat row. Native AB retains Bursts per SOA;
-masking retains its group controls and displays managed counts without unsupported
+Ordinary FPVS hides the former global-repeat row. Session retains native AB's Bursts
+per SOA and masking's group controls. Timing displays managed counts without unsupported
 individual overrides. Existing global counts are preserved as fallback totals, so a
 single ordinary condition with two requested presentations reports an error until the
 author changes its count or adds a separating condition.
@@ -1615,7 +1620,7 @@ count drafts, and masking/AB managed states.
 
 ### Seed reuse and launch snapshots
 
-Timing & Session has one overall Same for every participant / New for each participant
+Session has one overall Same for every participant / New for each participant
 choice and three clearly labeled configured seeds: stimulus order (images/words),
 condition order and fixation. Generate seeds is an explicit author action. The existing
 order field remains the condition-order seed; there is no fourth independent setting.
@@ -1637,11 +1642,14 @@ labels without clipping. Registered Qt coverage remains opt-in.
 
 ### Choose and save condition order
 
-Timing & Session keeps the overall Fixed/New choice visible and numerical controls
+Session keeps the overall Fixed/New choice visible and numerical controls
 under collapsed **Seed details**. **Condition order...** opens a plain list with
 Generate, Move up, Move down and Save. Repeated occurrences show chronological
-presentation numbers; long names remain available by tooltip. No extra setup page or
-reuse-mode switches are introduced.
+presentation numbers; long names remain available by tooltip. Seed reuse and order
+editing remain together on Session, without additional reuse-mode switches.
+Timing retains a **Condition order...** shortcut beside its table commands, opening
+the same dialog without flushing staged counts so saved-order mismatches can be
+repaired in one atomic save. Session remains the primary order editor surface.
 
 Generate previews a pseudorandom candidate. Manual moves retain a draft and report
 adjacent duplicates or count mismatches. Save persists the exact choice and any
