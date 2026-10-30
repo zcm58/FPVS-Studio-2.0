@@ -286,3 +286,12 @@ Historical plans and exact-occurrence recovery retain their original order/prove
 Saved-source fields use Project 1.15/config 1.13 and are omitted when absent. They are
 project/session state, never condition-template defaults. Canonical ordering identity
 includes an active exact list and ignores an inactive New-mode list.
+
+## Simple post-question context
+
+SessionPlan1.9 carries optional frozen `TaskModuleSpec.post_question_context` for
+explicitly marked after-only questionnaires. It captures authored question versions,
+original labels and chronological condition presentation identity before option shuffle.
+Native or specialized sessions can carry this capability without independent-seed
+metadata. Old unmarked tasks and compiled schemas retain their contracts. See
+[Post-condition Questions](POST_CONDITION_QUESTIONS.md) for the canonical workflow.

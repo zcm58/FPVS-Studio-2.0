@@ -162,6 +162,7 @@ class ModifierScopeDialog(QDialog):
         *,
         selected_ids: list[str],
         conflicts: dict[str, str],
+        description: str | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -174,6 +175,7 @@ class ModifierScopeDialog(QDialog):
         layout.addWidget(
             DialogHeader(
                 "Choose conditions",
+                description or
                 "Each condition supports one sustained activity. Remove an existing activity "
                 "before assigning a different one.",
                 parent=self,

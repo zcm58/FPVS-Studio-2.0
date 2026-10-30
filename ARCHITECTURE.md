@@ -27,6 +27,11 @@ bounded, non-adjacent generated or saved order; see [SessionPlan](docs/SESSION_P
 GUI launch coordination captures one pending triplet, while compiled/runtime contracts
 retain immutable provenance. See [SessionPlan](docs/SESSION_PLAN.md#independent-randomization).
 
+`core/post_questions.py` owns simple after-condition questionnaire definitions and
+original compiled context. GUI editors reuse ordinary task controls; runtime derives
+the project-root response CSV from retained task journals and context through
+`runtime/post_condition_responses.py`. See [Post-condition Questions](docs/POST_CONDITION_QUESTIONS.md).
+
 ## Package Map
 
 Automatic crash recovery/consent and the bounded sanitized outbox live in

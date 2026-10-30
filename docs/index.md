@@ -16,6 +16,7 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
 - Experiment categories and legacy separation: `EXPERIMENT_CATEGORIES.md`
 - Cognitive Load FPVS and reusable backward counting: `COGNITIVE_LOAD_FPVS.md`
 - Condition modifiers, memory workflows, and local presets: `CONDITION_MODIFIERS.md`
+- Simple questions and readable response CSV: `POST_CONDITION_QUESTIONS.md`
 - Packaging developer builds: `PACKAGING.md`
 - Execution planning: `PLANS.md`, `exec-plans/README.md`, and
   `exec-plans/plan-review-workflow.md`

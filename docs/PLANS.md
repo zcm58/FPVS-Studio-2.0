@@ -18,12 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-
-
-
-
-
-
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -33,7 +27,6 @@ Current implementation:
 
 Concrete planned work:
 
-- [Simplified condition modifiers, post-condition questions and readable response CSV](exec-plans/planned/simple-condition-modifiers-and-post-questions.md)
 - [Optional image pool reset policy](exec-plans/planned/image-pool-reset-policy.md) (retain reset per condition run; future carryover option with user-facing pros/cons)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md) (proposal; not implemented)
 - [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md) (algorithm and validation investigation; not implemented)
@@ -41,6 +34,9 @@ Concrete planned work:
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Simplified modifiers and post-condition questions](exec-plans/completed/simple-condition-modifiers-and-post-questions.md)
+(simple Yes/No authoring, retained answer journals and cumulative project-root CSV; visible GUI acceptance remains separate).
 
 Recent completion: [Condition order preview and saved manual arrangements](exec-plans/completed/condition-order-preview-and-manual-order.md)
 (exact reusable arrangements, compact preview/reordering and atomic saves; visible GUI acceptance remains separate).

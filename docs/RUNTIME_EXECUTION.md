@@ -1257,3 +1257,14 @@ identifies an exact chosen list; `pooled_no_adjacent` identifies seed-generated 
 The condition-order seed remains provenance and does not alone describe a manually
 arranged list. Entry order and chronological condition presentation identity are retained.
 Older result/config formats remain readable and omitted source fields stay omitted.
+
+## Readable post-condition responses
+
+Explicit Post-condition Questions retain their original compiled context and existing
+answer journals in both export modes. Runtime reconciles submitted answers after task
+exceptions, then derives project-root `post_condition_responses.csv` outside playback.
+The CSV separates stream completion, question status and session finalization; locked
+views preserve prior data and can be rebuilt through the GUI. Original journals remain
+canonical and never enter authored bundles/configs or generic summaries. See
+[Post-condition Questions](POST_CONDITION_QUESTIONS.md) for schema, identity, recovery,
+privacy and visible acceptance details.

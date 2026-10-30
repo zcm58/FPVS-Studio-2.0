@@ -776,7 +776,7 @@ def preflight_session_plan(
     actual_indices = [entry.global_order_index for entry in ordered_entries]
     if actual_indices != expected_indices:
         raise PreflightError("Session preflight failed because session entry ordering is invalid.")
-    if session_plan.schema_version in {"1.7.0", "1.8.0"} or (
+    if session_plan.schema_version in {"1.7.0", "1.8.0", "1.9.0"} or (
         session_plan.randomization_seeds is not None
     ):
         try:
@@ -796,6 +796,15 @@ def preflight_session_plan(
             verify_connected_refresh=False,
         )
         task_modules = [*entry.pre_tasks, *entry.post_tasks]
+        for module in task_modules:
+            if module.post_question_context is not None:
+                try:
+                    TaskModuleSpec.model_validate(module)
+                except ValueError as exc:
+                    raise PreflightError(
+                        "Post-condition Questions are incompatible with their original "
+                        f"compiled context: {exc}"
+                    ) from exc
         _validate_task_assets(
             project_root,
             task_modules,
@@ -818,10 +827,10 @@ def _validate_session_presentation_identity(session_plan: SessionPlan) -> None:
             raise PreflightError("Presentation identity requires a pooled session ordering policy.")
         return
     if (session_plan.ordering_policy not in {"pooled_no_adjacent", "saved_no_adjacent"}
-            or session_plan.schema_version not in {"1.6.0", "1.7.0", "1.8.0"}):
+            or session_plan.schema_version not in {"1.6.0", "1.7.0", "1.8.0", "1.9.0"}):
         raise PreflightError("Pooled presentations require SessionPlan schema 1.6.0 or newer.")
     if session_plan.ordering_policy == "saved_no_adjacent" and (
-        session_plan.schema_version != "1.8.0"
+        session_plan.schema_version not in {"1.8.0", "1.9.0"}
     ):
         raise PreflightError("Saved ordering requires SessionPlan schema 1.8.0.")
     seen: dict[str, tuple[int, int]] = {}

@@ -628,10 +628,14 @@ The authoring window is organized around two user-facing modes:
     overrides between T1 and T2. The draft-based dialog supports
     reset-to-inherited controls and a live representative-stimulus preview
   - each selected condition exposes `FPVS Condition Modifiers` with a saved-flow
-    summary. The dialog groups counting or memory across before/during/after FPVS,
-    with Overview, Settings, Participant preview, explicit condition assignments,
-    and a Built-in / My presets library. Local preset saves and project Apply are
-    separate actions. See [Condition modifiers](CONDITION_MODIFIERS.md).
+    summary. Counting, Memory, Masking and Post-condition Questions are direct actions;
+    Advanced holds the Library/presets and custom task tools. Existing modifiers retain
+    their Overview, Settings, Participant preview and explicit assignments. Questions
+    use a simple ordered editor, Yes/No defaults and a non-recording preview. Open
+    Responses Folder and worker-backed Rebuild responses use the active project in
+    either export mode. Local preset saves and project Apply remain separate actions.
+    See [Condition modifiers](CONDITION_MODIFIERS.md) and
+    [Post-condition Questions](POST_CONDITION_QUESTIONS.md).
   - The modifier dialog fits a `1100x720` minimum and `1120x760` default. The existing
     advanced task editor remains available for custom pre/post steps. Its modules
     stay on the left, selected step occupies the center, and preview stays on the

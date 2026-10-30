@@ -759,6 +759,9 @@ def _compile_session_plan(
 
     return SessionPlan(
         schema_version=(
+            "1.9.0" if any(task.post_question_context is not None
+                           for block in blocks for entry in block.entries
+                           for task in [*entry.pre_tasks, *entry.post_tasks]) else
             "1.8.0" if saved_order is not None else
             "1.7.0" if seed_snapshot is not None else
             "1.5.0" if any(task_requires_text_alignment_schema(task)

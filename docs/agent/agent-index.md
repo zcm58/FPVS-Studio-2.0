@@ -383,6 +383,14 @@ The existing task compiler/runner owns execution; grouped workflows do not add a
 third task phase or change FPVS timing. Use core/compiler/project-io/runtime/engine
 focused routes, GUI registered coverage, then repo precommit.
 
+For simple **Post-condition Questions**, start with `core/post_questions.py`,
+`gui/post_questions_dialog.py`, `runtime/post_condition_responses.py` and
+[the question/CSV contract](../POST_CONDITION_QUESTIONS.md). Core owns marked
+after-only modules and immutable definition/occurrence snapshots; runtime reuses
+original answer journals for the derived root CSV. Use core/compiler/project-io/runtime
+focused routes and `test_post_questions.py`, `test_post_question_lifecycle.py`,
+`test_post_condition_responses.py`, plus registered GUI coverage and repo precommit.
+
 For Cognitive Load FPVS, begin with `core/cognitive_load_presets.py`,
 `core/backward_counting.py`, `core/compiler_tasks.py` and
 [`Cognitive Load FPVS`](../COGNITIVE_LOAD_FPVS.md). The preset reuses ordinary image

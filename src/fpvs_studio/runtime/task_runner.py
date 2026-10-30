@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -38,6 +40,39 @@ from fpvs_studio.runtime.backward_counting import BackwardCountingSession
 from fpvs_studio.runtime.session_export import append_task_response_checkpoint
 
 _MAX_BRANCH_TRANSITIONS_MULTIPLIER = 20
+LOGGER = logging.getLogger(__name__)
+
+
+def read_task_response_journal(path: Path) -> list[TaskResponseRecord]:
+    """Read the original answer journal, retaining a valid prefix after a torn tail."""
+    try:
+        lines = path.read_bytes().splitlines(keepends=True)
+    except FileNotFoundError:
+        return []
+    responses: list[TaskResponseRecord] = []
+    for index, line in enumerate(lines):
+        try:
+            payload = json.loads(line)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            if index == len(lines) - 1 and not line.endswith(b"\n"):
+                LOGGER.warning(
+                    "Task-response journal has an incomplete final record; "
+                    "earlier submitted answers are retained."
+                )
+                break
+            raise ValueError(
+                f"Task-response journal record {index + 1} is invalid. "
+                "The retained journal needs review before rebuilding responses."
+            ) from None
+        try:
+            response = TaskResponseRecord.model_validate(payload)
+        except ValueError:
+            raise ValueError(
+                f"Task-response journal record {index + 1} is invalid. "
+                "The retained journal needs review before rebuilding responses."
+            ) from None
+        responses.append(response)
+    return responses
 
 
 @dataclass(frozen=True)
@@ -96,6 +131,23 @@ class TaskResponseCheckpoint:
         except OSError:
             pass
 
+    def reconcile_run_responses(
+        self, run_id: str, responses: list[TaskResponseRecord],
+    ) -> list[TaskResponseRecord]:
+        """Recover already submitted responses when a later task screen raises."""
+        journaled = read_task_response_journal(self._path) if self._path is not None else []
+        by_index = {response.response_index: response for response in responses}
+        for response in journaled:
+            if response.run_id != run_id:
+                continue
+            prior = by_index.get(response.response_index)
+            if prior is not None and prior != response:
+                raise ValueError(
+                    "The retained task journal contains conflicting response identities."
+                )
+            by_index[response.response_index] = response
+        return [by_index[index] for index in sorted(by_index)]
+
 
 def run_task_modules(
     engine: PresentationEngine,
@@ -109,6 +161,7 @@ def run_task_modules(
     checkpoint: TaskResponseCheckpoint | None = None,
     backward_counting: BackwardCountingSession | None = None,
     terminal: bool = False,
+    on_module_start: Callable[[str], None] | None = None,
 ) -> TaskFlowOutcome:
     """Execute compiled modules in order, preserving module-level repeat semantics."""
 
@@ -117,6 +170,12 @@ def run_task_modules(
     backward_counting = backward_counting or BackwardCountingSession()
     for module_index, module in enumerate(modules):
         validate_task_module_repeat_capacity(module)
+        if module.post_question_context is not None:
+            from fpvs_studio.core.post_questions import validate_compiled_post_questions
+
+            validate_compiled_post_questions(module)
+            if on_module_start is not None:
+                on_module_start(module.task_id)
         selection_history: dict[tuple[str, str, str | None], set[str]] = {}
         for module_repeat_index in range(module.repeat_count):
             outcome = _run_module_once(
@@ -921,6 +980,15 @@ def _realized_option_order(
             )
         )
     return list(step.realized_item_order or [item.item_id for item in step.items])
+
+
+def question_response_is_valid(question: TaskQuestion, result: TaskStepResult) -> bool:
+    """Validate authoring-preview input without collection, scoring, or randomization."""
+    step = TaskStepSpec(
+        step_id="question-preview", kind=TaskStepKind.QUESTIONNAIRE,
+        questions=[question], random_seed=0,
+    )
+    return _response_is_valid(step, result, question=question)
 
 
 def _response_is_valid(

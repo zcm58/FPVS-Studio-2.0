@@ -8,7 +8,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
+from typing import Literal
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import (
@@ -34,6 +36,7 @@ from fpvs_studio.runtime.data_sharing import SharingCapture
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
+from fpvs_studio.runtime.post_condition_responses import PostConditionResponseRecorder
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.recording import (
     recording_backend_label,
@@ -72,6 +75,10 @@ _ACCESSIBLE_FIXATION_TARGET_COLOR = "#D55E00"
 _TUTORIAL_INCOMPLETE_WARNING = (
     "Participant did not complete the fixation tutorial after repeated missed practice "
     "attempts; researcher continued the experiment without tutorial completion."
+)
+_POST_RESPONSE_CSV_WARNING = (
+    "Post-condition responses CSV could not be updated. Submitted answers are retained. "
+    "Close post_condition_responses.csv in Excel, then use Rebuild responses."
 )
 
 
@@ -344,6 +351,10 @@ class RuntimeWorker:
             participant_metadata=participant_metadata,
             pilot_mode=bool((runtime_options or {}).get("pilot_mode", False)),
         )
+        has_post_questions = any(
+            task.post_question_context is not None
+            for entry in ordered_entries for task in entry.post_tasks
+        )
         compact_task_checkpoint = (
             None
             if write_detailed_exports
@@ -353,9 +364,44 @@ class RuntimeWorker:
                     participant_number=participant_number,
                     session_id=session_plan.session_id,
                     participant_session_number=participant_session_number,
+                    execution_id=recovery.execution_id if has_post_questions else None,
                 )
             )
         )
+        compact_journal_path = (
+            compact_task_checkpoint.path if compact_task_checkpoint is not None else None
+        )
+        journal_paths = {
+            entry.run_id: (compact_journal_path if compact_journal_path is not None else
+                           output_dir / entry.run_id / "task_responses.jsonl")
+            for entry in ordered_entries
+        }
+        post_responses: PostConditionResponseRecorder | None = None
+        active_post_response_run: str | None = None
+
+        def project_post_responses() -> None:
+            if post_responses is None or not post_responses.enabled:
+                return
+            try:
+                post_responses.write_csv()
+            except Exception as exc:
+                LOGGER.warning(
+                    "Post-condition response CSV could not be updated (%s); "
+                    "original context and task journals are retained.", type(exc).__name__,
+                )
+                if _POST_RESPONSE_CSV_WARNING not in warnings:
+                    warnings.append(_POST_RESPONSE_CSV_WARNING)
+
+        def finish_post_response_entry(state: Literal["completed", "aborted", "error"]) -> None:
+            nonlocal active_post_response_run
+            if post_responses is not None and active_post_response_run is not None:
+                post_responses.finish_entry(active_post_response_run, state=state)
+                active_post_response_run = None
+                project_post_responses()
+
+        def start_post_response_module(run_id: str, task_id: str) -> None:
+            if post_responses is not None and post_responses.enabled:
+                post_responses.start_module(run_id, task_id)
 
         def session_result(
             results: list[RunExecutionSummary], reason: str | None,
@@ -414,9 +460,16 @@ class RuntimeWorker:
         execution_error: Exception | None = None
         trigger_error: TriggerEmissionError | None = None
         running_post_tasks = False
+        running_pre_tasks = False
         task_checkpoint: TaskResponseCheckpoint | None = None
+        active_entry: SessionEntry | None = None
 
         try:
+            post_responses = PostConditionResponseRecorder(
+                project_root, session_plan, participant_number=participant_number,
+                participant_session_number=participant_session_number,
+                execution_id=recovery.execution_id, journal_paths=journal_paths,
+            )
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
             write_masking_plan_checkpoint(
@@ -435,6 +488,7 @@ class RuntimeWorker:
                 if abort_reason is not None:
                     break
                 native_scene = entry.run_spec.scene_stream is not None
+                active_entry = entry
                 recovery.start_run(entry.run_id, playback_armed=native_scene)
                 acquisition.start_run(entry.run_id, len(trigger_backend.records))
                 _validate_configured_display_resolution(self._engine, entry.run_spec)
@@ -444,10 +498,13 @@ class RuntimeWorker:
                     )
                 blink_recorder.start_entry(entry)
                 task_checkpoint = TaskResponseCheckpoint(
-                    compact_task_checkpoint.path if compact_task_checkpoint is not None
-                    else output_dir / entry.run_id / "task_responses.jsonl",
+                    journal_paths[entry.run_id],
                     on_response=blink_recorder.record_response,
                 )
+                if post_responses.enabled:
+                    post_responses.start_entry(entry.run_id)
+                    active_post_response_run = entry.run_id
+                running_pre_tasks = True
                 pre_task_outcome = run_task_modules(
                     self._engine,
                     entry.pre_tasks,
@@ -458,6 +515,7 @@ class RuntimeWorker:
                     checkpoint=task_checkpoint,
                     backward_counting=backward_counting,
                 )
+                running_pre_tasks = False
                 if pre_task_outcome.aborted:
                     task_checkpoint.flush()
                     run_summary = _build_start_aborted_summary(
@@ -495,6 +553,8 @@ class RuntimeWorker:
                             entry.run_spec,
                             run_summary,
                         )
+                    post_responses.playback_finished(entry.run_id, completed=False)
+                    finish_post_response_entry("aborted")
                     break
                 # Native authored tasks can end in a timed fixation immediately followed
                 # by prepared frame zero. Persist intent before those tasks, never fsync
@@ -509,6 +569,8 @@ class RuntimeWorker:
                     abort_reason = (
                         f"Session aborted during the transition screen before run '{entry.run_id}'."
                     )
+                    post_responses.playback_finished(entry.run_id, completed=False)
+                    finish_post_response_entry("aborted")
                     if not pre_task_outcome.responses:
                         break
                     run_summary = _build_start_aborted_summary(
@@ -602,6 +664,7 @@ class RuntimeWorker:
                 run_summary = run_summary.model_copy(update=task_summary_update)
                 run_results.append(run_summary)
                 checkpoint_results(run_results)
+                post_responses.playback_finished(entry.run_id, completed=playback_completed)
                 if playback_completed or trigger_error is None:
                     recovery.playback_finished(entry.run_id, aborted=not playback_completed)
                 running_post_tasks = True
@@ -622,6 +685,7 @@ class RuntimeWorker:
                         checkpoint=task_checkpoint,
                         backward_counting=backward_counting,
                         terminal=entry.run_spec.scene_stream is not None,
+                        on_module_start=partial(start_post_response_module, entry.run_id),
                     )
                     task_checkpoint.flush()
                     update: dict[str, object] = {
@@ -655,6 +719,10 @@ class RuntimeWorker:
                 warnings.extend(run_summary.warnings)
                 run_results[-1] = run_summary
                 checkpoint_results(run_results)
+                finish_post_response_entry(
+                    "error" if trigger_error is not None else
+                    "aborted" if abort_reason is not None or run_summary.aborted else "completed"
+                )
 
                 if abort_reason is not None:
                     break
@@ -695,13 +763,6 @@ class RuntimeWorker:
             execution_error = trigger_error or exc
             if trigger_error is not None:
                 LOGGER.exception("Result processing also failed after trigger interruption.")
-            if running_post_tasks:
-                run_results[-1] = run_results[-1].model_copy(update={
-                    "task_flow_completed": False,
-                    "task_flow_aborted": True,
-                    "task_abort_stage": "post_condition",
-                    "task_abort_reason": f"{type(exc).__name__}: {exc}",
-                })
         finally:
             try:
                 if task_checkpoint is not None:
@@ -727,6 +788,81 @@ class RuntimeWorker:
                         execution_error = trigger_error or exc
                     else:
                         LOGGER.exception("Runtime cleanup also failed after session interruption.")
+
+        if execution_error is not None and active_entry is not None and task_checkpoint is not None:
+            prior = (run_results[-1] if run_results
+                     and run_results[-1].run_id == active_entry.run_id else None)
+            try:
+                reconciled = task_checkpoint.reconcile_run_responses(
+                    active_entry.run_id, list(prior.task_responses) if prior is not None else [],
+                )
+            except (OSError, ValueError) as journal_error:
+                LOGGER.warning(
+                    "Submitted task responses could not be reconciled (%s); "
+                    "the original journal is retained.", type(journal_error).__name__,
+                )
+                warnings.append(
+                    "Submitted task responses need review in the retained task journal "
+                    "before rebuilding responses."
+                )
+            else:
+                if prior is not None or reconciled:
+                    partial_summary = prior or _build_start_aborted_summary(
+                        active_entry.run_spec, engine_name=self._engine.engine_id,
+                        runtime_options=runtime_options, participant_number=participant_number,
+                        participant_metadata=participant_metadata, warnings=(),
+                        abort_reason="Session interrupted before playback returned a result.",
+                    )
+                    updates: dict[str, object] = {
+                        "session_id": session_plan.session_id,
+                        "participant_session_number": participant_session_number,
+                        "task_responses": reconciled,
+                    }
+                    if running_pre_tasks or running_post_tasks:
+                        updates.update(
+                            task_flow_completed=False, task_flow_aborted=True,
+                            task_abort_stage=("post_condition" if running_post_tasks
+                                              else "pre_condition"),
+                            task_abort_id=None,
+                            task_abort_reason=(
+                                f"{type(execution_error).__name__}: {execution_error}"
+                            ),
+                        )
+                    partial_summary = partial_summary.model_copy(update=updates)
+                    if prior is None:
+                        run_results.append(partial_summary)
+                    else:
+                        run_results[-1] = partial_summary
+                    try:
+                        checkpoint_results(run_results)
+                    except Exception as checkpoint_error:
+                        LOGGER.warning(
+                            "Partial task result checkpoint could not be updated (%s); "
+                            "the primary runtime error and original journal are retained.",
+                            type(checkpoint_error).__name__,
+                        )
+                        warnings.append(
+                            "Detailed task results could not be refreshed after interruption. "
+                            "Submitted answers remain in the original task journal."
+                        )
+
+        if post_responses is not None and post_responses.enabled:
+            state: Literal["completed", "aborted", "error"] = (
+                "error" if execution_error is not None or trigger_error is not None else
+                "aborted" if abort_reason is not None else "completed"
+            )
+            try:
+                finish_post_response_entry(state)
+                post_responses.finish_session(state=state)
+            except Exception as context_error:
+                if execution_error is None:
+                    execution_error = context_error
+                else:
+                    LOGGER.warning(
+                        "Post-condition response context could not be finalized (%s); "
+                        "original task journals are retained.", type(context_error).__name__,
+                    )
+            project_post_responses()
 
         if execution_error is not None:
             abort_reason = (
@@ -787,10 +923,21 @@ class RuntimeWorker:
                     compact_summary_path.unlink(missing_ok=True)
                 for path in compact_run_paths:
                     path.unlink(missing_ok=True)
-                if compact_task_checkpoint is not None:
+                if compact_task_checkpoint is not None and (
+                    post_responses is None or not post_responses.enabled
+                ):
                     compact_task_checkpoint.discard()
                 acquisition.write_completed_handoff(session_plan)
         except Exception as export_error:
+            if post_responses is not None and post_responses.enabled:
+                try:
+                    post_responses.finish_session(state="error")
+                except Exception as context_error:
+                    LOGGER.warning(
+                        "Post-condition response context could not retain finalization failure "
+                        "(%s); original task journals are retained.", type(context_error).__name__,
+                    )
+                project_post_responses()
             _finish_acquisition_after_error(
                 acquisition, execution_error or trigger_error or export_error,
                 records=trigger_backend.records, export_error=str(export_error),

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING, Literal, cast
+from uuid import uuid4
 
 from PySide6.QtCore import QRectF, QSignalBlocker, QSize, Qt, Signal
 from PySide6.QtGui import (
@@ -272,6 +273,7 @@ class TaskModuleDraft:
     steps: list[TaskStepDraft] = field(default_factory=list)
     backward_counting: BackwardCountingConfig | None = None
     image_memory: ImageMemoryConfig | None = None
+    simple_post_questions: bool = False
 
 
 @dataclass
@@ -1007,13 +1009,144 @@ class TaskOptionTable(QTableWidget):
         return "degrees"
 
 
-class QuestionnaireEditor(QWidget):
-    """Ordered questionnaire item editor covering all neutral response types."""
+class NaturalQuestionOptions(QWidget):
+    """Answer rows that retain stable metadata without exposing option syntax."""
 
     changed = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
+        self._syncing = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        self.table = QTableWidget(0, 3, self)
+        self.table.setObjectName("simple_question_answer_rows")
+        self.table.setHorizontalHeaderLabels(["Answer", "Correct", "Score"])
+        self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.verticalHeader().hide()
+        self.table.setMinimumHeight(110)
+        self.table.setMaximumHeight(150)
+        self.table.setColumnWidth(0, 250)
+        self.table.setColumnWidth(1, 72)
+        layout.addWidget(self.table)
+        actions = QHBoxLayout()
+        self.add_button = QPushButton("Add answer", self)
+        self.remove_button = QPushButton("Remove answer", self)
+        self.scoring_checkbox = QCheckBox("Score answers", self)
+        self.scoring_checkbox.setToolTip(
+            "Optional correctness and scores. Unchecked questions record answers without scoring.",
+        )
+        mark_secondary_action(self.add_button)
+        mark_destructive_action(self.remove_button)
+        actions.addWidget(self.add_button)
+        actions.addWidget(self.remove_button)
+        actions.addStretch(1)
+        actions.addWidget(self.scoring_checkbox)
+        layout.addLayout(actions)
+        self.add_button.clicked.connect(self._add)
+        self.remove_button.clicked.connect(self._remove)
+        self.table.itemChanged.connect(self._changed)
+        self.scoring_checkbox.toggled.connect(self._changed)
+        self._changed()
+
+    def _changed(self, *_args: object) -> None:
+        scored = self.scoring_checkbox.isChecked()
+        self.table.setColumnHidden(1, not scored)
+        self.table.setColumnHidden(2, not scored)
+        if not self._syncing:
+            self._syncing = True
+            for row in range(self.table.rowCount()):
+                item = self.table.item(row, 0)
+                if item is not None:
+                    item.setToolTip(item.text())
+                    item.setData(Qt.ItemDataRole.AccessibleTextRole, item.text())
+            self._syncing = False
+            self.changed.emit()
+
+    def set_options(self, options: list[TaskOptionDraft]) -> None:
+        self._syncing = True
+        self.table.setRowCount(len(options))
+        self.scoring_checkbox.setChecked(
+            any(option.correct is not None or option.score is not None for option in options),
+        )
+        for row, option in enumerate(options):
+            self._set_option_row(row, option)
+        self._syncing = False
+        self._changed()
+
+    def _set_option_row(self, row: int, option: TaskOptionDraft) -> None:
+        text = QTableWidgetItem(option.label)
+        text.setData(Qt.ItemDataRole.UserRole, copy.deepcopy(option))
+        text.setToolTip(option.label)
+        correct = QTableWidgetItem()
+        correct.setFlags(
+            correct.flags() | Qt.ItemFlag.ItemIsUserCheckable | Qt.ItemFlag.ItemIsUserTristate,
+        )
+        correct.setCheckState(
+            Qt.CheckState.PartiallyChecked if option.correct is None
+            else Qt.CheckState.Checked if option.correct else Qt.CheckState.Unchecked,
+        )
+        self.table.setItem(row, 0, text)
+        self.table.setItem(row, 1, correct)
+        self.table.setItem(row, 2, QTableWidgetItem(
+            "" if option.score is None else f"{option.score:g}",
+        ))
+
+    def options(self) -> list[TaskOptionDraft]:
+        options = []
+        for row in range(self.table.rowCount()):
+            item = self.table.item(row, 0)
+            assert item is not None
+            option = copy.deepcopy(cast(TaskOptionDraft, item.data(Qt.ItemDataRole.UserRole)))
+            option.label = item.text()
+            if self.scoring_checkbox.isChecked():
+                correct = self.table.item(row, 1)
+                score_item = self.table.item(row, 2)
+                assert correct is not None and score_item is not None
+                state = correct.checkState()
+                option.correct = (None if state == Qt.CheckState.PartiallyChecked
+                                  else state == Qt.CheckState.Checked)
+                score = score_item.text().strip()
+                try:
+                    option.score = float(score) if score else None
+                except ValueError as error:
+                    raise ValueError("Enter a numeric score or leave it blank.") from error
+            else:
+                option.correct = None
+                option.score = None
+            options.append(option)
+        return options
+
+    def _add(self) -> None:
+        row = self.table.rowCount()
+        self._syncing = True
+        self.table.insertRow(row)
+        self._set_option_row(row, TaskOptionDraft(
+            option_id=f"answer-{uuid4().hex[:10]}", label="Answer",
+        ))
+        self._syncing = False
+        self._changed()
+        self.table.setCurrentCell(row, 0)
+        item = self.table.item(row, 0)
+        assert item is not None
+        self.table.editItem(item)
+
+    def _remove(self) -> None:
+        row = self.table.currentRow()
+        if row >= 0:
+            self.table.removeRow(row)
+            self.changed.emit()
+
+
+class QuestionnaireEditor(QWidget):
+    """Ordered questionnaire item editor covering all neutral response types."""
+
+    changed = Signal()
+
+    def __init__(self, parent: QWidget | None = None, *, simple: bool = False) -> None:
+        super().__init__(parent)
+        self._simple = simple
         self.setObjectName("condition_task_questionnaire_editor")
         self._questions: list[TaskQuestionDraft] = []
         self._syncing = False
@@ -1026,6 +1159,8 @@ class QuestionnaireEditor(QWidget):
 
         self.add_kind_combo = QComboBox(self)
         self.add_kind_combo.setObjectName("condition_task_add_question_kind_combo")
+        if simple:
+            self.add_kind_combo.addItem("Yes / No", "yes_no")
         for label, kind in _QUESTION_LABELS:
             self.add_kind_combo.addItem(label, kind)
         self.add_kind_combo.setMinimumContentsLength(12)
@@ -1083,6 +1218,7 @@ class QuestionnaireEditor(QWidget):
             "id | label | selectable/display-only | correct | optional score | "
             "optional project image path"
         )
+        self.natural_options = NaturalQuestionOptions(self) if simple else None
         self.randomize_question_options_checkbox = QCheckBox(
             "Randomize option order for this question",
             self,
@@ -1106,7 +1242,11 @@ class QuestionnaireEditor(QWidget):
         self.maximum_value_spin = self._number_spin("condition_task_question_maximum_value_spin")
         self.step_value_spin = self._number_spin(
             "condition_task_question_step_value_spin",
-            minimum=0.000001,
+            minimum=0.0,
+        )
+        self.step_value_spin.setSpecialValueText("Any / default")
+        self.step_value_spin.setToolTip(
+            "Any increment for numeric answers; a one-unit default for rating scales.",
         )
         self.minimum_label_edit = QLineEdit(self)
         self.minimum_label_edit.setObjectName("condition_task_question_minimum_label_edit")
@@ -1153,7 +1293,12 @@ class QuestionnaireEditor(QWidget):
         self.question_form.addRow("Prompt", self.question_prompt_edit)
         self.question_form.addRow("", self.required_checkbox)
         self.options_label = QLabel("Options", self)
-        answers_form.addRow(self.options_label, self.options_edit)
+        if self.natural_options is not None:
+            answers_form.addRow(self.options_label, self.natural_options)
+        else:
+            answers_form.addRow(self.options_label, self.options_edit)
+        if simple:
+            self.options_edit.hide()
         self.options_edit.setToolTip(
             "One option per line: ID | label | selectable or display-only | correct | "
             "optional score | optional project image path"
@@ -1195,6 +1340,7 @@ class QuestionnaireEditor(QWidget):
         self.question_tabs.addTab(question_page, "Question")
         self.question_tabs.addTab(answers_page, "Answers")
         self.question_tabs.addTab(rules_page, "Rules")
+        self.question_tabs.setTabVisible(2, not simple)
         for spin in (
             self.minimum_selections_spin,
             self.maximum_selections_spin,
@@ -1205,9 +1351,13 @@ class QuestionnaireEditor(QWidget):
             spin.setMinimumWidth(0)
             spin.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
 
-        content = QVBoxLayout(self)
+        content = QHBoxLayout(self) if simple else QVBoxLayout(self)
         content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(8)
+        if simple:
+            list_column.setFixedWidth(230)
+            self.question_list.setMinimumHeight(140)
+            self.question_list.setMaximumHeight(16_777_215)
         content.addWidget(list_column)
         content.addWidget(self.question_tabs, 1)
 
@@ -1232,6 +1382,8 @@ class QuestionnaireEditor(QWidget):
         ):
             widget_signal.connect(self._store_selected)
         self.question_kind_combo.currentIndexChanged.connect(self._refresh_type_fields)
+        if self.natural_options is not None:
+            self.natural_options.changed.connect(self._store_selected)
         self._refresh_type_fields()
         self._set_editor_enabled(False)
 
@@ -1295,10 +1447,20 @@ class QuestionnaireEditor(QWidget):
         kind = str(self.add_kind_combo.currentData())
         existing = {question.question_id for question in self._questions}
         question_id = _unique_id("question", existing)
-        question = _default_question_draft(
-            question_id=question_id,
-            kind=kind,  # type: ignore[arg-type]
-        )
+        if kind == "yes_no":
+            from fpvs_studio.core.post_questions import make_yes_no_question
+
+            model = make_yes_no_question("Question", question_id=question_id)
+            question = TaskQuestionDraft(
+                question_id=model.question_id, prompt="", kind="single_choice",
+                options=[TaskOptionDraft(option_id=option.option_id, label=option.label)
+                         for option in model.options],
+            )
+        else:
+            question = _default_question_draft(
+                question_id=question_id,
+                kind=kind,  # type: ignore[arg-type]
+            )
         self._questions.append(question)
         self._refresh_list(select_row=len(self._questions) - 1)
         self.changed.emit()
@@ -1330,9 +1492,12 @@ class QuestionnaireEditor(QWidget):
             self.question_list.clear()
             for question in self._questions:
                 label = next(label for label, kind in _QUESTION_LABELS if kind == question.kind)
-                item = QListWidgetItem(f"{question.prompt or question.question_id}\n{label}")
+                prompt = question.prompt or (
+                    "New question" if self._simple else question.question_id
+                )
+                item = QListWidgetItem(f"{prompt}\n{label}")
                 item.setData(Qt.ItemDataRole.UserRole, question.question_id)
-                item.setToolTip(f"{question.prompt or question.question_id}\n{label}")
+                item.setToolTip(f"{prompt}\n{label}")
                 self.question_list.addItem(item)
             self.question_list.setCurrentRow(select_row)
         finally:
@@ -1350,6 +1515,8 @@ class QuestionnaireEditor(QWidget):
                 self.question_id_edit.clear()
                 self.question_prompt_edit.clear()
                 self.options_edit.clear()
+                if self.natural_options is not None:
+                    self.natural_options.set_options([])
                 return
             self.question_id_edit.setText(question.question_id)
             self.question_kind_combo.setCurrentIndex(
@@ -1358,6 +1525,8 @@ class QuestionnaireEditor(QWidget):
             self.question_prompt_edit.setPlainText(question.prompt)
             self.required_checkbox.setChecked(question.required)
             self.options_edit.setPlainText(_option_lines(question.options))
+            if self.natural_options is not None:
+                self.natural_options.set_options(question.options)
             self.randomize_question_options_checkbox.setChecked(question.randomize_options)
             self.minimum_selections_spin.setValue(
                 question.minimum_selections if question.minimum_selections is not None else -1
@@ -1397,7 +1566,8 @@ class QuestionnaireEditor(QWidget):
         question.prompt = self.question_prompt_edit.toPlainText()
         question.required = self.required_checkbox.isChecked()
         try:
-            question.options = _parse_option_lines(self.options_edit.toPlainText())
+            question.options = (self.natural_options.options() if self.natural_options is not None
+                                else _parse_option_lines(self.options_edit.toPlainText()))
         except ValueError as error:
             question.validation_error = str(error)
         else:
@@ -1418,8 +1588,9 @@ class QuestionnaireEditor(QWidget):
         question.branch_target_step_id = self.branch_target_edit.text().strip()
         item = self.question_list.item(row)
         label = next(label for label, item_kind in _QUESTION_LABELS if item_kind == kind)
-        item.setText(f"{question.prompt or question.question_id}\n{label}")
-        item.setToolTip(f"{question.prompt or question.question_id}\n{label}")
+        prompt = question.prompt or ("New question" if self._simple else question.question_id)
+        item.setText(f"{prompt}\n{label}")
+        item.setToolTip(f"{prompt}\n{label}")
         self._refresh_type_fields()
         if emit_changed:
             self.changed.emit()
@@ -1432,7 +1603,9 @@ class QuestionnaireEditor(QWidget):
         rating = kind == "rating"
         text = kind in {"short_text", "long_text"}
         self.options_label.setVisible(choice)
-        self.options_edit.setVisible(choice)
+        self.options_edit.setVisible(choice and not self._simple)
+        if self.natural_options is not None:
+            self.natural_options.setVisible(choice)
         self.randomize_question_options_checkbox.setVisible(choice)
         self.selection_range_label.setVisible(multiple)
         self.selection_range_row.setVisible(multiple)
@@ -2731,6 +2904,7 @@ def _module_to_draft(module: TaskModule, binding: TaskBinding) -> TaskModuleDraf
         occurrence=binding.occurrence.value,
         replaces_condition_start_gate=binding.replaces_condition_start_gate,
         repeat_count=module.repeat_count,
+        simple_post_questions=module.simple_post_questions,
         steps=[_step_to_draft(step) for step in module.steps],
         backward_counting=(
             module.backward_counting.model_copy(deep=True)
@@ -2812,7 +2986,7 @@ def _step_to_draft(step: TaskStep) -> TaskStepDraft:
                 maximum_selections=question.max_selections,
                 minimum_value=question.min_value if question.min_value is not None else 1.0,
                 maximum_value=question.max_value if question.max_value is not None else 5.0,
-                step_value=question.step if question.step is not None else 1.0,
+                step_value=question.step if question.step is not None else 0.0,
                 randomize_options=question.randomize_options,
                 minimum_label=question.min_label or "",
                 maximum_label=question.max_label or "",
@@ -2986,6 +3160,7 @@ def _module_from_draft(module: TaskModuleDraft) -> TaskModule:
         task_id=module.module_id,
         name=module.title,
         repeat_count=module.repeat_count,
+        simple_post_questions=module.simple_post_questions,
         steps=[_step_from_draft(step) for step in module.steps],
         backward_counting=(
             BackwardCountingConfig.model_validate(module.backward_counting.model_dump())
@@ -3116,7 +3291,7 @@ def _question_from_draft(question: TaskQuestionDraft) -> TaskQuestion:
         max_selections=maximum,
         min_value=question.minimum_value if numeric else None,
         max_value=question.maximum_value if numeric else None,
-        step=question.step_value if numeric else None,
+        step=(question.step_value or None) if numeric else None,
         min_label=question.minimum_label or None,
         max_label=question.maximum_label or None,
         max_text_length=question.maximum_text_length,

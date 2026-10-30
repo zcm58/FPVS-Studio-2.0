@@ -182,3 +182,11 @@ check randomized no-load-first baseline, selected no-load-only testing, explicit
 Submit, revised choices, incorrect responses, and Escape in each phase. Inspect full
 and compact output. Source/fake-renderer checks do not establish physical display or
 trigger acceptance.
+
+## Simple after-condition questions
+
+The common-action dialog also exposes Post-condition Questions beside Counting,
+Memory and Masking. These use ordinary after-only bindings rather than a grouped
+modifier requiring a before module. Existing modifier post-steps run first; detailed
+editing and presets stay under Advanced. See [Post-condition Questions](POST_CONDITION_QUESTIONS.md)
+for the simple editor, immutable context and project-root response CSV contract.

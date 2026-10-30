@@ -1,11 +1,11 @@
 # Simplified Condition Modifiers and Readable Post-Question Responses
 
-Status: Planned
+Status: Completed
 
 ## Purpose and confirmed decisions
 
-Planning branch: `feat/condition-timing-and-reproducibility`. This is the fifth
-feature plan on the branch; implementation has not started.
+Planning branch: `feat/condition-timing-and-reproducibility`. This is the sixth executed
+feature on the branch, after saved condition order was added to the sequence.
 
 Simplify the main **FPVS Condition Modifiers** workflow around straightforward
 Counting, Memory, Masking and **Post-condition Questions** actions. Keep detailed
@@ -178,7 +178,63 @@ and preserve [stream-duration boundaries](../completed/per-condition-stream-dura
 authoring must not consume the stimulus/condition/fixation RNG domains in the
 [seed plan](../completed/reproducible-randomization-controls.md).
 
-The older [participant results and question presentation proposal](participant-results-and-question-presentation.md)
+The older [participant results and question presentation proposal](../planned/participant-results-and-question-presentation.md)
 remains separate: a results browser, Masking/group statistics, Excel workbooks and a
 general participant-screen restyle are not added by this plan. Reuse compatible
 provenance/export work rather than introducing parallel answer stores.
+
+## Execution decisions
+
+- Saved condition order is verified, committed and pushed as 2bf34f2.
+- Prioritize a concise main GUI: common actions stay visible, technical and advanced
+  settings remain optional. Existing modifier draft/preset behavior stays authoritative.
+- Retain the original task-response journal for question-bearing executions and a
+  small immutable compiled context for rebuilds. Recovery plans alone are insufficient:
+  successful/cancelled sessions remove them. Do not create another answer logger.
+
+## Delivered implementation
+
+- The main modifier workflow exposes Counting, Memory, Masking and Post-condition
+  Questions directly, with advanced tools collapsed. Simple questions offer natural
+  answer rows, stable identities, all six existing response types, explicit shared/private
+  assignments, Apply/Cancel and a non-recording participant preview.
+- Marked after-only modules run after every assigned condition presentation, following
+  existing modifier post-steps. Defaults are required, self-paced, unscored Yes/No
+  with explicit Continue. Complex branching/repeated tasks retain Advanced ownership.
+- Project1.16/Config1.14 and optional SessionPlan1.9 context capture original question
+  definitions/labels, condition names and chronological presentation identity before
+  option shuffle. Old unmarked flows and schemas retain their behavior. Duplicate
+  marked config bindings now fail validation before import creates files.
+- Existing per-answer journals remain canonical. Full and compact executions retain
+  original context/journals for rebuild, reconcile earlier answers after exceptions,
+  and project the cumulative root CSV with independent stream/question/session states.
+  Ratings, No, zero, interrupted questions, additive versions, escaped text, Excel locks,
+  missing evidence and manually annotated CSV headers have explicit handling.
+- Active-project Open Responses Folder and worker-backed Rebuild responses work in
+  either output mode. Ordinary bundle and clean Library privacy inventories remain
+  unchanged; legitimate stimulus CSVs stay eligible for ordinary bundles.
+
+## Verification evidence
+
+- New core question suite: 25 passed after the final pre-I/O config guard.
+- New question/lifecycle/projection suite before that narrow guard: 63 passed and
+  one expected Windows symlink skip. Subsequent guard coverage passed independently.
+- Existing explicit Continue engine/runtime checks: 92 passed. Earlier focused runtime,
+  recovery and durability review: 131 passed and two expected symlink skips; broader
+  legacy runtime/modifier/recording coverage: 381 passed and two skips.
+- GUI focused route: 98 safe non-Qt tests passed. Registered Qt coverage includes both
+  themes, minimum/default geometry, six answer types, long/many answers, shared/private
+  edits, preview, folder/rebuild busy/error and Apply/Cancel. Qt and physical presentation
+  checks were not run; the canonical visible smoke path remains documented.
+- Changed-file Ruff/compilation, full-source mypy (259 files), garbage-collection audit,
+  docs audits and verification-config audit passed. Unfiltered precommit stops on six
+  unrelated E501 issues in the preserved user-owned untracked helpers; filtered gates
+  exclude only those helper paths from changed-file lint/compilation.
+
+- Final full safe suite after integration/review repairs: **4261 passed, 13 expected
+  Windows symlink skips and 24 subtests passed** in 403.02 seconds, using a short
+  task-local temporary root. There were no failures. The later duplicate-binding
+  regression passed with the complete 25-case core question suite.
+- Final independent source review found no remaining concrete P1/P2 issue. All six
+  feature plans on this branch are implemented; native visible/physical acceptance
+  remains explicitly outside the automated evidence above.

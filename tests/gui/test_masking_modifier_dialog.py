@@ -53,6 +53,8 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
     dialog.show()
     dialog.tabs.setCurrentIndex(1)
     assert dialog.settings_stack.currentIndex() == 2
+    assert not dialog.screens_button.isVisible()
+    dialog.advanced_toggle.setChecked(True)
     assert dialog.screens_button.isVisible()
     assert not dialog.instructions_button.isVisible()
     assert not dialog.masking_catch_checkbox.isChecked()

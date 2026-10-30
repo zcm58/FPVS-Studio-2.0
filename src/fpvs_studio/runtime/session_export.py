@@ -366,12 +366,15 @@ def compact_task_checkpoint_path(
     participant_number: str,
     session_id: str,
     participant_session_number: int | None = None,
+    execution_id: str | None = None,
 ) -> Path:
     """Return a contained, opaque checkpoint path for one compact-mode session."""
 
     identity_text = f"{participant_number}\0{session_id}"
     if participant_session_number is not None:
         identity_text += f"\0{participant_session_number}"
+    if execution_id is not None:
+        identity_text += f"\0{execution_id}"
     identity = identity_text.encode()
     filename = f"{hashlib.sha256(identity).hexdigest()[:24]}.jsonl"
     return logs_dir(project_root) / TASK_CHECKPOINT_DIRNAME / filename

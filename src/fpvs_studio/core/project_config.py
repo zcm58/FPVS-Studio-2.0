@@ -82,6 +82,7 @@ from fpvs_studio.core.paths import (
     stimulus_originals_dir,
     task_assets_root,
 )
+from fpvs_studio.core.post_questions import validate_post_question_bindings
 from fpvs_studio.core.presentation import legacy_project_presentation_settings
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.recording_hardware import (
@@ -118,6 +119,7 @@ CONDITION_DURATION_CONFIG_SCHEMA_VERSION: Literal["1.10.0"] = "1.10.0"
 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION: Literal["1.11.0"] = "1.11.0"
 RANDOMIZATION_CONFIG_SCHEMA_VERSION: Literal["1.12.0"] = "1.12.0"
 SAVED_ORDER_CONFIG_SCHEMA_VERSION: Literal["1.13.0"] = "1.13.0"
+POST_QUESTIONS_CONFIG_SCHEMA_VERSION: Literal["1.14.0"] = "1.14.0"
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -514,7 +516,7 @@ class ProjectConfigFile(FPVSBaseModel):
 
     schema_version: Literal[
         "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
-        "1.10.0", "1.11.0", "1.12.0", "1.13.0",
+        "1.10.0", "1.11.0", "1.12.0", "1.13.0", "1.14.0",
     ] = "1.2.0"
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
@@ -544,11 +546,21 @@ class ProjectConfigFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
+        if any(task.simple_post_questions for task in self.task_modules):
+            if self.schema_version != POST_QUESTIONS_CONFIG_SCHEMA_VERSION:
+                raise ValueError("Post-condition Questions require config schema 1.14.0.")
+            for condition in self.conditions:
+                validate_post_question_bindings(
+                    pre_bindings=condition.pre_task_bindings,
+                    post_bindings=condition.post_task_bindings, modules=self.task_modules,
+                )
         saved_order = self.session.saved_condition_order
         completed_policy = (self.completed_session.ordering_policy
                             if self.completed_session is not None else None)
         if saved_order is not None or completed_policy is not None:
-            if self.schema_version != SAVED_ORDER_CONFIG_SCHEMA_VERSION:
+            if self.schema_version not in {
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
+            }:
                 raise ValueError("Saved order/provenance requires config schema 1.13.0.")
         if saved_order is not None:
             masking_tasks = {task_id for modifier in self.condition_modifiers
@@ -570,7 +582,7 @@ class ProjectConfigFile(FPVSBaseModel):
         )):
             if self.schema_version not in {
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Randomization controls require config schema 1.12.0.")
             masking_tasks = {task_id for modifier in self.condition_modifiers
@@ -590,7 +602,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 raise ValueError("Presentation counts are unavailable for Attentional-Blink.")
             if self.schema_version not in {
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION, RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Presentation counts require config schema 1.11.0.")
             masking_pre_tasks = {
@@ -621,7 +633,7 @@ class ProjectConfigFile(FPVSBaseModel):
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
                for item in self.conditions) and self.schema_version not in {
                    "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
-                   "1.10.0", "1.11.0", "1.12.0", "1.13.0",
+                   "1.10.0", "1.11.0", "1.12.0", "1.13.0", "1.14.0",
                }:
             raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
@@ -634,7 +646,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition modifiers require config schema 1.4.0 or newer.")
         if (any(modifier.masking is not None for modifier in self.condition_modifiers)
@@ -647,7 +659,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Native scene workflows require config schema 1.5.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
@@ -659,7 +671,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Masking catch trials require config schema 1.6.0.")
         if any(condition.masking_catch for condition in self.conditions) or any(
@@ -671,7 +683,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError(
                     "Catch conditions and task text alignment require config schema 1.7.0."
@@ -683,7 +695,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Masking event triggers require config schema 1.8.0.")
         if any(condition.base_hz is not None for condition in self.conditions):
@@ -691,7 +703,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION, CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Condition frequency overrides require config schema 1.9.0.")
         if any(condition.stream_duration_seconds is not None for condition in self.conditions) or (
@@ -702,7 +714,7 @@ class ProjectConfigFile(FPVSBaseModel):
                 CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
                 CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
                 RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
             }:
                 raise ValueError("Stream duration overrides require config schema 1.10.0.")
         referenced = set(owned_image_references(self.task_modules, self.condition_modifiers))
@@ -743,7 +755,9 @@ def export_project_config(
     )
     return ProjectConfigFile(
         schema_version=(
-            SAVED_ORDER_CONFIG_SCHEMA_VERSION
+            POST_QUESTIONS_CONFIG_SCHEMA_VERSION
+            if any(task.simple_post_questions for task in project.task_modules)
+            else SAVED_ORDER_CONFIG_SCHEMA_VERSION
             if project.settings.session.saved_condition_order is not None
             or (session_plan is not None and session_plan.ordering_policy is not None)
             else RANDOMIZATION_CONFIG_SCHEMA_VERSION
@@ -981,11 +995,11 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
         CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
         RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-        SAVED_ORDER_CONFIG_SCHEMA_VERSION,
+        SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
     }:
         raise ProjectConfigError(
             "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.13.0."
+            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.14.0."
         )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
@@ -1030,7 +1044,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
 
     project = ProjectFile(
         schema_version=(
-            ProjectSchemaVersion.V1_15
+            ProjectSchemaVersion.V1_16
+            if config.schema_version == POST_QUESTIONS_CONFIG_SCHEMA_VERSION
+            else ProjectSchemaVersion.V1_15
             if config.schema_version == SAVED_ORDER_CONFIG_SCHEMA_VERSION
             else ProjectSchemaVersion.V1_14
             if config.schema_version == RANDOMIZATION_CONFIG_SCHEMA_VERSION

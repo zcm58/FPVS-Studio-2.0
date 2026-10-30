@@ -23,10 +23,12 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSizePolicy,
@@ -34,6 +36,7 @@ from PySide6.QtWidgets import (
     QStackedWidget,
     QTabWidget,
     QTextEdit,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -54,6 +57,7 @@ from fpvs_studio.core.condition_modifiers import (
     validate_image_memory_definition,
 )
 from fpvs_studio.core.condition_timing import effective_condition_base_hz
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.masking import MaskingSettings
 from fpvs_studio.core.masking_presets import (
     apply_masking_timing_defaults,
@@ -71,6 +75,7 @@ from fpvs_studio.core.modifier_presets import (
     save_modifier_preset,
 )
 from fpvs_studio.core.paths import filesystem_path
+from fpvs_studio.core.post_questions import remove_post_questionnaire
 from fpvs_studio.core.task_assets import modifier_image_references, task_image_references
 from fpvs_studio.core.task_models import (
     BackwardCountingRole,
@@ -89,13 +94,22 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.condition_task_dialog import ConditionTaskDialog
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.folder_actions import open_folder
 from fpvs_studio.gui.masking_source_dialog import MaskingSourceDialog
 from fpvs_studio.gui.modifier_library_dialog import (
     ModifierLibraryDialog,
     ModifierScopeDialog,
     SaveModifierPresetDialog,
 )
+from fpvs_studio.gui.post_questions_dialog import PostQuestionsDialog
 from fpvs_studio.gui.workers import BackgroundTask
+from fpvs_studio.runtime.post_condition_responses import (
+    POST_CONDITION_RESPONSES_FILENAME,
+    post_condition_responses_path,
+    rebuild_post_condition_responses,
+)
+
+_QUESTIONS_KEY = "__post-condition-questions__"
 
 
 def _label(text: str, parent: QWidget) -> QLabel:
@@ -126,9 +140,13 @@ def condition_modifier_summary(document: ProjectDocument, condition_id: str) -> 
         for modifier in document.project.condition_modifiers
         if condition_id in modifier_condition_ids(document.project, modifier.modifier_id)
     ]
+    condition = document.get_condition(condition_id)
+    if condition is not None:
+        tasks = {task.task_id: task for task in document.project.task_modules}
+        names.extend(tasks[binding.task_id].name for binding in condition.post_task_bindings
+                     if binding.task_id in tasks and tasks[binding.task_id].simple_post_questions)
     if names:
         return ", ".join(names)
-    condition = document.get_condition(condition_id)
     if condition is not None and (condition.pre_task_bindings or condition.post_task_bindings):
         return "Existing custom tasks"
     return "No modifiers"
@@ -177,6 +195,8 @@ class ConditionModifierDialog(QDialog):
         self._custom_edited = False
         self._masking_timing_edited = False
         self._selected_id: str | None = None
+        self._selected_questions = False
+        self._question_affected: set[str] = set()
         self._definitions: dict[str, ModifierDefinition] = {}
         self._scopes: dict[str, list[str]] = {}
         self._target_images: list[MemoryImage] = []
@@ -263,29 +283,62 @@ class ConditionModifierDialog(QDialog):
         sidebar.setFixedWidth(232)
         side = QVBoxLayout(sidebar)
         side.setContentsMargins(0, 0, 0, 0)
+        self.counting_button = QPushButton("Counting", sidebar)
+        self.counting_button.clicked.connect(lambda: self._add_common("counting"))
+        self.memory_button = QPushButton("Memory", sidebar)
+        self.memory_button.clicked.connect(lambda: self._add_common("memory"))
+        self.masking_button = QPushButton("Masking", sidebar)
+        masking_menu = QMenu(self.masking_button)
+        for variant in ("color", "faces", "number"):
+            action = masking_menu.addAction(variant.title())
+            action.triggered.connect(lambda _checked=False, value=variant: self._add_common(value))
+        self.masking_button.setMenu(masking_menu)
+        self.questions_button = QPushButton("Post-condition Questions", sidebar)
+        self.questions_button.setObjectName("post_condition_questions_button")
+        self.questions_button.clicked.connect(self._edit_post_questions)
+        self.questions_button.setEnabled(
+            self._project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK,
+        )
+        for button in (self.counting_button, self.memory_button,
+                       self.masking_button, self.questions_button):
+            mark_secondary_action(button)
+            side.addWidget(button)
         side.addWidget(_label("Added to this condition", sidebar))
         self.modifier_list = QListWidget(sidebar)
         self.modifier_list.setObjectName("modifier_added_list")
         self.modifier_list.setWordWrap(True)
         self.modifier_list.currentItemChanged.connect(self._select_item)
         side.addWidget(self.modifier_list, 1)
-        self.add_button = QPushButton("Add modifier…", sidebar)
+        self.advanced_toggle = QToolButton(sidebar)
+        self.advanced_toggle.setText("Advanced")
+        self.advanced_toggle.setCheckable(True)
+        self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.advanced_toggle.setArrowType(Qt.ArrowType.RightArrow)
+        self.advanced_toggle.toggled.connect(self._toggle_advanced)
+        side.addWidget(self.advanced_toggle)
+        self.advanced_tools = QWidget(sidebar)
+        advanced_layout = QVBoxLayout(self.advanced_tools)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(6)
+        self.add_button = QPushButton("Library and presets…", sidebar)
         self.add_button.clicked.connect(self._open_library)
-        side.addWidget(self.add_button)
+        advanced_layout.addWidget(self.add_button)
         self.remove_button = QPushButton("Remove from condition", sidebar)
         self.remove_button.clicked.connect(self._remove_selected)
         mark_destructive_action(self.remove_button)
         side.addWidget(self.remove_button)
         self.custom_button = QPushButton("Existing custom tasks…", sidebar)
         self.custom_button.clicked.connect(self._open_advanced)
-        side.addWidget(self.custom_button)
+        advanced_layout.addWidget(self.custom_button)
         self.convert_button = QPushButton("Convert existing counting…", sidebar)
         self.convert_button.clicked.connect(self._convert_counting)
         self.convert_button.setVisible(
             any(task.backward_counting is not None for task in self._project.task_modules)
             and not self._project.condition_modifiers
         )
-        side.addWidget(self.convert_button)
+        advanced_layout.addWidget(self.convert_button)
+        side.addWidget(self.advanced_tools)
+        self.advanced_tools.hide()
         body.addWidget(sidebar)
         self.detail = QWidget(self)
         detail = QVBoxLayout(self.detail)
@@ -305,6 +358,20 @@ class ConditionModifierDialog(QDialog):
         self.copy_button.clicked.connect(self._copy_for_condition)
         scope.addWidget(self.copy_button)
         detail.addLayout(scope)
+        self.question_overview = QWidget(self.detail)
+        question_overview_layout = QVBoxLayout(self.question_overview)
+        question_overview_layout.setContentsMargins(0, 8, 0, 0)
+        self.question_flow_label = _label("", self.question_overview)
+        question_overview_layout.addWidget(self.question_flow_label)
+        self.edit_questions_button = QPushButton("Edit questions…", self.question_overview)
+        self.edit_questions_button.clicked.connect(self._edit_post_questions)
+        mark_secondary_action(self.edit_questions_button)
+        question_overview_layout.addWidget(
+            self.edit_questions_button, 0, Qt.AlignmentFlag.AlignLeft,
+        )
+        question_overview_layout.addStretch(1)
+        detail.addWidget(self.question_overview, 1)
+        self.question_overview.hide()
         self.tabs = _ModifierTabs(self.detail)
         self.tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Ignored)
         self.tabs.setObjectName("modifier_editor_tabs")
@@ -326,6 +393,7 @@ class ConditionModifierDialog(QDialog):
         overview.addWidget(self.recorded_label)
         self.advanced_button = QPushButton("Advanced steps…", self.overview)
         self.advanced_button.clicked.connect(self._open_advanced)
+        self.advanced_button.hide()
         overview.addWidget(self.advanced_button, 0, Qt.AlignmentFlag.AlignLeft)
         self.tabs.addTab(self.overview, "Overview")
         self._build_settings()
@@ -335,13 +403,45 @@ class ConditionModifierDialog(QDialog):
         detail.addWidget(self.tabs, 1)
         body.addWidget(self.detail, 1)
         layout.addLayout(body, 1)
+        responses = QHBoxLayout()
+        self.responses_label = _label(POST_CONDITION_RESPONSES_FILENAME, self)
+        self.responses_label.setObjectName("post_question_responses_path")
+        self.responses_label.setWordWrap(False)
+        self.responses_label.setMinimumWidth(
+            self.responses_label.fontMetrics().horizontalAdvance(POST_CONDITION_RESPONSES_FILENAME),
+        )
+        path_error = ""
+        try:
+            response_path = post_condition_responses_path(self._document.project_root)
+            path_detail = str(response_path)
+        except (ValueError, OSError) as error:
+            path_error = str(error)
+            path_detail = (
+                f"{self._document.project_root / POST_CONDITION_RESPONSES_FILENAME}\n{error}"
+            )
+        self.responses_label.setToolTip(path_detail)
+        self.responses_label.setAccessibleDescription(self.responses_label.toolTip())
+        responses.addWidget(self.responses_label)
+        self.open_responses_button = QPushButton("Open Responses Folder", self)
+        self.open_responses_button.clicked.connect(self._open_responses_folder)
+        mark_secondary_action(self.open_responses_button)
+        responses.addWidget(self.open_responses_button)
+        self.rebuild_responses_button = QPushButton("Rebuild responses", self)
+        self.rebuild_responses_button.clicked.connect(self._rebuild_responses)
+        mark_secondary_action(self.rebuild_responses_button)
+        responses.addWidget(self.rebuild_responses_button)
         self.status = _label("Changes remain in this draft until Apply.", self)
         self.status.setObjectName("modifier_status")
         self.status.setMinimumHeight(38)
+        if path_error:
+            self.status.setText(path_error)
+            mark_error_text(self.status)
         layout.addWidget(self.status)
         footer = QHBoxLayout()
+        footer.addLayout(responses)
         self.save_button = QPushButton("Save as local preset…", self)
         self.save_button.clicked.connect(self._save_preset)
+        self.save_button.hide()
         footer.addWidget(self.save_button)
         footer.addStretch()
         self.cancel_button = QPushButton("Cancel", self)
@@ -736,6 +836,15 @@ class ConditionModifierDialog(QDialog):
             self.modifier_list.addItem(item)
             if key == selected_id:
                 selected_row = self.modifier_list.count() - 1
+        question_tasks = self._post_question_tasks()
+        if question_tasks:
+            count = sum(len(step.questions) for task in question_tasks for step in task.steps)
+            item = QListWidgetItem(f"Post-condition Questions\n{count} questions")
+            item.setData(Qt.ItemDataRole.UserRole, _QUESTIONS_KEY)
+            item.setToolTip("\n".join(task.name for task in question_tasks))
+            self.modifier_list.addItem(item)
+            if selected_id == _QUESTIONS_KEY or not self._definitions:
+                selected_row = self.modifier_list.count() - 1
         self.modifier_list.setCurrentRow(selected_row)
         self.modifier_list.blockSignals(False)
         self._loading = False
@@ -751,14 +860,41 @@ class ConditionModifierDialog(QDialog):
                 self.modifier_list.setCurrentItem(previous)
             self.modifier_list.blockSignals(False)
             return
-        self._selected_id = str(current.data(Qt.ItemDataRole.UserRole)) if current else None
-        enabled = self._selected_id is not None
+        key = str(current.data(Qt.ItemDataRole.UserRole)) if current else None
+        self._selected_questions = key == _QUESTIONS_KEY
+        self._selected_id = None if self._selected_questions else key
+        enabled = self._selected_id is not None or self._selected_questions
         self.detail.setEnabled(enabled)
+        self.question_overview.setVisible(self._selected_questions)
+        self.tabs.setVisible(not self._selected_questions)
+        self.scope_button.setVisible(not self._selected_questions)
         self.remove_button.setEnabled(enabled)
         self.save_button.setEnabled(enabled and self._fpvs_root is not None)
         self.save_button.setToolTip(
             "" if self._fpvs_root is not None else "Choose an FPVS Studio Root Folder in Settings."
         )
+        if self._selected_questions:
+            self.title_label.setText("Post-condition Questions")
+            self.description_label.setText("After every presentation, outside the FPVS stream.")
+            self.scope_label.setText(
+                "Choose conditions and edit shared or private questions in the editor.",
+            )
+            self.copy_button.hide()
+            self.save_button.setEnabled(False)
+            try:
+                project = self._build_project()
+            except ValueError as error:
+                self.question_flow_label.setText(str(error))
+            else:
+                condition = next(item for item in project.conditions
+                                 if item.condition_id == self._condition_id)
+                modules = {task.task_id: task for task in project.task_modules}
+                names = [modules[binding.task_id].name if binding.task_id in modules
+                         else f"Missing custom task ({binding.task_id})"
+                         for binding in condition.post_task_bindings]
+                self.question_flow_label.setText("After FPVS:\n" + " → ".join(names))
+            self._refresh_details()
+            return
         if not enabled:
             self.title_label.setText("Add a modifier to get started")
             self._refresh_details()
@@ -772,7 +908,7 @@ class ConditionModifierDialog(QDialog):
         is_masking = definition.modifier.kind == ConditionModifierKind.MASKING
         self.settings_stack.setCurrentIndex(0 if is_counting else 2 if is_masking else 1)
         self.tabs.setTabVisible(self.masking_catch_tab_index, is_masking)
-        self.screens_button.setVisible(not is_counting)
+        self.screens_button.setVisible(not is_counting and self.advanced_toggle.isChecked())
         self.instructions_button.setVisible(not is_masking)
         if is_counting:
             start = next(
@@ -872,6 +1008,7 @@ class ConditionModifierDialog(QDialog):
 
     def _refresh_details(self) -> None:
         affected = {self._condition_id} if self._custom_edited else set()
+        affected.update(self._question_affected)
         if self._masking_timing_edited:
             affected.update(condition.condition_id for condition in self._project.conditions)
         for key in self._original_definitions.keys() | self._definitions.keys():
@@ -1073,6 +1210,18 @@ class ConditionModifierDialog(QDialog):
             )
 
     def _remove_selected(self) -> None:
+        if self._selected_questions:
+            project = self._project
+            for module in self._post_question_tasks():
+                project = remove_post_questionnaire(project, module.task_id, [self._condition_id])
+            self._project = project
+            self._custom_edited = True
+            self._question_affected.add(self._condition_id)
+            self._refresh_list()
+            self._set_status(
+                "Questions removed from this condition's draft. Apply to keep the change.",
+            )
+            return
         if self._selected_id is None:
             return
         key = self._selected_id
@@ -1183,6 +1332,105 @@ class ConditionModifierDialog(QDialog):
                 self._show_library,
                 "Reading local modifier presets…",
             )
+
+    def _toggle_advanced(self, checked: bool) -> None:
+        self.advanced_tools.setVisible(checked)
+        self.save_button.setVisible(checked)
+        self.advanced_button.setVisible(checked)
+        self.advanced_toggle.setArrowType(
+            Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow,
+        )
+        if self._selected_id is not None:
+            definition = self._definitions[self._selected_id]
+            self.screens_button.setVisible(
+                checked and definition.modifier.kind != ConditionModifierKind.BACKWARD_COUNTING,
+            )
+
+    def _add_common(self, kind: str) -> None:
+        if not self._save_fields():
+            return
+        desired = (ConditionModifierKind.BACKWARD_COUNTING if kind == "counting"
+                   else ConditionModifierKind.IMAGE_MEMORY if kind == "memory"
+                   else ConditionModifierKind.MASKING)
+        for key, definition in self._definitions.items():
+            if (definition.modifier.kind == desired and self._condition_id in self._scopes[key]
+                    and (desired != ConditionModifierKind.MASKING
+                         or definition.modifier.masking is not None
+                         and definition.modifier.masking.variant == kind)):
+                self._refresh_list(key)
+                self.tabs.setCurrentIndex(1)
+                return
+        key = f"modifier-{uuid4().hex[:10]}"
+        definition = (create_backward_counting_modifier(modifier_id=key) if kind == "counting"
+                      else create_image_memory_modifier(modifier_id=key) if kind == "memory"
+                      else create_masking_modifier(
+                          modifier_id=key, variant=cast(Literal["color", "faces", "number"], kind),
+                      ))
+        self._add_definition(definition)
+        self.tabs.setCurrentIndex(1)
+
+    def _post_question_tasks(self) -> list[TaskModule]:
+        condition = next(item for item in self._project.conditions
+                         if item.condition_id == self._condition_id)
+        modules = {task.task_id: task for task in self._project.task_modules}
+        return [modules[binding.task_id] for binding in condition.post_task_bindings
+                if binding.task_id in modules and modules[binding.task_id].simple_post_questions]
+
+    def _edit_post_questions(self) -> None:
+        if not self._save_fields():
+            return
+        tasks = self._post_question_tasks()
+        task_id = tasks[0].task_id if tasks else None
+        if len(tasks) > 1:
+            labels = [f"{index}. {task.name}" for index, task in enumerate(tasks, 1)]
+            label, accepted = QInputDialog.getItem(
+                self, "Post-condition Questions", "Question set", labels, 0, False,
+            )
+            if not accepted:
+                return
+            task_id = tasks[labels.index(label)].task_id
+        try:
+            dialog = PostQuestionsDialog(
+                self._build_project(), project_root=self._document.project_root,
+                condition_id=self._condition_id, task_id=task_id, parent=self,
+            )
+        except ValueError as error:
+            self._show_error(error)
+            return
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.project_result is None:
+            return
+        self._project = dialog.project_result
+        self._custom_edited = True
+        self._question_affected.update(dialog.affected_condition_ids)
+        self._refresh_list(_QUESTIONS_KEY)
+        self._set_status("Questions updated in the draft. Apply to keep them in the experiment.")
+
+    def _open_responses_folder(self) -> None:
+        try:
+            if not open_folder(self._document.project_root):
+                raise ValueError("Couldn't open the project folder.")
+        except (ValueError, OSError) as error:
+            self._show_error(error)
+
+    def _rebuild_responses(self) -> None:
+        root = self._document.project_root
+
+        def rebuilt(value: object) -> None:
+            self._set_status(
+                f"Responses rebuilt: {POST_CONDITION_RESPONSES_FILENAME}"
+                if value is not None else "No saved question responses to rebuild.",
+            )
+
+        def rebuild() -> Path | None:
+            try:
+                return rebuild_post_condition_responses(root)
+            except (ValueError, OSError, RuntimeError) as error:
+                raise ValueError(
+                    "Close post_condition_responses.csv in Excel, then rebuild responses. "
+                    f"{error}"
+                ) from error
+
+        self._run_job(rebuild, rebuilt, "Rebuilding saved question responses…")
 
     def _show_library(self, value: object) -> None:
         presets = cast(list[ModifierPreset], value)
@@ -1842,13 +2090,23 @@ class ConditionModifierDialog(QDialog):
             self.save_button,
             self.cancel_button,
             self.apply_button,
+            self.counting_button,
+            self.memory_button,
+            self.masking_button,
+            self.questions_button,
+            self.advanced_toggle,
+            self.open_responses_button,
+            self.rebuild_responses_button,
         ):
             widget.setEnabled(not busy)
         if not busy:
-            self.detail.setEnabled(self._selected_id is not None)
-            self.remove_button.setEnabled(self._selected_id is not None)
+            self.detail.setEnabled(self._selected_id is not None or self._selected_questions)
+            self.remove_button.setEnabled(self._selected_id is not None or self._selected_questions)
             self.save_button.setEnabled(
                 self._selected_id is not None and self._fpvs_root is not None
+            )
+            self.questions_button.setEnabled(
+                self._project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK,
             )
 
     def _set_status(self, text: str) -> None:
