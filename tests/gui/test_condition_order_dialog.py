@@ -325,7 +325,6 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     dialogs = []
 
     def generate_and_save(dialog):
-        qtbot.addWidget(dialog)
         dialogs.append(dialog)
         dialog.show()
         QApplication.processEvents()
@@ -381,7 +380,6 @@ def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
     dialogs = []
 
     def generate_and_save(dialog):
-        qtbot.addWidget(dialog)
         dialogs.append(dialog)
         dialog.show()
         QApplication.processEvents()
