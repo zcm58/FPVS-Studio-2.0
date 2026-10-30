@@ -15,7 +15,8 @@ from fpvs_studio.library.models import LibraryItem
 
 _SHORT_UPDATE_WARNING = (
     "If data collection has started, review changes before switching versions.\n"
-    "Downloads open as separate projects; current edits and participant data stay here."
+    "Updating replaces experiment settings and stimuli. Participant data and local "
+    "recording/display setup are kept, with a backup of the previous version."
 )
 
 
@@ -46,6 +47,7 @@ def _fit(widget) -> None:
 @pytest.mark.parametrize(
     "state", [
         "unlinked", "unknown", "relink", "current", "update", "incompatible", "offline", "busy",
+        "reporting-blocked", "updated",
     ],
 )
 def test_project_version_states_fit_and_preserve_full_description(qtbot, size, state):
@@ -63,12 +65,19 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
         "incompatible": "The new version requires a newer FPVS Studio application.",
         "offline": "Could not contact the library. Your project remains available offline.",
         "busy": "Downloading and verifying the project. Cancel waits for the operation to stop.",
+        "reporting-blocked": "Send or resolve saved Results reports before updating. "
+                             "Download separately to retain the current version and its reports.",
+        "updated": "Previous version backup: D:/A realistic long Studio Root Folder/"
+                   + "subfolder with a long study name/" * 5 + ".fpvs-studio/project-backups/"
+                   "study/20261030T140000Z-123456abcdef",
     }[state]
     dialog.set_state(
-        installed_version=None if state in {"unlinked", "unknown"} else "1.0.0",
+        installed_version=(None if state in {"unlinked", "unknown"} else
+                           "2.0.0" if state == "updated" else "1.0.0"),
         latest=None if state in {"unlinked", "offline"} else item,
         linked=state != "unlinked", auto_check=True, status=status,
-        can_install=state in {"unknown", "update", "busy"},
+        can_install=state in {"unknown", "update", "busy", "reporting-blocked"},
+        can_update=state in {"update", "busy"},
     )
     if state == "busy":
         dialog.set_busy(True, status)
@@ -80,21 +89,28 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     _fit(dialog)
     assert (dialog.width(), dialog.height()) == size
     assert not dialog.isModal()
-    assert dialog.install_button.isEnabled() == (state in {"unknown", "update"})
+    assert dialog.install_button.isEnabled() == (
+        state in {"unknown", "update", "reporting-blocked"}
+    )
     assert dialog.header.title_label.text() == project_name
     assert not dialog.header.subtitle_label.isVisible()
     assert dialog.status_label.text() == ("" if state == "relink" else status)
     assert dialog.status_label.isVisible() == (state != "relink")
-    assert dialog.preservation_label.text() == _SHORT_UPDATE_WARNING
+    if state in {"update", "busy"}:
+        assert dialog.preservation_label.text() == _SHORT_UPDATE_WARNING
     assert dialog.preservation_label.textFormat() == Qt.TextFormat.PlainText
     assert dialog.preservation_label.wordWrap()
-    assert dialog.preservation_label.isVisible() == (state in {"unknown", "update", "busy"})
-    for control in (dialog.preservation_label, dialog.install_button):
+    assert dialog.preservation_label.isVisible() == (
+        state in {"unknown", "update", "busy", "reporting-blocked"}
+    )
+    for control in (dialog.preservation_label, dialog.install_button, dialog.update_button):
         assert control.accessibleDescription() == control.toolTip()
-        assert "separate folder" in control.toolTip()
-        assert "review its changes" in control.toolTip()
-        assert "ongoing study" in control.toolTip()
-        assert "participant data" in control.toolTip()
+    assert "separate folder" in dialog.install_button.toolTip()
+    assert "backup" in dialog.update_button.toolTip()
+    assert "participant data" in dialog.update_button.toolTip()
+    assert dialog.update_button.text() == "Update current project"
+    assert dialog.update_button.isEnabled() == (state == "update")
+    assert dialog.update_button.isDefault() == (state == "update")
     assert dialog.install_button.text() == "Download separately"
     assert dialog.check_button.text() == "Check for updates"
     assert dialog.auto_check_checkbox.text() == "Check for updates automatically"
@@ -102,8 +118,10 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     assert dialog.close_button.text() == "Keep current version"
     assert dialog.close_button.isVisible() == (state != "busy")
     assert dialog.cancel_button.isVisible() == (state == "busy")
-    assert "separate projects" in dialog.preservation_label.text()
-    assert "participant data" in dialog.preservation_label.text()
+    if state in {"update", "busy"}:
+        assert "participant data" in dialog.preservation_label.text()
+    elif state == "unknown":
+        assert "installed version is unknown" in dialog.preservation_label.text()
     assert dialog.details.isReadOnly()
     assert dialog.details.isVisible() == (state not in {"unlinked", "offline"})
     if state == "relink":
@@ -198,13 +216,14 @@ def test_user_actions_and_unknown_installed_version_are_explicit(qtbot):
     dialog.action_requested.connect(actions.append)
     dialog.closing.connect(lambda: closed.append(True))
     dialog.set_state(installed_version="1.0.0", latest=_item(), linked=True,
-                     auto_check=True, can_install=True)
+                     auto_check=True, can_install=True, can_update=True)
     assert actions == []
     dialog.show()
     dialog.check_button.click()
+    dialog.update_button.click()
     dialog.install_button.click()
     dialog.auto_check_checkbox.click()
-    assert actions == ["check", "install", "set_auto"]
+    assert actions == ["check", "update", "install", "set_auto"]
     assert not dialog.auto_check_enabled()
     dialog.set_state(installed_version=None, latest=None, linked=False, auto_check=True)
     dialog.set_link_items([_item()])
@@ -384,3 +403,120 @@ def test_project_update_menu_and_notice_respect_busy_guards(qtbot, tmp_path, mon
     window.project_update_action.trigger()
     assert requested == [True, True]
     monkeypatch.setattr(window, "_allow_project_handoff_during_fixation_load", lambda: True)
+
+
+@pytest.mark.parametrize("size", [(760, 680), (820, 720)])
+def test_primary_update_keeps_separate_download_secondary_and_blocks_unknown(qtbot, size):
+    dialog = ProjectVersionDialog("Long current project name " * 4)
+    qtbot.addWidget(dialog)
+    dialog.set_state(installed_version="1.0.0", latest=_item(), linked=True,
+                     auto_check=True, can_install=True, can_update=True,
+                     can_download_separately=False)
+    dialog.resize(*size)
+    dialog.show()
+    _fit(dialog)
+    assert dialog.update_button.isEnabled() and dialog.update_button.isDefault()
+    assert not dialog.install_button.isEnabled()
+    dialog.set_state(installed_version=None, latest=_item(), linked=True,
+                     auto_check=True, can_install=True, can_update=True)
+    _fit(dialog)
+    assert not dialog.update_button.isEnabled()
+    assert dialog.install_button.isEnabled() and dialog.install_button.isDefault()
+    assert "installed version is unknown" in dialog.preservation_label.text()
+
+
+def _update_window(qtbot, tmp_path):
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Current project")
+    window = StudioMainWindow(
+        document=document, on_request_new_project=lambda: None,
+        on_request_open_project=lambda: None, on_request_manage_projects=lambda: None,
+        on_request_import_project_config=lambda: None,
+        on_request_import_project_bundle=lambda: None, on_request_settings=lambda: None,
+        on_load_condition_template_profiles=lambda: [], on_manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(window)
+    return window
+
+
+def test_committed_update_discards_old_editor_drafts_before_save(qtbot, tmp_path):
+    from fpvs_studio.core.serialization import load_project_file
+    from fpvs_studio.preprocessing.manifest import create_empty_manifest
+
+    window = _update_window(qtbot, tmp_path)
+    old_setup = window.setup_wizard_page
+    old_setup.condition_setup_step.condition_name_edit.setText("Stale editor draft")
+    old_setup.condition_setup_step.instructions_edit.setPlainText("Stale pending instructions")
+    assert old_setup.condition_setup_step._instructions_committer.pending
+    project = window.document.project.model_copy(deep=True)
+    project.conditions[0].name = "Updated Library condition"
+    project.conditions[0].instructions = "Updated Library instructions"
+    manifest = create_empty_manifest(project.meta.project_id)
+    window.start_bundle_import_processing(project_name=project.meta.name,
+        bundle_path=tmp_path / "new.fpvsbundle", root_dir=window.document.project_root,
+        updating_current=True)
+    window.accept_library_project_update(project, manifest)
+    assert window._setup_wizard_page is None
+    assert not window.document.dirty
+    window.finish_bundle_import_processing(restore_previous=False)
+    window.show_home()
+    assert window.save_project()
+    saved = load_project_file(window.document.project_root / "project.json")
+    assert saved.conditions[0].name == "Updated Library condition"
+    assert saved.conditions[0].instructions == "Updated Library instructions"
+    assert window.document.manifest is manifest
+
+
+def test_failed_update_reload_blocks_stale_save_and_allows_close(qtbot, tmp_path, monkeypatch):
+    window = _update_window(qtbot, tmp_path)
+    monkeypatch.setattr(window.document, "save", lambda: pytest.fail("Stale model saved"))
+    window.start_bundle_import_processing(project_name="Current project",
+        bundle_path=tmp_path / "new.fpvsbundle", root_dir=window.document.project_root,
+        updating_current=True)
+    window.fail_library_project_update()
+    assert not window.save_project()
+    assert not window.save_project_action.isEnabled()
+    assert not window.launch_action.isEnabled()
+    window.show_setup_wizard()
+    assert window._setup_wizard_page is None
+    assert window.maybe_save_changes()
+    assert window.close()
+
+
+@pytest.mark.parametrize("failed_reload", [False, True])
+def test_project_update_blocks_existing_recovery_dialog_and_direct_rerun(
+    qtbot, tmp_path, monkeypatch, failed_reload,
+):
+    from fpvs_studio.gui.condition_recovery_dialog import ConditionRecoveryDialog
+    from fpvs_studio.runtime.condition_recovery import ConditionRecoveryReport
+
+    window = _update_window(qtbot, tmp_path)
+    monkeypatch.setattr(window, "start_deferred_open_tasks", lambda: None)
+    monkeypatch.setattr(window.document, "validate_recording_launch",
+                        lambda: pytest.fail("Recovery launch reached the runtime safeguards"))
+    recovery = window._condition_recovery
+    monkeypatch.setattr(recovery, "_rerun", lambda _record: pytest.fail("Recovery dispatched"))
+    dialog = ConditionRecoveryDialog(ConditionRecoveryReport(), window)
+    recovery._dialog = dialog
+    window.show()
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.isVisible()
+
+    window.start_bundle_import_processing(project_name="Current project",
+        bundle_path=tmp_path / "new.fpvsbundle", root_dir=window.document.project_root,
+        updating_current=True)
+    if failed_reload:
+        window.fail_library_project_update()
+    assert not dialog.isVisible()
+    assert not window.interrupted_sessions_action.isEnabled()
+    assert not recovery._available()
+    recovery.check()
+    assert recovery._task is None
+    recovery._request_rerun(object())
+    window._launch_recovered_condition(object())
+
+    if not failed_reload:
+        window.finish_bundle_import_processing(restore_previous=True)
+        assert window.interrupted_sessions_action.isEnabled()
+        assert recovery._available()
+    assert window.close()

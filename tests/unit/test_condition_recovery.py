@@ -6,6 +6,7 @@ import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -28,6 +29,7 @@ from fpvs_studio.runtime.condition_recovery import (
     acknowledge_condition_recovery,
     build_recovery_session_plan,
     build_replacement_session_plan,
+    ensure_project_update_recovery_ready,
     query_condition_recovery,
 )
 from fpvs_studio.runtime.run_worker import RuntimeWorker
@@ -62,6 +64,64 @@ def _files(root):
 def test_query_empty_project_creates_nothing(tmp_path):
     assert not query_condition_recovery(tmp_path).records
     assert list(tmp_path.iterdir()) == []
+
+
+def test_project_update_recovery_guard_is_empty_read_only_and_cancellable(tmp_path):
+    ensure_project_update_recovery_ready(tmp_path)
+    assert list(tmp_path.iterdir()) == []
+    cancel = Event()
+    cancel.set()
+    with pytest.raises(InterruptedError, match="canceled"):
+        ensure_project_update_recovery_ready(tmp_path, cancel_event=cancel)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_project_update_recovery_guard_blocks_live_then_unreviewed_and_allows_review(execution):
+    root, plan = execution
+    recorder = _record(root, plan)
+    recorder.start_run(plan.ordered_entries()[0].run_id)
+    try:
+        with pytest.raises(ValueError, match="Close other Studio instances"):
+            ensure_project_update_recovery_ready(root)
+    finally:
+        recorder.close()
+    before = _files(root)
+    with pytest.raises(ValueError, match="resolve interrupted runs"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+    acknowledge_condition_recovery(root, query_condition_recovery(root).records)
+    reviewed = _files(root)
+    ensure_project_update_recovery_ready(root)
+    assert _files(root) == reviewed
+
+
+@pytest.mark.parametrize("state", ["completed", "cancelled"])
+def test_project_update_recovery_guard_allows_terminal_history(execution, state):
+    root, plan = execution
+    recorder = _record(root, plan)
+    recorder.finish(state)
+    recorder.close()
+    before = _files(root)
+    ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+
+
+def test_project_update_recovery_guard_rejects_unknown_lifetime_and_corruption(execution):
+    root, plan = execution
+    recorder = _record(root, plan)
+    recorder.close()
+    lock = root / "logs/.condition-recovery" / (recorder.execution_id + ".lock")
+    lock.unlink()
+    before = _files(root)
+    with pytest.raises(ValueError, match="Interruption evidence needs review"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+    checkpoint = lock.with_suffix(".json")
+    checkpoint.write_text("bad json", encoding="utf-8")
+    before = _files(root)
+    with pytest.raises(ValueError, match="Interruption evidence needs review"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
 
 
 def test_live_execution_is_hidden_and_dead_owner_is_discovered_read_only(execution):
@@ -698,11 +758,17 @@ def test_acknowledgement_legacy_receipt_hides_its_missing_plan_notice(execution,
     assert record.status == "unverified"
     assert query_condition_recovery(root).warnings
     before = _files(root)
+    with pytest.raises(ValueError, match="resolve interrupted runs"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
     acknowledge_condition_recovery(root, (record,))
     report = query_condition_recovery(root, include_acknowledged=False)
     assert report.records == report.warnings == ()
     assert query_condition_recovery(root).records[0].acknowledged_at is not None
     assert all(_files(root)[path] == value for path, value in before.items())
+    reviewed = _files(root)
+    ensure_project_update_recovery_ready(root)
+    assert _files(root) == reviewed
 
 
 def test_new_execution_for_same_participant_remains_pending(execution):

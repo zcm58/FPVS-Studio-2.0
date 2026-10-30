@@ -11,6 +11,23 @@ are released in Studio 2.4.5. The existing OpenFPVS backend is activated. Curren
 packaging evidence and operational check boundaries are in the
 [2.4.5 release record](exec-plans/completed/release-2.4.5.md).
 
+## Library project updates
+
+Explicit same-folder Library replacement keeps private Results settings, credentials,
+reports, receipts and capture evidence. `data_sharing/project_updates.py` performs a
+read-only preflight before transfer and immediately before the core update commit.
+Every active report scope is checked, including held reports after opting out and
+orphan earlier-scope records. Pending/held/failed reports, running/eligible captures,
+and malformed or unreadable evidence prevent replacement. Accepted receipts and
+terminal excluded captures remain untouched and do not block it.
+
+Resolve saved Results reports through the existing workflow, or download separately
+to retain the original project/version and queued reports. A new Library version
+requires matching Results authorization; the update never retags old reports,
+rewrites a profile's version or silently reenrolls. Review warns when an existing
+connection will need reconnecting. Local participant data and original off choices
+are preserved. See [Experiment Library](EXPERIMENT_LIBRARY.md#project-version-checks).
+
 ## Operator workflow
 
 An administrator creates a private project in **OpenFPVS > Projects**, selecting

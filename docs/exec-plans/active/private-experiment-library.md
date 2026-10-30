@@ -4,6 +4,13 @@ Status: Active
 
 Date: 2026-09-16
 
+## Local signing and current-project updates (October 30, 2026)
+
+The completed [implementation record](../completed/local-signing-current-project-updates.md)
+covers local signing, primary current-project replacement, verification, and this PC's
+60.96 cm project calibration. Canonical behavior lives in
+[Experiment Library](../../EXPERIMENT_LIBRARY.md#project-version-checks).
+
 ## Automatic project update offers (October 30, 2026)
 
 The user requests automatic detection and offers for newly published versions,

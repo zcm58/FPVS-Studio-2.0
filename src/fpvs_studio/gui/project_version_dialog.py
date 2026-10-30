@@ -24,9 +24,19 @@ from fpvs_studio.library.models import LibraryItem
 
 _UPDATE_GUIDANCE = (
     "If data collection has started, review changes before switching versions.\n"
-    "Downloads open as separate projects; current edits and participant data stay here."
+    "Updating replaces experiment settings and stimuli. Participant data and local "
+    "recording/display setup are kept, with a backup of the previous version."
 )
 _UPDATE_DETAILS = (
+    "Update this project's experiment settings and stimuli in the current folder. "
+    "Keep participant data, local recording/display setup and a recoverable backup "
+    "of the previous version. Review protocol changes before continuing an ongoing study."
+)
+_SEPARATE_GUIDANCE = (
+    "The installed version is unknown. Set its version before updating this project, "
+    "or download the new version separately."
+)
+_SEPARATE_DETAILS = (
     "Download the new version into a separate folder and review its changes before "
     "using it in an ongoing study. Your current project's edits and participant data "
     "stay in the existing folder."
@@ -48,6 +58,9 @@ class ProjectVersionDialog(QDialog):
         self.resize(820, 720)
         self._busy = False
         self._can_install = False
+        self._can_update = False
+        self._known_installed_version = False
+        self._can_download_separately = False
         self._linked = False
         self._linking = False
         layout = QVBoxLayout(self)
@@ -132,10 +145,15 @@ class ProjectVersionDialog(QDialog):
         self.check_button.clicked.connect(lambda: self.action_requested.emit("check"))
         self.install_button = QPushButton("Download separately", self)
         self.install_button.setObjectName("project_version_install_button")
-        self.install_button.setToolTip(_UPDATE_DETAILS)
-        self.install_button.setAccessibleDescription(_UPDATE_DETAILS)
+        self.install_button.setToolTip(_SEPARATE_DETAILS)
+        self.install_button.setAccessibleDescription(_SEPARATE_DETAILS)
         self.install_button.clicked.connect(lambda: self.action_requested.emit("install"))
-        mark_primary_action(self.install_button)
+        self.update_button = QPushButton("Update current project", self)
+        self.update_button.setObjectName("project_version_update_button")
+        self.update_button.setToolTip(_UPDATE_DETAILS)
+        self.update_button.setAccessibleDescription(_UPDATE_DETAILS)
+        self.update_button.clicked.connect(lambda: self.action_requested.emit("update"))
+        mark_primary_action(self.update_button)
         self.cancel_button = QPushButton("Cancel", self)
         self.cancel_button.setObjectName("project_version_cancel_button")
         self.cancel_button.clicked.connect(lambda: self.action_requested.emit("cancel"))
@@ -145,6 +163,7 @@ class ProjectVersionDialog(QDialog):
         buttons.addWidget(self.check_button)
         buttons.addStretch(1)
         buttons.addWidget(self.install_button)
+        buttons.addWidget(self.update_button)
         buttons.addWidget(self.cancel_button)
         buttons.addWidget(self.close_button)
         layout.addLayout(buttons)
@@ -155,10 +174,16 @@ class ProjectVersionDialog(QDialog):
     def set_state(
         self, *, installed_version: str | None, latest: LibraryItem | None,
         linked: bool, auto_check: bool, status: str = "", can_install: bool = False,
+        can_update: bool = False, can_download_separately: bool | None = None,
     ) -> None:
         self._linked = linked
         self._linking = False
         self._can_install = can_install
+        self._can_update = can_update and can_install and linked and installed_version is not None
+        self._known_installed_version = installed_version is not None
+        self._can_download_separately = (
+            can_install and (True if can_download_separately is None else can_download_separately)
+        )
         current = installed_version or ("Unknown" if linked else "Not linked")
         newest = latest.version if latest is not None else "Not checked"
         self.versions_label.setText(
@@ -216,6 +241,8 @@ class ProjectVersionDialog(QDialog):
     def clear_install_candidate(self) -> None:
         """Require a successful fresh check before offering another installation."""
         self._can_install = False
+        self._can_update = False
+        self._can_download_separately = False
         self._update_controls()
 
     def _link_selection_changed(self, *_args: object) -> None:
@@ -235,9 +262,22 @@ class ProjectVersionDialog(QDialog):
         self.details.setVisible(has_details)
         self._details_layout.setStretch(self._empty_details_index, 0 if has_details else 1)
         self.preservation_label.setVisible(self._can_install and not self._linking)
+        self.preservation_label.setText(
+            _UPDATE_GUIDANCE if self._known_installed_version else _SEPARATE_GUIDANCE
+        )
+        guidance = _UPDATE_DETAILS if self._known_installed_version else _SEPARATE_DETAILS
+        self.preservation_label.setToolTip(guidance)
+        self.preservation_label.setAccessibleDescription(guidance)
         self.status_label.setVisible(bool(self.status_label.text()))
         self.check_button.setEnabled(not self._busy)
-        self.install_button.setEnabled(not self._busy and self._can_install and not self._linking)
+        self.install_button.setEnabled(
+            not self._busy and self._can_download_separately and not self._linking
+        )
+        self.update_button.setEnabled(not self._busy and self._can_update and not self._linking)
+        self.update_button.setDefault(self.update_button.isEnabled())
+        self.install_button.setDefault(
+            not self.update_button.isEnabled() and self.install_button.isEnabled()
+        )
         self.auto_check_checkbox.setEnabled(not self._busy and self._linked)
         self.auto_check_checkbox.setVisible(self._linked and not self._linking)
         self.relink_button.setVisible(self._linked and not self._linking)

@@ -43,6 +43,10 @@ plus a documented visible manual smoke path. Registered pytest-qt coverage is re
 for an optional approved visible `full` run; use the repo precommit tier when GUI work
 touches multiple layers.
 
+Library version review makes **Update current project** primary and retains
+**Download separately** as a secondary action. The canonical interaction, backup,
+Results and recovery contract is [Experiment Library](EXPERIMENT_LIBRARY.md#project-version-checks).
+
 ## No-Clipping Baseline
 
 No clipping is an initial GUI design constraint, not a later polish task. Before building

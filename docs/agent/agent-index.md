@@ -76,6 +76,14 @@ isolation. The Qt-enabled `full` tier remains serial.
 
 ## Skill Routing
 
+For current-project Library updates, start with `core/project_bundle_update.py`,
+`gui/project_update_controller.py` and `gui/project_version_dialog.py`. The
+read-only Results readiness guard is `data_sharing/project_updates.py`; execution
+and interruption readiness belongs to `runtime/condition_recovery.py`.
+Use project-I/O, Library, GUI, data-sharing and runtime focused checks, then repo precommit.
+The private Website owns protected signing-key migration and the locally installed
+maintainer command documented in [Experiment Library](../EXPERIMENT_LIBRARY.md#local-maintainer-signing).
+
 For one-time lab access and named study selection, start with
 `data_sharing/client.py`, `gui/data_sharing_controller.py` and
 `library/client.py::enrolled_credential`. The completed

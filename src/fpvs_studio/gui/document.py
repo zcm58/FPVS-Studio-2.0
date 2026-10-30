@@ -594,6 +594,25 @@ class ProjectDocument(
         self._set_dirty(False)
         self.saved.emit()
 
+    def accept_library_project_update(
+        self, project: ProjectFile, manifest: StimulusManifest,
+    ) -> None:
+        """Adopt validated committed models before old editing controls are unlocked."""
+        if (
+            project.meta.project_id != self.project.meta.project_id
+            or manifest.project_id != project.meta.project_id
+            or project.experiment_category != self.project.experiment_category
+        ):
+            raise DocumentError("The updated models do not belong to this project.")
+        self._project = project
+        self._manifest = manifest
+        self._last_session_plan = None
+        self._image_normalization_scan_cache = None
+        self._set_dirty(False)
+        self.project_changed.emit()
+        self.manifest_changed.emit()
+        self.saved.emit()
+
     def export_config_file(self, path: Path, *, include_completed: bool = False) -> None:
         """Export the current project as a Studio `.fpvsconfig` file."""
 

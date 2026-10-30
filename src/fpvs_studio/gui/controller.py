@@ -95,6 +95,7 @@ from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
+    from fpvs_studio.core.project_bundle_update import ProjectBundleUpdateResult
     from fpvs_studio.gui.data_sharing_controller import DataSharingController
     from fpvs_studio.gui.data_sharing_dialog import SavedReportsDialog, StartupReportNotice
     from fpvs_studio.gui.library_access_dialog import LibraryAccessController
@@ -1123,9 +1124,17 @@ class StudioController(QObject):
             self._project_update_controller = ProjectUpdateController(
                 self._app, current_window=lambda: self.main_window,
                 import_bundle=self._import_library_bundle,
+                apply_update=self._apply_library_project_update,
                 studio_root=self._library_root,
             )
         return self._project_update_controller
+
+    def _apply_library_project_update(self, result: ProjectBundleUpdateResult) -> None:
+        """Open already validated models after the current-project commit."""
+        window = self.main_window
+        if window is None or window.document.project_root != result.scaffold.project_root:
+            raise RuntimeError("The updated project is no longer open.")
+        window.accept_library_project_update(result.scaffold.project, result.manifest)
 
     def show_project_versions(self) -> None:
         window = self.main_window

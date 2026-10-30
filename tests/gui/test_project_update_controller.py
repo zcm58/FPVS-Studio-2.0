@@ -89,6 +89,31 @@ class _Window(QWidget):
         )
         self.notices = []
         self.launch_busy = False
+        self.handoff_allowed = True
+        self.processing = False
+        self._project_update_reload_failed = False
+
+    def _allow_project_handoff_during_fixation_load(self):
+        return True
+
+    def prepare_project_handoff(self):
+        return self.handoff_allowed
+
+    def start_bundle_import_processing(self, **_kwargs):
+        self.processing = True
+
+    def finish_bundle_import_processing(self, **_kwargs):
+        self.processing = False
+
+    def set_bundle_import_stage(self, _stage):
+        pass
+
+    def show_home(self):
+        pass
+
+    def fail_library_project_update(self):
+        self.reload_failed = True
+        self._project_update_reload_failed = True
 
     def set_project_update_notice(self, message):
         self.notices.append(message)
@@ -174,15 +199,18 @@ def updates(qapp, qtbot, monkeypatch, tmp_path):
         lambda _path: SimpleNamespace(project=SimpleNamespace(project_id="masking")),
     )
     handoffs = []
+    applied = []
     client = _Client(tmp_path / "masking-1.0.1.fpvsbundle")
     controller = module.ProjectUpdateController(
         qapp, current_window=lambda: current[0],
-        import_bundle=lambda *args: handoffs.append(args), client=client,
+        import_bundle=lambda *args: handoffs.append(args), apply_update=applied.append,
+        client=client,
         studio_root=lambda: tmp_path,
     )
     yield SimpleNamespace(
         controller=controller, window=window, current=current, lifecycle=lifecycle,
-        client=client, handoffs=handoffs, io_calls=io_calls, origins=origins, root=tmp_path,
+        client=client, handoffs=handoffs, applied=applied, io_calls=io_calls,
+        origins=origins, root=tmp_path,
     )
     lifecycle.request_shutdown()
     lifecycle.drain()
@@ -318,13 +346,14 @@ def test_periodic_check_does_not_cancel_manual_work_and_shutdown_stops_timers(up
     assert not state.controller._offer_timer.isActive()
 
 
-def test_latest_version_already_installed_elsewhere_disables_update(updates):
+def test_latest_version_elsewhere_only_disables_separate_download(updates):
     state = updates
     installed_project(state.root, project_id="masking-from-bundle", version="1.0.1")
     state.controller.show(state.window)
     state.lifecycle.drain()
-    assert not state.controller._result.can_install
-    assert "already installed" in state.controller._result.message
+    assert state.controller._result.can_install
+    assert state.controller.dialog.update_button.isEnabled()
+    assert not state.controller.dialog.install_button.isEnabled()
     state.controller._action("install")
     state.lifecycle.drain()
     assert state.client.download_calls == []
@@ -627,3 +656,43 @@ def test_shutdown_cancels_check_and_prevents_new_operations(updates):
     assert state.controller.dialog is None
     assert not any(state.window.notices)
     assert state.handoffs == []
+
+
+def test_current_update_applies_only_the_committed_worker_result(updates, monkeypatch):
+    state = updates
+    monkeypatch.setattr(module, "capture_project_update_snapshot", lambda *_args, **_kw:
+                        SimpleNamespace(origin=_origin()))
+    result = module.ProjectBundleUpdateResult(
+        scaffold=SimpleNamespace(project_root=state.root, project=state.window.document.project),
+        backup_path=state.root / "previous-version", manifest=SimpleNamespace(),
+    )
+    monkeypatch.setattr(module, "update_project_bundle", lambda *_args, **_kw: result)
+    state.controller.show(state.window)
+    state.lifecycle.drain()
+    dialog = state.controller.dialog
+    assert dialog.update_button.isEnabled() and dialog.update_button.isDefault()
+    dialog.update_button.click()
+    assert state.window.processing
+    assert state.client.download_calls == [] and state.applied == []
+    job = state.lifecycle.pending[0]
+    job.run_callback()
+    job.cancel_event.set()  # A completed commit cannot be undone by late cancellation.
+    job.finish()
+    state.lifecycle.drain()
+    assert state.applied == [result]
+    assert not state.window.processing
+    assert state.client.releases == 1
+    assert "previous-version" in dialog.status_label.text()
+    assert not dialog.update_button.isEnabled()
+    assert not dialog.install_button.isEnabled()
+
+
+def test_canceling_unsaved_handoff_does_not_download_or_freeze(updates):
+    state = updates
+    state.controller.show(state.window)
+    state.lifecycle.drain()
+    state.window.handoff_allowed = False
+    state.controller.dialog.update_button.click()
+    assert state.client.download_calls == [] and state.applied == []
+    assert not state.window.processing
+    assert state.lifecycle.pending == []

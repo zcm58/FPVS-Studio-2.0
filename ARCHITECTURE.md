@@ -39,7 +39,12 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   installed metadata; `library/installations.py` gates payload downloads and explicit
   updates. The bundle importer also blocks repeated recorded releases at commit.
   On-open/periodic checks, foreground-safe update offers and explicit separate-project
-  installation use `gui/project_update_controller.py`. Version review explains collection risks and
+  installation use `gui/project_update_controller.py`. Its primary current-project
+  action delegates to `core/project_bundle_update.py` for staged replacement,
+  backups and rollback, preserving local identity, settings and participant data.
+  `data_sharing/project_updates.py` blocks unresolved old-version reports before
+  transfer and commit; `runtime/condition_recovery.py` checks execution lifetimes
+  and unreviewed interruptions without changing evidence. Version review explains collection risks and
   preserves the choice to keep the current version; see the Library contract.
   Private content and the independent Cloudflare service live in
   `zcm58/OpenFPVS-Website`; that service checks live release-asset availability

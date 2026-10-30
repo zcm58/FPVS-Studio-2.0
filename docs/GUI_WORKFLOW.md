@@ -205,10 +205,12 @@ while idle. Eligible versions show a Home notice and an automatic update-review
 offer. Offers wait for presentation/other dialogs and background use to
 finish, and are shown once per project/release in a Studio session.
 **File > Update Project Version...** also checks manually, controls automatic
-checks, and links earlier downloads explicitly. Installing a newer version
-opens a separate project through ordinary import review; local edits and participant
-data stay in the current project. Review explains the risk of changing an experiment
-after collection begins and offers **Keep current version** or **Download separately**.
+checks, and links earlier downloads explicitly. **Update current project** is primary
+for a known older linked version; it replaces authored settings/stimuli in the same
+folder, retaining participant data/local setup and a recoverable authored backup.
+**Download separately** remains secondary. Review explains collection changes and
+any Results reconnection requirement. Unresolved saved Results evidence blocks
+replacement. **Keep current version** closes without changes.
 The warning is concise and shown with an eligible download; detailed preservation
 guidance remains in control help. Linking and empty states avoid instructional
 release-note text and disabled automatic-check controls. Keeping the version leaves

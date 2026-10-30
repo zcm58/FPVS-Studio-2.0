@@ -10,6 +10,7 @@ import sys
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Event
 from typing import BinaryIO, Literal, TypeVar
 from uuid import uuid4
 
@@ -501,6 +502,88 @@ def query_condition_recovery(
             warnings.append(f"Could not inspect acquisition record {candidate.name}.")
     records.sort(key=lambda record: record.updated_at.timestamp(), reverse=True)
     return ConditionRecoveryReport(tuple(records), tuple(warnings))
+
+
+def ensure_project_update_recovery_ready(
+    project_root: Path,
+    *,
+    cancel_event: Event | None = None,
+) -> None:
+    """Read readiness before replacing authored assets; never resolve evidence implicitly.
+
+    This probes existing execution lifetime locks, not a project-wide launch lock.
+    Other Studio instances must remain closed through the update. Reviewed history
+    stays intact; an original historical rerun after updating requires restoring the
+    corresponding authored backup first.
+    """
+    busy = (
+        "Close other Studio instances and resolve interrupted runs before updating "
+        "this project, or download separately to retain the current setup."
+    )
+    unreadable = (
+        "Interruption evidence needs review before updating this project. Close other "
+        "Studio instances and resolve interrupted runs, or download separately."
+    )
+
+    def check_cancel() -> None:
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("Project update canceled.")
+
+    check_cancel()
+    try:
+        known: set[str] = set()
+        directory = resolve_project_relative_path(project_root, _DIRECTORY)
+        locks = list(directory.glob("*.lock")) if directory.exists() else []
+        for lock in locks:
+            check_cancel()
+            if not _inactive(project_root, lock.with_suffix(".json")):
+                raise ValueError(busy)
+        candidates = list(directory.glob("*.json")) if directory.exists() else []
+        for candidate in candidates:
+            check_cancel()
+            if candidate.name.endswith(".plan.json"):
+                continue
+            path = resolve_project_relative_path(project_root, f"{_DIRECTORY}/{candidate.name}")
+            checkpoint = _bounded_read(path, _Checkpoint, limit=1024 * 1024)
+            if checkpoint.execution_id != candidate.stem:
+                raise ValueError(unreadable)
+            known.add(checkpoint.execution_id)
+            if checkpoint.state not in {"completed", "cancelled"} and not _inactive(
+                project_root,
+                path,
+            ):
+                raise ValueError(busy)
+        report = query_condition_recovery(project_root, include_acknowledged=True)
+        check_cancel()
+        if any(record.can_rerun and record.acknowledged_at is None for record in report.records):
+            raise ValueError(busy)
+        reviewed = {
+            record.execution_id for record in report.records if record.acknowledged_at is not None
+        }
+        acquisition = resolve_project_relative_path(project_root, "logs/acquisition")
+        candidates = list(acquisition.glob("*.acquisition-v1.json")) if acquisition.exists() else []
+        for candidate in candidates:
+            check_cancel()
+            path = resolve_project_relative_path(
+                project_root,
+                f"logs/acquisition/{candidate.name}",
+            )
+            evidence = _bounded_read(path, AcquisitionEvidence)
+            if candidate.name != f"{evidence.execution_id}.acquisition-v1.json":
+                raise ValueError(unreadable)
+            if (
+                evidence.execution_id not in known
+                and evidence.state in {"running", "interrupted"}
+                and evidence.execution_id not in reviewed
+            ):
+                raise ValueError(busy)
+        check_cancel()
+    except InterruptedError:
+        raise
+    except (OSError, ValueError) as error:
+        if isinstance(error, ValueError) and str(error) in {busy, unreadable}:
+            raise
+        raise ValueError(unreadable) from error
 
 
 def acknowledge_condition_recovery(

@@ -27,3 +27,7 @@ accepted status or cause another upload of an acknowledged record.
 
 The canonical contract, operator workflow, automatic archive behavior and pending
 live/visible acceptance are in `docs/DATA_SHARING.md` from the repository root.
+
+`project_updates.py` owns read-only Results readiness before explicit Library
+replacement. Inspect all active outbox scopes and unfinished capture evidence;
+never relabel old reports or rewrite connections for a new Library version.

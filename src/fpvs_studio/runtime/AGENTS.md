@@ -98,6 +98,10 @@ This phase should establish:
   markers. Suppress reviewed snapshots only in automatic notices; preserve manual
   history, new interruption notices and original research evidence. Writes stay
   outside discovery and run on a GUI-owned worker when requested by the operator.
+  Its read-only `ensure_project_update_recovery_ready` guard blocks authored-file
+  replacement for active/uncertain lifetimes or unreviewed interruptions; it does
+  not create a project-wide execution lock or mutate recovery evidence. See
+  `docs/EXPERIMENT_LIBRARY.md` for the update/backup contract.
 - commit numbered research rows idempotently before generating derived spreadsheets;
   preserve legacy rows, visit identity, and prior files if atomic replacement fails
 - `attentional_blink_report.py` checkpoints native burst targets and per-question

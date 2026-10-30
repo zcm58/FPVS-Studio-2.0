@@ -26,10 +26,11 @@ from PySide6.QtWidgets import (
     QStatusBar,
     QWidget,
 )
+from shiboken6 import delete as delete_qobject
 
 from fpvs_studio import __version__
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.models import ConditionTemplateProfile
+from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
 from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
@@ -78,6 +79,7 @@ from fpvs_studio.gui.window_helpers import (
     _show_error_dialog,
 )
 from fpvs_studio.gui.workers import BackgroundTask, ProgressSignalBridge, ProgressTask
+from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.runtime.condition_recovery import (
     InterruptedCondition,
     build_recovery_session_plan,
@@ -181,6 +183,8 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_completed_result: _BundleExportTaskResult | None = None
         self._bundle_import_previous_widget: QWidget | None = None
         self._bundle_import_processing_active = False
+        self._bundle_import_updating_current = False
+        self._project_update_reload_failed = False
         self._setup_wizard_page: SetupWizardPage | None = None
         self._image_resizer_page: ImageResizerPage | None = None
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
@@ -203,7 +207,12 @@ class StudioMainWindow(QMainWindow):
         self._active_launch_participant_number: str | None = None
         self._condition_recovery = ConditionRecoveryController(
             parent=self, project_root=self.document.project_root,
-            is_busy=self.is_launch_busy, rerun=self._launch_recovered_condition,
+            is_busy=lambda: (
+                self.is_launch_busy()
+                or self._bundle_import_processing_active
+                or self._project_update_reload_failed
+            ),
+            rerun=self._launch_recovered_condition,
             show_error=lambda error: _show_error_dialog(self, "Recovery Check Failed", error),
             current_condition_ids=lambda: frozenset(
                 condition.condition_id for condition in self.document.ordered_conditions()
@@ -345,6 +354,8 @@ class StudioMainWindow(QMainWindow):
         return self._bundle_import_processing_page
 
     def show_home(self) -> None:
+        if self._project_update_reload_failed:
+            return
         if not self.flush_pending_edits():
             return
         self.home_page.refresh()
@@ -359,6 +370,8 @@ class StudioMainWindow(QMainWindow):
         step_key: str | None = None,
         allow_step_jumps: bool = False,
     ) -> None:
+        if self._project_update_reload_failed:
+            return
         setup_wizard_page = self.setup_wizard_page
         self._set_home_chrome_visible(True)
         self._apply_setup_window_size()
@@ -875,6 +888,8 @@ class StudioMainWindow(QMainWindow):
         )
 
     def save_project(self) -> bool:
+        if self._project_update_reload_failed or self._bundle_import_processing_active:
+            return False
         # Ctrl+S does not move focus like clicking Save. Commit editingFinished
         # fields first so the name currently being typed is included in the save.
         focused = self.focusWidget()
@@ -895,6 +910,8 @@ class StudioMainWindow(QMainWindow):
         return True
 
     def launch_session(self) -> None:
+        if self._project_update_reload_failed or self._bundle_import_processing_active:
+            return
         if self.is_launch_busy():
             return
         try:
@@ -1001,7 +1018,10 @@ class StudioMainWindow(QMainWindow):
 
     def _launch_recovered_condition(self, record: InterruptedCondition) -> None:
         """Launch one frozen occurrence through the ordinary recording/visit safeguards."""
-        if not self.isVisible() or self.is_launch_busy():
+        if (
+            not self.isVisible() or self.is_launch_busy()
+            or self._bundle_import_processing_active or self._project_update_reload_failed
+        ):
             return
         try:
             if self.document.local_testing_enabled:
@@ -1343,22 +1363,28 @@ class StudioMainWindow(QMainWindow):
         project_name: str,
         bundle_path: Path,
         root_dir: Path,
+        updating_current: bool = False,
     ) -> None:
         self._bundle_import_previous_widget = self.main_stack.currentWidget()
         self._bundle_import_processing_active = True
+        self._bundle_import_updating_current = updating_current
+        self._condition_recovery.close_dialog()
         self.bundle_import_processing_page.reset_steps()
         self.bundle_import_processing_page.set_transfer_context(
-            title=f"Importing {project_name}",
+            title=f"Updating {project_name}" if updating_current else f"Importing {project_name}",
             source_label="Source",
             source_path=bundle_path,
-            destination_label="Destination root",
+            destination_label="Current project" if updating_current else "Destination root",
             destination_path=root_dir,
         )
         self.bundle_import_processing_page.set_stage("verify")
         self.bundle_import_processing_page.start()
         self._set_home_chrome_visible(True, status_visible=True)
         self.main_stack.setCurrentWidget(self.bundle_import_processing_page)
-        self.statusBar().showMessage("Importing FPVS Studio project bundle...")
+        self.statusBar().showMessage(
+            "Updating current project..." if updating_current else
+            "Importing FPVS Studio project bundle..."
+        )
         self._set_bundle_processing_busy(True)
 
     def set_bundle_import_stage(self, stage: BundleImportStage) -> None:
@@ -1367,11 +1393,33 @@ class StudioMainWindow(QMainWindow):
     def finish_bundle_import_processing(self, *, restore_previous: bool) -> None:
         self.bundle_import_processing_page.stop()
         self._bundle_import_processing_active = False
+        self._bundle_import_updating_current = False
         self._set_bundle_processing_busy(False)
         if restore_previous:
             self._restore_after_bundle_import()
         else:
             self._bundle_import_previous_widget = None
+
+    def accept_library_project_update(
+        self, project: ProjectFile, manifest: StimulusManifest,
+    ) -> None:
+        """Replace the document and discard editor drafts from the previous version."""
+        previous_setup = self._setup_wizard_page
+        if previous_setup is not None:
+            previous_setup.setEnabled(False)
+            self.main_stack.removeWidget(previous_setup)
+            self._setup_wizard_page = None
+            # Old document receivers must be gone before project_changed: some
+            # refresh slots flush debounced edits from their previous condition.
+            delete_qobject(previous_setup)
+        self.document.accept_library_project_update(project, manifest)
+
+    def fail_library_project_update(self) -> None:
+        """Allow closing, but never save or launch a model that may no longer match disk."""
+        self._project_update_reload_failed = True
+        self.bundle_import_processing_page.stop()
+        self._set_bundle_processing_busy(True)
+        self.statusBar().showMessage("Close and reopen this project before continuing.")
 
     def _set_bundle_processing_busy(self, busy: bool) -> None:
         actions = (
@@ -1389,6 +1437,7 @@ class StudioMainWindow(QMainWindow):
             self.library_action,
             self.project_update_action,
             self.fixation_cross_data_action,
+            self.interrupted_sessions_action,
             self.data_sharing_action,
             self.image_resizer_action,
             self.launch_action,
@@ -1578,6 +1627,8 @@ class StudioMainWindow(QMainWindow):
             self._handoff_close_approved = False
 
     def maybe_save_changes(self) -> bool:
+        if self._project_update_reload_failed:
+            return True
         if not self._allow_project_handoff_during_launch():
             return False
         if self._setup_wizard_page is not None and (
@@ -1632,6 +1683,10 @@ class StudioMainWindow(QMainWindow):
         return False
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self._project_update_reload_failed:
+            self._condition_recovery.deactivate()
+            event.accept()
+            return
         if not self._allow_project_handoff_during_launch():
             event.ignore()
             return
@@ -1649,8 +1704,11 @@ class StudioMainWindow(QMainWindow):
         if self._bundle_import_processing_active:
             QMessageBox.information(
                 self,
+                "Project Update In Progress" if self._bundle_import_updating_current else
                 "Import In Progress",
                 (
+                    "Wait for the current project update to finish before closing."
+                    if self._bundle_import_updating_current else
                     "FPVS Studio is still setting up the imported project. "
                     "Please wait for the import to finish before closing."
                 ),

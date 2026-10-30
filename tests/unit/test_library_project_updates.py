@@ -32,7 +32,10 @@ def discovery():
         return SimpleNamespace(calls=calls, start=lambda *args: calls.append(args),
                                stop=lambda: calls.append("stop"))
 
-    checked = namedtuple("Checked", "result catalog", defaults=[None])
+    checked = namedtuple(
+        "Checked", "result catalog can_download_separately reporting_error reporting_notice",
+        defaults=[None, True, "", ""],
+    )
     # Inject a fake under the source's imported application symbol. No Qt import
     # or widget construction is performed by these coordinator tests.
     application_name = next(
@@ -57,11 +60,12 @@ def discovery():
     window = SimpleNamespace(document=SimpleNamespace(project_root=Path("synthetic-project")),
                              isVisible=lambda: flags.visible,
                              is_launch_busy=lambda: flags.busy,
+                             _project_update_reload_failed=False,
                              set_project_update_notice=notices.append)
     context = SimpleNamespace(
-        _window=window, _current_window=lambda: window, _result=None,
+        _window=window, _current_window=lambda: window, _result=None, _checked_result=None,
         _lifecycle=SimpleNamespace(is_shutting_down=False), _job=None, _importing=False,
-        _offered=set(), _pending_check=None, dialog=None,
+        _offered=set(), _pending_check=None, _last_backup=None, dialog=None,
         _poll_timer=timer(), _offer_timer=timer(),
         _message=lambda result: result.message,
         _queue_check=lambda window, **kwargs: requests.append((window, kwargs)),
@@ -107,6 +111,7 @@ def test_automatic_discovery_offers_new_version_without_install_and_deduplicates
 def test_automatic_discovery_defers_offer_until_safe(discovery, reason):
     d, c = discovery, discovery.controller
     c._result = select_project_update(origin(), catalog(item("1.1.0")))
+    c._checked_result = discovery.checked(c._result)
     if reason == "busy":
         d.flags.busy = True
     elif reason == "modal":
@@ -145,6 +150,7 @@ def test_opt_out_stale_window_and_shutdown_suppress_automatic_offer(discovery):
     c._try_offer()
     assert c.dialog is None
     c._result = select_project_update(origin(), catalog(item("1.1.0")))
+    c._checked_result = discovery.checked(c._result)
     discovery.flags.visible = False
     c._try_offer()
     c._automatic_check()
@@ -345,3 +351,20 @@ def test_managed_receipt_cannot_select_a_custom_service(previous_origin):
     result = check_project_update(client, origin(service_url=previous_origin))
     assert result.status == "unavailable"
     assert client.calls == []
+
+
+@pytest.mark.parametrize("blocked", ["reports", "separate-installed"])
+def test_automatic_offer_preserves_checked_eligibility_and_warnings(discovery, blocked):
+    c = discovery.controller
+    result = select_project_update(origin(), catalog(item("1.1.0")))
+    checked = discovery.checked(
+        result, None, blocked != "separate-installed",
+        "Resolve saved reports first" if blocked == "reports" else "",
+        "Results must reconnect",
+    )
+    c._checked(checked, automatic=True)
+    c._try_offer()
+    assert c.dialog.visible
+    assert discovery.states[-1]["can_update"] == (blocked != "reports")
+    assert discovery.states[-1]["can_download_separately"] == (blocked != "separate-installed")
+    assert "Results must reconnect" in discovery.states[-1]["status"]

@@ -251,37 +251,61 @@ The Home notice, **Review update...** and **File > Update Project Version...** r
 manual access. Offline, revoked
 or unavailable service states do not block project opening or claim the project is current.
 
-The dialog shows the installed and latest versions, release description and minimum
-Studio version. **Keep current version** closes review without downloading, changing
-the experiment or turning off future checks. **Download separately** uses
-the existing verified download,
-bundle review, Save/Discard/Cancel guards and display-settings review. The current
-project's setup, local edits, logs and participant data stay in its existing folder;
-the imported project gets its own collision-safe folder and version record. A newer
-release requiring a newer Studio build remains visible with installation disabled.
-View-only lab access also keeps version details visible with downloading disabled and
-an access explanation; a fresh check applies any changed download permission.
-When a download is available, the review shows concise guidance without scanning
-participant data:
+The dialog shows installed/latest versions, the release description and minimum
+Studio version. **Update current project** is the primary action for a known,
+linked older version. **Download separately** remains secondary; **Keep current
+version** closes without changing the experiment or automatic-check preference.
+View-only access and incompatible Studio versions keep details visible but disable
+installation. Unknown installed versions require explicit version review before
+updating in place; a separate download remains available when eligible.
 
-> If data collection has started, review changes before switching versions.
-> Downloads open as separate projects; current edits and participant data stay here.
+A current-project update replaces authored experiment settings, conditions, tasks
+and stimuli in the same folder. It preserves the local project ID/name, participant
+electrode exclusions, repeat-visit policy, runs, logs, private reporting/recovery
+records and unrelated root files. Local recording hardware, trigger transport and
+physical monitor calibration are retained; authored background, geometry, timing
+and event codes come from the new version. Both the original bundle and the locally
+configured result pass canonical validation/compilation before commit.
 
-Detailed review/preservation guidance is available through the download control's
-tooltip and accessible description. Unlinked projects show the linking fields without
-disabled automatic-check settings or an instructional release-notes box. Actual
-release details appear after selection or checking; empty status rows stay hidden.
-The Library browser keeps experiment descriptions, metadata, access restrictions,
-installation state and errors, with routine explanations moved to control help.
+The previous project.json, complete stimuli tree and Library receipt are retained
+under `<Studio Root>/.fpvs-studio/project-backups/<local-project-id>/<UTC-UUID>/`.
+RESTORE.txt describes recovery. Unknown files inside the old stimuli tree stay in
+that backup rather than being merged into new stimulus pools. Existing participant
+outputs stay in the active project and are not moved into the authored backup.
+Save/Discard/Cancel runs before transfer; cancellation before commit leaves the
+project unchanged. Failed file moves roll back. A late cancel cannot turn a
+successful commit into a failure. An incomplete rollback or failed GUI adoption
+locks editing/saving until the operator closes and reopens/restores the project.
 
-Condition changes are reviewed as part of the whole experiment version, with its
-settings and assets. The user decides whether to adopt the separate project after
-inspection; discovery never changes an ongoing study. Its data-sharing enrollment,
-protocol identity and queued reports stay associated with the original project.
-The update check and download also check the configured Root Folder: if that release
-or a newer one is already installed elsewhere, the dialog reports its path and blocks
-another download. Unreadable project metadata or version records stop installation with
-an error rather than being treated as proof that nothing is installed.
+`core/project_bundle_update.py` owns snapshot hashing, strict staged validation,
+local-field preservation, backup and rollback. The worker rechecks authored bytes
+and the origin immediately before commit. Close other Studio instances using this
+project before updating; these checks do not introduce a project-wide runtime lease.
+The nonmodal review retains the collection-change warning and provides full-value
+preservation/backup guidance. Editor drafts from the old version are discarded only
+after a successful commit, before the updated document is unlocked.
+
+The runtime recovery owner also checks before transfer/commit. Active or uncertain
+execution lifetimes and unreviewed recoverable interruptions block replacement;
+resolve them first or download separately. Reviewed history remains available.
+Restore the prior authored backup before using an old original-plan rerun, since
+the current version's stimulus files may differ from that plan.
+
+`data_sharing/project_updates.py` checks all saved report scopes and capture intents
+before transfer and again before commit. Pending, held or failed reports and
+unfinished captures block in-place replacement, including when sharing is off.
+Resolve them in Data Sharing & Comparison, or download separately to keep that
+version and its queued reports. Old reports/profiles/credentials are never relabeled.
+A saved Results connection may need reconnecting for the new version; review warns
+about that consequence. See [Data sharing](DATA_SHARING.md#library-project-updates).
+
+Separate downloads keep the existing verified transfer, bundle review, display
+review and collision-safe new-folder workflow. If the selected release or a newer
+one is already installed elsewhere, only another separate download is disabled;
+an older current project may still be updated. Other installed copies are untouched.
+Unlinked projects show explicit linking fields; empty details/status rows remain
+hidden. The Library browser retains descriptions, restrictions, installation state
+and recoverable errors.
 
 New Library imports atomically include `.fpvs-library/project-origin.json`, storing
 the service origin, stable item identity, installed version, verified bundle SHA-256,
@@ -481,6 +505,9 @@ offline at fresh short and long Windows roots on one PC.
 | `library/credentials.py` | Windows Credential Manager and Linux Secret Service adapters. |
 | `library/cache.py` | Private per-user cache, no-follow checks and cross-process lease. |
 | `core/project_bundle.py` | Whole-project archive validation, strict Library inventory, bounded JSON, staged validation, cancellation and pre-parse/pre-compilation resource guards; see [Security](SECURITY.md#upload-and-download-trust-boundaries). |
+| `core/project_bundle_update.py` | Explicit same-folder replacement, snapshot checks, local-data preservation, backup and rollback. |
+| `data_sharing/project_updates.py` | Read-only Results readiness before replacement; no report or connection relabeling. |
+| `runtime/condition_recovery.py` | Read-only lifetime and interruption readiness before replacement; recovery evidence stays intact. |
 | `core/compiler_limits.py` | Pre-allocation bundle compilation budgets. |
 | `preprocessing/inspection.py` | Actual image format, structure and bounded pixel decoding. |
 | `core/library_publish.py` | Explicit clean publishing preparation without modifying source projects. |
@@ -751,12 +778,46 @@ Publishing compatible content requires no Worker redeployment or Studio update.
 Previously downloaded projects remain independent copies and are not changed by later
 publications.
 
+## Local maintainer signing
+
+This maintainer PC uses an unchanged trusted Ed25519 signing key protected for its
+Windows account at `%LOCALAPPDATA%/OpenFPVS/signing/key.dpapi`. Do not copy a
+DPAPI-protected file from another PC and expect it to unlock here. The Website's
+canonical `scripts/sign-safety.mjs` supports an authenticated encrypted one-time
+transfer to this PC's public transfer request, then re-protects the same key for
+this account. The original key/public pin and existing approvals are preserved.
+Private keys never enter plaintext files, Git, project bundles or public scanners.
+See the private Website checkout's SIGNING_TOOLS.md for custody and migration.
+
+The installed self-contained command uses the canonical validator/signer, refreshes
+ClamAV definitions and verifies the result against the existing public pin:
+
+```powershell
+& "$env:LOCALAPPDATA/OpenFPVS/signing/tools/Sign-Experiment.ps1" `
+    -Bundle <exact.fpvsbundle> -ItemJson <exact-catalog-item.json> -Proof <new-proof.json>
+```
+
+Use `-CheckOnly` to verify the local tools without opening the key or using the
+network. The command changes no global profile/PATH/service settings. Exact item
+metadata comes from the published catalog, not an unmodified preparation report.
+The Website owns the tool source, installer, bounded subprocess/log handling and
+source/integrity profile; GitHub and Cloudflare authorization stay in their OS stores.
+
+A published GitHub asset remains withheld until its signed proof is registered.
+Use the Website's canonical safety-registration-sql.mjs and existing authorized D1
+operator, or its owner-session/CSRF API. Register within one hour of signing and
+confirm the exact digest in the live catalog/provenance. Successful exact-artifact
+admission remains valid until withdrawal; changed bytes need fresh validation.
+Do not initialize or rotate a production key to work around missing local custody.
+
 ## Verification and visible acceptance
 
 ```powershell
 ./scripts/verify.ps1 -Scope library -Tier focused
 ./scripts/verify.ps1 -Scope project-io -Tier focused
 ./scripts/verify.ps1 -Scope gui -Tier focused
+./scripts/verify.ps1 -Scope data-sharing -Tier focused
+./scripts/verify.ps1 -Scope runtime -Tier focused
 ./scripts/verify.ps1 -CheckConfig
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
@@ -788,6 +849,7 @@ with controlled clients/importers; it does not access the live service.
 | Surface | Minimum | Default |
 | --- | --- | --- |
 | Experiment Library | 900×640 | 1040×760 |
+| Project version review | 760×680 | 820×720 |
 | Welcome with four project actions | 760×520 | 1120×720 |
 | Create Project, all three pages | 760×500 | 800×500 |
 | Developer publisher | 860×680 | 940×760 |

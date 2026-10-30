@@ -25,8 +25,9 @@ validation and extraction; this package only transfers and verifies bytes.
   payload and one bounded partial are retained; rehash cached bytes before reuse.
 - Remove recognized transfer files before releasing a completed download lease after
   review/import. Log cleanup failures and always unlock; never remove imported projects.
-- Imported projects are independent copies and work offline. Network access never
-  replaces an existing project or edits settings.
+- Ordinary imports are independent copies and work offline. Only an explicitly
+  reviewed current-project update may replace authored files, through core's
+  project_bundle_update transaction with a backup and local-data preservation.
 - `provenance.py` verifies signed bundle evidence with the locally pinned managed
   service key before cache creation/reuse. Response keys cannot establish trust;
   see `docs/LIBRARY_ARTIFACT_PROVENANCE.md` for the bounded proof contract.
@@ -39,10 +40,14 @@ validation and extraction; this package only transfers and verifies bytes.
 - `project_updates.py` discovers newer versions from an explicit local origin receipt.
   Compare semantic versions by item identity even if the installed release disappeared;
   never infer origins from names or follow a receipt to a different service endpoint.
-  Checking does not install. GUI-owned review imports a separate project explicitly.
+  Checking does not install. GUI-owned review offers Update current project and
+  Download separately. Core owns replacement, validation, backup and rollback;
+  the data-sharing owner checks unresolved Results evidence before update commit.
 - `installations.py` checks the configured Studio Root before and after payload transfer.
-  Same/newer installed versions cannot download again, including through project updates.
-  Older or unlinked review candidates require the explicit project-version workflow.
+  Same/newer installed versions cannot download again as separate copies.
+  Explicit current-project updates compare their own receipt, so another installed
+  copy does not prevent updating an older current project. Unknown installed
+  versions require explicit version review before replacement.
 
 See `docs/EXPERIMENT_LIBRARY.md` and the active library execution plan. Run the
 `library` focused verification route and repo precommit for shared changes.

@@ -164,6 +164,7 @@ def test_rerun_keeps_recording_and_visit_safeguards(monkeypatch, testing, repeat
     )
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
+        _bundle_import_processing_active=False, _project_update_reload_failed=False,
     )
     main_window.StudioMainWindow._launch_recovered_condition(window, _record())
     assert expected in str(show_error.call_args.args[2])
@@ -184,6 +185,7 @@ def test_current_setup_replacement_cancel_does_not_compile_or_launch(monkeypatch
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False,
         document=document, flush_pending_edits=lambda: True,
+        _bundle_import_processing_active=False, _project_update_reload_failed=False,
     )
     monkeypatch.setattr(
         main_window.QMessageBox, "question",
@@ -202,6 +204,7 @@ def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypa
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
         flush_pending_edits=lambda: True, _session_seed_ready=False,
+        _bundle_import_processing_active=False, _project_update_reload_failed=False,
         _start_deferred_session_seed_task=Mock(), launch_session=Mock(),
     )
     monkeypatch.setattr(

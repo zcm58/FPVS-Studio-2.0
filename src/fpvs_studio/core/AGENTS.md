@@ -41,6 +41,10 @@ This directory is the most important foundation in the repo. It should remain im
 - optional project-local Library origin receipts in `library_origin.py`, committed
   inside bundle import staging and excluded from authored project/runtime contracts;
   its exact managed-origin alias policy preserves receipts during service moves
+- explicit same-folder Library updates in `project_bundle_update.py`: snapshot
+  review, canonical bundle validation, local setting/data preservation, backups
+  and rollback. Ordinary imports retain their no-replacement contract. External
+  policy checks enter through the neutral precommit callback, not core imports.
 - installed-project discovery and duplicate decisions in `library_installations.py`;
   receipt identity is authoritative, while legacy name matches require explicit review
 - validation
