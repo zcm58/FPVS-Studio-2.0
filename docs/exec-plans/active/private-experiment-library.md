@@ -32,6 +32,7 @@ Verification passed: Library focused (416 with three Windows symlink-permission
 skips), GUI focused (98), docs focused (10), Ruff/compilation and mypy over 249
 source modules. Repo precommit passes 3,980 non-Qt tests with 12 Windows permission
 skips. Registered Qt and actual Library publication/receiver smoke remain unrun.
+The change is published in [Studio 2.5.6](../completed/release-2.5.6.md).
 
 ## One-time lab connection (October 29, 2026)
 

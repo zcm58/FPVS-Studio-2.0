@@ -69,6 +69,10 @@ Recent completion: [Studio 2.5.0 release](exec-plans/completed/release-2.5.0.md)
 (BrainVision setup, default EEG hardware, full installer and direct 2.4.8 patch;
 visible GUI, artifact hashes, public downloads and updater checks passed).
 
+Recent completion: [Studio 2.5.6 release](exec-plans/completed/release-2.5.6.md)
+(automatic Library project update offers; full installer, signed release/assets,
+public download hashes and eight live updater checks verified).
+
 Recent completion: [Studio 2.5.3 release](exec-plans/completed/release-2.5.3.md)
 (updater bullet formatting and compact release notes; full installer, signed
 release/assets, public downloads and eight live updater cases verified).
