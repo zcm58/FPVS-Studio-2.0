@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QListWidget,
-    QMessageBox,
     QPushButton,
     QSizePolicy,
     QWidget,
@@ -27,11 +26,13 @@ from tests.gui.helpers import (
     _assert_visible_children_within_parent,
     _open_created_project,
     _prepare_compile_ready_project,
+    _write_image_directory,
 )
 
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import resolve_studio_theme
-from fpvs_studio.gui.image_sources_editor import ImageSourcesEditor
+from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 
 
@@ -125,13 +126,13 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 8
-    assert wizard.step_stack.count() == 8
+    assert len(wizard.progress_steps.step_items) == 7
+    assert wizard.step_stack.count() == 7
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
-    assert wizard.design_step_surface.property("setupStepSurface") == "true"
-    assert wizard.design_step_surface.content.maximumWidth() == 1400
+    assert not hasattr(wizard, "design_step_surface")
+    assert not hasattr(wizard, "design_setup_step")
     assert wizard.experiment_step_surface.property("setupStepSurface") == "true"
     assert wizard.fixation_step_surface.property("setupStepSurface") == "true"
     assert wizard.response_step_surface.property("setupStepSurface") == "true"
@@ -150,7 +151,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Step 1 of 6" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
-    assert "Design" in step_metadata_text
+    assert "Design" not in step_metadata_text
     assert "Timing" in step_metadata_text
     assert "Image Size" in step_metadata_text
     assert "Session" in step_metadata_text
@@ -161,10 +162,10 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_4_timing_session") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_6_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_timing_session") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_5_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_6_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_7_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
     assert next_hint is not None
@@ -202,7 +203,6 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     for step_key in (
         "project",
         "conditions",
-        "design",
         "experiment",
         "image_size",
         "fixation",
@@ -226,7 +226,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.property("launchSurfaceRoot") == "true"
     assert wizard.step_card.property("launchSurfaceFrame") == "true"
     assert wizard.step_card.property("sectionCard") == "false"
-    assert wizard.step_count_label.text() == "Step 1 of 8"
+    assert wizard.step_count_label.text() == "Step 1 of 7"
     assert 'QFrame[launchSurfaceFrame="true"]' in wizard.styleSheet()
     assert "QFrame#non_home_shell_content_frame" in wizard.styleSheet()
     assert "QWidget#page_container_scroll_content" in wizard.styleSheet()
@@ -270,7 +270,6 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     for step_key in (
         "project",
         "conditions",
-        "design",
         "experiment",
         "image_size",
         "fixation",
@@ -279,7 +278,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     ):
         wizard.open_wizard(step_key=step_key)
         QApplication.processEvents()
-        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 7"
         assert wizard.step_count_label.isVisible()
         assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
         assert "border-top" not in wizard.styleSheet()
@@ -295,14 +294,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             _assert_visible_children_within_parent(wizard.project_step_surface)
         elif step_key == "conditions":
             assert wizard.condition_setup_step.presentation_button.isVisible()
-        elif step_key == "design":
-            assert wizard.design_setup_step.width() >= 1000
-            editor = wizard.design_setup_step.editor
-            assert isinstance(editor, ImageSourcesEditor)
-            assert editor.base_source.choose_button.isVisible()
-            assert editor.oddball_source.choose_button.isVisible()
-            assert not hasattr(editor, "cycle_canvas")
-            assert not hasattr(editor, "preview_window")
+            assert wizard.condition_setup_step.base_import_button.isVisible()
+            assert wizard.condition_setup_step.oddball_import_button.isVisible()
         elif step_key == "image_size":
             assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()
@@ -620,7 +613,7 @@ def test_edit_setup_stepper_can_jump_to_any_step(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Editable Stepper Project")
     _prepare_compile_ready_project(window, tmp_path / "editable-stepper-assets")
-    qtbot.waitUntil(lambda: not window.setup_wizard_page.design_setup_step.is_busy())
+    qtbot.waitUntil(lambda: not window.setup_wizard_page.condition_setup_step.is_busy())
     assert window.save_project() is True
 
     controller.open_project(window.document.project_root)
@@ -635,7 +628,7 @@ def test_edit_setup_stepper_can_jump_to_any_step(
     QApplication.processEvents()
 
     guide = reopened.setup_wizard_page
-    qtbot.mouseClick(guide.progress_steps.step_circles[6], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(guide.progress_steps.step_circles[5], Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.response_step_surface
 
     qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)
@@ -667,67 +660,100 @@ def test_setup_wizard_refresh_skips_hidden_heavy_pages(
     assert calls == {"assets": 0, "run": 0}
 
 
-def test_conditions_advance_to_design_without_image_sources(
-    qtbot, controller: StudioController, tmp_path: Path, monkeypatch
+@pytest.mark.parametrize("condition_name", ["Condition 1", "A"])
+def test_conditions_require_image_sources_before_advancing_to_timing(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch, condition_name,
 ) -> None:
-    document, window = _open_created_project(controller, qtbot, tmp_path, "Design Source Gate")
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Condition Source Gate")
     guide = window.setup_wizard_page
     guide.project_overview_editor.project_description_edit.setPlainText("Source selection flow")
     condition_id = document.create_condition(name="Object categories")
     document.update_condition(condition_id, trigger_code=10)
     guide.flush_pending_edits()
     window.show_setup_wizard(step_key="conditions")
-    monkeypatch.setattr(
-        guide,
-        "_start_condition_image_readiness_scan",
-        lambda: (_ for _ in ()).throw(AssertionError("Conditions must not scan images")),
-    )
     QApplication.processEvents()
+    assert not guide.setup_wizard_next_button.isEnabled()
+    assert guide.first_incomplete_step_key() == "conditions"
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert "image sources" in guide.setup_wizard_next_hint_label.text()
+    monkeypatch.setattr(guide, "_ensure_condition_image_prescan_started", lambda: None)
+    for role in ("base", "oddball"):
+        document.import_condition_stimulus_folder(
+            condition_id, role=role,
+            source_dir=_write_image_directory(tmp_path / f"condition-{role}-assets"),
+        )
+    document.update_condition(condition_id, name=condition_name)
+    scan = document.scan_condition_image_normalization()
+    monkeypatch.setattr(
+        guide, "_start_condition_image_readiness_scan",
+        lambda: guide._on_condition_image_readiness_scan_succeeded(scan),
+    )
+    guide.refresh()
     assert guide.setup_wizard_next_button.isEnabled()
-    assert guide.first_incomplete_step_key() == "design"
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
-    assert guide.design_setup_step.selected_condition_id() == condition_id
-    assert not guide.setup_wizard_next_button.isEnabled()
-    assert "image sources" in guide.setup_wizard_next_hint_label.text()
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    guide._go_back()
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
 
-def test_invalid_pending_design_blocks_navigation_and_flush(
+def test_importing_condition_images_blocks_navigation_and_flush(
     qtbot, controller: StudioController, tmp_path: Path, monkeypatch
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Pending Design Gate")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Import Gate")
     guide = window.setup_wizard_page
-    guide.open_wizard(step_key="design", allow_step_jumps=True)
-    monkeypatch.setattr(guide.design_setup_step, "has_pending_design", lambda: True)
-    monkeypatch.setattr(guide.design_setup_step, "apply_pending_design", lambda: False)
+    guide.open_wizard(step_key="conditions", allow_step_jumps=True)
+    monkeypatch.setattr(guide.condition_setup_step, "is_busy", lambda: True)
+    monkeypatch.setattr(guide.condition_setup_step, "is_importing", lambda: True)
+    guide.condition_setup_step.busy_changed.emit(True)
+    guide.refresh()
+    assert not guide.setup_wizard_back_button.isEnabled()
+    assert not guide.setup_wizard_next_button.isEnabled()
+    assert not guide.setup_wizard_return_home_button.isEnabled()
+    assert guide.setup_wizard_next_hint_label.text() == "Importing condition images..."
     assert guide.flush_pending_edits() is False
     guide._go_to_step_from_progress(0)
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     guide._go_back()
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     guide.open_wizard(step_key="review")
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
 
-def test_return_home_can_discard_an_invalid_unapplied_design(
-    qtbot, controller: StudioController, tmp_path: Path, monkeypatch
+@pytest.mark.parametrize(
+    "category", [ExperimentCategory.FPVS_ODDBALL, ExperimentCategory.COGNITIVE_LOAD_FPVS,
+                 ExperimentCategory.ATTENTIONAL_BLINK],
+)
+def test_all_categories_use_seven_setup_steps_without_constructing_design(
+    qtbot, tmp_path: Path, category, monkeypatch,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Discard Design")
-    guide = window.setup_wizard_page
-    guide.open_wizard(step_key="design")
-    discarded = []
-    returned = []
-    monkeypatch.setattr(guide.design_setup_step, "has_pending_design", lambda: True)
-    monkeypatch.setattr(guide.design_setup_step, "apply_pending_design", lambda: False)
-    monkeypatch.setattr(
-        guide.design_setup_step, "discard_pending_design", lambda: discarded.append(True) or True
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path, project_name="Seven setup steps", experiment_category=category,
     )
-    monkeypatch.setattr(guide, "_on_return_home", lambda: returned.append(True))
-    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.No)
-    guide._return_home()
-    assert not discarded and not returned
-    monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Yes)
-    guide._return_home()
-    assert discarded == [True]
-    assert returned == [True]
+    protocol = document.project.settings.protocol.model_dump()
+    conditions = [condition.model_dump() for condition in document.ordered_conditions()]
+
+    def unexpected_editor(*_args, **_kwargs):
+        raise AssertionError("Setup must not construct a separate Design editor")
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.design_setup_step.DesignSetupStep.__init__", unexpected_editor,
+    )
+    guide = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(guide)
+    guide.resize(1120, 820)
+    guide.show()
+    guide.open_wizard(step_key="design")
+    QApplication.processEvents()
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.count() == 7
+    assert len(guide.progress_steps.step_items) == 7
+    assert guide.step_count_label.text() == "Step 2 of 7"
+    assert "Design" not in " ".join(item.toolTip() for item in guide.progress_steps.step_items)
+    assert not hasattr(guide, "design_setup_step")
+    assert not hasattr(guide, "design_step_surface")
+    assert document.project.settings.protocol.model_dump() == protocol
+    assert [condition.model_dump() for condition in document.ordered_conditions()] == conditions

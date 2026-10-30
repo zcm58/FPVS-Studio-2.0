@@ -728,12 +728,11 @@ def test_repeated_burst_timing_reports_t1_cadence_and_preserves_duration(
 
 
 @pytest.mark.parametrize("dark", [False, True])
-@pytest.mark.parametrize("size", [(1120, 820), (1448, 1086)])
+@pytest.mark.parametrize("size", [(1000, 590), (1328, 856)])
 @pytest.mark.parametrize("repeated", [False, True])
-def test_stream_design_fits_wizard_in_both_themes(
+def test_stream_design_fits_standalone_content_in_both_themes(
     qtbot,
     qapp,
-    controller,
     stream_document,
     dark,
     size,
@@ -744,19 +743,11 @@ def test_stream_design_fits_wizard_in_both_themes(
     try:
         if repeated:
             _use_repeated_targets(stream_document)
-        stream_document.save()
-        controller.open_project(stream_document.project_root)
-        window = controller.main_window
-        qtbot.addWidget(window)
-        window.show_setup_wizard(step_key="design")
-        window.setup_wizard_page.open_wizard(step_key="design", allow_step_jumps=True)
-        window.resize(*size)
-        window.show()
+        step, editor = _editor(qtbot, stream_document)
+        step.resize(*size)
         QApplication.processEvents()
-        step = window.setup_wizard_page.design_setup_step
-        editor = step.editor
         assert isinstance(editor, AttentionalBlinkStreamDesigner)
-        assert (window.width(), window.height()) == size
+        assert (step.width(), step.height()) == size
         assert_visible_children_within_parent(step)
         assert editor.condition_table.horizontalScrollBar().maximum() == 0
         assert editor.condition_table.verticalScrollBar().maximum() == 0
@@ -791,7 +782,6 @@ def test_stream_design_fits_wizard_in_both_themes(
         assert editor.preview_caption.height() >= editor.preview_caption.heightForWidth(
             editor.preview_caption.width()
         )
-        assert window.setup_wizard_page.progress_step_labels[4].text() == "Character Size"
         assert editor.rate_edit.isVisible()
         assert editor.rate_edit.height() >= editor.rate_edit.minimumSizeHint().height()
         for rate in (10, 20):
@@ -808,7 +798,7 @@ def test_stream_design_fits_wizard_in_both_themes(
         QApplication.processEvents()
         assert editor.validation_label.isVisible()
         assert_visible_children_within_parent(step)
-        assert not window.setup_wizard_page.setup_wizard_next_button.isEnabled()
+        assert not step.apply_pending_design()
         qtbot.keyClick(editor.base_edit, Qt.Key.Key_Tab)
     finally:
         qapp.setPalette(previous_palette)
@@ -835,14 +825,14 @@ def test_all_stream_setup_steps_fit_default_window(
         window.show()
         wizard = window.setup_wizard_page
         for step_key in (
-            "project", "conditions", "design", "experiment", "image_size",
+            "project", "conditions", "experiment", "image_size",
             "fixation", "response", "review",
         ):
             wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
             QApplication.processEvents()
             assert wizard._current_step_key() == step_key
             assert (window.width(), window.height()) == (1120, 820), step_key
-            assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+            assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 7"
             assert wizard.step_count_label.isVisible()
             assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
             assert "border-top" not in wizard.styleSheet()
@@ -869,6 +859,7 @@ def test_all_stream_setup_steps_fit_default_window(
             assert scroll.horizontalScrollBar().maximum() == 0, step_key
             assert_visible_children_within_parent(wizard.step_stack.currentWidget())
             if step_key == "image_size":
+                assert wizard.progress_step_labels[3].text() == "Character Size"
                 editor = wizard.image_display_size_editor
                 assert editor.character_height_edit.isVisible()
                 assert not editor.width_degrees_spin.isVisible()

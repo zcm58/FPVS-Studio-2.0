@@ -57,8 +57,8 @@ def test_search_matches_names_and_triggers_preserving_order_and_selection(search
 def test_filtering_does_not_commit_or_replace_pending_text(search_step):
     document, step, condition_ids = search_step
     document.set_condition_stimulus_modality(condition_ids[0], modality=StimulusModality.WORD)
+    document.update_condition(condition_ids[0], instructions="Saved instructions for faces")
     step.condition_name_edit.setText("Pending name")
-    step.instructions_edit.setPlainText("Pending instructions for faces")
     step.base_words_edit.setPlainText("cat\ndog")
     step.oddball_words_edit.setPlainText("hammer\nsaw")
     before = document.project.model_dump(mode="json")
@@ -69,7 +69,7 @@ def test_filtering_does_not_commit_or_replace_pending_text(search_step):
     assert _visible_ids(step) == [condition_ids[0]]
     assert step.condition_search_status.text() == "No matches. Selected condition kept visible."
     assert step.condition_name_edit.text() == "Pending name"
-    assert step.instructions_edit.toPlainText() == "Pending instructions for faces"
+    assert document.get_condition(condition_ids[0]).instructions == "Saved instructions for faces"
     assert step.base_words_edit.toPlainText() == "cat\ndog"
     assert step.oddball_words_edit.toPlainText() == "hammer\nsaw"
     assert step.has_pending_edits()
@@ -82,11 +82,11 @@ def test_filtering_does_not_commit_or_replace_pending_text(search_step):
 def test_keyboard_selection_commits_drafts_to_the_previous_condition(qtbot, search_step):
     document, step, condition_ids = search_step
     document.set_condition_stimulus_modality(condition_ids[0], modality=StimulusModality.WORD)
+    document.update_condition(condition_ids[0], instructions="Faces instructions")
     step.resize(1000, 600)
     step.show()
     QApplication.processEvents()
     step.condition_search_edit.setFocus()
-    step.instructions_edit.setPlainText("Faces instructions")
     step.base_words_edit.setPlainText("cat\ndog")
     step.oddball_words_edit.setPlainText("hammer\nsaw")
     step.condition_search_edit.setText("TOOLS")

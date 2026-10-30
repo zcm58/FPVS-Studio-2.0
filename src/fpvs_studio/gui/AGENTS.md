@@ -23,7 +23,7 @@ backend-driven.
 - Preserve the Home/Setup Wizard workflow: Home is the returning-user launch surface;
   detailed setup widgets should be reached through the guided wizard, not new top-level
   tabs.
-- Keep the eight guided steps in order: Project, Conditions, Design, Timing & Session,
+- Keep the seven guided steps in order: Project, Conditions, Timing & Session,
   Image Size, Fixation, Response, Review. Budget all steps for `1120x820` without required
   scrolling. Timing retains the `experiment` navigation key for internal callers.
 - Preserve Home setup actions: ready projects expose `Edit Setup`, incomplete projects
@@ -32,23 +32,24 @@ backend-driven.
 - New-experiment Setup offers manual creation or Library download. Manual creation asks
   for category, then name/folder/template; Library downloads reuse bundle import. Manual
   category choices are FPVS Oddball Paradigm and disabled Standard FPVS Coming soon.
-  Category is locked after creation. Design uses per-condition Base/Oddball image
-  folder selection without image previews or cycle editing; the optional standalone
-  visual designer stays separate from Setup. Image-pair AB and its ISI editor are
-  retired. Attentional-Blink letter streams expose a shared presentation rate,
-  character pools and onset-to-onset SOAs.
-  New burst studies expose Bursts per SOA in Design and Timing & Session, with EEG time
-  and total burst count in Design. Rate/source/SOA/burst-count drafts apply atomically;
-  core guards default five-second or explicitly repeated-target burst timing and
-  category rules. Design preserves repeated-target duration and first onset through
-  exact rate/SOA edits. Legacy stream pools remain
-  unchanged. View > T1 and T2 Accuracy reads runtime-owned SOA/trigger summaries and
+  Category is locked after creation. Conditions provides per-condition Base/Oddball
+  folder selection without image previews or cycle editing. There is no guided
+  Design step. Retain the standalone image designer and native AB editor source
+  separately; do not expose an AB editing replacement as part of this workflow.
+  Saved AB rates, character pools, SOAs, burst settings and legacy streams remain
+  unchanged. Core still guards default five-second or explicitly repeated-target
+  timing and category rules. View > T1 and T2 Accuracy reads runtime-owned SOA/trigger summaries and
   chronological burst records, with worker-backed Excel export and busy-close guards.
   Other categories retain View > Fixation Task Accuracy.
-- Keep condition modality authoring in Conditions. Image folders belong in Design;
+- Keep condition modality and Base/Oddball image-folder authoring in Conditions;
   oddball word conditions keep typed base/oddball word-list editors in Conditions.
-  Native AB digit/T1/T2 sources belong in Design, with Character Size replacing Image
-  Size. See `docs/EXPERIMENT_CATEGORIES.md` for shared surfaces and legacy repair.
+  Image imports use fresh project-owned pools on workers and block navigation while
+  mutating sources; normalization occurs when leaving Conditions. Participant
+  instructions use an Edit Instructions dialog with Save/Cancel; empty Save clears
+  them and Cancel preserves them. Do not reject default or short condition names
+  through a custom descriptive-name rule; retain core's nonempty name schema.
+  Character Size replaces Image Size for native AB. See
+  `docs/EXPERIMENT_CATEGORIES.md` for shared surfaces and legacy repair.
 - Present Sinusoidal Contrast Modulation as the third image presentation mode alongside
   Continuous Display and 50% Blank. Do not offer it for word conditions, and expose
   Neutral Gray as the required project background without changing existing modes.

@@ -145,7 +145,7 @@ def test_editing_ab_template_preserves_category_and_cadence(qtbot):
     assert dialog.duty_cycle_combo.count() == 1
 
 
-@pytest.mark.parametrize("worker", ["designer", "conditions"])
+@pytest.mark.parametrize("worker", ["source_import", "readiness"])
 def test_changing_experiments_waits_for_image_workers(
     qtbot, controller, tmp_path, monkeypatch, worker,
 ):
@@ -158,7 +158,7 @@ def test_changing_experiments_waits_for_image_workers(
         lambda *args: pytest.fail("Discard cannot destroy a widget with an active image worker"),
     )
     owner, method = (
-        (wizard.design_setup_step, "is_busy") if worker == "designer"
+        (wizard.condition_setup_step, "is_busy") if worker == "source_import"
         else (wizard, "_condition_image_task_active")
     )
     monkeypatch.setattr(owner, method, lambda: True)

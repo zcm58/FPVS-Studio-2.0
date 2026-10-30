@@ -316,14 +316,12 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == []
     assert not next_button.isEnabled()
-    qtbot.waitUntil(lambda: "name every condition" in guide.step_status_label.text().lower())
+    qtbot.waitUntil(lambda: "image sources" in guide.step_status_label.text().lower())
 
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
-    guide._document.update_condition(condition_id, name="Faces")
-    qtbot.waitUntil(next_button.isEnabled)
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
+    assert guide._document.get_condition(condition_id).name == "Condition 1"
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert not next_button.isEnabled()
     assert "image sources" in guide.setup_wizard_next_hint_label.text().lower()
     assert guide.condition_setup_step.selected_condition_id() == condition_id
@@ -391,8 +389,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.design_step_surface
-    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert guide.step_stack.currentIndex() == 1
     assert guide.content_stack.currentWidget() is guide.guided_panel
 

@@ -15,7 +15,6 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QMessageBox,
     QProgressBar,
     QPushButton,
     QVBoxLayout,
@@ -115,6 +114,7 @@ class UpdateDialog(QDialog):
         self._close_result = int(QDialog.DialogCode.Rejected)
         self._result: UpdateCheckResult | None = None
         self._downloaded_installer: DownloadedInstaller | None = None
+        self._preparing_install = False
         self._disposed = Event()
         disposed = self._disposed
         self.destroyed.connect(lambda _object=None: disposed.set())
@@ -187,23 +187,18 @@ class UpdateDialog(QDialog):
         actions_layout.setColumnStretch(1, 1)
         self.check_button = QPushButton("Check Again", self.button_box)
         self.check_button.setObjectName("update_dialog_check_button")
-        self.download_button = QPushButton("Download Update", self.button_box)
+        self.download_button = QPushButton("Download and Install", self.button_box)
         self.download_button.setObjectName("update_dialog_download_button")
-        self.install_button = QPushButton("Install and Restart", self.button_box)
-        self.install_button.setObjectName("update_dialog_install_button")
         self.close_button = QPushButton("Close", self.button_box)
         self.close_button.setObjectName("update_dialog_close_button")
         actions_layout.addWidget(self.check_button, 0, 0)
         actions_layout.addWidget(self.download_button, 0, 1)
-        actions_layout.addWidget(self.install_button, 1, 0)
-        actions_layout.addWidget(self.close_button, 1, 1)
+        actions_layout.addWidget(self.close_button, 1, 0, 1, 2)
         mark_secondary_action(self.check_button)
         mark_primary_action(self.download_button)
-        mark_primary_action(self.install_button)
         mark_secondary_action(self.close_button)
         self.check_button.clicked.connect(self.start_update_check)
         self.download_button.clicked.connect(self.start_download)
-        self.install_button.clicked.connect(self.install_and_restart)
         self.close_button.clicked.connect(self._dismiss_dialog)
         layout.addWidget(self.button_box)
         apply_studio_theme(self)
@@ -214,6 +209,7 @@ class UpdateDialog(QDialog):
         if (
             self._disposed.is_set()
             or self._job is not None
+            or self._preparing_install
             or self._close_pending
             or self._lifecycle.is_shutting_down
         ):
@@ -245,6 +241,7 @@ class UpdateDialog(QDialog):
         if (
             self._disposed.is_set()
             or self._job is not None
+            or self._preparing_install
             or self._close_pending
             or self._lifecycle.is_shutting_down
         ):
@@ -254,7 +251,9 @@ class UpdateDialog(QDialog):
         asset = self._result.installer_asset
         if asset is None or asset.sha256 is None:
             return
-        self._downloaded_installer = None
+        if self._downloaded_installer is not None:
+            self.install_and_restart()
+            return
         self._set_busy_state("Downloading and verifying the update...")
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)
@@ -269,43 +268,39 @@ class UpdateDialog(QDialog):
         if (
             self._disposed.is_set()
             or self._job is not None
+            or self._preparing_install
             or self._downloaded_installer is None
             or self._close_pending
             or self._lifecycle.is_shutting_down
         ):
             return
-        answer = QMessageBox.question(
-            self,
-            "Install Update",
-            "FPVS Studio needs to close to install the update.\n\n"
-            "Install the update and restart FPVS Studio?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.Yes,
-        )
-        if answer != QMessageBox.StandardButton.Yes:
-            return
-        # Confirmation and Save can enter nested GUI event loops. The parent or app
-        # may have closed while either prompt was open; never continue into a dead
-        # dialog or launch an installer after that cancellation.
-        if self._disposed.is_set() or self._close_pending or self._lifecycle.is_shutting_down:
-            return
-        if self._on_before_install is not None and not self._on_before_install():
-            return
-        if self._disposed.is_set() or self._close_pending or self._lifecycle.is_shutting_down:
-            return
         downloaded = self._downloaded_installer
-        if downloaded is None:
-            return
-        installer_launcher = self._installer_launcher
+        self._preparing_install = True
         self._set_busy_state("Preparing FPVS Studio Updater. Studio will close when it is ready...")
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setVisible(True)
-        self._start_task(
-            "install",
-            lambda _progress, cancel: installer_launcher(downloaded, cancel),
-            keep_success_on_cancel=True,
-            on_committed_success=self._quit_app,
-        )
+        try:
+            # The combined action authorizes installation. Save can enter a nested
+            # event loop, so block repeat actions and recheck close/shutdown afterward.
+            if self._on_before_install is not None and not self._on_before_install():
+                if not (
+                    self._disposed.is_set()
+                    or self._close_pending
+                    or self._lifecycle.is_shutting_down
+                ):
+                    self._handle_download_result(downloaded)
+                return
+            if self._disposed.is_set() or self._close_pending or self._lifecycle.is_shutting_down:
+                return
+            installer_launcher = self._installer_launcher
+            self.progress_bar.setRange(0, 0)
+            self.progress_bar.setVisible(True)
+            self._start_task(
+                "install",
+                lambda _progress, cancel: installer_launcher(downloaded, cancel),
+                keep_success_on_cancel=True,
+                on_committed_success=self._quit_app,
+            )
+        finally:
+            self._preparing_install = False
 
     def _start_task(
         self,
@@ -355,6 +350,8 @@ class UpdateDialog(QDialog):
             self._handle_check_result(outcome.value)
         elif kind == "download":
             self._handle_download_result(outcome.value)
+            if isinstance(outcome.value, DownloadedInstaller):
+                self.install_and_restart()
 
     @Slot(object)
     def _handle_check_result(self, result: object) -> None:
@@ -410,7 +407,6 @@ class UpdateDialog(QDialog):
             self.download_button.setEnabled(False)
             self._set_close_button_text("Close")
         self.check_button.setEnabled(True)
-        self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
 
     @Slot(object)
@@ -423,7 +419,6 @@ class UpdateDialog(QDialog):
         self._downloaded_installer = result
         self.status_label.setText("The update is verified and ready to install.")
         self.download_button.setEnabled(True)
-        self.install_button.setEnabled(True)
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
         self._set_close_button_text("Close")
@@ -448,7 +443,6 @@ class UpdateDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
-        self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
         self._set_close_button_text("Close")
 
@@ -482,7 +476,6 @@ class UpdateDialog(QDialog):
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
-        self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
         self._set_close_button_text("Close")
 
@@ -498,7 +491,6 @@ class UpdateDialog(QDialog):
     def _set_idle_state(self) -> None:
         self.release_notes_button.setEnabled(False)
         self.download_button.setEnabled(False)
-        self.install_button.setEnabled(False)
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
         self._set_close_button_text("Close")
@@ -507,7 +499,6 @@ class UpdateDialog(QDialog):
         self.status_label.setText(status_text)
         self.check_button.setEnabled(False)
         self.download_button.setEnabled(False)
-        self.install_button.setEnabled(False)
         self.close_button.setEnabled(True)
         self._set_close_button_text("Cancel and Close")
 
@@ -537,7 +528,6 @@ class UpdateDialog(QDialog):
         self._close_result = result
         self.check_button.setEnabled(False)
         self.download_button.setEnabled(False)
-        self.install_button.setEnabled(False)
         self.close_button.setEnabled(False)
         self._set_close_button_text("Canceling...")
         self.status_label.setText(
@@ -563,7 +553,6 @@ class UpdateDialog(QDialog):
         buttons = (
             self.check_button,
             self.download_button,
-            self.install_button,
             self.close_button,
         )
         for button in buttons:

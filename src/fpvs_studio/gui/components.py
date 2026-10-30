@@ -1832,7 +1832,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_primary};
         font-weight: 700;
     }}
-    QLabel#setup_wizard_step_4_timing_session_label[setupProgressState="current"] {{
+    QLabel#setup_wizard_step_3_timing_session_label[setupProgressState="current"] {{
         font-weight: 500;
     }}
     QLabel[setupProgressLabel="true"][setupProgressState="complete"] {{

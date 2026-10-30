@@ -2,7 +2,7 @@
 
 Condition modifiers keep a participant activity's before/after screens, sustained
 instruction, settings, and response rules together. Open **FPVS Condition Modifiers**
-from Setup > Conditions. Ordinary modifiers retain the condition's Design and Timing
+from Setup > Conditions. Ordinary modifiers retain the condition's image sources and timing
 settings. Masking modifiers supply native visual pools and within-item windows while
 retaining the FPVS item and oddball cadence.
 

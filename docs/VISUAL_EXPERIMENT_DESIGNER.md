@@ -1,11 +1,13 @@
 # Visual FPVS Experiment Designer
 
-Updated: 2026-10-30. Setup uses simple image-source selection and native AB design.
+Updated: 2026-10-30. Guided Setup has seven steps with image selection in Conditions.
 New Attentional-Blink projects use five-second bursts of white letters with green
-T1 and white T2 digits at 100/300/500 ms SOAs. Setup > Design shows shared
+T1 and white T2 digits at 100/300/500 ms SOAs. The retained AB editor shows shared
 character pools, bursts per SOA, condition SOAs, a target-focused timeline, an onset bracket, and a
 quarter-speed illustration. Character Size edits native text height. The existing
-questionnaire editor is also accessible from Design. See
+questionnaire editor remains available through Conditions. The AB editor source is
+retained outside the guided workflow; saved AB settings remain unchanged and no
+replacement AB authoring UI is introduced here. See
 [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current defaults, schema,
 recall scoring, and exact display-grid requirements.
 
@@ -32,18 +34,23 @@ are retired. Old files remain readable but cannot be authored, compiled or run; 
 
 ## Oddball Image Designer
 
-Setup > Conditions edits names, modality, instructions and tasks. Setup > Design
-uses `ImageSourcesEditor` at a `1000x600` content budget inside the eight-step
-`1120x820` wizard. Select a condition and choose its Base and Oddball image folders.
+Setup > Conditions edits names, modality, instructions, tasks and image sources in
+the seven-step `1120x820` wizard. Select a condition and use its Base Images and
+Oddball Images buttons to choose folders.
 The source cards show counts, resolution and full-path details with Copy path.
 There are no thumbnails, visual cycle controls or image preview in Setup. Image
 selection preserves existing cycle and timing settings. Word lists remain in
-Conditions and frequency edits remain in Timing & Session.
+Conditions and frequency edits remain in Timing & Session. There is no Design step.
+
+Edit Instructions opens a modal text dialog. Save commits its text, including an
+empty value that clears the instructions; Cancel preserves the previous value.
+Default and short condition names are accepted under the existing nonempty schema.
 
 Folder buttons import on workers into fresh project-owned source sets without merging
 images or changing other conditions. Canceling the picker preserves the current source;
 failed imports show an inline error and support retry. Missing sources block progression,
-and active imports block navigation and condition switching. Windows extended-length
+and active imports block navigation and condition switching. Normalization runs when
+leaving Conditions. Windows extended-length
 filesystem paths preserve original image names and bytes without changing persisted
 project-relative paths.
 

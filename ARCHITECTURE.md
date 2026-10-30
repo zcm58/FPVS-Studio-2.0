@@ -139,7 +139,7 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   Home/Setup workflows, and shared components/theme helpers. New-experiment Setup
   starts with manual creation or Library download. Manual creation offers FPVS Oddball
   Paradigm and disabled Standard FPVS, then project details; Library downloads reuse
-  bundle import. Setup composes eight model-backed pages (Project, Conditions, Design,
+  bundle import. Setup composes seven model-backed pages (Project, Conditions,
   Timing & Session, Image Size, Fixation,
   Response, Review); shared dialog/form styling remains in `gui/components.py`.
   User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
@@ -151,17 +151,17 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   thread through shutdown. `gui/thread_completion.py` waits for native cleanup outside
   the GUI thread before releasing Python worker wrappers and reporting completion.
   Conditions confirms populated image/word switches before the document replaces only
-  the selected condition's source associations. Its list and text editors expand
-  vertically within the shared wizard surface; see `docs/GUI_WORKFLOW.md`.
-  Design uses `gui/image_sources_editor.py` for per-condition Base/Oddball folder
-  selection without image previews or cycle editing. Imports use existing preprocessing
-  and document services; Timing & Session retains frequency authoring.
-  Native AB keeps its character/SOA editor and Next applies its draft through the
-  existing navigation gate. The optional standalone image designer retains Apply.
+  the selected condition's source associations. It owns per-condition Base/Oddball
+  folder buttons, worker-backed fresh imports and normalization on leaving the step.
+  Participant instructions use a Save/Cancel dialog; default and short names use
+  core's existing nonempty schema. There is no guided Design page or image preview.
+  Timing & Session retains frequency authoring. Native AB settings are preserved;
+  its editor source and the optional standalone image designer remain outside Setup.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
   Oddball Apply uses existing protocol settings. AB image pairs are retired, with
   guards in category validation, authoring, runtime preflight and direct engine launch.
-  New AB bursts use `gui/attentional_blink_stream_designer.py`, shared native
+  The retained `gui/attentional_blink_stream_designer.py` handles AB burst editing,
+  shared native
   letter/digit pools, editable bursts per SOA and presentation rate, and onset-to-onset
   SOAs. `core/attentional_blink_stream.py` owns
   the exact character grid and seeded symbol sampling shared with the designer;
@@ -172,7 +172,7 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   compiled answer keys refer to each entry's actual targets. Existing native studies
   retain their saved character pools and blockwise session behavior.
   Explicit repeated-target studies retain a complete burst grid, repeated target
-  identities and optional first-T2 omission. Core owns exact retiming; Design
+  identities and optional first-T2 omission. Core owns exact retiming; the retained editor
   preserves the authored duration/onsets, and runtime groups observed target pairs
   separately. See the repeated-target contract in `docs/EXPERIMENT_CATEGORIES.md`.
   Opt-in all-character AB markers use a separate neutral condition-marker flip;
@@ -240,6 +240,9 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   recovery, and target verification. The retained full Python verifier uses scoped
   directory pins and reusable Windows bindings. Typed phase events keep progress and
   installation commitment separate from GUI presentation.
+  The GUI's explicit Download and Install action chains verified download to the
+  existing Save gate and helper handoff after worker cleanup, with cancellation and
+  shutdown guards; there is no second install confirmation or install button.
   Inno posts actual installation percentages to the managed updater window; the
   notification is display-only. Completion still requires setup exit, registration
   verification and restart; see `docs/PACKAGING.md`.
@@ -432,7 +435,8 @@ owns endpoint estimates and task-response checkpoints. Details and acceptance ar
   `<FPVS Studio Root>/.fpvs-studio/templates/`, outside experiment projects.
 - Project-facing paths remain project-relative POSIX strings.
 - The independent updater imports no runtime or experiment engine. Studio saves through
-  its existing GUI callback before accepting a handoff; the helper never edits projects.
+  its existing GUI callback before accepting a handoff authorized by the explicit
+  Download and Install action; the helper never edits projects.
   Installer/download trust, private IPC, and recovery rules live in `docs/PACKAGING.md`.
 - `tests/unit/test_import_boundaries.py` checks documented internal restrictions,
   including relative imports and aliased authoring-model use, without importing modules.

@@ -252,11 +252,12 @@ def test_update_dialog_action_buttons_fit_text_at_compact_width(qtbot) -> None:
     dialog.resize(dialog.minimumSizeHint())
     dialog.show()
     qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
+    assert dialog.download_button.text() == "Download and Install"
+    assert not hasattr(dialog, "install_button")
 
     for button in (
         dialog.check_button,
         dialog.download_button,
-        dialog.install_button,
         dialog.close_button,
     ):
         required_width = button.fontMetrics().horizontalAdvance(button.text()) + 20
@@ -324,6 +325,9 @@ def test_update_dialog_downloads_then_launches_installer(
     monkeypatch,
     tmp_path: Path,
 ) -> None:
+    monkeypatch.setattr(
+        QMessageBox, "question", lambda *_args: pytest.fail("The combined action needs no prompt"),
+    )
     installer_path = tmp_path / "FPVS-Studio-Setup-0.9.0b2.exe"
     installer_path.write_bytes(b"installer")
     launched: list[Path] = []
@@ -366,16 +370,9 @@ def test_update_dialog_downloads_then_launches_installer(
     assert dialog.release_notes_button.isEnabled()
     assert dialog.close_button.text() == "Remind Me Later"
 
-    dialog.start_download()
-    qtbot.waitUntil(lambda: dialog.install_button.isEnabled())
-    assert dialog.progress_bar.value() == dialog.progress_bar.maximum() == 1000
-
-    monkeypatch.setattr(
-        QMessageBox,
-        "question",
-        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
-    )
-    dialog.install_and_restart()
+    assert dialog.download_button.text() == "Download and Install"
+    assert not hasattr(dialog, "install_button")
+    dialog.download_button.click()
 
     qtbot.waitUntil(lambda: quit_calls == ["quit"])
     assert launched == [installer_path]
@@ -404,7 +401,6 @@ def test_update_dialog_reports_no_update(qtbot) -> None:
     qtbot.waitUntil(lambda: dialog.status_label.text() == "FPVS Studio is up to date.")
 
     assert dialog.download_button.isEnabled() is False
-    assert dialog.install_button.isEnabled() is False
     assert dialog.close_button.text() == "Close"
 
 
@@ -423,7 +419,6 @@ def test_update_dialog_reports_manual_server_error(qtbot) -> None:
 
     assert "network unavailable" in dialog.notes_label.text()
     assert dialog.download_button.isEnabled() is False
-    assert dialog.install_button.isEnabled() is False
     assert dialog.close_button.text() == "Close"
 
 
@@ -555,7 +550,6 @@ def test_new_release_without_trusted_installer_metadata_is_not_reported_as_curre
     assert "SHA-256 checksum" in dialog.status_label.text()
     assert "up to date" not in dialog.status_label.text()
     assert not dialog.download_button.isEnabled()
-    assert not dialog.install_button.isEnabled()
     assert dialog.release_notes_button.isEnabled()
     dialog.release_notes_button.click()
     assert opened == [result.release_url]
@@ -564,7 +558,7 @@ def test_new_release_without_trusted_installer_metadata_is_not_reported_as_curre
 @pytest.mark.parametrize("action", ["button", "window", "escape"])
 @pytest.mark.parametrize("operation", ["check", "download", "install"])
 def test_close_cancels_but_keeps_dialog_alive_until_worker_finishes(
-    qtbot, monkeypatch, tmp_path, deferred_updates, action, operation,
+    qtbot, tmp_path, deferred_updates, action, operation,
 ) -> None:
     lifecycle, jobs, quit_calls = deferred_updates
     dialog = UpdateDialog(auto_check=False, initial_result=_available_update(), lifecycle=lifecycle)
@@ -576,9 +570,6 @@ def test_close_cancels_but_keeps_dialog_alive_until_worker_finishes(
         dialog.start_download()
     else:
         dialog._handle_download_result(_downloaded_fixture(tmp_path))
-        monkeypatch.setattr(
-            QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes
-        )
         dialog.install_and_restart()
     job = jobs[-1]
     qtbot.waitUntil(lambda: job.is_running)
@@ -594,7 +585,6 @@ def test_close_cancels_but_keeps_dialog_alive_until_worker_finishes(
     assert dialog.isVisible()
     assert dialog.close_button.text() == "Canceling..."
     assert not dialog.close_button.isEnabled()
-    assert not dialog.install_button.isEnabled()
     assert lifecycle.has_active_jobs
     assert quit_calls == []
 
@@ -605,20 +595,20 @@ def test_close_cancels_but_keeps_dialog_alive_until_worker_finishes(
     assert quit_calls == []
 
 
-def test_download_result_does_not_enable_install_until_thread_finished(
-    qtbot, monkeypatch, tmp_path, deferred_updates,
+def test_download_result_starts_install_only_after_its_worker_finishes(
+    qtbot, tmp_path, deferred_updates,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
-    confirmations: list[str] = []
-    monkeypatch.setattr(
-        QMessageBox, "question", lambda *_args: confirmations.append("confirm")
-    )
+    events: list[str] = []
     downloaded = _downloaded_fixture(tmp_path)
     dialog = UpdateDialog(
         auto_check=False,
         initial_result=_available_update(),
         lifecycle=lifecycle,
         download_callback=lambda _asset, _progress, _cancel: downloaded,
+        installer_launcher=lambda _downloaded, _cancel: events.append("launch"),
+        on_before_install=lambda: events.append("save") or True,
+        quit_app=lambda: events.append("quit"),
     )
     qtbot.addWidget(dialog)
     dialog.show()
@@ -627,17 +617,72 @@ def test_download_result_does_not_enable_install_until_thread_finished(
     qtbot.waitUntil(lambda: job.is_running)
     job.run_callback()
 
-    assert not dialog.install_button.isEnabled()
+    assert not dialog.download_button.isEnabled()
     assert dialog._downloaded_installer is None
     dialog.install_and_restart()
     dialog.start_download()
-    assert confirmations == []
+    assert events == []
     assert len(jobs) == 1
 
     job.finish()
-    assert dialog.install_button.isEnabled()
+    assert events == ["save"]
     assert dialog._downloaded_installer is downloaded
+    assert len(jobs) == 2
+    assert dialog._task_kind == "install"
+    install_job = jobs[-1]
+    qtbot.waitUntil(lambda: install_job.is_running)
+    install_job.run_callback()
+    assert events == ["save", "launch"]
+    install_job.finish()
+    qtbot.waitUntil(lambda: events == ["save", "launch", "quit"])
+
+
+def test_canceled_save_keeps_the_verified_download_for_single_action_retry(
+    qtbot, tmp_path, deferred_updates,
+) -> None:
+    lifecycle, jobs, _quit_calls = deferred_updates
+    downloaded = _downloaded_fixture(tmp_path)
+    events: list[str] = []
+
+    def download(_asset, _progress, _cancel):
+        events.append("download")
+        return downloaded
+
+    def save():
+        events.append("save")
+        dialog.start_download()
+        dialog.start_update_check()
+        dialog.install_and_restart()
+        return events.count("save") == 2
+
+    dialog = UpdateDialog(
+        auto_check=False, initial_result=_available_update(), lifecycle=lifecycle,
+        download_callback=download,
+        installer_launcher=lambda _downloaded, _cancel: events.append("launch"),
+        on_before_install=save, quit_app=lambda: events.append("quit"),
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.download_button.click()
+    qtbot.waitUntil(lambda: jobs[0].is_running)
+    jobs[0].run_callback()
+    jobs[0].finish()
+    assert events == ["download", "save"]
+    assert len(jobs) == 1
     assert dialog._job is None
+    assert not dialog._preparing_install
+    assert dialog._downloaded_installer is downloaded
+    assert dialog.download_button.isEnabled()
+
+    dialog.download_button.click()
+    assert events == ["download", "save", "save"]
+    assert len(jobs) == 2
+    assert dialog._task_kind == "install"
+    qtbot.waitUntil(lambda: jobs[1].is_running)
+    jobs[1].run_callback()
+    assert events == ["download", "save", "save", "launch"]
+    jobs[1].finish()
+    qtbot.waitUntil(lambda: events == ["download", "save", "save", "launch", "quit"])
 
 
 def test_cancel_wins_over_a_download_result_not_yet_delivered(
@@ -661,17 +706,13 @@ def test_cancel_wins_over_a_download_result_not_yet_delivered(
 
     assert not dialog.isVisible()
     assert dialog._downloaded_installer is None
-    assert not dialog.install_button.isEnabled()
 
 
 def test_launch_success_survives_late_cancel_and_quits_only_after_finish(
-    qtbot, monkeypatch, tmp_path, deferred_updates,
+    qtbot, tmp_path, deferred_updates,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
     events: list[str] = []
-    monkeypatch.setattr(
-        QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes
-    )
     dialog = UpdateDialog(
         auto_check=False,
         initial_result=_available_update(),
@@ -701,7 +742,7 @@ def test_launch_success_survives_late_cancel_and_quits_only_after_finish(
 
 @pytest.mark.parametrize("operation", ["check", "download", "install"])
 def test_parent_destruction_cancels_without_destroying_or_orphaning_worker(
-    qtbot, monkeypatch, tmp_path, deferred_updates, operation,
+    qtbot, tmp_path, deferred_updates, operation,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
     parent = QWidget()
@@ -718,9 +759,6 @@ def test_parent_destruction_cancels_without_destroying_or_orphaning_worker(
         dialog.start_download()
     else:
         dialog._handle_download_result(_downloaded_fixture(tmp_path))
-        monkeypatch.setattr(
-            QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes
-        )
         dialog.install_and_restart()
     job = jobs[-1]
     qtbot.waitUntil(lambda: job.is_running)
@@ -735,7 +773,7 @@ def test_parent_destruction_cancels_without_destroying_or_orphaning_worker(
 
 
 def test_committed_launch_still_quits_when_its_dialog_was_destroyed(
-    qtbot, monkeypatch, tmp_path, deferred_updates,
+    qtbot, tmp_path, deferred_updates,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
     events: list[str] = []
@@ -750,9 +788,6 @@ def test_committed_launch_still_quits_when_its_dialog_was_destroyed(
         quit_app=lambda: events.append("quit"),
     )
     dialog._handle_download_result(_downloaded_fixture(tmp_path))
-    monkeypatch.setattr(
-        QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes
-    )
     dialog.install_and_restart()
     job = jobs[-1]
     qtbot.waitUntil(lambda: job.is_running)
@@ -765,10 +800,9 @@ def test_committed_launch_still_quits_when_its_dialog_was_destroyed(
     assert not lifecycle.has_active_jobs
 
 
-@pytest.mark.parametrize("stage", ["confirmation", "save"])
 @pytest.mark.parametrize("interruption", ["close", "destroy", "shutdown"])
-def test_install_prompt_interruption_cannot_start_a_hidden_launch(
-    qtbot, monkeypatch, tmp_path, deferred_updates, stage, interruption,
+def test_install_save_interruption_cannot_start_a_hidden_launch(
+    qtbot, tmp_path, deferred_updates, interruption,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
     parent = QWidget()
@@ -788,18 +822,11 @@ def test_install_prompt_interruption_cannot_start_a_hidden_launch(
         else:
             lifecycle.request_shutdown()
 
-    def _confirm(*_args):
-        if stage == "confirmation":
-            _interrupt()
-        return QMessageBox.StandardButton.Yes
-
     def _save() -> bool:
-        assert stage == "save", "Do not save after confirmation was interrupted."
         _interrupt()
         return True
 
     dialog._on_before_install = _save
-    monkeypatch.setattr(QMessageBox, "question", _confirm)
     dialog.install_and_restart()
     assert not jobs
     assert not lifecycle.has_active_jobs
@@ -809,7 +836,10 @@ def test_large_download_byte_counts_are_scaled_without_qt_integer_overflow(
     qtbot, tmp_path, deferred_updates,
 ) -> None:
     lifecycle, jobs, _quit_calls = deferred_updates
-    dialog = UpdateDialog(auto_check=False, initial_result=_available_update(), lifecycle=lifecycle)
+    dialog = UpdateDialog(
+        auto_check=False, initial_result=_available_update(), lifecycle=lifecycle,
+        on_before_install=lambda: False,
+    )
     qtbot.addWidget(dialog)
     dialog.show()
     dialog.start_download()
@@ -825,7 +855,6 @@ def test_large_download_byte_counts_are_scaled_without_qt_integer_overflow(
     assert dialog.progress_bar.maximum() == 0
     job.finish(replace(_downloaded_fixture(tmp_path), size_bytes=total))
     assert dialog.progress_bar.maximum() == dialog.progress_bar.value() == 1000
-    assert dialog.install_button.isEnabled()
 
 
 @pytest.mark.parametrize("source", ["dialog", "startup"])
@@ -1005,7 +1034,7 @@ def test_canceled_startup_metadata_check_cannot_open_a_late_prompt(
 
 @pytest.mark.parametrize("operation", ["download", "install"])
 def test_failed_update_stays_recoverable_and_does_not_quit(
-    qtbot, monkeypatch, tmp_path, deferred_updates, operation,
+    qtbot, tmp_path, deferred_updates, operation,
 ) -> None:
     lifecycle, jobs, quit_calls = deferred_updates
     dialog = UpdateDialog(auto_check=False, initial_result=_available_update(), lifecycle=lifecycle)
@@ -1015,16 +1044,12 @@ def test_failed_update_stays_recoverable_and_does_not_quit(
         dialog.start_download()
     else:
         dialog._handle_download_result(_downloaded_fixture(tmp_path))
-        monkeypatch.setattr(
-            QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes
-        )
         dialog.install_and_restart()
     qtbot.waitUntil(lambda: jobs[-1].is_running)
     jobs[-1].finish(error=RuntimeError("The cached installer could not be verified."))
     assert dialog.isVisible()
     assert dialog.download_button.isEnabled()
     assert dialog.check_button.isEnabled()
-    assert not dialog.install_button.isEnabled()
     assert dialog._downloaded_installer is None
     assert "could not" in dialog.status_label.text()
     assert quit_calls == []
@@ -1138,7 +1163,6 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         jobs[-1].progress_changed.emit(UpdatePhase(status, result), None)
         assert dialog.status_label.text() == status
         assert not dialog.download_button.isEnabled()
-        assert not dialog.install_button.isEnabled()
         assert dialog.progress_bar.isVisible()
         if state == "checking-files":
             assert dialog.latest_version_label.text() == f"Latest version: {result.latest_version}"
@@ -1167,7 +1191,6 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     for button in (
         dialog.check_button,
         dialog.download_button,
-        dialog.install_button,
         dialog.close_button,
         dialog.release_notes_button,
     ):
@@ -1268,7 +1291,7 @@ def test_standalone_repair_uses_registered_version_and_full_installer(
     assert checks[-1]["force_full"] is True
     assert window.current_version_label.text() == "Current version: 0.9.0b2"
     assert "repair" in window.status_label.text()
-    assert window.download_button.text() == "Download Full Installer"
+    assert window.download_button.text() == "Download and Install"
     assert window.download_button.isEnabled()
     assert window.repair_button.isEnabled()
     assert not window.progress_bar.isVisible()
@@ -1279,7 +1302,7 @@ def test_standalone_repair_uses_registered_version_and_full_installer(
     jobs[-1].run_callback()
     jobs[-1].finish()
     assert checks[-1]["repair"] is False
-    assert window.download_button.text() == "Download Update"
+    assert window.download_button.text() == "Download and Install"
 
 
 def test_standalone_handoff_does_not_claim_to_be_studio(qtbot, deferred_updates, monkeypatch):

@@ -98,7 +98,6 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     for button in (
         dialog.check_button,
         dialog.download_button,
-        dialog.install_button,
         dialog.close_button,
     ):
         needed_width = button.fontMetrics().horizontalAdvance(button.text()) + 20

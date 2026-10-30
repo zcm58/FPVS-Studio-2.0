@@ -106,18 +106,18 @@ class UpdaterWindow(UpdateDialog):
 
     @Slot()
     def start_update_check(self) -> None:
-        if self._job is not None:
+        if self._job is not None or self._preparing_install:
             return
         self._repair = False
-        self.download_button.setText("Download Update")
+        self.download_button.setText("Download and Install")
         super().start_update_check()
 
     @Slot()
     def start_repair_check(self) -> None:
-        if self._job is not None:
+        if self._job is not None or self._preparing_install:
             return
         self._repair = True
-        self.download_button.setText("Download Full Installer")
+        self.download_button.setText("Download and Install")
         super().start_update_check()
 
     def _set_busy_state(self, status_text: str) -> None:
@@ -132,7 +132,7 @@ class UpdaterWindow(UpdateDialog):
     def _handle_check_result(self, result: object) -> None:
         super()._handle_check_result(result)
         if self._repair and isinstance(result, UpdateCheckResult) and result.update_available:
-            self.download_button.setText("Download Full Installer")
+            self.download_button.setText("Download and Install")
             asset = result.installer_asset
             if asset is not None and asset.sha256 is not None:
                 size = f" ({asset.size_bytes / 1_000_000:.1f} MB)" if asset.size_bytes else ""

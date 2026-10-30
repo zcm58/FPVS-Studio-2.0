@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.attentional_blink_stream import describe_attentional_blink_stream
+from fpvs_studio.core.compiler_masking import validate_masking_settings
 from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import ExperimentCategory, PresentationUnit, StimulusModality
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
@@ -60,11 +61,9 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.condition_setup_step import (
     ConditionSetupStep,
-    is_guided_condition_name,
     is_guided_trigger_code,
 )
 from fpvs_studio.gui.condition_timing_table import ConditionTimingTable
-from fpvs_studio.gui.design_setup_step import DesignSetupStep
 from fpvs_studio.gui.design_system import PAGE_MARGIN_X
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_stimuli import condition_image_set_requires_normalization
@@ -88,7 +87,6 @@ from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
     ("conditions", "Conditions"),
-    ("design", "Design"),
     ("experiment", "Timing & Session"),
     ("image_size", "Image Size"),
     ("fixation", "Fixation"),
@@ -235,11 +233,7 @@ class SetupWizardPage(QWidget):
         self.condition_setup_step = ConditionSetupStep(
             document, self, load_fpvs_root_dir=load_fpvs_root_dir,
         )
-        self.design_setup_step = DesignSetupStep(document, parent=self)
-        self.design_setup_step.setMinimumWidth(1000)
-        self.design_setup_step.applied.connect(self.schedule_refresh)
-        self.design_setup_step.busy_changed.connect(self.schedule_refresh)
-        self.design_setup_step.draft_changed.connect(self.schedule_refresh)
+        self.condition_setup_step.busy_changed.connect(self.schedule_refresh)
         self.add_condition_button = self.condition_setup_step.add_condition_button
         self.assets_page = AssetsPage(document, self)
         self.run_page = RunPage(document, parent=self)
@@ -502,13 +496,11 @@ class SetupWizardPage(QWidget):
         self._document.project_changed.connect(self.schedule_refresh)
         self._document.manifest_changed.connect(self.schedule_refresh)
         self._document.session_plan_changed.connect(self.schedule_refresh)
-        self.design_setup_step.draft_changed.connect(self.pending_edits_changed)
         self.condition_timing_table.draft_changed.connect(self.pending_edits_changed)
         self.project_overview_editor.project_name_edit.textEdited.connect(self.pending_edits_changed)
         self.condition_setup_step.condition_name_edit.textEdited.connect(self.pending_edits_changed)
         for editor in (
             self.project_overview_editor.project_description_edit,
-            self.condition_setup_step.instructions_edit,
             self.condition_setup_step.base_words_edit,
             self.condition_setup_step.oddball_words_edit,
         ):
@@ -557,8 +549,7 @@ class SetupWizardPage(QWidget):
 
     def has_pending_edits(self) -> bool:
         return (
-            self.design_setup_step.has_pending_design()
-            or self.project_overview_editor.has_pending_edits()
+            self.project_overview_editor.has_pending_edits()
             or self.condition_setup_step.has_pending_edits()
             or self.condition_timing_table.has_pending_edits()
             or self.session_structure_editor.randomization_editor.has_pending_edits()
@@ -575,30 +566,12 @@ class SetupWizardPage(QWidget):
             self._active_step_index = self._step_index_for_key("experiment")
             self.refresh()
             return False
-        if self.design_setup_step.has_pending_design():
-            if not self.design_setup_step.apply_pending_design():
-                self._active_step_index = self._step_index_for_key("design")
-                self.refresh()
-                return False
         self.project_overview_editor.flush_pending_edits()
         self.condition_setup_step.flush_pending_edits()
         self.conditions_page.flush_pending_edits()
         return True
 
     def _select_step(self, index: int) -> None:
-        target_key = _WIZARD_STEPS[index][0]
-        if target_key == "design" and self._current_step_key() != "design":
-            self.design_setup_step.refresh()
-            selected = self.condition_setup_step.selected_condition_id()
-            if selected is not None and not self.design_setup_step.select_condition(selected):
-                return
-        elif target_key == "conditions" and self._current_step_key() == "design":
-            selected = self.design_setup_step.selected_condition_id()
-            condition_list = self.condition_setup_step.condition_list
-            for row in range(condition_list.count()):
-                if condition_list.item(row).data(Qt.ItemDataRole.UserRole) == selected:
-                    condition_list.setCurrentRow(row)
-                    break
         self._active_step_index = index
 
     def schedule_refresh(self) -> None:
@@ -623,12 +596,6 @@ class SetupWizardPage(QWidget):
             object_name="setup_wizard_conditions_surface",
             max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             expand_vertical=True,
-            parent=self,
-        )
-        self.design_step_surface = _SetupStepSurface(
-            self.design_setup_step,
-            object_name="setup_wizard_design_surface",
-            max_width=1400,
             parent=self,
         )
         self.experiment_step_surface = _SetupStepSurface(
@@ -679,7 +646,6 @@ class SetupWizardPage(QWidget):
         )
         self.step_stack.addWidget(self.project_step_surface)
         self.step_stack.addWidget(self.conditions_step_surface)
-        self.step_stack.addWidget(self.design_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
         self.step_stack.addWidget(self.image_size_step_surface)
         self.step_stack.addWidget(self.fixation_step_surface)
@@ -789,10 +755,7 @@ class SetupWizardPage(QWidget):
         if self._active_step_index == len(_WIZARD_STEPS) - 1:
             self._return_home()
             return
-        if self._current_step_key() == "design":
-            if not self.design_setup_step.apply_pending_design():
-                self.refresh()
-                return
+        if self._current_step_key() == "conditions":
             self._start_condition_image_readiness_scan()
             return
         self._advance_to_next_step()
@@ -814,7 +777,7 @@ class SetupWizardPage(QWidget):
             self._active_image_readiness_task is not None
             or self._active_normalization_task is not None
             or self._image_prescan_pending_advance
-            or self.design_setup_step.is_importing()
+            or self.condition_setup_step.is_busy()
         )
 
     def _active_condition_image_task_hint(self) -> str:
@@ -822,8 +785,8 @@ class SetupWizardPage(QWidget):
             return "Checking image readiness..."
         if self._active_normalization_task is not None:
             return "Normalizing condition images..."
-        if self.design_setup_step.is_importing():
-            return "Importing design images..."
+        if self.condition_setup_step.is_importing():
+            return "Importing condition images..."
         return ""
 
     def _start_condition_image_readiness_scan(self) -> None:
@@ -883,11 +846,12 @@ class SetupWizardPage(QWidget):
         self.refresh()
 
     def _ensure_condition_image_prescan_started(self) -> None:
-        if self._current_step_key() != "design":
+        if self._current_step_key() != "conditions":
             return
         if (
             self._active_image_readiness_task is not None
             or self._active_normalization_task is not None
+            or self.condition_setup_step.is_busy()
         ):
             return
         if not self._current_step_valid():
@@ -959,25 +923,6 @@ class SetupWizardPage(QWidget):
             self._active_step_index = self._step_index_for_key("experiment")
             self.refresh()
             return
-        if self.design_setup_step.has_pending_design():
-            answer = QMessageBox.question(
-                self,
-                "Unapplied Design",
-                "Discard the unapplied design changes and return Home?\n\n"
-                "The last applied timing and imported images remain in this open project.",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-                QMessageBox.StandardButton.No,
-            )
-            if answer != QMessageBox.StandardButton.Yes:
-                return
-            if not self.design_setup_step.discard_pending_design():
-                return
-            self.project_overview_editor.flush_pending_edits()
-            self.condition_setup_step.flush_pending_edits()
-            self.conditions_page.flush_pending_edits()
-            if self._on_return_home is not None:
-                self._on_return_home()
-            return
         if not self.flush_pending_edits():
             return
         if self._current_step_key() == "review":
@@ -1028,11 +973,9 @@ class SetupWizardPage(QWidget):
         self._refresh_current_editor_page()
 
         self._refresh_progress_steps()
-        is_design = step_key == "design"
         page_titles = {
             "project": "Set up your experiment",
             "conditions": "Configure your conditions",
-            "design": "Choose condition images",
             "experiment": "Set your timing and session",
             "image_size": "Calibrate your display" if is_masking_project(self._document.project)
             else "Set your character size" if is_letter_stream_project(self._document)
@@ -1042,8 +985,6 @@ class SetupWizardPage(QWidget):
             "review": "Review your experiment",
         }
         self.shell.title_label.setText(page_titles[step_key])
-        if is_design and is_letter_stream_project(self._document):
-            self.shell.title_label.setText("Design your attentional blink study")
         self.shell.title_label.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
@@ -1080,8 +1021,6 @@ class SetupWizardPage(QWidget):
             if step_valid or step_key in {"review", "experiment"}
             else self._next_step_hint_text()
         )
-        if is_design and step_valid and not condition_image_task_active:
-            hint_text = "Changes apply when you select Next."
         self.setup_wizard_next_hint_label.setText(hint_text)
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
         self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
@@ -1492,8 +1431,6 @@ class SetupWizardPage(QWidget):
             ordered_conditions = self._document.ordered_conditions()
             if not ordered_conditions:
                 return "Add a condition"
-            if not self._conditions_have_required_names(ordered_conditions):
-                return "Name every condition"
             if not self._conditions_have_required_trigger_codes(ordered_conditions):
                 return "Set trigger codes"
             return self._condition_setup_blocker()
@@ -1510,8 +1447,6 @@ class SetupWizardPage(QWidget):
             return self._project_details_ready()
         if step_key == "conditions":
             return not self._condition_setup_blocker()
-        if step_key == "design":
-            return not self._design_setup_blocker()
         if step_key == "experiment":
             return (self.runtime_settings_editor.timing_is_compatible()
                     and not self.condition_timing_table.presentation_count_blocker())
@@ -1533,8 +1468,6 @@ class SetupWizardPage(QWidget):
             return self._project_details_blocker()
         if step_key == "conditions":
             return self._condition_setup_blocker()
-        if step_key == "design":
-            return self._design_setup_blocker()
         if step_key == "experiment":
             return (self.condition_timing_table.presentation_count_blocker()
                     or self.runtime_settings_editor.timing_blocker())
@@ -1556,12 +1489,18 @@ class SetupWizardPage(QWidget):
         if not conditions:
             return "Add at least one condition"
         sets = {item.set_id: item for item in self._document.project.stimulus_sets}
-        for index, condition in enumerate(conditions, start=1):
-            if not is_guided_condition_name(condition.name):
-                return f"Enter a descriptive name for condition {index}"
+        for condition in conditions:
             if not is_guided_trigger_code(condition.trigger_code):
                 return f"Set a trigger code above 0 for {condition.name}"
-            if condition_masking(self._document.project, condition) is not None:
+            masking = condition_masking(self._document.project, condition)
+            if masking is not None:
+                try:
+                    validate_masking_settings(
+                        self._document.project, condition, masking,
+                        self._document.project.settings.display.preferred_refresh_hz or 60.0,
+                    )
+                except ValueError as error:
+                    return str(error)
                 continue
             for role, set_id in (
                 ("base", condition.base_stimulus_set_id),
@@ -1571,19 +1510,11 @@ class SetupWizardPage(QWidget):
                 if stimulus_set is not None and stimulus_set.modality == StimulusModality.WORD:
                     if not stimulus_set.word_count:
                         return f"Add {role} words to {condition.name}"
-        return ""
-
-    def _design_setup_blocker(self) -> str:
-        conditions = self._document.ordered_conditions()
-        if not conditions:
-            return "Add a condition in Conditions"
-        if category_conflict_condition_ids(self._document.project):
-            return "Separate oddball conditions in Conditions before editing this design"
         if not _conditions_have_assigned_assets(self._document, conditions):
             return ("Configure the sources in each masking modifier"
                     if any(condition_masking(self._document.project, item) for item in conditions)
-                    else "Choose the image sources for every condition in Design")
-        return self.design_setup_step.validation_message()
+                    else "Choose the image sources for every condition")
+        return ""
 
     def _focus_step_blocker(self) -> None:
         if self._current_step_key() == "conditions":
@@ -1621,10 +1552,6 @@ class SetupWizardPage(QWidget):
         return "Project details needed"
 
     @staticmethod
-    def _conditions_have_required_names(ordered_conditions: list) -> bool:
-        return all(is_guided_condition_name(condition.name) for condition in ordered_conditions)
-
-    @staticmethod
     def _conditions_have_required_trigger_codes(ordered_conditions: list) -> bool:
         return all(
             is_guided_trigger_code(condition.trigger_code) for condition in ordered_conditions
@@ -1644,9 +1571,10 @@ class SetupWizardPage(QWidget):
             "runtime": "experiment",
             "timing": "experiment",
             "geometry": "image_size",
-            "images": "design",
-            "stimuli": "design",
-            "assets": "design",
+            "design": "conditions",
+            "images": "conditions",
+            "stimuli": "conditions",
+            "assets": "conditions",
             "fixation_cross": "fixation",
             "accuracy": "response",
             "appearance": "response",

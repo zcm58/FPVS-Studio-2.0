@@ -154,10 +154,10 @@ and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 
 ## Frameless Setup layout and copy
 
-The eight-step wizard uses one task heading, without duplicate card headings. Project
+The seven-step wizard uses one task heading, without duplicate card headings. Project
 has a centered 760 px form; Timing & Session uses 1040 px for FPVS or 880 px for
 native AB; Size is 760 px.
-Review remains 880 px, and Conditions/Design retain wider working areas. Content is
+Review remains 880 px, and Conditions retains its wider working area. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
 Timing & Session places the FPVS timing/presentation table above two labeled,
@@ -168,8 +168,8 @@ Timing keeps refresh, Verify display and background controls. Successful frame m
 and SOA recaps are available through the refresh tooltip, with measured monitor detail
 on the verification status tooltip. Errors, approximate-timing warnings and verification
 state remain visible. Conditions removes repeated AB stream/SOA explanations and
-redundant rate text from each list entry; participant instructions and task controls
-remain unchanged. Optional task interpretation is available on the task button.
+redundant rate text from each list entry; participant instructions remain per-condition
+through Edit Instructions. Optional task interpretation is available on the task button.
 Review summarizes the native AB character height and digit/letter stream, without
 image-geometry wording.
 See [Frontend](FRONTEND.md#setup-text-hierarchy) for the descriptive-text policy.
@@ -307,7 +307,7 @@ Copied images are decoded and inspected before the selected condition adopts the
 old filenames cannot merge into the replacement. Other conditions sharing the previous
 set remain unchanged, and old source files are retained. Failed copy/inspection removes
 only owned staging; a later manifest-adoption failure preserves the old document/manifest
-and may retain the completed unreferenced pool. Design and other source-selection routes
+and may retain the completed unreferenced pool. Conditions and other source-selection routes
 share this intake operation. Non-Qt coverage is `tests/unit/test_preprocessing_import.py`;
 registered designer coverage also checks repeated replacement.
 
@@ -347,7 +347,7 @@ synchronously. Validation remains authoritative when a surface refreshes or laun
 is requested; there is no persistent validation cache. Closed Find Action skips QAction
 updates and reads current enabled/visible/text/shortcut state when reopened.
 
-Attentional-Blink Design shares each condition description across validation, digit
+The retained Attentional-Blink editor shares each condition description across validation, digit
 counts and the selected preview during one update. The next edit always recalculates,
 including recovery from invalid input. Existing digit cells are reused when their
 values are unchanged. Experiment state, timing and pending edits are unaffected.
@@ -357,9 +357,9 @@ Registered coverage: `test_hidden_page_refresh.py`, `test_manage_projects_respon
 Run GUI focused and repo precommit checks without Qt. In an approved visible session:
 
 1. Edit several Setup fields, then return Home and revisit Run; confirm current names,
-   summaries and readiness. Check all eight Setup steps at `1120x820`.
-2. In AB Design, change rate/SOAs and character pools; confirm immediate errors, correction,
-   digit counts and preview. Leave/revisit Design and verify drafts still apply/discard normally.
+   summaries and readiness. Check all seven Setup steps at `1120x820`.
+2. Verify saved AB settings survive guided Setup without opening its retained editor.
+   Separate AB-editor tests cover rate/SOA drafts, character pools, errors and preview.
 3. Open Manage Projects at `860x520` in both themes with many projects. Check loading,
    Close/reopen, selection after Rename, Recycle Bin rescan and failed-read retry. A
    controlled delayed reader in the registered test checks event-loop responsiveness.
@@ -392,8 +392,8 @@ task controls and visible acceptance are documented in
 
 ### Experimental visual cycle designer
 
-New Attentional-Blink experiments open a three-condition burst designer in
-Setup > **Design**: shared **Presentation rate (Hz)** and **Bursts per SOA** fields,
+The retained Attentional-Blink editor provides a three-condition burst designer with
+shared **Presentation rate (Hz)** and **Bursts per SOA** fields,
 letter distractor/T1 digit/T2 digit sources, editable onset-to-onset SOAs, and a
 labelled target-focused timeline. Default SOAs are 100/300/500 ms at 10 Hz, with 0/2/4
 intervening letters. The default 24 bursts per SOA yields 120 seconds of EEG per SOA
@@ -402,8 +402,11 @@ recall tracking; Timing & Session uses the same persisted burst count.
 Character Size edits native text height. Timing validates exact
 frame compatibility. The post-condition questionnaire button reuses the condition
 task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
+This editor source remains outside the current seven-step guided Setup. Setup has
+no Design section and preserves saved AB settings; an AB authoring replacement is
+deferred. The details and editor acceptance cases below describe the retained editor.
 
-The rate accepts positive finite decimal values and stays a draft until Next/Apply.
+The rate accepts positive finite decimal values and stays an editor draft until Apply.
 Rate, burst count, character sources, colors and SOAs are validated and saved together. Existing
 SOAs are preserved when the rate changes; incompatible values stay visible for
 correction. The timeline, character duration, cycle duration and quarter-speed preview
@@ -420,7 +423,7 @@ with an explanation; this does not change the authored rate or runtime validatio
 Visible acceptance at `1120x820`, in both themes: open an AB study, enter 20 Hz,
 confirm 50 ms characters, 100 characters per five-second burst and unchanged SOAs.
 Change bursts per SOA to 20; confirm 100 seconds per SOA and 60 total bursts.
-Apply, save and reopen to confirm persistence in Design, Timing & Session and Home.
+Apply, save and reopen to confirm persistence in the retained editor, Timing & Session and Home.
 On a saved legacy native study, 7.5 Hz with SOAs `133.33333333333334`, `400`, and
 `666.6666666666666` ms remains supported when frame-compatible; new five-second
 bursts reject rates that cannot represent their duration and target positions exactly.
@@ -432,7 +435,7 @@ Repeated-target visible acceptance at `1120x820` in both themes: open MSMS AB,
 verify 90 characters / 9 seconds / 6 T1 / 5 T2, 216 seconds per SOA and 72 bursts.
 Inspect each SOA, source-edit and Apply, save/reopen, and confirm the first T1
 remains at 2.1 seconds. At 20 Hz verify 180 characters with unchanged onset times;
-an incompatible rate must keep the draft invalid. Check the complete wizard and
+an incompatible rate must keep the draft invalid. Check the retained editor and
 expanded `1448x1086` layout for clipping. Local Qt execution remains opt-in.
 
 ### Attentional Blink accuracy
@@ -464,22 +467,24 @@ Open an AB project, trigger the T1 and T2 Accuracy View item, and confirm its
 three SOA rows and codes. Open an Oddball project and confirm the same View menu
 position opens Fixation Task Accuracy. Check all seven summary columns at both sizes.
 
-For image experiments, Setup > **Design** shows a condition selector and simple
-**Base images** and **Oddball images** source cards. Each card exposes its folder,
+For image experiments, Setup > **Conditions** shows simple **Base Images** and
+**Oddball Images** folder buttons for the highlighted condition. Each source card exposes its folder,
 image count, resolution and full-path details with Copy path. There are no image
 thumbnails, cycle canvas or image-preview controls in this Setup step.
-Attentional-Blink uses its native character/SOA editor; image pairs and the ISI editor
-are no longer available. Archived image-pair projects show an unsupported-design
-explanation instead of an editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md).
+There is no guided Design section. Saved native AB settings remain unchanged, and
+its character/SOA editor source is retained outside Setup. Image pairs and the ISI
+editor are no longer available. See [Experiment Categories](EXPERIMENT_CATEGORIES.md).
 
 Folder imports run on workers and immediately update only the selected condition
 using a fresh project-contained source set; old/new folders are never merged.
-Imports block navigation and condition switching until completion. Canceling the
+Imports block navigation and condition switching until completion. Normalization
+runs before leaving Conditions. Canceling the
 folder picker leaves the saved sources unchanged, and failed imports show an inline
 error that clears after a successful retry. Missing sources block progression.
 Image selection preserves the existing cycle and timing; frequency authoring remains
-in Timing & Session. AB drafts still apply before leaving Design, switching conditions
-or saving, with all AB conditions validated against a changed project-wide cadence.
+in Timing & Session. Default and short condition names are accepted under core's
+existing nonempty schema. Edit Instructions opens a modal text dialog; Save commits
+the text, empty Save clears it and Cancel preserves the previous instructions.
 
 The optional standalone image designer retains its visual cycle editor, thumbnail
 cache, quarter-speed preview and Timing & display details dialog. Preview reads run
@@ -496,7 +501,7 @@ Visible acceptance must cover both categories and themes, realistic long names/p
 folder-picker cancellation, replacement and per-condition source isolation, import
 failure/retry and busy navigation. AB and standalone checks also cover invalid/sub-frame
 timing, draft switching, apply/discard, pending workers and preview stop/close.
-The eight-step wizard must fit
+The seven-step wizard must fit
 `1120x820`. The optional standalone designer retains `1040x760` minimum and
 `1400x920` default dimensions bounded by available screen space.
 
@@ -534,7 +539,7 @@ The authoring window is organized around two user-facing modes:
     workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Design, Timing & Session, Image Size, Fixation, Response, Review
+  - ordered steps: Project, Conditions, Timing & Session, Image Size, Fixation, Response, Review
   - `Next` is disabled until the active step is complete, with a compact footer hint
     naming the current blocker; Project and Conditions also offer `Show field` to
     focus the missing input, with image/word-specific source wording
@@ -545,10 +550,10 @@ The authoring window is organized around two user-facing modes:
     still advances through the gated `Next` flow
   - the wizard uses the compact Welcome/Home-sized default window while keeping
     guided steps free of Advanced buttons and vertical scrolling
-  - all guided steps use the Design page's frameless shell, left-aligned task heading,
+  - all guided steps use the shared frameless shell, left-aligned task heading,
     step count, and stable progress/navigation positions; content is vertically centered with
     bounded form widths, and the bottom navigation has no horizontal divider
-  - all eight setup steps must fit inside the compact `1120x820` setup window
+  - all seven setup steps must fit inside the compact `1120x820` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -572,7 +577,7 @@ The authoring window is organized around two user-facing modes:
     presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
     required when any image condition uses Contrast Modulation. Timing & Session owns
     the shared stimulus presentation frequency and inherited/custom rates for image
-    and word conditions. Design displays frequency read-only. A condition override
+    and word conditions. A condition override
     requires the explicit Yes/No warning (No by default); Use shared restores inheritance.
     Shared edits preserve custom rates. Apply validates every affected condition before
     committing, preserving its stream duration at the selected refresh target. Invalid
@@ -599,13 +604,15 @@ The authoring window is organized around two user-facing modes:
   - the Conditions step uses compact condition rows showing each condition's current
     timing template and a combined condition
     setup surface for condition list actions, name, trigger code, participant
-    instructions, modality, and word-list authoring; its frameless two-column
+    instructions, Base/Oddball image-folder selection, modality, and word-list authoring; its frameless two-column
     workspace separates an `All conditions` repeat target beneath the list from the
-    `This condition` editor and participant instructions, uses one
+    `This condition` editor, uses one
     responsive field column whose minimum width is set by the Advanced Timing selector,
     places oddball repeat guidance behind a compact lower-right information action.
     Conditions fills the available height with a 16-pixel inset above and below.
-    The condition list, instructions and word editors grow with the window. Ready
+    The condition list and word editors grow with the window. Edit Instructions opens
+    a modal text editor with Save/Cancel; empty Save clears the text and Cancel keeps
+    the saved value. Ready
     conditions omit the list hint so the navigator search and editor share the same top edge;
     incomplete and legacy-repair guidance remains visible when needed.
     Visible acceptance: use six populated conditions at 1120x820, then enlarge to
@@ -616,7 +623,8 @@ The authoring window is organized around two user-facing modes:
     empty lists of the chosen type; No restores the selector and keeps the selections.
     Pending word edits are committed before confirmation. Other conditions sharing
     the sources and image files on disk are preserved. Empty conditions switch directly.
-    Image pools and timeline editing live in Design. AB hides modality, ordinary
+    Base Images and Oddball Images buttons select folders for the highlighted
+    condition without a preview. AB hides modality, ordinary
     presentation-mode choices and oddball repeat-balance controls, retaining names,
     instructions, task bindings and appearance settings. Mixed legacy projects expose
     an explicit separation action here and cannot advance until category conflicts
@@ -693,7 +701,7 @@ The authoring window is organized around two user-facing modes:
   - each selected FPVS Oddball Paradigm image condition exposes an advanced presentation selector for
     Continuous Display, 50% Blank, or Sinusoidal Contrast Modulation; word conditions
     expose only the first two, and changing the selection updates only that condition
-  - image conditions use the category-specific source shelf in Design; oddball word conditions
+  - image conditions use compact Base/Oddball source cards in Conditions; oddball word conditions
     use typed Base Words and Oddball Words editors with one word or short phrase per line
   - word editors save only non-empty lines while preserving the focused editor's
     in-progress blank line during debounce/refresh, so pressing Enter keeps the cursor
@@ -703,7 +711,7 @@ The authoring window is organized around two user-facing modes:
     or launch
   - raw image-folder import is permissive; folders with mixed or rectangular image
     sizes are not rejected at selection time
-  - when users leave Design, FPVS Studio checks condition images for mixed
+  - when users leave Conditions, FPVS Studio checks condition images for mixed
     sizes or unsupported runtime formats through a progress task; uniform rectangular
     sets are valid native inputs, while inconsistent folders can still be normalized to
     project-local PNG copies before moving on
@@ -715,8 +723,9 @@ The authoring window is organized around two user-facing modes:
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
     while the friendly per-condition timing-template choice remains available
   - Conditions is complete when category conflicts are resolved and every condition
-    has a descriptive name, trigger code of 1 or higher and, for words, configured
-    Base/Oddball lists. Design requires all image pools and valid sequence timing
+    has a nonempty name, trigger code of 1 or higher and configured Base/Oddball
+    sources appropriate to its modality. Default and short names are accepted;
+    there is no custom descriptive-name rule
   - Attentional-Blink exposes **Show fixation cross** in Fixation. Turning it off
     disables fixation color changes, accuracy responses and the participant tutorial.
     Appearance/task controls become inactive, the preview and Review show that the
@@ -1106,8 +1115,10 @@ Moving a project to the Recycle Bin remains a controller-owned filesystem operat
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` delegates to the
 independent updater through `HelperClient`, without blocking the GUI. It shows
-current/latest versions, release notes, and the candidate patch/full installer, downloads
-and verifies the package with progress, and supports this-launch-only `Remind Me Later`.
+current/latest versions, release notes, and the candidate patch/full installer.
+Download and Install verifies the package with progress and continues to installation
+from that one explicit click. There is no separate install button or redundant install
+confirmation. The dialog also supports this-launch-only `Remind Me Later`.
 Discovery and download do not scan installed payload files; final patch compatibility
 belongs to the native installer. A newer release without a trusted installer SHA-256
 digest is still shown as available, with an explanation that in-app installation is
@@ -1125,10 +1136,13 @@ dialog responsive in `Canceling...` until the worker thread really finishes. Inc
 downloads are discarded and retries start from zero. Application quit and last-window
 closure also cancel outstanding jobs and defer final exit without a GUI-thread wait;
 parent-window destruction cannot destroy a running updater thread. Cache checks run in
-workers; helper subprocesses own release/download work and installation coordination. The
-Install action becomes available only after the download worker thread finishes;
-confirmation and any project Save prompt run on the GUI thread before the final
-handoff worker starts. The staged helper authenticates the package and the registered
+workers; helper subprocesses own release/download work and installation coordination.
+After a verified download worker finishes and is cleaned up, Download and Install
+continues directly through the existing project Save callback, once, before starting
+the handoff worker. Canceling Save stops the chain with the cached installer ready
+for retry through the same button. Closing/disposal, application shutdown, cancellation
+or download failure prevents automatic continuation. The Save prompt remains on the
+GUI thread. The staged helper authenticates the package and the registered
 Studio process, then requires explicit acceptance of its ready nonce. Studio quits only
 after acceptance and local worker completion. The helper waits for that identified
 process to exit, installs under a separate installation lock, and restarts Studio once
@@ -1146,7 +1160,8 @@ description, and the full release page remains available by button.
 The bundled **FPVS Studio Update & Repair** Start Menu entry uses the same dialog in a
 separate process, at a `680x660` minimum and `760x680` default. Its full-installer repair
 action supports the currently installed version and requires all Studio windows to close
-before installation. It works independently of Studio's authoring/runtime dependencies.
+before installation. The repair check remains separate; the selected installer uses
+the same Download and Install action. It works independently of Studio's authoring/runtime dependencies.
 The managed install-progress dialog has a `480x140` minimum and `560x160` default. Its
 normal surface contains only "Updating FPVS Studio to version X... Please wait..." and
 an installation progress bar with a visible percentage. The target version comes from
@@ -1194,7 +1209,7 @@ preprocessing services but must not silently mutate the active project.
   state. The main window assembles the wizard before attaching it to the styled
   workflow stack, which takes ownership. The shared setup-theme helper skips unchanged
   stylesheets so parenting and palette events do not repeatedly restyle the entire
-  wizard. Theme changes, all eight pages, and existing navigation gates remain active.
+  wizard. Theme changes, all seven pages, and existing navigation gates remain active.
 - Display and image-size settings editing lives in
   `src/fpvs_studio/gui/runtime_settings_page.py`; refresh/background controls stay
   separate from visual-angle geometry controls.
@@ -1379,9 +1394,9 @@ For GUI coverage:
   plus important success, empty, busy, validation, and error states
 - keep tests organized by focused workflow instead of reading broad files:
   `test_setup_wizard_shell.py` for shell/layout, `test_setup_project_details.py` for
-  project details, `test_setup_conditions.py` for condition identity and the Design
-  import/normalization handoff, `test_design_setup_step.py` for per-condition image
-  selection, `test_experiment_designer.py` for standalone visual editing, and
+  project details, `test_setup_conditions.py` for condition identity, per-condition
+  image selection, instruction dialogs and the import/normalization handoff,
+  `test_experiment_designer.py` for standalone visual editing, and
   `test_experiment_categories_gui.py` for category-specific controls,
   `test_setup_experiment_display.py` for display/session/image-size settings,
   `test_setup_review.py` for review/return behavior, `test_home_launch_surface.py`
@@ -1401,19 +1416,22 @@ Updater visible/manual smoke (run only in an approved visible Windows session):
    and release-page action without resizing.
 2. Using controlled offline callbacks (as in `tests/gui/test_update_dialog.py`), exercise
    current, newer/trusted, newer/missing-digest, busy, canceled, and failed states. A
-   missing digest must disable Download/Install while preserving the newer-version copy.
+   missing digest must disable Download and Install while preserving the newer-version copy.
    Verify progress beyond 2 GiB with synthetic byte counts, not a large real download.
 3. Hold fake metadata/download/verification work open, then use Close, X, and Escape.
    Check that cancellation is visible, controls stay responsive, and the dialog closes
    only after worker completion. Repeat with application quit, last-window closure,
    parent destruction, and first-run root-picker cancellation. No running-thread warning
    or hidden updater job may remain; temporary root-picker transitions must not quit.
-4. Stub installer launch and confirmation/save prompts. Confirm that neither hashing nor
-   launching occurs on the GUI thread, Install stays disabled until download-thread
-   completion, declining/canceling never launches, and an accepted fake handoff quits only
-   after its worker finishes. Closing/destroying a prompt must not start a hidden launch.
+4. Stub installer launch and the project Save prompt. Click Download and Install once;
+   verify a successful download continues only after its worker is cleaned up, without
+   a second button or install confirmation. Confirm hashing and launching stay off the
+   GUI thread, Save is called once, canceling Save retains the cached installer for
+   the same-button retry, and an accepted fake handoff quits only after its worker
+   finishes. Closing/disposal, shutdown, failure or cancellation must stop continuation.
 5. With offline service callbacks, inspect **Update & Repair** at `680x660` and `760x680`.
-   Check same-version full repair, unavailable metadata, package progress, and all button
+   Check the separate repair lookup and combined Download and Install action, same-version
+   full repair, unavailable metadata, package progress, and all button
    labels without clipping. Close before deferred startup and while work is pending.
 6. Exercise the independent apply dialog at `620x340` and `700x380` with fake callbacks.
    Check long failure details, waiting/cancellation, success, and the repair transition.
@@ -1421,8 +1439,9 @@ Updater visible/manual smoke (run only in an approved visible Windows session):
    return a failed setup result: it must show failure/repair and never claim cancellation
    before installation. Do not execute a real installer for this GUI check.
 
-The registered updater module contains deterministic fake-worker cases for these paths;
-source/lint/compilation checks do not validate real Qt event delivery or visible layout.
+`tests/unit/test_update_dialog_jobs.py` covers combined-action sequencing with fake jobs
+without importing Qt; the registered updater module covers visible states and geometry.
+Source, lint and compilation checks do not validate real Qt event delivery or visible layout.
 Actual installer/upgrade lifecycle checks remain separately documented in
 `docs/PACKAGING.md`; this smoke must not launch a real installer or clean a real cache.
 The completed independent-updater plan records verification performed and remaining installed
@@ -1470,7 +1489,7 @@ Visible acceptance (not run by safe local verification):
    transfer and image work. These checks must not launch a real experiment or transfer.
    Verify an incomplete project still enters the earliest incomplete Setup step.
 4. At `1120x820`, search six or more long-named image, word and AB conditions by
-   partial name and trigger. Edit an instruction/word draft, filter out its condition,
+   partial name and trigger. Save an instruction edit or start a word draft, filter out its condition,
    clear, rename, add, duplicate and remove. Check retained selection, match feedback,
    keyboard focus, row tooltips and editor/list bounds. Scrollable condition lists
    remain intentional; the wizard itself must not require scrolling.
@@ -1492,26 +1511,32 @@ installed builds. The Recording tab preserves these existing dimensions.
 Presentation (`900x600` minimum) and FPVS Condition Modifiers retain staged Apply/Cancel behavior.
 Native dropdown/spinner affordances and system file pickers remain available.
 
-Review uses factual summaries for project, conditions/task bindings, Design, Timing, Image Size,
+Review uses factual summaries for project, conditions/task bindings, Timing, Image Size,
 Session, and Fixation/Response, with effective tutorial status in Project. Edit actions
 follow ready-project step-jump permissions. Review's completion actions use the shared
 bottom navigation outside the summary frame: Return Home Without Saving on the left,
 Back and Save and Return Home on the right. Other steps retain Return Home, Back, and
 Next in that row. Saving returns Home with the existing nonmodal status-bar confirmation;
 returning without saving explains that edits remain in memory until the project closes.
-Image Design uses the task-specific Choose condition images header. Next validates
-the selected sources before the existing image-readiness handoff; image selection
-has no pending timing draft or separate Apply button. Native AB keeps its own Design
-header and applies its valid draft on Next. See
-[Visual Experiment Designer](VISUAL_EXPERIMENT_DESIGNER.md) for the separate editors.
+Conditions places Base Images and Oddball Images folder buttons beside the highlighted
+condition's fields. Edit Instructions opens its own Save/Cancel text dialog.
+`ParticipantInstructionsDialog` has a `520x360` minimum and `640x460` default size,
+shows the condition name and uses a plain text editor.
+Next validates Conditions before the existing image-readiness and normalization
+handoff. Setup has no Design section or pending AB-editor draft. Saved native AB
+settings remain unchanged. See [Visual Experiment Designer](VISUAL_EXPERIMENT_DESIGNER.md)
+for the retained editors outside guided Setup.
 Fixation displays the effective smallest count limit, identifies the limiting condition,
 and explains count adjustments caused by changed durations; full per-condition limits
 remain accessible in the tooltip.
 
-For visible acceptance on Windows, walk all eight steps at `1120x820` in both themes,
+For visible acceptance on Windows, walk all seven steps at `1120x820` in both themes,
 then repeat at the normal expanded size and available 125/150% scaling. Include long
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect
+default and one-character names, both image-folder pickers, import failure/retry,
+and instruction Save/Cancel/clear at both dialog sizes. Confirm saved AB settings are
+unchanged through all seven steps. Inspect
 Settings, Presentation, and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
@@ -1545,7 +1570,7 @@ In an approved visible Windows session, open image and word projects at 1120x820
 in both themes. In Timing & Session, apply a shared frequency, decline and accept a
 condition-specific override, then use the shared value again. Check inherited/custom
 labels, long condition-name tooltips, keyboard focus, pending-draft navigation and
-invalid-duration recovery. Verify that Design cannot edit the frequency, saved custom
+invalid-duration recovery. Verify that Conditions preserves the frequency, saved custom
 rates survive reopen, and requested/realized rates remain distinguishable at 59.94 Hz.
 Registered Qt coverage is maintained separately from the default non-Qt checks.
 

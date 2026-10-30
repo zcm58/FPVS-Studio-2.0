@@ -708,9 +708,7 @@ class StudioMainWindow(QMainWindow):
             or self._active_bundle_export_task is not None
             or self._bundle_import_processing_active
             or self.main_stack.currentWidget() is self._bundle_export_result_page
-            or (setup is not None and (
-                setup.design_setup_step.is_busy() or setup._condition_image_task_active()
-            ))
+            or (setup is not None and setup._condition_image_task_active())
             or (self._image_resizer_page is not None
                 and self._image_resizer_page._active_task is not None)
         )
@@ -1608,10 +1606,8 @@ class StudioMainWindow(QMainWindow):
     def maybe_save_changes(self) -> bool:
         if not self._allow_project_handoff_during_launch():
             return False
-        if self._setup_wizard_page is not None and (
-            self._setup_wizard_page.design_setup_step.is_busy()
-            or self._setup_wizard_page._condition_image_task_active()
-        ):
+        if (self._setup_wizard_page is not None
+                and self._setup_wizard_page._condition_image_task_active()):
             QMessageBox.information(
                 self, "Images are still loading",
                 "Wait for the image operation to finish before closing or changing experiments.",

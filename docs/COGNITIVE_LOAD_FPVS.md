@@ -6,7 +6,7 @@ Choose **Cognitive Load FPVS** when creating an experiment. The built-in templat
 creates three placeholder image conditions, each represented by a **No load** and
 **Cognitive load** variant. These six entries run once in randomized order. Each pair
 initially shares its base/oddball image sources and timing. Replace those sources in
-Setup > Design and check both variants before collecting data; subsequent edits to
+Setup > Conditions and check both variants before collecting data; subsequent edits to
 condition timing or source assignments remain ordinary independent condition edits.
 
 The default is 6 Hz, an oddball every fifth image, and 108 cycles: 90 seconds of

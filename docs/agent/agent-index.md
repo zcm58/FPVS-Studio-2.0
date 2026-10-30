@@ -203,6 +203,11 @@ bounded helper staging, and install/restart ownership. `updater_main.py` is the 
 entry; `gui/update_dialog.py` remains Studio's update surface, while `gui/updater_window.py`
 provides standalone Update & Repair and installation progress. `UpdatePhase` reports
 status and an explicit installation-committed state through the existing worker lifecycle.
+Download and Install supplies consent once, chains verified download to the Save gate
+and helper handoff after worker cleanup, and guards cancellation/close/shutdown.
+There is no second install action or redundant confirmation; canceled Save retains
+the cached installer for retry through the same button. Standalone repair keeps its
+separate check and uses the same combined action.
 Actual setup percentages use the shared Inno `CurInstallProgressChanged` callback and
 `/PROGRESSWND` native notifications handled by `gui/updater_window.py`. The percentage
 reaches 100 only after verified managed success; details live in the Packaging contract.
@@ -217,7 +222,8 @@ live in [Packaging](../PACKAGING.md#independent-updater-build-and-installation).
 
 Use updates/gui/packaging focused routes, then repo precommit. The updates route includes
 `tests/unit/test_update_helper.py` and `test_updater_main.py`; registered GUI coverage
-stays in `tests/gui/test_update_dialog.py`. Native lifecycle acceptance uses
+stays in `tests/gui/test_update_dialog.py`. Safe combined-action sequencing is covered
+by `tests/unit/test_update_dialog_jobs.py` with fake jobs and callbacks. Native lifecycle acceptance uses
 `scripts/check_patch_installer_lifecycle.py` with isolated synthetic app identities.
 See the completed independent-updater execution plan for implementation evidence and the
 [v1.7.0 release record](../exec-plans/completed/release-1.7.0.md) for published artifact
@@ -420,8 +426,10 @@ per-pair cycle indices. Use the repeated-target section in
 runtime preflight and burst/event reports consistent; run compiler/runtime/GUI
 focused routes and repo precommit. Defaults remain single-pair bursts.
 
-Setup > Design edits the shared rate through `gui/attentional_blink_stream_designer.py`
-and the atomic `gui/document_conditions.py` apply method, alongside **Bursts per SOA**.
+The retained `gui/attentional_blink_stream_designer.py` edits the shared rate through
+the atomic `gui/document_conditions.py` apply method, alongside **Bursts per SOA**.
+It is outside the current seven-step guided Setup; saved AB settings are preserved
+and no replacement AB authoring route is added in the Conditions consolidation.
 Core owns exact five-second burst, character, SOA and display-frame compatibility in
 `core/attentional_blink_stream.py`. `core/attentional_blink_presets.py` owns the new
 24-bursts-per-SOA default and the two typed Enter/Next recall questions.
@@ -473,10 +481,10 @@ AB preview reuse is scoped to one update in `gui/attentional_blink_stream_design
 do not cache mutable project validation across edits. See the responsiveness contract
 and manual smoke path in `docs/GUI_WORKFLOW.md`.
 
-The eight-step Setup flow and shared dialog acceptance sizes are documented in
+The seven-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
 focused route for edits and the repo precommit tier for shared component changes.
-Current category and Design contracts are documented in
+Current category and retained editor contracts are documented in
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md); implementation history is
 in the completed plans directory.
 For the manual-creation category screen, start with `gui/create_project_dialog.py` and
@@ -485,11 +493,14 @@ Standard FPVS are shown. Use GUI focused verification and the registered categor
 Welcome flow tests for approved visible acceptance at `760x500` and `800x500`.
 
 For the 1120x820 Setup default and per-condition Base/Oddball image selection, start
-with `gui/design_setup_step.py`, `gui/image_sources_editor.py` and registered
-`tests/gui/test_design_setup_step.py`. The source-only editor reuses `SetupSourceCard`
-and existing worker-backed fresh imports; it has no thumbnail jobs, cycle canvas or
-image preview. Frequency edits remain in Timing & Session. For the optional
-standalone visual image editor and native AB Design, read
+with `gui/condition_setup_step.py`, `gui/setup_wizard_page.py` and registered
+`tests/gui/test_setup_conditions.py`. Conditions reuses compact `SetupSourceCard`
+controls and worker-backed fresh imports; it has no thumbnails, cycle canvas or
+image preview. Imports block navigation and condition switching; normalization runs
+when leaving Conditions. Edit Instructions opens a Save/Cancel text dialog. Default
+and short names use core's existing nonempty schema with no custom descriptive-name
+rule. Frequency edits remain in Timing & Session. There is no guided Design step.
+For the retained standalone image and native AB editor source, read
 [`VISUAL_EXPERIMENT_DESIGNER.md`](../VISUAL_EXPERIMENT_DESIGNER.md) and
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md). Category is fixed at creation;
 image pairs and their ISI editor are retired. Attentional-Blink streams expose
@@ -497,7 +508,7 @@ shared distractor/T1/T2 pools, three SOAs, burst count and an onset bracket. Rea
 `core/attentional_blink_presets.py`, `core/attentional_blink_stream.py`, and
 `gui/attentional_blink_stream_designer.py` for that route; native sizing uses
   `gui/attentional_blink_character_size.py`. Registered
-`tests/gui/test_attentional_blink_stream_designer.py` covers the new setup workflow.
+`tests/gui/test_attentional_blink_stream_designer.py` covers the retained editor.
 There are no mode tabs or masking controls.
 GUI owns interactions; `core/experiment_design.py` owns ordinary cycle mathematics
 and historical masking calculations that have no current GUI.
@@ -505,21 +516,20 @@ Retired image-pair projects are rejected by category validation, and old compile
 copies by runtime preflight and the engine before launch. Native AB sources, playback
 and onset exports follow existing layer boundaries. Standalone achieved frames live
 under Timing & display details.
-`gui/design_setup_step.py` integrates condition selection and worker-aware navigation
-around `ImageSourcesEditor`, while retaining native AB pending apply/discard.
-Folder imports immediately update only the selected condition's sources.
-`is_importing()` and `is_busy()` block Setup navigation and condition disposal during
-source mutation. Standalone `ExperimentDesignerWidget` also tracks thumbnail decoding
+Conditions folder imports immediately update only the selected condition's sources.
+Busy guards block Setup navigation and condition disposal during source mutation.
+Saved AB settings survive Setup navigation without opening its retained editor.
+Standalone `ExperimentDesignerWidget` also tracks thumbnail decoding
 and retains its visual cycle controls and preview cache. Ordinary
 image/word features remain FPVS Oddball Paradigm. Legacy conflicts require explicit separation.
 Use GUI/core/compiler/runtime/engine focused verification and registered
-`tests/gui/test_experiment_designer.py`, `tests/gui/test_design_setup_step.py`,
-category and wizard modules for approved visible acceptance. Check the embedded
-`1000x600` isolated content budget and the complete `1120x820` wizard in both themes,
+`tests/gui/test_experiment_designer.py`, `tests/gui/test_setup_conditions.py`,
+category and wizard modules for approved visible acceptance. Check the complete
+seven-step `1120x820` wizard in both themes,
 plus the expanded `1448x1086` mockup size. Check source-folder hit targets, long-path
-access, import retry and per-condition isolation. Next validates image selection and
-applies native AB drafts; the standalone editor retains its Apply action, schematic
-and proportional detail.
+access, import retry, per-condition isolation and instruction Save/Cancel/clear.
+Next validates Conditions before the image-readiness handoff; the standalone editor
+retains its Apply action, schematic and proportional detail.
 
 For AB fixation visibility, use `gui/fixation_settings_page.py`, the core fixation
 settings/RunSpec owners, and `engines/psychopy_engine.py` / `psychopy_stimuli.py`.
@@ -578,7 +588,7 @@ For shared frequency, confirmed condition overrides and stream-only seconds, sta
 `core/condition_timing.py`, `gui/condition_timing_table.py` and
 `gui/session_structure_page.py`. `core/session_ordering.py` owns presentation counts
 and constrained order; read [SessionPlan](../SESSION_PLAN.md) for occurrence/recovery
-semantics. Design displays the effective rate read-only;
+semantics. Conditions retains the existing timing-template controls;
 Timing & Session owns edits. Use core/compiler/GUI/project-I/O focused routes and
 repo precommit. Read [RunSpec timing](../RUNSPEC.md#timing-model) for duration
 preservation and frame constraints; visible acceptance stays opt-in.

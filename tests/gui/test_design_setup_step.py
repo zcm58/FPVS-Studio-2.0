@@ -12,7 +12,7 @@ from tests.gui.helpers import assert_visible_children_within_parent, write_image
 from tests.gui.test_experiment_designer import _populate_sources
 
 from fpvs_studio.core.condition_modifiers import assign_modifier, remove_modifier
-from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
+from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, StimulusModality
 from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.masking_presets import apply_masking_timing_defaults, create_masking_modifier
 from fpvs_studio.core.models import Condition, ProjectFile, ProjectMeta
@@ -138,8 +138,7 @@ def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(
     wizard.resize(1120, 820)
     wizard.show()
     assert wizard._condition_setup_blocker() == ""
-    assert wizard._design_setup_blocker() == ""
-    for step_key in ("conditions", "design", "image_size", "review"):
+    for step_key in ("conditions", "image_size", "review"):
         wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
         QApplication.processEvents()
         assert_visible_children_within_parent(wizard.step_stack.currentWidget())
@@ -152,6 +151,10 @@ def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(
     assert editor.viewing_distance_spin.isVisible()
     assert editor.screen_width_spin.isVisible()
     assert "Calibrate" in editor.preview_value_label.text()
+    document.project.conditions[0].duty_cycle_mode = DutyCycleMode.BLANK_50
+    wizard.open_wizard(step_key="conditions")
+    assert "continuous" in wizard._condition_setup_blocker()
+    assert not wizard.setup_wizard_next_button.isEnabled()
 
 
 def test_empty_design_step_explains_where_to_add_a_condition(qtbot, tmp_path):
