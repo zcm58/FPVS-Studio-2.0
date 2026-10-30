@@ -494,8 +494,8 @@ and manual smoke path in `docs/GUI_WORKFLOW.md`.
 The eight-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
 focused route for edits and the repo precommit tier for shared component changes.
-The current split is tracked in
-[the Timing & Display/Session plan](../exec-plans/active/setup-timing-session-split.md).
+Implementation history is recorded in
+[the completed Timing & Display/Session plan](../exec-plans/completed/setup-timing-session-split.md).
 Start with `gui/setup_wizard_page.py`, `gui/runtime_settings_page.py` and
 `gui/session_structure_page.py`. Timing retains `experiment` and timing/display/runtime
 aliases; `session` opens Session. Keep the frequency/duration/presentation table and

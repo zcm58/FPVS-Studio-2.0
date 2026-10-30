@@ -18,7 +18,6 @@ Use this page to find planning material before making feature-sized changes.
 
 Current implementation:
 
-- [Separate Setup timing/display and session pages](exec-plans/active/setup-timing-session-split.md) (eight-step wizard; verification pending)
 - [Studio to Toolbox and OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md)
 - [Experiment data sharing and comparison](exec-plans/active/remote-experiment-results-reporting.md)
 - [Unicorn Hybrid Black recording support](exec-plans/active/unicorn-hybrid-black-support.md) (normal marker output enabled; full receiver, Toolbox and physical timing validation pending)
@@ -35,6 +34,9 @@ Concrete planned work:
 
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
+
+Recent completion: [Separate Setup timing/display and session pages](exec-plans/completed/setup-timing-session-split.md)
+(eight-step wizard, atomic order repair, visible GUI acceptance and clean integration precommit verified).
 
 Recent completion: [Conditions authoring consolidation](exec-plans/completed/conditions-authoring-consolidation.md)
 (seven-step Setup, per-condition image folders and modal instructions; visible Qt acceptance remains separate).

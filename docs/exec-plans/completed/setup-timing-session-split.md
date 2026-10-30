@@ -1,6 +1,6 @@
 # Separate Setup timing/display and session pages
 
-Status: Active
+Status: Completed
 
 Date: 2026-10-30
 
@@ -45,8 +45,8 @@ Use synthetic projects in the approved visible environment; no offscreen Qt exec
    existing atomic draft behavior.
 3. Run GUI and docs focused verification, then repo precommit. Run registered Qt
    coverage in the approved visible environment and inspect real screenshots at
-   `1120x820`, with expanded seeds and recovery states. Save/reopen synthetic FPVS,
-   AB and masking projects to check persistence without changing their behavior.
+   `1120x820`, with expanded seeds and recovery states. Use the existing save/reopen
+   and model-preservation regressions for FPVS, AB and masking projects.
 
 ## Changed implementation and test files
 
@@ -65,11 +65,25 @@ Coverage under `tests/gui/`: `helpers.py`, `test_setup_wizard_shell.py`,
 
 - [x] GUI focused verification: 114 tests passed.
 - [x] Docs focused verification: 10 tests passed.
-- [ ] Repo precommit verification.
-- [ ] Approved visible GUI coverage and screenshot inspection.
-- [ ] Navigation, draft recovery, Review links and save/reopen acceptance.
+- [x] Repo precommit: 4,372 tests and 24 subtests passed; 13 Windows symlink-privilege skips.
+  Mypy passed for all 261 source files; harness and documentation audits passed.
+- [x] Approved visible GUI coverage: 164 tests passed across seven separate processes.
+  A further 17 integration checks passed against the combined latest-master candidate.
+- [x] Native Windows screenshots inspected at `1120x820`, 100% scaling, in both themes.
+  Checks include three complete timing rows, mixed image/word conditions, display
+  verification guidance and expanded seed details. Other scaling factors were not inspected.
+- [x] Next/Back, ready-project jumps, Review links, seed-error recovery, count blockers
+  and atomic saved-order/count repair passed. Save/reopen and category-preservation
+  regressions preserve existing editor/model behavior.
 
 The current-checkout precommit run is blocked by six existing E501 errors in
-untracked scratch files. Final verification in the clean integration checkout is
-planned. Record the remaining results here before moving the plan to `completed/`
-and updating the planning index.
+untracked scratch files. The complete precommit run passed in a clean, short-path
+integration worktree containing both the latest master and the current feature work.
+An earlier nested worktree exceeded Windows fixture path limits; the same failing
+compiler case and the full suite passed at the shorter path without source changes.
+An earlier long GUI batch timed out while processing palette changes. All seven
+modules subsequently passed in fresh visible processes with a 90-second per-test limit.
+
+Automatic approval review rejected cleanup of the generated capture-project folders,
+stating "blocked by policy". Those temporary `build/test_env/setup-split-visual*`
+folders remain. Screenshots and the precommit log are retained as verification evidence.
