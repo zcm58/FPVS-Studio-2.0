@@ -31,6 +31,7 @@ from tests.gui.helpers import (
 
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import resolve_studio_theme
+from fpvs_studio.gui.image_sources_editor import ImageSourcesEditor
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 
 
@@ -255,7 +256,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
 ) -> None:
     previous_palette = qapp.palette()
     qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup No Clip")
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Setup No Clip")
+    document.create_condition(name="Familiar and unfamiliar natural objects")
     wizard = window.setup_wizard_page
     window.resize(1120, 820)
     window.show_setup_wizard()
@@ -295,6 +297,12 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.condition_setup_step.presentation_button.isVisible()
         elif step_key == "design":
             assert wizard.design_setup_step.width() >= 1000
+            editor = wizard.design_setup_step.editor
+            assert isinstance(editor, ImageSourcesEditor)
+            assert editor.base_source.choose_button.isVisible()
+            assert editor.oddball_source.choose_button.isVisible()
+            assert not hasattr(editor, "cycle_canvas")
+            assert not hasattr(editor, "preview_window")
         elif step_key == "image_size":
             assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()

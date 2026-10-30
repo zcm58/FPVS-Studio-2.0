@@ -1032,7 +1032,7 @@ class SetupWizardPage(QWidget):
         page_titles = {
             "project": "Set up your experiment",
             "conditions": "Configure your conditions",
-            "design": "Design your sequence",
+            "design": "Choose condition images",
             "experiment": "Set your timing and session",
             "image_size": "Calibrate your display" if is_masking_project(self._document.project)
             else "Set your character size" if is_letter_stream_project(self._document)

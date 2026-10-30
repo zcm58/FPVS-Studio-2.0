@@ -464,22 +464,27 @@ Open an AB project, trigger the T1 and T2 Accuracy View item, and confirm its
 three SOA rows and codes. Open an Oddball project and confirm the same View menu
 position opens Fixation Task Accuracy. Check all seven summary columns at both sizes.
 
-For image experiments, Setup > **Design** embeds the visual designer for the selected condition.
-FPVS Oddball Paradigm uses Base/Oddball sources and a repeating image cycle.
+For image experiments, Setup > **Design** shows a condition selector and simple
+**Base images** and **Oddball images** source cards. Each card exposes its folder,
+image count, resolution and full-path details with Copy path. There are no image
+thumbnails, cycle canvas or image-preview controls in this Setup step.
 Attentional-Blink uses its native character/SOA editor; image pairs and the ISI editor
 are no longer available. Archived image-pair projects show an unsupported-design
 explanation instead of an editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md).
 
-Folder imports run on workers and immediately update the condition using a fresh
-project-contained source set; old/new folders are never merged. Timing edits apply
-before leaving Design, switching conditions or saving, with all AB conditions
-validated against a changed project-wide cadence. Invalid edits stay visible for
-correction; explicitly discarding a draft preserves completed folder imports.
-Image cards show Importing images or Loading previews while workers are active.
-Each open editor reuses its bounded image previews across unrelated metadata/timing
-edits and page navigation; source or manifest changes invalidate those previews.
-Only the first four base images and first oddball image are passed to the decoder.
-Failed preview reads remain visible, can retry, and clear their error after success.
+Folder imports run on workers and immediately update only the selected condition
+using a fresh project-contained source set; old/new folders are never merged.
+Imports block navigation and condition switching until completion. Canceling the
+folder picker leaves the saved sources unchanged, and failed imports show an inline
+error that clears after a successful retry. Missing sources block progression.
+Image selection preserves the existing cycle and timing; frequency authoring remains
+in Timing & Session. AB drafts still apply before leaving Design, switching conditions
+or saving, with all AB conditions validated against a changed project-wide cadence.
+
+The optional standalone image designer retains its visual cycle editor, thumbnail
+cache, quarter-speed preview and Timing & display details dialog. Preview reads run
+on workers, decode only the first four base images and first oddball image, and can
+retry after failure. Source or manifest changes invalidate that editor's cache.
 The AB SOA table reserves its styled header, three complete rows and frame at 1120x820.
 Preview slowly uses a cancellable animation. Timing &
 display details opens a separate small dialog with requested/achieved frame timing
@@ -487,9 +492,11 @@ and T2 marker; preview refresh is never treated as display measurement.
 
 Normal experimental playback supports the
 custom AB compound slot, dedicated T2 and ISI assets, and separate target onset records.
-Visible acceptance must cover both categories, both themes, realistic long names/paths,
-folder-picker cancellation, changed sources, invalid/sub-frame timing, draft switching,
-apply/discard, pending workers and preview stop/close. The eight-step wizard must fit
+Visible acceptance must cover both categories and themes, realistic long names/paths,
+folder-picker cancellation, replacement and per-condition source isolation, import
+failure/retry and busy navigation. AB and standalone checks also cover invalid/sub-frame
+timing, draft switching, apply/discard, pending workers and preview stop/close.
+The eight-step wizard must fit
 `1120x820`. The optional standalone designer retains `1040x760` minimum and
 `1400x920` default dimensions bounded by available screen space.
 
@@ -1373,8 +1380,8 @@ For GUI coverage:
 - keep tests organized by focused workflow instead of reading broad files:
   `test_setup_wizard_shell.py` for shell/layout, `test_setup_project_details.py` for
   project details, `test_setup_conditions.py` for condition identity and the Design
-  import/normalization handoff, `test_design_setup_step.py` and
-  `test_experiment_designer.py` for embedded editing, and
+  import/normalization handoff, `test_design_setup_step.py` for per-condition image
+  selection, `test_experiment_designer.py` for standalone visual editing, and
   `test_experiment_categories_gui.py` for category-specific controls,
   `test_setup_experiment_display.py` for display/session/image-size settings,
   `test_setup_review.py` for review/return behavior, `test_home_launch_surface.py`
@@ -1492,10 +1499,11 @@ bottom navigation outside the summary frame: Return Home Without Saving on the l
 Back and Save and Return Home on the right. Other steps retain Return Home, Back, and
 Next in that row. Saving returns Home with the existing nonmodal status-bar confirmation;
 returning without saving explains that edits remain in memory until the project closes.
-Design uses the task-specific Design your sequence header. Next applies a valid
-design draft before the existing image-readiness handoff; there is no second Apply
-button on that page. The source shelf, schematic stream and proportional target-pair
-detail follow [Visual Experiment Designer](VISUAL_EXPERIMENT_DESIGNER.md).
+Image Design uses the task-specific Choose condition images header. Next validates
+the selected sources before the existing image-readiness handoff; image selection
+has no pending timing draft or separate Apply button. Native AB keeps its own Design
+header and applies its valid draft on Next. See
+[Visual Experiment Designer](VISUAL_EXPERIMENT_DESIGNER.md) for the separate editors.
 Fixation displays the effective smallest count limit, identifies the limiting condition,
 and explains count adjustments caused by changed durations; full per-condition limits
 remain accessible in the tooltip.

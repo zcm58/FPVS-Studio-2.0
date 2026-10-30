@@ -145,16 +145,19 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
   discovery consumes path snapshots and canceled/stale results cannot update a closed dialog.
   GUI documents/windows
-  are constructed after completion on the GUI thread. Authoring save feedback and
-  per-editor thumbnail reuse are specified in `docs/GUI_WORKFLOW.md`.
+  are constructed after completion on the GUI thread. Authoring save feedback is
+  specified in `docs/GUI_WORKFLOW.md`.
   `gui/update_lifecycle.py` also owns ordinary GUI tasks and the reusable presentation
   thread through shutdown. `gui/thread_completion.py` waits for native cleanup outside
   the GUI thread before releasing Python worker wrappers and reporting completion.
   Conditions confirms populated image/word switches before the document replaces only
   the selected condition's source associations. Its list and text editors expand
   vertically within the shared wizard surface; see `docs/GUI_WORKFLOW.md`.
-  Design embeds a shared category-specific visual editor. Setup's Next action applies
-  the draft through the existing navigation gate; the standalone host retains Apply.
+  Design uses `gui/image_sources_editor.py` for per-condition Base/Oddball folder
+  selection without image previews or cycle editing. Imports use existing preprocessing
+  and document services; Timing & Session retains frequency authoring.
+  Native AB keeps its character/SOA editor and Next applies its draft through the
+  existing navigation gate. The optional standalone image designer retains Apply.
   `core/experiment_design.py` owns oddball cycle descriptions and frame previews;
   Oddball Apply uses existing protocol settings. AB image pairs are retired, with
   guards in category validation, authoring, runtime preflight and direct engine launch.

@@ -1,6 +1,6 @@
 # Visual FPVS Experiment Designer
 
-Updated: 2026-09-15. Category-specific native stream and image designers share Setup.
+Updated: 2026-10-30. Setup uses simple image-source selection and native AB design.
 New Attentional-Blink projects use five-second bursts of white letters with green
 T1 and white T2 digits at 100/300/500 ms SOAs. Setup > Design shows shared
 character pools, bursts per SOA, condition SOAs, a target-focused timeline, an onset bracket, and a
@@ -33,29 +33,38 @@ are retired. Old files remain readable but cannot be authored, compiled or run; 
 ## Oddball Image Designer
 
 Setup > Conditions edits names, modality, instructions and tasks. Setup > Design
-embeds `ExperimentDesignerWidget` at a `1000x600` content budget inside the nine-step
-`1120x820` wizard. The optional standalone dialog hosts the same editor. Word lists
-remain in Conditions and their cadence in Timing.
+uses `ImageSourcesEditor` at a `1000x600` content budget inside the eight-step
+`1120x820` wizard. Select a condition and choose its Base and Oddball image folders.
+The source cards show counts, resolution and full-path details with Copy path.
+There are no thumbnails, visual cycle controls or image preview in Setup. Image
+selection preserves existing cycle and timing settings. Word lists remain in
+Conditions and frequency edits remain in Timing & Session.
 
-Base and Oddball source cards show real thumbnails decoded on workers. Drag or click
-a source tile to add a role; separate folder buttons import into fresh project-owned
-source sets without merging images or adding slots. Full paths are accessible through
-tooltips. Windows extended-length filesystem paths preserve original image names and
-bytes without changing persisted project-relative paths.
+Folder buttons import on workers into fresh project-owned source sets without merging
+images or changing other conditions. Canceling the picker preserves the current source;
+failed imports show an inline error and support retry. Missing sources block progression,
+and active imports block navigation and condition switching. Windows extended-length
+filesystem paths preserve original image names and bytes without changing persisted
+project-relative paths.
 
-The timeline shows equal-duration slots. Cadence is a typed numeric field without
-arrow/wheel stepping. Keyboard/context actions also move and remove slots. Preview
+The optional standalone `ExperimentDesignerWidget` retains Base and Oddball thumbnail
+cards and visual cycle authoring. Drag or click a source tile to add a role; separate
+folder buttons import sources without adding slots. Full paths are accessible through
+tooltips.
+
+The timeline shows equal-duration slots and the stream rate from Timing & Session.
+Keyboard/context actions also move and remove slots. Preview
 at quarter speed illustrates the cycle; 50% Blank previews image and blank phases,
 while Contrast Modulation discloses that its slowed preview omits modulation.
 Timing & display details calculates frames without changing the selected real display.
 
-Next applies the draft cycle and cadence; standalone Use this design does the same.
-Saving remains explicit. Invalid or incomplete sources block progression with inline
-guidance. Discard restores timing while preserving imported source files.
+Standalone Use this design applies the draft cycle. Saving remains explicit.
+Invalid or incomplete sources show inline guidance. Discard restores timing while
+preserving imported source files.
 
-Imports block navigation while mutating sources. Thumbnail decoding can coexist with
-applying valid settings, but editor disposal waits for workers. Hidden embedded editors
-defer decoding until shown. All Setup pages use the shared frameless surface and
+Standalone thumbnail decoding can coexist with applying valid settings, but editor
+disposal waits for workers. Its cache reuses previews until image sources or manifest
+change. All Setup pages use the shared frameless surface and
 bottom navigation without a separator line.
 
 ## Ownership and Verification

@@ -23,8 +23,9 @@ experiment's category. Editing a template preserves that category and its cadenc
 The guided steps are Project, Conditions, Design, Timing & Session, Image Size,
 Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size
 for native letter streams. Conditions handles identity,
-participant instructions/tasks and existing oddball word lists. Design embeds the
-shared visual image editor and image-folder selection for the selected condition.
+participant instructions/tasks and existing oddball word lists. Design provides
+Base/Oddball image-folder selection for the selected condition without image previews
+or visual cycle editing.
 Image intake/normalization occurs when advancing from Design. Word-list presentation
 rates remain editable in Timing. Shared display, session, fixation and response
 surfaces retain their existing ownership.
@@ -106,12 +107,11 @@ or deleting their images. They cannot be saved, exported, compiled or run. Creat
 new Attentional-Blink experiment; timing and stimuli are never silently converted.
 Mixed projects containing retired image pairs cannot use the separation action.
 
-Design edits apply before switching conditions, leaving the step or saving. Invalid
-drafts remain visible for correction. Folder imports continue to use workers and
+Native AB Design edits apply before switching conditions, leaving the step or saving.
+Invalid drafts remain visible for correction. Image-folder imports use workers and
 update project-owned sources immediately, including long Windows paths. Scientific
 timing and source-validation rules stay in core, not widget handlers.
-Embedded thumbnail decoding waits until Design is visible; edits and saves on other
-pages keep source counts current without starting hidden image jobs.
+Setup image selection refreshes source metadata without decoding thumbnails.
 
 ## Legacy projects and separation
 

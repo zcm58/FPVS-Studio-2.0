@@ -464,9 +464,10 @@ covered by `tests/gui/test_manage_projects_responsiveness.py`.
 
 For project-opening responsiveness and save feedback, start with `gui/controller.py`,
 `gui/document.py`, `gui/main_window.py`, and registered
-`tests/gui/test_frontend_responsiveness.py`. Preview reuse/error recovery is covered
-by `tests/gui/test_design_setup_step.py`. Use the existing application-owned job
-lifecycle for project reads and keep document/widget construction on the GUI thread.
+`tests/gui/test_frontend_responsiveness.py`. Setup image-source selection and import
+recovery are covered by `tests/gui/test_design_setup_step.py`. Use the existing
+application-owned job lifecycle for project reads and keep document/widget construction
+on the GUI thread.
 Hidden Home/Assets/Run refresh behavior is covered by `tests/gui/test_hidden_page_refresh.py`.
 AB preview reuse is scoped to one update in `gui/attentional_blink_stream_designer.py`;
 do not cache mutable project validation across edits. See the responsiveness contract
@@ -483,9 +484,12 @@ For the manual-creation category screen, start with `gui/create_project_dialog.p
 Standard FPVS are shown. Use GUI focused verification and the registered category and
 Welcome flow tests for approved visible acceptance at `760x500` and `800x500`.
 
-For the 1120x820 Setup default and its oddball image editor, read
-`tests/gui/test_design_setup_step.py` for full-window and source-choice coverage.
-For the shared visual editor embedded in Setup > Design, read
+For the 1120x820 Setup default and per-condition Base/Oddball image selection, start
+with `gui/design_setup_step.py`, `gui/image_sources_editor.py` and registered
+`tests/gui/test_design_setup_step.py`. The source-only editor reuses `SetupSourceCard`
+and existing worker-backed fresh imports; it has no thumbnail jobs, cycle canvas or
+image preview. Frequency edits remain in Timing & Session. For the optional
+standalone visual image editor and native AB Design, read
 [`VISUAL_EXPERIMENT_DESIGNER.md`](../VISUAL_EXPERIMENT_DESIGNER.md) and
 [`EXPERIMENT_CATEGORIES.md`](../EXPERIMENT_CATEGORIES.md). Category is fixed at creation;
 image pairs and their ISI editor are retired. Attentional-Blink streams expose
@@ -499,21 +503,23 @@ GUI owns interactions; `core/experiment_design.py` owns ordinary cycle mathemati
 and historical masking calculations that have no current GUI.
 Retired image-pair projects are rejected by category validation, and old compiled
 copies by runtime preflight and the engine before launch. Native AB sources, playback
-and onset exports follow existing layer boundaries. The overview works without a
-preview display selection; achieved frames live under Timing & display details.
-`gui/design_setup_step.py` integrates condition selection, pending apply/discard,
-and worker-aware navigation around the shared `ExperimentDesignerWidget`. Folder
-imports immediately update sources; timing discard preserves those imports.
-`is_importing()` blocks navigation during source mutation; `is_busy()` also includes
-thumbnail decoding and protects condition disposal and editor teardown. Ordinary
+and onset exports follow existing layer boundaries. Standalone achieved frames live
+under Timing & display details.
+`gui/design_setup_step.py` integrates condition selection and worker-aware navigation
+around `ImageSourcesEditor`, while retaining native AB pending apply/discard.
+Folder imports immediately update only the selected condition's sources.
+`is_importing()` and `is_busy()` block Setup navigation and condition disposal during
+source mutation. Standalone `ExperimentDesignerWidget` also tracks thumbnail decoding
+and retains its visual cycle controls and preview cache. Ordinary
 image/word features remain FPVS Oddball Paradigm. Legacy conflicts require explicit separation.
 Use GUI/core/compiler/runtime/engine focused verification and registered
 `tests/gui/test_experiment_designer.py`, `tests/gui/test_design_setup_step.py`,
 category and wizard modules for approved visible acceptance. Check the embedded
 `1000x600` isolated content budget and the complete `1120x820` wizard in both themes,
-plus the expanded `1448x1086` mockup size. Next applies the embedded design; the
-standalone editor retains its Apply action. Check numeric edits, navigation validity,
-source-folder hit targets, readable schematic tokens and proportional detail.
+plus the expanded `1448x1086` mockup size. Check source-folder hit targets, long-path
+access, import retry and per-condition isolation. Next validates image selection and
+applies native AB drafts; the standalone editor retains its Apply action, schematic
+and proportional detail.
 
 For AB fixation visibility, use `gui/fixation_settings_page.py`, the core fixation
 settings/RunSpec owners, and `engines/psychopy_engine.py` / `psychopy_stimuli.py`.

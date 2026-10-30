@@ -35,6 +35,9 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Setup image source selection](exec-plans/completed/setup-image-source-selection.md)
+(simple per-condition Base/Oddball folders without image previews; visible Qt acceptance remains separate).
+
 Recent completion: [Simplified modifiers and post-condition questions](exec-plans/completed/simple-condition-modifiers-and-post-questions.md)
 (simple Yes/No authoring, retained answer journals and cumulative project-root CSV; visible GUI acceptance remains separate).
 

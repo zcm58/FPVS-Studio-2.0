@@ -218,7 +218,7 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
 
 def test_cognitive_load_uses_image_design_and_shared_condition_pairs(qtbot, tmp_path):
     from fpvs_studio.gui.design_setup_step import DesignSetupStep
-    from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
+    from fpvs_studio.gui.image_sources_editor import ImageSourcesEditor
 
     document = ProjectDocument.create_new(
         parent_dir=tmp_path,
@@ -234,5 +234,5 @@ def test_cognitive_load_uses_image_design_and_shared_condition_pairs(qtbot, tmp_
     assert not conditions.modality_combo.isHidden()
     designer = DesignSetupStep(document)
     qtbot.addWidget(designer)
-    assert isinstance(designer.editor, ExperimentDesignerWidget)
+    assert isinstance(designer.editor, ImageSourcesEditor)
     assert designer.category_label.text() == "Cognitive Load FPVS"

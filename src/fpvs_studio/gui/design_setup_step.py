@@ -1,8 +1,8 @@
-"""Condition selection around the shared, category-specific visual design editor."""
+"""Condition image selection and the category-specific AB stream editor."""
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSignalBlocker, Signal
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from fpvs_studio.core.compiler_masking import validate_masking_settings
@@ -21,7 +21,7 @@ from fpvs_studio.gui.attentional_blink_stream_designer import (
 )
 from fpvs_studio.gui.components import mark_secondary_action
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
+from fpvs_studio.gui.image_sources_editor import ImageSourcesEditor
 
 
 class DesignSetupStep(QWidget):
@@ -37,7 +37,7 @@ class DesignSetupStep(QWidget):
         self._selected_id: str | None = None
         self._refreshing = False
         self._displayed_project = document.project
-        self.editor: ExperimentDesignerWidget | AttentionalBlinkStreamDesigner | None = None
+        self.editor: ImageSourcesEditor | AttentionalBlinkStreamDesigner | None = None
         self.setObjectName("design_setup_step")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -47,7 +47,10 @@ class DesignSetupStep(QWidget):
         selector.addWidget(self.condition_label)
         self.condition_combo = QComboBox(self)
         self.condition_combo.setMinimumWidth(0)
-        self.condition_combo.setAccessibleName("Condition to design")
+        self.condition_combo.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon,
+        )
+        self.condition_combo.setAccessibleName("Selected condition")
         selector.addWidget(self.condition_combo, 1)
         self.category_label = QLabel(
             experiment_category_label(document.project.experiment_category), self
@@ -102,7 +105,7 @@ class DesignSetupStep(QWidget):
                 "an experiment of the matching category."
             )
         if self._selected_id is None:
-            return "Add a condition in Conditions, then return here to design its sequence."
+            return "Add a condition in Conditions, then return here to choose its sources."
         return ""
 
     def validation_message(self) -> str:
@@ -174,6 +177,7 @@ class DesignSetupStep(QWidget):
     def _restore_selection(self) -> None:
         with QSignalBlocker(self.condition_combo):
             self.condition_combo.setCurrentIndex(self.condition_combo.findData(self._selected_id))
+        self.condition_combo.setToolTip(self.condition_combo.currentText())
 
     def _selection_changed(self, _index: int) -> None:
         selected = self.condition_combo.currentData()
@@ -197,13 +201,27 @@ class DesignSetupStep(QWidget):
                 self.condition_combo.clear()
                 for condition in conditions:
                     self.condition_combo.addItem(condition.name, condition.condition_id)
+                    self.condition_combo.setItemData(
+                        self.condition_combo.count() - 1,
+                        condition.name,
+                        Qt.ItemDataRole.ToolTipRole,
+                    )
                 self.condition_combo.setCurrentIndex(self.condition_combo.findData(desired))
+            self.condition_combo.setToolTip(self.condition_combo.currentText())
             self.condition_combo.setEnabled(bool(conditions) and not self.is_busy())
             conflict = desired in category_conflict_condition_ids(self._document.project)
             selected = self._document.get_condition(desired) if desired else None
             masking = condition_masking(self._document.project, selected) if selected else None
+            source = (
+                self._document.get_stimulus_set(selected.base_stimulus_set_id) if selected else None
+            )
+            image_editor_unavailable = isinstance(self.editor, ImageSourcesEditor) and (
+                source is None or source.modality != StimulusModality.IMAGE
+            )
             if (desired != self._selected_id
-                    or (self.editor is not None and (conflict or masking is not None))):
+                    or (self.editor is not None and (
+                        conflict or masking is not None or image_editor_unavailable
+                    ))):
                 if not self.is_busy():
                     self._display_condition(desired)
             elif self.editor is not None and self._displayed_project is not self._document.project:
@@ -255,7 +273,7 @@ class DesignSetupStep(QWidget):
         if source.modality == StimulusModality.WORD and not stream:
             self._show_message(
                 "This condition uses word lists. Edit its words in Conditions and its "
-                "presentation rate in Timing. Image blocks are available for image conditions."
+                "presentation rate in Timing & Session."
             )
             return
         if stream:
@@ -264,8 +282,8 @@ class DesignSetupStep(QWidget):
             )
             self.editor.condition_selected.connect(self._stream_condition_selected)
         else:
-            self.editor = ExperimentDesignerWidget(
-                self._document, condition_id=condition.condition_id, embedded=True, parent=self,
+            self.editor = ImageSourcesEditor(
+                self._document, condition_id=condition.condition_id, parent=self,
             )
         self.editor_layout.addWidget(self.editor)
         self.editor.applied.connect(self.applied.emit)

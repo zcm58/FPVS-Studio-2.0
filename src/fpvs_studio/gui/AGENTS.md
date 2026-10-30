@@ -32,9 +32,11 @@ backend-driven.
 - New-experiment Setup offers manual creation or Library download. Manual creation asks
   for category, then name/folder/template; Library downloads reuse bundle import. Manual
   category choices are FPVS Oddball Paradigm and disabled Standard FPVS Coming soon.
-  Category is locked after creation. Reuse the visual editor in
-  Design; image-pair AB and its ISI editor are retired. Attentional-Blink letter
-  streams expose a shared presentation rate, character pools and onset-to-onset SOAs.
+  Category is locked after creation. Design uses per-condition Base/Oddball image
+  folder selection without image previews or cycle editing; the optional standalone
+  visual designer stays separate from Setup. Image-pair AB and its ISI editor are
+  retired. Attentional-Blink letter streams expose a shared presentation rate,
+  character pools and onset-to-onset SOAs.
   New burst studies expose Bursts per SOA in Design and Timing & Session, with EEG time
   and total burst count in Design. Rate/source/SOA/burst-count drafts apply atomically;
   core guards default five-second or explicitly repeated-target burst timing and

@@ -76,7 +76,7 @@ interaction.
   stepper. Bottom navigation remains at the window edge with no divider. Forms retain
   bounded readable widths. All steps must fit without clipping or required scrolling.
 - Conditions is a combined guided setup area for condition list/actions, names,
-  triggers, instructions, modality selection, image-folder assignment, typed word-list
+  triggers, instructions, modality selection, typed word-list
   authoring, control-condition creation, and image normalization. It uses compact list
   rows and source cards, separating `All conditions` repeat settings from
   `This condition` fields. Image sources have keyboard-accessible full-path details
@@ -85,13 +85,18 @@ interaction.
   has aligned navigator/editor tops, with search above the list and no routine hint. See
   [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
-  dimensions within a set are handled by the guided normalization flow before leaving
-  Conditions. Control-condition creation and normalization stay image-only paths. A
+  dimensions within a set are handled by the guided normalization flow when advancing
+  from Design. Control-condition creation and normalization stay image-only paths. A
   condition-level `FPVS Condition Modifiers` dialog groups participant activities
   and exposes local presets while preserving the eight-step wizard. The existing
   detailed task editor remains available for custom screens and questionnaires;
   task media is staged until Apply and stored beneath the active project's
   `stimuli/task-assets/<task-id>/`. See `CONDITION_MODIFIERS.md`.
+- Design selects Base and Oddball image folders for each image condition using the
+  shared source cards, with counts, resolution and full-path details. Folder imports
+  run on workers and preserve the existing fresh-source replacement flow. Setup does
+  not load image thumbnails or expose the visual cycle editor or image preview.
+  Timing & Session retains frequency edits. Native AB keeps its character/SOA editor.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
