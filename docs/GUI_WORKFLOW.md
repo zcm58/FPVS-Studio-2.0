@@ -529,6 +529,9 @@ The authoring window is organized around two user-facing modes:
     `Launch Experiment`
   - uses the same shared launch-surface frame as Welcome so the outer window and
     inner card styling stay aligned across the two launch surfaces
+  - the four project actions form a two-by-two grid at the `760x520` minimum and
+    one row at `1120x720`; empty optional descriptions are hidden while authored
+    descriptions remain visible
   - ready projects show `Edit Setup` as a secondary action for intentional edits
   - incomplete projects keep the same setup button slot but relabel it `Complete Setup`
     and style it as the primary enabled action
@@ -559,7 +562,7 @@ The authoring window is organized around two user-facing modes:
   - when a user opens setup from a ready project's `Edit Setup` action, the numbered
     stepper is clickable and can jump directly to any setup step; first-time setup
     still advances through the gated `Next` flow
-  - the wizard uses the compact Welcome/Home-sized default window while keeping
+  - the wizard enforces its documented `1120x820` minimum and default size, keeping
     guided steps free of Advanced buttons and vertical scrolling
   - all guided steps use the shared frameless shell, left-aligned task heading,
     step count, and stable progress/navigation positions; content is vertically centered with
@@ -661,15 +664,18 @@ The authoring window is organized around two user-facing modes:
     directly with one blank Yes/No question; Edit on the existing list adds nothing.
     Repeated Add Question and numbered-list Up/Down controls set each phase's
     independent question order, preserved on save and compilation without Advanced.
-    Phase and assigned conditions stay visible. Collapsible Advanced modifiers holds
+    Phase remains visible; condition assignment stays in the parent modifier dialog.
+    Optional repeated header/footer help uses tooltips, and a valid Preview clears
+    stale validation errors. Collapsible Advanced modifiers holds
     Counting, Memory, Masking, Library/presets and custom task tools. Existing modifiers retain
     their Overview, Settings, Participant preview and explicit assignments. Questions
     use a simple ordered editor and a non-recording preview. Before questions use
     compatible ordinary pre tasks ahead of protected counting/memory starts; their
     answers retain ordinary task exports. After questions retain the readable root CSV. Open
     Responses Folder and worker-backed Rebuild responses use the active project in
-    either export mode; these footer controls and the CSV filename appear only while
-    Advanced is expanded. Local preset saves and project Apply remain separate actions.
+    either export mode; these footer controls appear only while Advanced is expanded.
+    The folder button's tooltip exposes the full CSV path without a clipped filename
+    label. Local preset saves and project Apply remain separate actions.
     See [Condition modifiers](CONDITION_MODIFIERS.md) and
     [Post-condition Questions](POST_CONDITION_QUESTIONS.md).
   - The modifier dialog fits a `1100x720` minimum and `1120x760` default. The existing
@@ -951,7 +957,7 @@ ActiveThree's shared serial transport. Test/Pilot remains no-output for all choi
 The [runtime contract](RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
 owns pulse/low-interval scheduling, errors and hardware acceptance.
 The additional Settings tab preserves the existing parent size budgets documented
-above; Home and Run retain the `1120x720` main-window minimum. Registered
+above; Run retains the `1120x720` main-window minimum, and Home supports `760x520`. Registered
 `tests/gui/test_recording_setup.py` covers Apply/Cancel, project reopen/switch, failed saves, invalid saved
 choices/ports, fake asynchronous discovery, manual overrides, amplifier/rate pulse
 validation and wrapping in both themes. It also checks that both launch surfaces
@@ -1533,7 +1539,8 @@ Research and implementation rationale are recorded in the
 ## Setup Design And Manual Acceptance
 
 The shared component owner supplies theme-aware form fields, keyboard focus states,
-validation text, dialog headers, and button roles. Settings groups preferences into
+validation text, dialog headers, and button roles. Shared cards and fixation-editor
+styles follow application palette changes in place. Settings groups preferences into
 Workspace, Participant runs, and Development; preferences still save immediately.
 Its minimum/default size is `700x560`, or `700x650` with local experiment testing
 available. Library access adds 44 pixels of height (`700x604` / `700x694`).

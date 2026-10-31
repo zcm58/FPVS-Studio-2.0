@@ -69,14 +69,17 @@ interaction.
   launch action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
+  Home's four project actions use two rows at the `760x520` minimum and one row at
+  `1120x720`. Empty optional descriptions are hidden; authored descriptions remain visible.
 - Main-window styles use the shared palette observer and refresh the existing Setup
   page's palette. Application theme changes use fresh colors so the client area stays aligned
   with Qt's native Windows title bar and minimize/maximize/close controls.
+  Shared cards and fixation-editor local styles refresh through the same palette observer.
 - File > Find Action opens searchable existing commands
   with `Ctrl+F`. Conditions has a name/trigger filter that retains the selected
   editor context. Interaction and sizing contracts live in
   [GUI workflow](GUI_WORKFLOW.md#action-discovery-and-condition-search).
-- Setup Wizard is the guided setup/editing surface at `1120x820`. Its eight steps are
+- Setup Wizard enforces `1120x820` as its minimum and default size. Its eight steps are
   Project, Conditions, Timing & Display, Session, Image Size (Character Size for native AB),
   Fixation, Response, and Review. All steps share the frameless
   shell, left-aligned task heading, step count, and stable progress
@@ -111,8 +114,10 @@ interaction.
   questions remain editable from the dialog's list. Add Question and numbered-list
   Up/Down controls support multiple questions and independent before/after display
   order, preserved on save and compilation. Counting, Memory, Masking, presets and
-  custom tasks live in collapsible Advanced modifiers; CSV filename/folder/rebuild
-  controls are shown only while it is expanded. Assignments and
+  custom tasks live in collapsible Advanced modifiers; response-folder/rebuild
+  controls are shown only while it is expanded, with the full CSV path in the folder
+  button's tooltip. Question assignment stays in the parent modifier dialog, optional
+  help uses tooltips, and a valid preview clears any stale validation error. Assignments and
   detached Apply/Cancel behavior are preserved within the eight-step wizard;
   task media is staged until Apply and stored beneath the active project's
   `stimuli/task-assets/<task-id>/`. Before answers use ordinary task exports; the

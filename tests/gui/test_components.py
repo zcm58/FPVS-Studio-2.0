@@ -9,11 +9,14 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFormLayout,
+    QFrame,
     QLabel,
     QLineEdit,
     QPushButton,
     QSpinBox,
     QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 from tests.gui.helpers import assert_visible_children_within_parent
 
@@ -23,6 +26,7 @@ from fpvs_studio.gui.components import (
     SetupProgressStepper,
     SetupSourceCard,
     apply_dialog_theme,
+    apply_fixation_settings_theme,
     condition_template_details_header_stylesheet,
     error_text_stylesheet,
     fixation_settings_stylesheet,
@@ -210,6 +214,32 @@ def test_error_label_follows_palette_changes(qtbot) -> None:
     label.setPalette(_palette_with_window_color("#202124"))
     QApplication.processEvents()
     assert DARK_STUDIO_THEME.error_text in label.styleSheet()
+
+
+def test_fixation_preview_heading_uses_its_local_theme(qtbot) -> None:
+    host = QWidget()
+    qtbot.addWidget(host)
+    host.setStyleSheet(section_card_stylesheet(DARK_STUDIO_THEME))
+    outer = QVBoxLayout(host)
+    editor = QWidget(host)
+    editor.setPalette(_palette_with_window_color("#f4f7fb"))
+    outer.addWidget(editor)
+    layout = QVBoxLayout(editor)
+    panel = QFrame(editor)
+    panel.setProperty("fixationPreviewPanel", "true")
+    layout.addWidget(panel)
+    title = QLabel("Preview", panel)
+    title.setProperty("sectionCardRole", "title")
+    QVBoxLayout(panel).addWidget(title)
+    apply_fixation_settings_theme(editor)
+    host.resize(320, 140)
+    host.show()
+    QApplication.processEvents()
+    rendered = title.grab().toImage()
+    assert any(
+        rendered.pixelColor(x, y).name() == LIGHT_STUDIO_THEME.text_primary
+        for x in range(rendered.width()) for y in range(rendered.height())
+    )
 
 
 def test_form_styles_preserve_native_arrow_subcontrols(qapp) -> None:

@@ -30,6 +30,7 @@ from fpvs_studio.core.task_models import (
     TaskStepKind,
     TaskSubmissionMode,
 )
+from fpvs_studio.gui.components import DialogHeader
 from fpvs_studio.gui.condition_modifier_dialog import (
     _PRE_QUESTIONS_KEY,
     _QUESTIONS_KEY,
@@ -116,6 +117,12 @@ def test_default_questions_use_natural_yes_no_and_apply_without_io(qtbot, tmp_pa
     qtbot.addWidget(dialog)
     dialog.show()
     editor = dialog.editor
+    assert dialog.status.isHidden()
+    assert not dialog.status.text()
+    assert "unscored by default" in dialog.apply_button.toolTip()
+    header = dialog.findChild(DialogHeader)
+    assert header.subtitle_label.isHidden()
+    assert "every presentation" in header.title_label.toolTip()
     assert dialog._selected_ids == [first]
     assert editor.add_kind_combo.currentData() == "yes_no"
     assert not editor.options_edit.isVisible()
@@ -376,6 +383,37 @@ def test_preview_requires_deliberate_continue_and_no_is_a_valid_answer(qtbot, tm
     assert not list(tmp_path.rglob("*.csv"))
 
 
+@pytest.mark.parametrize("phase", [TaskPhase.PRE_CONDITION, TaskPhase.POST_CONDITION])
+def test_valid_preview_clears_previous_question_error_without_saving(
+    qtbot, tmp_path, monkeypatch, phase,
+):
+    document, first, _second = _document(tmp_path)
+    before = document.project.model_copy(deep=True)
+    previews = []
+
+    def preview(dialog):
+        previews.append([question.prompt for question in dialog._questions])
+        return QDialog.DialogCode.Rejected
+
+    monkeypatch.setattr(PostQuestionPreview, "exec", preview)
+    dialog = PostQuestionsDialog(
+        document.project, project_root=document.project_root, condition_id=first, phase=phase,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
+    assert dialog.status.isVisible()
+    assert "question text" in dialog.status.text()
+    assert previews == []
+    dialog.editor.question_prompt_edit.setPlainText("Are you ready?")
+    qtbot.mouseClick(dialog.preview_button, Qt.MouseButton.LeftButton)
+    assert previews == [["Are you ready?"]]
+    assert dialog.status.isHidden()
+    assert not dialog.status.text()
+    assert document.project == before
+    assert dialog.project_result is None
+
+
 @pytest.mark.parametrize("kind", [TaskQuestionKind.NUMERIC, TaskQuestionKind.RATING])
 def test_preview_zero_is_not_missing(qtbot, kind):
     question = TaskQuestion(
@@ -617,7 +655,12 @@ def test_modifier_question_draft_applies_once_and_save_reopens_without_response_
     assert dialog._selected_questions
     assert dialog._question_phase == phase
     timing = "Before" if phase == TaskPhase.PRE_CONDITION else "After"
-    assert timing.lower() in dialog.question_flow_label.text().lower()
+    assert timing in dialog.scope_label.text()
+    assert document.get_condition(first).name in dialog.scope_label.text()
+    assert "outside the FPVS stream" in dialog.scope_label.toolTip()
+    assert dialog.description_label.isHidden()
+    assert dialog.question_flow_label.isHidden()
+    assert dialog.status.text() == "Questions updated. Apply to save."
     if action == "cancel":
         dialog.reject()
         assert document.project == before
@@ -719,6 +762,40 @@ def test_multiple_before_and_after_questions_keep_independent_authored_order_aft
         ]
 
 
+@pytest.mark.parametrize("phase", [TaskPhase.PRE_CONDITION, TaskPhase.POST_CONDITION])
+@pytest.mark.parametrize("shared", [False, True])
+@pytest.mark.parametrize("custom_name", [False, True])
+def test_question_overview_keeps_assignment_and_authored_names_without_duplicate_guidance(
+    qtbot, tmp_path, phase, shared, custom_name,
+):
+    document, first, second = _document(tmp_path)
+    module = _questionnaire(phase)
+    if custom_name:
+        module.name = "Participant confidence and recognition check"
+    apply = (apply_pre_questionnaire if phase == TaskPhase.PRE_CONDITION
+             else apply_post_questionnaire)
+    selected = [first, second] if shared else [first]
+    document.apply_condition_modifier_project(apply(document.project, module, selected))
+    dialog = ConditionModifierDialog(document, condition_id=first)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    timing = "Before" if phase == TaskPhase.PRE_CONDITION else "After"
+    target = "2 conditions" if shared else document.get_condition(first).name
+    assert dialog.title_label.text() == f"{timing}-condition Questions"
+    assert dialog.scope_label.text() == f"{timing} each FPVS presentation · {target}"
+    for condition_id in selected:
+        assert document.get_condition(condition_id).name in dialog.scope_label.toolTip()
+    assert "outside the FPVS stream" in dialog.scope_label.toolTip()
+    assert dialog.description_label.isHidden()
+    assert dialog.question_flow_label.isVisible() == custom_name
+    if custom_name:
+        assert dialog.question_flow_label.text() == module.name
+    else:
+        assert not dialog.question_flow_label.text()
+    assert dialog.status.isHidden()
+    assert "until Apply" in dialog.apply_button.toolTip()
+
+
 def test_response_actions_use_active_project_and_rebuild_in_worker(
     qtbot,
     monkeypatch,
@@ -740,7 +817,11 @@ def test_response_actions_use_active_project_and_rebuild_in_worker(
     )
     qtbot.addWidget(dialog)
     dialog.advanced_toggle.setChecked(True)
-    assert str(document.project_root) in dialog.responses_label.toolTip()
+    assert dialog.findChild(QLabel, "post_question_responses_path") is None
+    for button in (dialog.open_responses_button, dialog.rebuild_responses_button):
+        assert str(document.project_root) in button.toolTip()
+        assert POST_CONDITION_RESPONSES_FILENAME in button.toolTip()
+        assert str(document.project_root) in button.accessibleDescription()
     dialog.open_responses_button.click()
     assert opened == [document.project_root]
     dialog.rebuild_responses_button.click()
@@ -818,13 +899,13 @@ def test_simplified_modifier_common_actions_and_output_summary_fit(
         assert button.isVisible() == (state == "advanced")
     assert dialog.custom_button.isVisible() == (state == "advanced")
     assert dialog.save_button.isVisible() == (state == "advanced")
-    for widget in (dialog.responses_label, dialog.open_responses_button,
-                   dialog.rebuild_responses_button):
+    for widget in (dialog.open_responses_button, dialog.rebuild_responses_button):
         assert widget.isVisible() == (state == "advanced")
-    if state == "advanced":
-        assert dialog.responses_label.width() >= (
-            dialog.responses_label.fontMetrics().horizontalAdvance(POST_CONDITION_RESPONSES_FILENAME)
-        )
+        assert POST_CONDITION_RESPONSES_FILENAME in widget.toolTip()
+    assert dialog.findChild(QLabel, "post_question_responses_path") is None
+    if state not in {"busy", "error"}:
+        assert dialog.status.isHidden()
+        assert "until Apply" in dialog.apply_button.toolTip()
     if state == "busy":
         dialog._active_task.complete()
 

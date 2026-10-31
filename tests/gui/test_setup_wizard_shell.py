@@ -137,6 +137,39 @@ def test_existing_main_window_follows_application_palette_and_keeps_native_chrom
         else:
             style_hints.setColorScheme(original_color_scheme)
         qapp.setPalette(original_palette)
+
+
+def test_setup_cards_follow_application_theme_after_creation(
+    qtbot, qapp, controller: StudioController, tmp_path: Path,
+) -> None:
+    original_palette = qapp.palette()
+    try:
+        qapp.setPalette(_verification_palette(dark=True))
+        _, window = _open_created_project(controller, qtbot, tmp_path, "Card theme")
+        _prepare_compile_ready_project(window, tmp_path / "sources")
+        window.show_setup_wizard(allow_step_jumps=True)
+        window.show()
+        wizard = window.setup_wizard_page
+        for dark in (False, True):
+            qapp.setPalette(_verification_palette(dark=dark))
+            QApplication.processEvents()
+            theme = resolve_studio_theme(qapp.palette())
+            expected = theme.surface_elevated
+            for step, panel in (
+                ("fixation", wizard.fixation_schedule_editor.fixation_behavior_panel),
+                ("response", wizard.fixation_response_editor.fixation_response_panel),
+            ):
+                wizard.open_wizard(step_key=step, allow_step_jumps=True)
+                QApplication.processEvents()
+                assert wizard._current_step_key() == step
+                assert panel.isVisible()
+                assert panel.grab().toImage().pixelColor(5, panel.height() // 2).name() == expected
+            wizard.open_wizard(step_key="review", allow_step_jumps=True)
+            QApplication.processEvents()
+            panel = wizard._review_summary_widgets[0].section
+            assert panel.grab().toImage().pixelColor(5, panel.height() // 2).name() == expected
+    finally:
+        qapp.setPalette(original_palette)
         QApplication.processEvents()
 
 
@@ -370,7 +403,24 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     previous_palette = qapp.palette()
     qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     document, window = _open_created_project(controller, qtbot, tmp_path, "Setup No Clip")
-    document.create_condition(name="Familiar and unfamiliar natural objects")
+    base = _write_image_directory(tmp_path / "base")
+    oddball = _write_image_directory(tmp_path / "oddball")
+    condition_ids = [document.create_condition(name=name) for name in (
+        "Semantic Categories - Cognitive Load",
+        "Semantic Categories - No Load",
+        "Recognition Memory - Cognitive Load",
+    )]
+    for condition_id in condition_ids:
+        for role, source in (("base", base), ("oddball", oddball)):
+            document.import_condition_stimulus_folder(
+                condition_id, role=role, source_dir=source,
+            )
+    document.update_display_settings(preferred_refresh_hz=60)
+    document.update_condition_timing(
+        overrides={condition_ids[0]: 5.0, condition_ids[2]: 7.5},
+        durations=dict.fromkeys(condition_ids, 10.0),
+        presentation_counts=dict.fromkeys(condition_ids, 2),
+    )
     wizard = window.setup_wizard_page
     window.resize(1120, 820)
     window.show_setup_wizard()
@@ -608,8 +658,8 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     assert window.main_stack.currentWidget() is window.setup_wizard_page
     assert window.menuBar().isVisible()
     assert window.statusBar().isVisible()
-    assert window.minimumWidth() == 960
-    assert window.minimumHeight() == 640
+    assert window.minimumWidth() == 1120
+    assert window.minimumHeight() == 820
     assert window.width() == 1120
     assert window.height() == 820
 
@@ -639,10 +689,15 @@ def test_switching_main_workflow_stack_keeps_outer_window_size_stable(
     assert window.main_stack.currentWidget() is window.setup_wizard_page
     assert window.menuBar().isVisible()
     assert window.statusBar().isVisible()
-    assert window.minimumWidth() == 960
-    assert window.minimumHeight() == 640
-    assert window.width() == 1110
-    assert window.height() == 700
+    assert window.minimumWidth() == 1120
+    assert window.minimumHeight() == 820
+    assert window.width() == 1120
+    assert window.height() == 820
+
+    window.resize(960, 640)
+    QApplication.processEvents()
+    assert window.width() == 1120
+    assert window.height() == 820
 
     window.show_home()
     QApplication.processEvents()

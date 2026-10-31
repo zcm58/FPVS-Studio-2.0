@@ -50,9 +50,9 @@ option shuffles do not change their meaning.
 
 The active project owns `post_condition_responses.csv` directly in its folder,
 in both full and compact export modes. The GUI's Open Responses Folder action uses
-that project folder independently of any detailed run folder. The CSV filename,
-Open Responses Folder and Rebuild responses controls appear only while Advanced
-modifiers is expanded.
+that project folder independently of any detailed run folder. Open Responses Folder
+and Rebuild responses appear only while Advanced modifiers is expanded. The folder
+button's tooltip and accessible description expose the CSV filename and full path.
 
 Each attempted condition presentation with assigned questions occupies one row.
 Participant, numbered session/visit, original condition name and presentation number

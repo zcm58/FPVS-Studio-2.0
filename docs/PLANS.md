@@ -35,6 +35,9 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [GUI visual audit](exec-plans/completed/gui-visual-audit.md)
+(real-window theme/layout fixes and 215 distinct Qt passes; full-precommit limitations recorded).
+
 Recent completion: [Simple before and after condition questions](exec-plans/completed/basic-before-after-questions.md)
 (multiple questions, independent display order, basic question actions and Advanced modifiers).
 

@@ -297,18 +297,19 @@ class HomePage(QWidget):
         self.project_update_notice.hide()
         launch_panel_layout.addWidget(self.project_update_notice)
 
+        self._quick_action_buttons = (
+            self.new_project_button,
+            self.import_project_button,
+            self.open_project_button,
+            self.edit_setup_button,
+        )
         action_layout = QGridLayout()
+        self._quick_action_layout = action_layout
+        self._quick_action_columns = 0
         action_layout.setContentsMargins(0, 0, 0, 0)
         action_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
         action_layout.setVerticalSpacing(PAGE_SECTION_GAP)
-        for column, button in enumerate(
-            (
-                self.new_project_button,
-                self.import_project_button,
-                self.open_project_button,
-                self.edit_setup_button,
-            )
-        ):
+        for column, button in enumerate(self._quick_action_buttons):
             action_layout.addWidget(button, 0, column)
             action_layout.setColumnStretch(column, 1)
         launch_panel_layout.addLayout(action_layout)
@@ -355,6 +356,7 @@ class HomePage(QWidget):
 
         apply_home_page_theme(self)
         self._sync_launch_button_geometry()
+        self._sync_action_layout()
 
         self._document.project_changed.connect(self._refresh_after_document_update)
         self._document.session_plan_changed.connect(self._refresh_after_document_update)
@@ -369,6 +371,7 @@ class HomePage(QWidget):
             try:
                 apply_home_page_theme(self)
                 self._sync_launch_button_geometry()
+                self._sync_action_layout()
                 self._sync_hero_height()
             finally:
                 self._theme_refreshing = False
@@ -469,6 +472,38 @@ class HomePage(QWidget):
             self.refresh()
         super().showEvent(event)
 
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if hasattr(self, "_quick_action_layout"):
+            self._sync_action_layout()
+            self._sync_hero_height()
+
+    def _sync_action_layout(self) -> None:
+        page_margins = self.launch_surface.page_layout.contentsMargins()
+        content_margins = self.launch_surface.content_layout.contentsMargins()
+        available_width = max(0, min(
+            self.launch_surface.hero_container.maximumWidth(),
+            self.width() - page_margins.left() - page_margins.right()
+            - content_margins.left() - content_margins.right(),
+        ))
+        self.launch_surface.hero_container.setMinimumWidth(available_width)
+        for button in self._quick_action_buttons:
+            button.ensurePolished()
+        button_width = max(max(button.minimumWidth(), button.sizeHint().width())
+                           for button in self._quick_action_buttons)
+        row_width = 4 * button_width + 3 * self._quick_action_layout.horizontalSpacing()
+        columns = 4 if row_width <= available_width else 2
+        if columns == self._quick_action_columns:
+            return
+        for button in self._quick_action_buttons:
+            self._quick_action_layout.removeWidget(button)
+        for column in range(4):
+            self._quick_action_layout.setColumnStretch(column, 1 if column < columns else 0)
+        for index, button in enumerate(self._quick_action_buttons):
+            self._quick_action_layout.addWidget(button, index // columns, index % columns)
+        self._quick_action_columns = columns
+        self.launch_surface.hero_layout.setSpacing(6 if columns == 2 else PAGE_SECTION_GAP)
+
     def refresh(self) -> None:
         self._refresh_pending = False
         project = self._document.project
@@ -481,8 +516,9 @@ class HomePage(QWidget):
         subtitle_text = self._project_description_text(project.meta.description)
         self.current_project_subtitle.setText(subtitle_text)
         self.current_project_subtitle.setToolTip(
-            " ".join(project.meta.description.split()) or "No description set yet."
+            " ".join(project.meta.description.split())
         )
+        self.current_project_subtitle.setVisible(bool(subtitle_text))
 
         self.condition_count_value.setText(str(len(ordered_conditions)))
         burst_mode = (
@@ -517,6 +553,7 @@ class HomePage(QWidget):
         self._refresh_sophia_mode_ticker()
         self._refresh_recording_summary()
         self._set_status_indicator(report)
+        self._sync_action_layout()
         self.launch_surface.hero_layout.activate()
         self._sync_hero_height()
 
@@ -597,7 +634,7 @@ class HomePage(QWidget):
     def _project_description_text(description: str) -> str:
         compact = " ".join(description.split())
         if not compact:
-            return "No description set yet."
+            return ""
         if len(compact) > 96:
             compact = f"{compact[:93]}..."
         return compact

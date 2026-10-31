@@ -66,6 +66,71 @@ def _assert_button_contents_fit(button: QPushButton) -> None:
     assert button.rect().contains(contents)
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("ready", [False, True])
+@pytest.mark.parametrize("description", [
+    "",
+    "An authored description of the familiar object and unfamiliar category conditions "
+    "that stays available in full without crowding the Home actions.",
+])
+def test_home_actions_fit_minimum_and_default_sizes_and_resize_back(
+    qtbot, controller, tmp_path, monkeypatch, background, ready, description,
+):
+    monkeypatch.setattr(HomePage, "_status_report", lambda _self: SimpleNamespace(
+        badge_state="ready" if ready else "warning",
+        status_label="Ready to Launch" if ready else "Setup Required",
+        status_summary="" if ready else "Choose the image sources for every condition",
+        readiness_items=(),
+    ))
+    document, window = _open_created_project(
+        controller, qtbot, tmp_path,
+        "Familiar objects and unfamiliar semantic category exemplars",
+    )
+    document.update_project_description(description)
+    page = window.home_page
+    page.setPalette(QPalette(QColor(background)))
+    buttons = (
+        page.new_project_button, page.import_project_button,
+        page.open_project_button, page.edit_setup_button,
+    )
+    for size in ((760, 520), (1120, 720), (760, 520)):
+        window.resize(*size)
+        window.show()
+        QApplication.processEvents()
+        assert window.size().toTuple() == size
+        assert page.current_project_subtitle.isVisible() is bool(description)
+        assert page.edit_setup_button.text() == ("Edit Setup" if ready else "Complete Setup")
+        _assert_visible_children_within_parent(page)
+        for button in (*buttons, page.launch_button):
+            assert button.isVisible()
+            _assert_button_contents_fit(button)
+        row_tops = [button.mapTo(page, button.rect().topLeft()).y() for button in buttons]
+        if size[0] == 760:
+            assert row_tops[0] == row_tops[1] < row_tops[2] == row_tops[3]
+        else:
+            assert len(set(row_tops)) == 1
+    assert document.project.meta.description == description
+    assert page.current_project_header.toolTip() == document.project.meta.name
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_home_typical_project_name_stays_complete_at_minimum_size(
+    qtbot, controller, tmp_path, background,
+):
+    document, window = _open_created_project(
+        controller, qtbot, tmp_path, "Cognitive Load FPVS",
+    )
+    page = window.home_page
+    page.setPalette(QPalette(QColor(background)))
+    window.resize(760, 520)
+    window.show()
+    QApplication.processEvents()
+    title = page.current_project_header
+    assert title.text() == document.project.meta.name
+    assert title.width() >= title.fontMetrics().horizontalAdvance(title.text())
+    _assert_visible_children_within_parent(page)
+
+
 def test_ab_home_shows_total_bursts_and_recall_tracking(qtbot, tmp_path: Path) -> None:
     document = ProjectDocument.create_new(
         parent_dir=tmp_path,
@@ -851,7 +916,8 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     assert fixation_label.text() == "Disabled"
     assert accuracy_label.text() == "Disabled"
     assert status_label.text()
-    assert subtitle_label.text() == "No description set yet."
+    assert subtitle_label.text() == ""
+    assert subtitle_label.isHidden()
 
     window.setup_dashboard_page.project_overview_editor.project_description_edit.setPlainText(
         "This is the participant-facing project summary."
@@ -859,6 +925,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     window.flush_pending_edits()
     QApplication.processEvents()
     assert subtitle_label.text() == "This is the participant-facing project summary."
+    assert subtitle_label.isVisible()
 
     long_description = " ".join(
         [
@@ -877,6 +944,12 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     assert subtitle_label.text().endswith("...")
     assert len(subtitle_label.text()) <= 96
     assert subtitle_label.toolTip() == long_description
+
+    window.document.update_project_description(" \t\n ")
+    QApplication.processEvents()
+    assert subtitle_label.isHidden()
+    assert subtitle_label.text() == ""
+    assert window.document.project.meta.description == " \t\n "
     assert subtitle_label.maximumHeight() <= subtitle_label.fontMetrics().lineSpacing() * 2 + 4
     _assert_visible_children_within_parent(launch_panel)
 

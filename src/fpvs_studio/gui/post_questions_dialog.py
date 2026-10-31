@@ -289,10 +289,12 @@ class PostQuestionsDialog(QDialog):
         self._selected_ids = [condition_id]
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
-        layout.addWidget(DialogHeader(
-            self.windowTitle(), f"{self._timing} every presentation of the selected conditions.",
-            parent=self,
-        ))
+        header = DialogHeader(self.windowTitle(), "", parent=self)
+        header.subtitle_label.hide()
+        header.title_label.setToolTip(
+            f"{self._timing} every presentation of the selected conditions.",
+        )
+        layout.addWidget(header)
         top = QHBoxLayout()
         self.name_edit = QLineEdit(self._module.name, self)
         self.name_edit.setAccessibleName("Question set name")
@@ -318,10 +320,9 @@ class PostQuestionsDialog(QDialog):
         self._original_questions = {question.question_id: question for question in step.questions}
         self._original_drafts = {draft.question_id: draft for draft in self.editor.questions()}
         layout.addWidget(self.editor, 1)
-        self.status = _label(
-            "Required, self-paced and unscored by default. Continue submits an answer.", self,
-        )
+        self.status = _label("", self)
         self.status.setObjectName("post_question_status")
+        self.status.hide()
         layout.addWidget(self.status)
         footer = QHBoxLayout()
         self.preview_button = QPushButton("Preview", self)
@@ -339,6 +340,9 @@ class PostQuestionsDialog(QDialog):
         mark_secondary_action(self.cancel_button)
         footer.addWidget(self.cancel_button)
         self.apply_button = QPushButton("Apply questions", self)
+        self.apply_button.setToolTip(
+            "Required, self-paced and unscored by default. Continue submits an answer.",
+        )
         self.apply_button.clicked.connect(self.accept)
         mark_primary_action(self.apply_button)
         footer.addWidget(self.apply_button)
@@ -411,6 +415,7 @@ class PostQuestionsDialog(QDialog):
         self.status.setText(str(error))
         self.status.setToolTip(str(error))
         mark_error_text(self.status)
+        self.status.show()
 
     def _preview(self) -> None:
         try:
@@ -418,6 +423,9 @@ class PostQuestionsDialog(QDialog):
         except ValueError as error:
             self._show_error(error)
             return
+        self.status.clear()
+        self.status.setToolTip("")
+        self.status.hide()
         PostQuestionPreview(module.steps[0].questions, self).exec()
 
     def _remove(self) -> None:

@@ -437,12 +437,6 @@ class ConditionModifierDialog(QDialog):
         self.responses_container.hide()
         responses = QHBoxLayout(self.responses_container)
         responses.setContentsMargins(0, 0, 0, 0)
-        self.responses_label = _label(POST_CONDITION_RESPONSES_FILENAME, self)
-        self.responses_label.setObjectName("post_question_responses_path")
-        self.responses_label.setWordWrap(False)
-        self.responses_label.setMinimumWidth(
-            self.responses_label.fontMetrics().horizontalAdvance(POST_CONDITION_RESPONSES_FILENAME),
-        )
         path_error = ""
         try:
             response_path = post_condition_responses_path(self._document.project_root)
@@ -452,23 +446,29 @@ class ConditionModifierDialog(QDialog):
             path_detail = (
                 f"{self._document.project_root / POST_CONDITION_RESPONSES_FILENAME}\n{error}"
             )
-        self.responses_label.setToolTip(path_detail)
-        self.responses_label.setAccessibleDescription(self.responses_label.toolTip())
-        responses.addWidget(self.responses_label)
         self.open_responses_button = QPushButton("Open Responses Folder", self)
+        self.open_responses_button.setToolTip(path_detail)
+        self.open_responses_button.setAccessibleDescription(path_detail)
         self.open_responses_button.clicked.connect(self._open_responses_folder)
         mark_secondary_action(self.open_responses_button)
         responses.addWidget(self.open_responses_button)
         self.rebuild_responses_button = QPushButton("Rebuild responses", self)
+        self.rebuild_responses_button.setToolTip(
+            f"Rebuild {POST_CONDITION_RESPONSES_FILENAME} from saved task responses.\n"
+            f"{path_detail}",
+        )
+        self.rebuild_responses_button.setAccessibleDescription(path_detail)
         self.rebuild_responses_button.clicked.connect(self._rebuild_responses)
         mark_secondary_action(self.rebuild_responses_button)
         responses.addWidget(self.rebuild_responses_button)
-        self.status = _label("Changes remain in this draft until Apply.", self)
+        self.status = _label("", self)
         self.status.setObjectName("modifier_status")
         self.status.setMinimumHeight(38)
+        self.status.hide()
         if path_error:
             self.status.setText(path_error)
             mark_error_text(self.status)
+            self.status.show()
         layout.addWidget(self.status)
         footer = QHBoxLayout()
         footer.addWidget(self.responses_container)
@@ -481,6 +481,7 @@ class ConditionModifierDialog(QDialog):
         self.cancel_button.clicked.connect(self.reject)
         footer.addWidget(self.cancel_button)
         self.apply_button = QPushButton("Apply modifiers", self)
+        self.apply_button.setToolTip("Changes remain in this draft until Apply.")
         self.apply_button.clicked.connect(self.accept)
         mark_primary_action(self.apply_button)
         mark_secondary_action(self.cancel_button)
@@ -721,7 +722,7 @@ class ConditionModifierDialog(QDialog):
     def _mark_dirty(self, *_args: object) -> None:
         if not self._loading:
             self._fields_dirty = True
-            self._set_status("Unsaved modifier edits. Apply updates the experiment copy only.")
+            self._set_status("Unsaved changes.")
 
     def _save_fields(self) -> bool:
         if self._selected_id is None or not self._fields_dirty:
@@ -923,11 +924,12 @@ class ConditionModifierDialog(QDialog):
             before = self._question_phase == TaskPhase.PRE_CONDITION
             timing = "Before" if before else "After"
             self.title_label.setText(f"{timing}-condition Questions")
-            self.description_label.setText(
-                f"{timing} every presentation, outside the FPVS stream.",
-            )
-            self.scope_label.setText(
-                "Choose conditions and edit shared or private questions in the editor.",
+            self.description_label.clear()
+            self.description_label.hide()
+            self.scope_label.clear()
+            self.scope_label.setToolTip("")
+            self.edit_questions_button.setToolTip(
+                "Edit questions, choose conditions, or edit shared and private copies.",
             )
             self.copy_button.hide()
             self.save_button.setEnabled(False)
@@ -935,6 +937,7 @@ class ConditionModifierDialog(QDialog):
                 project = self._build_project()
             except ValueError as error:
                 self.question_flow_label.setText(str(error))
+                self.question_flow_label.show()
             else:
                 condition = next(item for item in project.conditions
                                  if item.condition_id == self._condition_id)
@@ -943,17 +946,40 @@ class ConditionModifierDialog(QDialog):
                 names = [modules[binding.task_id].name if binding.task_id in modules
                          else f"Missing custom task ({binding.task_id})"
                          for binding in bindings]
-                self.question_flow_label.setText(f"{timing} FPVS:\n" + " → ".join(names))
+                question_ids = {task.task_id for task in self._question_tasks(self._question_phase)}
+                assigned_names = [
+                    item.name for item in project.conditions
+                    if any(binding.task_id in question_ids for binding in (
+                        item.pre_task_bindings if before else item.post_task_bindings
+                    ))
+                ]
+                target = (assigned_names[0] if len(assigned_names) == 1
+                          else f"{len(assigned_names)} conditions")
+                self.scope_label.setText(f"{timing} each FPVS presentation · {target}")
+                self.scope_label.setToolTip(
+                    f"{timing} every presentation, outside the FPVS stream.\n"
+                    + "\n".join(assigned_names),
+                )
+                default_names = {f"{timing}-condition Questions"}
+                if not before:
+                    default_names.add("Post-condition Questions")
+                flow = " → ".join(names) if len(names) > 1 or any(
+                    name not in default_names for name in names
+                ) else ""
+                self.question_flow_label.setText(flow)
+                self.question_flow_label.setVisible(bool(flow))
             self._refresh_details()
             return
         if not enabled:
             self.title_label.setText("Add a before or after question")
             self.description_label.clear()
+            self.description_label.hide()
             self.scope_label.clear()
             self.copy_button.hide()
             self.question_flow_label.setText(
                 "Choose when the question should appear, then enter its text and answers.",
             )
+            self.question_flow_label.show()
             self._refresh_details()
             return
         self.advanced_toggle.setChecked(True)
@@ -1090,6 +1116,7 @@ class ConditionModifierDialog(QDialog):
         self.description_label.setText(
             description if len(description) <= 220 else description[:217] + "…"
         )
+        self.description_label.setVisible(bool(description))
         self.description_label.setToolTip(description)
         count = len(self._scopes[self._selected_id])
         self.copy_button.setVisible(
@@ -1415,6 +1442,7 @@ class ConditionModifierDialog(QDialog):
                 self.question_flow_label.setText(
                     "Expand Advanced modifiers to edit this activity.",
                 )
+                self.question_flow_label.show()
             self.screens_button.setVisible(
                 checked and definition.modifier.kind != ConditionModifierKind.BACKWARD_COUNTING,
             )
@@ -1496,7 +1524,7 @@ class ConditionModifierDialog(QDialog):
         self._refresh_list(
             _PRE_QUESTIONS_KEY if phase == TaskPhase.PRE_CONDITION else _QUESTIONS_KEY,
         )
-        self._set_status("Questions updated in the draft. Apply to keep them in the experiment.")
+        self._set_status("Questions updated. Apply to save.")
 
     def _open_responses_folder(self) -> None:
         try:
@@ -2211,6 +2239,7 @@ class ConditionModifierDialog(QDialog):
         refresh_widget_style(self.status)
         self.status.setText(text if len(text) <= 300 else text[:297] + "…")
         self.status.setToolTip(text)
+        self.status.setVisible(bool(text))
 
     def _show_error(self, error: object) -> None:
         self._set_status(str(error))

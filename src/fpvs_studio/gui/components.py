@@ -2071,7 +2071,8 @@ def fixation_settings_stylesheet(theme: StudioTheme | QPalette | None = None) ->
         color: {theme.text_primary};
         font-weight: 600;
     }}
-    QLabel[fixationSettingsSectionTitle="true"] {{
+    QLabel[fixationSettingsSectionTitle="true"],
+    QFrame[fixationPreviewPanel="true"] QLabel[sectionCardRole="title"] {{
         color: {theme.text_primary};
         font-weight: 700;
     }}
@@ -2082,7 +2083,7 @@ def fixation_settings_stylesheet(theme: StudioTheme | QPalette | None = None) ->
 
 
 def apply_fixation_settings_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(fixation_settings_stylesheet(widget.palette()))
+    _apply_palette_stylesheet(widget, fixation_settings_stylesheet)
 
 
 def non_home_shell_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
@@ -2227,7 +2228,7 @@ def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
 
 
 def apply_section_card_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(section_card_stylesheet(widget.palette()))
+    _apply_palette_stylesheet(widget, section_card_stylesheet)
 
 
 def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
