@@ -83,7 +83,6 @@ from fpvs_studio.preprocessing.inspection import (
 from fpvs_studio.preprocessing.manifest import write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
-BUNDLE_SCHEMA_VERSION = "1.0.0"
 PROJECT_BUNDLE_SUFFIX = ".fpvsbundle"
 BUNDLE_MANIFEST_FILENAME = "fpvs_bundle.json"
 IMPORT_STAGING_DIRNAME = "import-staging"

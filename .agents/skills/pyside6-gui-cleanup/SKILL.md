@@ -7,7 +7,8 @@ description: Use for Windows-focused PySide6 GUI cleanup, widget refactors, dial
 
 ## Workflow
 
-1. Read `AGENTS.md`, `ARCHITECTURE.md`, and `docs/GUI_WORKFLOW.md`.
+1. Follow the `gui` route in `docs/agent/agent-index.md`; read only the relevant
+   contract section in `docs/FRONTEND.md` or `docs/GUI_WORKFLOW.md`.
 2. Read any nested `AGENTS.md` in the GUI paths you touch.
 3. Identify the smallest behavior-preserving GUI change that satisfies the task.
 4. Set the documented minimum/default surface size and budget the layout against

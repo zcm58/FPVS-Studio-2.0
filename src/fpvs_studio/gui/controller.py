@@ -1827,16 +1827,6 @@ class StudioController(QObject):
     def _normalize_path(path: Path) -> Path:
         return Path(path).expanduser().resolve()
 
-    def _is_within_configured_root(self, path: Path) -> bool:
-        root_dir = self._fpvs_root_dir
-        if root_dir is None:
-            return False
-        try:
-            self._normalize_path(path).relative_to(self._normalize_path(root_dir))
-        except ValueError:
-            return False
-        return True
-
     def _normalize_fpvs_root_layout(self) -> bool:
         root_dir = self._fpvs_root_dir
         if root_dir is None:

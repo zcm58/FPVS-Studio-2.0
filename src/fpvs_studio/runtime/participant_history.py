@@ -19,7 +19,6 @@ from fpvs_studio.core.paths import logs_dir, runs_dir
 from fpvs_studio.core.serialization import read_json_file
 
 _SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
-_PARTICIPANT_OUTPUT_PREFIX = "P"
 
 _SESSION_SEED_UPPER_BOUND = 2**31
 _MAX_SEED_GENERATION_ATTEMPTS = 10_000
@@ -124,27 +123,6 @@ def find_completed_sessions_for_participant(
     return completed_records
 
 
-def resolve_next_participant_output_label(
-    project_root: Path,
-    participant_number: str,
-) -> str:
-    """Return the next available participant-labeled output directory name."""
-
-    base_label = _participant_output_label(participant_number)
-    runs_root = runs_dir(project_root)
-    if not _participant_output_label_exists(runs_root, participant_number):
-        return base_label
-
-    suffix = 2
-    while _participant_output_label_exists(runs_root, participant_number, suffix=suffix):
-        suffix += 1
-    return f"{base_label}_run{suffix}"
-
-
-def _participant_output_label(participant_number: str) -> str:
-    return f"{_PARTICIPANT_OUTPUT_PREFIX}{participant_number}"
-
-
 def participant_session_number_from_output_label(
     output_label: str, participant_number: str
 ) -> int | None:
@@ -158,20 +136,6 @@ def participant_session_number_from_output_label(
         return None
     number = int(match.group(1) or "1")
     return number if number > 0 else None
-
-
-def _participant_output_label_exists(
-    runs_root: Path,
-    participant_number: str,
-    *,
-    suffix: int | None = None,
-) -> bool:
-    current_label = _participant_output_label(participant_number)
-    legacy_label = participant_number
-    if suffix is not None:
-        current_label = f"{current_label}_run{suffix}"
-        legacy_label = f"{legacy_label}_run{suffix}"
-    return (runs_root / current_label).exists() or (runs_root / legacy_label).exists()
 
 
 def completed_session_seeds(project_root: Path) -> set[int]:

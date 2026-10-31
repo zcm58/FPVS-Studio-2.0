@@ -391,15 +391,6 @@ def release_held(root: Path) -> None:
                 )
 
 
-def delete_pending(root: Path, report_id: str) -> None:
-    path = _record_path(root, report_id)
-    with _storage_lock(root):
-        record = read_bounded_model(path, OutboxRecord, MAX_RECORD_BYTES)
-        if record.state == "uploaded":
-            raise SharingStorageError("Accepted receipts cannot be deleted as pending reports.")
-        path.unlink()
-
-
 @dataclass(frozen=True)
 class ReviewedCapture:
     report_id: str

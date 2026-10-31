@@ -36,8 +36,6 @@ from fpvs_studio.core.enums import (
     InterConditionMode,
     PresentationUnit,
     ProjectSchemaVersion,
-    RunMode,
-    SchemaVersion,
     StimulusModality,
     StimulusTransform,
     StimulusVariant,
@@ -1276,37 +1274,6 @@ class ConditionTemplateProfileLibrary(FPVSBaseModel):
         if len(profile_ids) != len(set(profile_ids)):
             raise ValueError("Condition template profile ids must be unique.")
         return self
-
-
-class RunParticipant(FPVSBaseModel):
-    """Participant/session metadata attached to a compiled run."""
-
-    participant_id: str | None = None
-    session_label: str | None = None
-    notes: str = ""
-
-
-class SessionSummary(FPVSBaseModel):
-    """Neutral session summary written by runtime/export layers."""
-
-    schema_version: SchemaVersion = SchemaVersion.V1
-    project_id: str
-    session_id: str
-    engine_name: str
-    run_mode: RunMode
-    started_at: datetime | None = None
-    finished_at: datetime | None = None
-    completed_condition_count: int = Field(default=0, ge=0)
-    aborted: bool = False
-    warnings: list[str] = Field(default_factory=list)
-    output_dir: str | None = None
-
-    @field_validator("output_dir")
-    @classmethod
-    def validate_output_dir(cls, value: str | None) -> str | None:
-        if value is None:
-            return value
-        return validate_project_relative_path(value)
 
 
 class TemplateLibraryRecord(FPVSBaseModel):

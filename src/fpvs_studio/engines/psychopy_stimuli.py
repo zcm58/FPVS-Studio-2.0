@@ -22,7 +22,6 @@ from fpvs_studio.core.paths import resolve_project_relative_path
 from fpvs_studio.core.run_spec import (
     STUDIO_WORD_FONT_NAME,
     DisplayRunSpec,
-    FixationEvent,
     ImageGeometrySpec,
     RolePresentationSpec,
     RunSpec,
@@ -219,27 +218,6 @@ class PreparedConditionResources:
         gpu_sync()
         self._gpu_synchronized = True
         self._ready = True
-
-
-def fixation_color_for_frame(
-    fixation_events: list[FixationEvent],
-    default_color: str,
-    target_color: str,
-    fixation_index: int,
-    frame_index: int,
-) -> str:
-    """Return the fixation color active on one frame."""
-
-    if not fixation_events:
-        return default_color
-    fixation_event = fixation_events[fixation_index]
-    if (
-        fixation_event.start_frame
-        <= frame_index
-        < (fixation_event.start_frame + fixation_event.duration_frames)
-    ):
-        return target_color
-    return default_color
 
 
 def should_draw_stimulus(

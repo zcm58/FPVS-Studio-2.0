@@ -6,7 +6,6 @@ import random
 
 from fpvs_studio.core.compiler_schedules import (
     boundary_aware_shuffled_bag,
-    build_balanced_shuffled_values,
     plan_no_repeat_role_bag_keys,
     pop_preferred_bag_item,
     repair_no_repeat_role_bag_sequence,
@@ -74,26 +73,6 @@ def compile_condition_presentation(
             ),
         ),
         resolved_roles,
-    )
-
-
-def build_role_text_height_values(
-    settings: TextHeightScheduleSettings,
-    *,
-    count: int,
-    random_seed: int,
-    role: StimulusRole,
-) -> list[float]:
-    """Realize one role's text-height schedule using an isolated stable seed."""
-
-    if settings.mode == TextHeightMode.FIXED:
-        return [settings.values[0]] * count
-    rng = random.Random(namespaced_random_seed(random_seed, f"presentation:text-height:{role}"))
-    return build_balanced_shuffled_values(
-        settings.values,
-        count=count,
-        rng=rng,
-        key=float,
     )
 
 

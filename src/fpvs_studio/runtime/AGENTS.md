@@ -1,202 +1,57 @@
-# AGENTS.md
+# Runtime Guidance
 
-## Scope of this directory
+Runtime owns separate-process orchestration, launch/preflight, participant/session
+flow, scoring, recovery and exports. Read the relevant section of
+`docs/RUNTIME_EXECUTION.md`; contracts are in core and playback is in engines.
 
-`src/fpvs_studio/runtime/` owns the separate-process runtime orchestration, session preflight, and session-export writers.
+## Execution Invariants
 
-The runtime should consume neutral `RunSpec` and `SessionPlan` contracts, add machine-specific launch settings, select an engine, and write neutral run/session exports.
+- Consume `RunSpec`/`SessionPlan`, never editable projects. Keep machine launch options
+  outside compiled contracts; do not move session randomization/compilation here.
+- Validate assets and timing before participant flow. Routine preflight checks paths
+  and text without decoding entire image sets; engines prepare rendering resources.
+- Use the configured display adapter and engine observation for refresh verification.
+  Explicit Test/Pilot exceptions must not weaken normal-launch defaults.
+- `recording.py` resolves hardware/configuration before visit reservation. Open selected
+  transport before engine session flow. `unicorn_recorder.py` checks process/raw-file
+  readiness in the launch worker, never the GUI thread or frame callbacks.
+- Never fall back to null after hardware open/write failure. Normal launches use the
+  selected hardware. Null requires explicit Test/Pilot; `serial_enabled=false` alone
+  is insufficient. Preserve legacy selection precedence and pulse-spacing validation.
+- Open/close one engine session; runtime sequences instructions, tasks, breaks,
+  tutorials, feedback and runs. Engines render one neutral task step or run at a time.
+  Runtime owns validation, branches, retries and fixation/answer scoring.
+- Keep `escape` reserved for abort. Score fixation from same-clock hardware timestamps.
+  Record trigger `sent` only after successful transport writes, export `error` and abort
+  cleanly on failure. Trigger timestamps exclude warmup; drain pulses outside playback.
 
-## Current phase expectations
+## Durability and Recovery
 
-This phase should establish:
+- Preserve participant visit reservations across full/compact exports, historical and
+  aborted output. Snapshot reviewed electrodes/demographics per execution; repeat-visit
+  bookkeeping never enters compiled timing.
+- Checkpoint task responses and completed compact results before later screens. Commit
+  numbered research rows idempotently before derived spreadsheets. Preserve partial
+  answers, original errors and prior files when finalization/replacement fails.
+- `condition_recovery.py` owns lifetime locks, immutable occurrence snapshots, rerun
+  plans and separate acknowledgements. Discovery is read-only; never recompile missing
+  original plans or overwrite earlier visits. Armed intent is not observed frame zero.
+  Automatic notices omit acknowledged history; manual history retains it. Project-update
+  readiness checks must not mutate evidence or claim a project-wide execution lock.
+- `data_sharing.py` captures immutable eligible reports only after research commit
+  proof, before derived XLSX. Recovery requires matching proof/rows; credentials/HTTP
+  remain outside runtime. See `docs/DATA_SHARING.md`.
+- `acquisition_evidence.py` writes versioned selection and sent/error evidence outside
+  the frame loop, plus completed Toolbox handoffs after finalization. Configuration,
+  operator association, receiver integrity and physical timing remain separate evidence.
+- Full exports write numbered visit folders under `runs/`; compact writes project logs
+  without detailed run folders. Canonical filenames/schema compatibility are in the
+  runtime contract. Raw task answers stay out of general logs/summary workbooks.
+- `attentional_blink_report.py` retains answered bursts after later aborts, separates
+  SOA denominators and marks test/pilot identity. Never append through an unfinished
+  journal line; preserve it for explicit repair. Native onset exports retain exact-grid
+  coverage and legacy image headers remain compatible.
 
-- launcher/worker module structure
-- session-plan iteration and transition flow above the engine seam
-- runtime-side fail-fast preflight for assets, timing, and launch hardware
-- normal session-mode result assembly with explicit presentation and timing-QC options
-- trigger backend wiring/logging with selected transport availability checked before
-  participant launch screens; `recording.py` owns local selection and configuration
-  validation before visit reservation. `unicorn_recorder.py`
-  checks Recorder's process and active raw-file writes in the launch worker before
-  presentation; never run OS probes on the GUI thread or in frame callbacks.
-- session export writers
-- participant and seed-history lookup
-- atomic participant visit reservation across full and compact exports, preserving
-  legacy and aborted output and numbering each execution separately from compilation
-- engine selection plumbing
-- real session execution flow against the engine seam
-
-## Responsibilities
-
-- read `RunSpec` and `SessionPlan`
-- keep runtime-only launch options out of `RunSpec`
-- select engine by name
-- preflight compiled stimulus payloads before launch: image events must point to
-  existing project-relative files, while word events must carry non-empty text
-- reject a compiled sinusoidal run unless it is image-based and uses the required
-  neutral-gray presentation background
-- query the primary/default configured display mode through the platform adapter before
-  launch, preserving exact Windows rational selection and KDE Linux VRR rejection
-- honor an explicit `verify_refresh_rate=false` runtime option for explicit
-  local experiment testing in source and installed builds without weakening normal launch defaults
-- leave full image decoding to preprocessing/manual deep preflight or engine stimulus
-  preparation; routine participant launch preflight must not decode the whole image set
-- when serial output is enabled, open the configured port before `engine.open_session`
-  so missing, busy, or unavailable ports fail before participant-facing flow begins
-- open/close one engine session per launched session
-- show instruction/transition screens via the engine
-- sequence compiled pre-condition and post-condition task modules around each
-  `RunSpec`; validate responses, repeats, retries, and branches in runtime while the
-  engine renders only one neutral task step at a time
-- insert inter-block pause flow via the engine for non-final blocks
-- call `engine.run_condition(RunSpec, ...)`
-- score fixation responses from raw key logs
-- keep `escape` reserved for abort; do not accept it as a configured response key
-- apply fixation accuracy scoring windows/false-alarm logic and build condition-level accuracy/RT summaries
-- trigger participant-facing end-of-condition feedback via the engine when the fixation accuracy task is enabled
-- run the participant fixation tutorial once before the first condition when the
-  compiled fixation accuracy and tutorial settings are enabled
-- aggregate run results into a session result
-- `data_sharing.py` owns opt-in completed-session capture: persist launch intent before
-  presentation, terminal eligibility before research finalization, then explicit commit
-  proof and immutable report after research writes and before derived XLSX. Recovery
-  requires those proofs and matching rows; HTTP and credentials stay outside runtime.
-  See `docs/DATA_SHARING.md` from the repository root.
-- write run/session export artifacts
-- record trigger writes as `sent` only after the backend write succeeds; write failures
-  must be exported as `error` records and abort the current run/session cleanly
-- keep trigger timestamps run-playback-relative; do not include timing warmup frames in
-  exported trigger `time_s`
-- `acquisition_evidence.py` owns versioned recording-hardware evidence beneath active-project
-  `logs/acquisition/` in both export modes, separate from deleted recovery checkpoints.
-  Persist configuration, explicit operator association, planned code maps and actual
-  sent/error attempts at run boundaries and orderly failure. No disk writes enter
-  the frame loop; abrupt process loss can omit the current run's attempts.
-  A prelaunch neutral config enables an atomic completed Toolbox config after
-  research finalization, preserving participant/session/marker evidence in both
-  export modes. See `docs/RUNTIME_EXECUTION.md` for the completed handoff contract.
-- keep local transport submission, operator confirmation, recorded-marker integrity
-  and physical timing qualification distinct; none implies the next. The prelaunch
-  process/file check observes current raw recording activity only; marker integrity
-  and EEG timing remain unknown without receiving-side evidence.
-- append project-level reporting indexes under `logs/`; write detailed execution
-  artifacts under `runs/` only when full run export mode is enabled
-- checkpoint experimental task responses incrementally, preserve partial responses on
-  abort, and keep raw task answers out of application logs and summary workbooks
-- checkpoint completed compact run results before later task/feedback screens; retain
-  recovery files on interruption/export failure and preserve the original runtime error
-- `condition_recovery.py` owns independent project-local interruption snapshots and
-  exact-occurrence rerun plans. Hold its OS lifetime lock throughout execution; persist
-  stage boundaries outside the frame loop in both export modes. Native scenes persist
-  armed intent before timed pre-tasks with no recovery I/O
-  until playback returns; armed intent is not observed frame-zero evidence. Validate
-  record/plan project, session and ordered occurrence identity before exact reruns.
-  Discovery is read-only, excludes live/completed/cancelled launches, and treats old acquisition receipts without
-  lifetime evidence as unverified. Never recompile missing original plans or overwrite
-  earlier participant visits; completed playback is distinct from later task completion.
-  Explicit acknowledgements are separate project-local audit records, never completion
-  markers. Suppress reviewed snapshots only in automatic notices; preserve manual
-  history, new interruption notices and original research evidence. Writes stay
-  outside discovery and run on a GUI-owned worker when requested by the operator.
-  Its read-only `ensure_project_update_recovery_ready` guard blocks authored-file
-  replacement for active/uncertain lifetimes or unreviewed interruptions; it does
-  not create a project-wide execution lock or mutate recovery evidence. See
-  `docs/EXPERIMENT_LIBRARY.md` for the update/backup contract.
-- commit numbered research rows idempotently before generating derived spreadsheets;
-  preserve legacy rows, visit identity, and prior files if atomic replacement fails
-- `attentional_blink_report.py` checkpoints native burst targets and per-question
-  answers before proceeding, including in compact mode. Its read-only query returns
-  immutable burst rows and separate T1/T2 SOA denominators; completed stream answers
-  remain included after a later task/session abort. Test IDs 0/00 are included and
-  explicitly marked in GUI/CSV/Excel. Typed recall uses the compiled exact answer
-  after trimming surrounding whitespace for scoring while preserving raw text.
-  Its explicit Excel export contains SOA, participant/session, and burst
-  tables. Raw recall answers stay out of general participant/group summaries.
-- regenerate the compact project-level `logs/participant_summary.xlsx` and companion
-  `logs/participant_summary.csv` after session exports so researchers have one
-  spreadsheet-friendly participant/session summary
-- provide a manual group-summary workbook export from the participant summary rows,
-  excluding rows where `Include In Analysis` is `N` from aggregate metrics while
-  keeping those rows visible for filtering/audit
-- provide a read-only pooled fixation-data query from the active project's condition
-  history, sharing participant-session inclusion and weighting semantics without
-  regenerating summaries or changing project data, plus an explicit-path Excel writer
-  for the already loaded typed result
-- preserve clear separation from GUI code
-- keep participant visit numbers and reviewed electrode snapshots in execution
-  metadata; never add repeat-visit bookkeeping to compiled timing contracts
-
-## Restrictions
-
-- No PySide6 imports here.
-- Keep PsychoPy usage indirect through the engine layer.
-- Avoid mixing file format concerns with engine logic.
-- Do not push runtime-only settings like display index or serial port back into core `RunSpec` models.
-- Keep runtime-only launch settings such as fullscreen in runtime launch settings instead of GUI or core contracts.
-- Do not move session randomization or compilation logic out of core and into runtime.
-- Do not add null-trigger fallback after a configured serial backend fails to open or
-  write.
-- Normal launches default to serial output unless an explicit local selection exists.
-  ActiveThree retains its selected identity while using serial. Brain Products uses
-  its own TriggerBox endpoint and fixed protocol; preflight rejects schedules without
-  enough high/low time, and condition-boundary reset drains the final pulse outside
-  playback before tasks/feedback. New devices have no guessed Toolbox montage profile.
-  Invalid saved selections are actionable errors, never fallback. Normal Unicorn
-  launches send real markers after configuration and Recorder readiness pass. Full
-  receiver/timing qualification remains pending metadata and does not block launch.
-  Null output requires an explicit
-  `experiment_test_mode` or `pilot_mode` runtime flag; `serial_enabled=false` alone
-  must be rejected. Test/Pilot always select null, including with serial enabled.
-  Legacy project disabled/null flags cannot suppress an explicit recording selection.
-
-## Export guidance
-
-Even if the exporter is skeletal in this phase, define a stable shape for:
-
-- `runspec.json`
-- `run_summary.json`
-- `session_summary.json`
-- `runtime_metadata.json`
-- `conditions.csv`
-- `events.csv`
-- `fixation_events.csv`
-- `responses.csv`
-- `frame_intervals.csv`
-- `trigger_log.csv`
-- `logs/acquisition/<execution_id>.acquisition-v1.json` retains selected hardware,
-  any supported profile and event evidence, including participant visit/session/run identity,
-  after successful compact finalization; receiver/physical timing qualification remains
-  separate.
-- `logs/acquisition/<execution_id>-completed.fpvsconfig` is the automatic completed
-  Toolbox handoff for current native session launches in either export mode.
-- `attentional_blink_stream_events_v1.csv` for native AB characters, including
-  symbol/phase/cycle, requested/achieved SOA and planned/observed onsets; retain legacy
-  image-pair event headers. Revalidate complete exact-grid character coverage and
-  target/condition markers in preflight before using the shared text frame loop.
-- `display_report.json`
-- detailed `task_responses.csv` and structured task results in full export mode
-- project-level `logs/task_responses.csv` in compact export mode
-- project-level `logs/session_condition_history.csv`
-- project-level `logs/participant_summary.csv`
-- project-level `logs/participant_summary.xlsx`
-- manual group summary workbook exports, defaulting to `group_summary.xlsx`
-- manual fixation task accuracy workbook exports to a user-selected `.xlsx` path
-- `logs/attentional_blink_bursts_v1.jsonl` is the append-only source for latest native
-  recall burst records in full/compact modes; `attentional_blink_bursts_v1.csv` is its
-  session-finalized companion. Full mode additionally writes per-run/session JSON and
-  CSV. An interrupted final journal write produces a visible query warning; refuse
-  further append until that unfinished line is explicitly repaired, preserving all
-  existing data. `session_finalized=False` identifies live/interrupted checkpoints.
-- manual attentional blink accuracy workbook exports to a user-selected `.xlsx` path
-- app-selected run export mode: full writes detailed `runs/` artifacts, compact writes
-  only project-level summary logs
-- full task sessions write `task_responses.csv` and per-run append-only
-  `task_responses.jsonl`; compact task sessions persist raw responses beneath `logs/`
-  without creating a `runs/` folder
-
-Use simple, explicit writer utilities and keep them easy to test.
-
-
-AB pilot launches retain full participant metadata and explicit pilot identity in
-runtime metadata and incremental burst records. Dedicated CSV/Excel exports flatten
-the demographics; older journals remain readable. See `docs/RUNTIME_EXECUTION.md`.
+No Qt imports, direct PsychoPy use, engine-owned file formats or unqualified hardware
+claims. Use the `runtime` focused route, adding related scopes for cross-layer changes
+and repo precommit for shared behavior. Hardware acceptance remains a separate check.

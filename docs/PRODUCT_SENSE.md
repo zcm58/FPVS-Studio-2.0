@@ -12,7 +12,7 @@ should open to Home. New or incomplete projects should guide users through setup
 
 ## Product Sources
 
-- Current product/protocol scope: `FPVS_Studio_v1_Architecture_Spec.md`
+- Current category/protocol scope: `EXPERIMENT_CATEGORIES.md` and `RUNSPEC.md`
 - GUI workflow behavior: `GUI_WORKFLOW.md`
 - Product specs area: `product-specs/index.md`
 

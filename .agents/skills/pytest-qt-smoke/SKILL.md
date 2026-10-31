@@ -7,7 +7,8 @@ description: Use when adding or updating registered pytest-qt smoke coverage for
 
 ## Workflow
 
-1. Read `AGENTS.md`, `ARCHITECTURE.md`, and `docs/GUI_WORKFLOW.md`.
+1. Follow the `gui` route in `docs/agent/agent-index.md`, read the governing
+   `AGENTS.md` files, and select the affected widget's contract section and tests.
 2. Inspect existing tests under `tests/gui/` before adding new patterns.
 3. Instantiate the changed widget, dialog, or window directly when possible.
 4. Register widgets with `qtbot.addWidget`.

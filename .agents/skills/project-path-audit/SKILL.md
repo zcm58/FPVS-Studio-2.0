@@ -7,8 +7,9 @@ description: Use when reviewing or changing file I/O, project manifests, import/
 
 ## Workflow
 
-1. Read `AGENTS.md`, `ARCHITECTURE.md`, and the path-related parts of
-   `docs/FPVS_Studio_v1_Architecture_Spec.md`.
+1. Follow the `project-io` route in `docs/agent/agent-index.md`: read the governing
+   `AGENTS.md` files and the affected workflow's current contract section. Use
+   `ARCHITECTURE.md` only when ownership is unclear.
 2. Locate the active project-root source of truth for the workflow.
 3. Search changed code for hard-coded absolute paths, home-directory assumptions, and
    joins that can escape the project root.

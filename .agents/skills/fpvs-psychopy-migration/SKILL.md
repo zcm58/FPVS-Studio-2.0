@@ -18,9 +18,9 @@ For schema details and copy/layout patterns, read
 
 ## Workflow
 
-1. Read repo guardrails first: `AGENTS.md`, `ARCHITECTURE.md`, and the path-related
-   parts of `docs/FPVS_Studio_v1_Architecture_Spec.md`, `docs/RUNSPEC.md`, and
-   `docs/GUI_WORKFLOW.md`.
+1. Follow the `project-io` and `preprocessing` routes in `docs/agent/agent-index.md`
+   and their governing `AGENTS.md` files. Read the affected path, stimulus and timing
+   sections of the current contracts; use `ARCHITECTURE.md` for unclear ownership.
 2. Locate the FPVS Studio Root Folder from user input, app settings, or current
    project context. Never assume a root when more than one plausible root exists.
 3. Inventory the legacy folder read-only:

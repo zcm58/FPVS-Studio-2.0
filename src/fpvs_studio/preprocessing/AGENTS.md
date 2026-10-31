@@ -1,75 +1,26 @@
-# AGENTS.md
+# Preprocessing Guidance
 
-## Scope of this directory
+Preprocessing owns source-image intake, inspection, normalization, deterministic
+assets and manifests. `models.py` owns `StimulusManifest` and related records;
+`manifest.py` persists/query them. Core consumes serialized neutral provenance.
 
-`src/fpvs_studio/preprocessing/` owns source-image intake, inspection, manifest generation, and derived-asset creation.
+- Condition sources accept case-insensitive JPG/JPEG/PNG. Launchable sets have known,
+  uniform resolution; rectangles and different Base/Oddball resolutions are supported.
+  Mixed-size sets require explicit project-local normalization, never silent resizing.
+- Generated derivatives are project-contained PNGs. `original` preserves imported
+  bytes, `grayscale` converts luminance, `rot180` rotates (not inverts), and
+  `phase_scrambled` records its reproducible seed/parameters.
+- Manifests retain source/derived hashes, paths, geometry, format, transform chain,
+  seeds, versions and timestamps. Identical source/parameters/seed must reproduce
+  the same derivative.
+- Standalone Image Resizer may also read BMP/TIF/TIFF, writing separate PNG copies
+  without mutating project sets/manifests.
+- `inspection.validate_image_files` owns bundle content checks: matching format,
+  single-frame complete decode, 64 MiB encoded/decoded buffers, 8192 pixels per axis
+  and 16,777,216 pixels total. Decoder overhead is additional; cancellation occurs
+  between decode phases. These limits are not a malware sandbox. Library publishing
+  retains its narrower JPG/PNG policy; see `docs/EXPERIMENT_LIBRARY.md`.
+- No Qt, PsychoPy, runtime or engine-specific contracts. Do not move image work into
+  compiler/runtime; use neutral core path/serialization helpers.
 
-For the current phase, the priority is **deterministic derived-asset materialization plus manifest-backed provenance**, not a feature-complete preprocessing UI.
-
-## Hard requirements
-
-- Supported condition stimulus source formats are:
-  - `.jpg`
-  - `.jpeg`
-  - `.png`
-- Extension matching should be case-insensitive.
-- Launchable condition image sets must each have a known, uniform source resolution.
-  Uniform rectangular sets are supported natively; mixed-size folders still require
-  project-local normalization before launch.
-- Base and oddball stimulus sets used together in one condition may differ in source
-  resolution because runtime display size is controlled by compiled role geometry.
-- Do not silently resize images.
-- Generated derivatives should be written as PNG in the project folder.
-- Persist enough metadata to make preprocessing reproducible.
-- Standalone `Tools > Image Resizer` optimization may additionally read `.bmp`, `.tif`,
-  and `.tiff`, but it must write separate PNG copies and must not mutate project stimulus
-  sets or manifests.
-- `inspection.validate_image_files` owns bundle image-content checks. Preserve original
-  bytes while checking matching PNG/JPEG/BMP/TIFF formats, single-frame structure and
-  complete decoding. Bound encoded files and decoded pixel buffers to 64 MiB, images
-  to 8192 pixels per axis and 16,777,216 pixels total. Decoder overhead is additional;
-  cancellation is between decoding phases, not inside Pillow. These checks are not a
-  malware scan or process sandbox. Library publishing keeps its narrower PNG/JPEG policy.
-
-## v1 derivative semantics
-
-- `original` = imported source image copied into the project
-- `grayscale` = grayscale PNG derivative
-- `rot180` = 180-degree rotation, not color inversion
-- `phase_scrambled` = deterministic Fourier phase scrambling
-
-## Determinism
-
-Phase scrambling and any future randomized preprocessing must record the seed in manifest metadata. The same source image + same transform parameters + same seed should reproduce the same file.
-
-## Recommended responsibilities for this phase
-
-- list and validate supported source files
-- inspect image dimensions with Pillow
-- build stimulus-set summaries
-- create manifest models/utilities
-- define transform metadata records
-- materialize deterministic `grayscale`, `rot180`, and `phase_scrambled` assets
-- keep the compiler/runtime consuming manifest-backed paths without moving image work into core/runtime
-
-## Manifest expectations
-
-The manifest should be able to record:
-
-- source relative path
-- source hash
-- width and height
-- source format
-- available variants
-- transform chain / parameters
-- scramble seed where applicable
-- preprocessing version
-- timestamps
-
-## Restrictions
-
-- No PsychoPy imports here.
-- No GUI code here.
-- No runtime presentation concerns here.
-- Do not make preprocessing aware of `RunSpec` or engine-specific execution details.
-- The compiler may consume the serialized manifest, but preprocessing owns generating and updating it.
+Run the `preprocessing` focused route and relevant inspection/manifest/transform tests.

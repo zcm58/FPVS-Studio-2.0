@@ -16,8 +16,6 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.paths import (
     filesystem_path,
-    is_reserved_root_entry_name,
-    project_json_path,
     stimulus_manifest_path,
 )
 from fpvs_studio.core.project_bundle import export_project_bundle, import_project_bundle
@@ -114,17 +112,10 @@ def test_imported_project_remains_discoverable_after_restart(
 ):
     methods = _source_functions(
         "src/fpvs_studio/gui/controller.py",
-        ["_normalize_path", "_is_within_configured_root", "_discover_project_roots"],
-        Path=Path, filesystem_path=filesystem_path, project_json_path=project_json_path,
-        is_reserved_root_entry_name=is_reserved_root_entry_name,
+        ["_discover_project_roots"],
         discover_project_roots=discover_project_roots,
     )
-    controller = SimpleNamespace(
-        _fpvs_root_dir=imported_long_project.parent, _normalize_path=methods["_normalize_path"],
-    )
-    controller._is_within_configured_root = lambda path: methods["_is_within_configured_root"](
-        controller, path,
-    )
+    controller = SimpleNamespace(_fpvs_root_dir=imported_long_project.parent)
     assert methods["_discover_project_roots"](controller) == [imported_long_project]
 
 

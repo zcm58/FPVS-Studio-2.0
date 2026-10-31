@@ -1,85 +1,32 @@
-# AGENTS.md
+# Engine Guidance
 
-## Scope of this directory
+Engines own the presentation interface, registry and PsychoPy implementation. Only
+this package imports PsychoPy, lazily. Start with the relevant section of
+`docs/ENGINE_INTERFACE.md`; use `docs/RUNSPEC.md` for frame/trigger contracts.
 
-`src/fpvs_studio/engines/` defines the presentation-engine abstraction and the v1 PsychoPy-backed implementation boundary.
+## Rendering Boundary
 
-This is the only place in the repo where PsychoPy should appear.
+- Consume neutral compiled contracts and render one condition or task step at a time.
+  Runtime owns session order, task validation/branches, scoring and persistence.
+- Render image, word and native scene payloads without changing compiled schedules.
+  Sinusoidal image contrast uses precomputed frame operations; other modes retain
+  their behavior. Engine-specific types never enter project schemas or exports.
+- Prepare/release resources per condition. Native scenes prepare before timed pre-tasks
+  and consume the prepared cache without new warmup blanks. Do not retain stimuli
+  across conditions or prepare resources after a timed scene fixation.
+- Keep native graphics creation/use/cleanup on the presentation thread. Use
+  `psychopy_graphics_lifetime` for foreign-thread GC/finalizers. Drain deferred cleanup
+  only at untimed boundaries; release reusable text/controls on every exit path.
+- Require an explicit trigger backend and external-marker capability for recording.
+  Reject missing backends, empty schedules or external output in explicit Test/Pilot.
+  Flip-lock markers via `callOnFlip`; exported clocks exclude warmup. Opted-in AB
+  frame -1 is the neutral condition marker with a continuous stream clock.
+- Keep task clocks/input separate from playback. `escape` aborts. Preserve keyboard
+  and visible click submission, resolved labels and per-question input clearing.
+  Native mouse handlers retain press/release events and clean up between screens.
+- Export strict timing misses as QC metadata unless runtime policy requires abort.
+  Transport submission never proves receiver integrity or physical EEG timing.
 
-## Current phase expectations
-
-For this phase, the engine layer should provide a narrow but real renderer. The
-important part is still the interface design, but the PsychoPy path now needs to
-play compiled runs end to end.
-
-## Requirements
-
-- Define a stable base protocol/ABC for presentation engines.
-- Keep input/output types engine-neutral (`RunSpec`, execution-result models, validation models).
-- Keep engines consuming one `RunSpec` at a time; runtime owns `SessionPlan` iteration.
-- Add an engine registry/factory.
-- Add a real but minimal `PsychoPyEngine`.
-- Render both image and word stimulus events from `RunSpec` payloads without
-  changing the compiled frame schedule.
-- Apply the compiled sinusoidal mode only to image stimuli, using precomputed per-frame
-  contrast operations while leaving continuous and 50%-blank drawing unchanged.
-- Keep condition-local stimulus preparation and cleanup inside the engine run
-  boundary; do not retain image or text stimuli across conditions. Native scene
-  runs use `prepare_condition` before authored pre-task screens, consume that one
-  prepared condition without warmup blanks, and release it on playback or session
-  close. A scene must never prepare resources after its timed pre-task fixation.
-- Render runtime-owned instruction, inter-block break, and completion screens without moving session sequencing into the engine.
-- Render one compiled, engine-neutral condition-task step and return neutral input;
-  runtime remains responsible for module order, repeats, response validation,
-  branching, scoring, and persistence.
-- Text task screens use the resolved submit label (Submit by default, Next for burst
-  recall), accept Enter for short text, and expose the same visible click control
-  with native or keyboard text input. Clear prior input between questions and gates.
-- Render runtime-owned end-of-condition fixation feedback screens without moving scoring/session decisions into the engine.
-- Render single fixation tutorial practice attempts while runtime owns tutorial
-  sequencing, reset rules, and participant-facing summary text.
-- Keep trigger emission flip-locked through `window.callOnFlip(...)`; exported trigger
-  timestamps should come from the run clock after warmup, not from warmup timing.
-  Opted-in AB distractor markers reserve frame -1 for one neutral condition-marker
-  flip before stream frame zero; keep its trigger clock continuous into the stream.
-- Require an explicit runtime-provided trigger backend before condition playback;
-  missing backends are errors. Test/pilot runs receive an explicit log-only backend.
-- Require an explicitly declared external-marker capability for recording playback,
-  and reject external output in explicit boolean test/pilot modes, including direct
-  engine callers. A software transport does not imply EEG receipt or sample timing.
-  Reject empty compiled trigger schedules.
-- Record strict timing misses as runtime metadata quality-control fields instead of
-  aborting playback unless runtime policy changes.
-- Poll `escape` only as an abort signal; condition-task semantics stay in runtime/core.
-- Keep condition-task clocks separate from condition playback and never let task
-  screens mutate `RunSpec`, frame timing, or trigger state.
-- Keep the public surface small and swappable.
-- Keep native graphics creation, use and cleanup on the window's presentation
-  thread. Guard Pyglet texture/buffer finalizers through `psychopy_graphics_lifetime`
-  for foreign-thread GC and references surviving window close. Drain deferred cleanup
-  at untimed boundaries, never inside playback or after a timed scene pre-task.
-  Reuse transition/feedback text stimuli and task-screen text/controls; release them
-  on every exit path rather than allocating new graphics on each frame.
-
-## Hard restrictions
-
-- Do not let PsychoPy-specific types leak into core models or runtime exports.
-- Do not import PsychoPy outside this directory.
-- Do not import PsychoPy eagerly at module import time; keep it lazy inside the engine implementation.
-- Do not couple project JSON structure to PsychoPy internals.
-
-## Likely interface shape
-
-The engine interface should be able to support, at minimum:
-
-- display probing
-- display validation
-- session open/close
-- transition/completion text screens
-- single fixation tutorial practice attempts
-- `run_condition(RunSpec, ...)` for image and word conditions
-- abort
-
-It is acceptable for advanced trigger hardware integration or future engine
-features to remain deferred, as long as the interface, typing, and dependency
-boundaries stay correct.
+Use the `engine` focused route and affected fake-window/input tests. Add runtime or
+compiler focused checks when touching their seams, then repo precommit for shared
+behavior. Visible presentation/hardware acceptance is distinct from source tests.

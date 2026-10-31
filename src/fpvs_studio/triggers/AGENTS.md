@@ -2,8 +2,7 @@
 
 ## Scope of this directory
 
-`src/fpvs_studio/triggers/` contains trigger backend interfaces and optional hardware
-adapter scaffolding.
+`src/fpvs_studio/triggers/` owns trigger interfaces, hardware adapters and discovery.
 
 ## Requirements
 

@@ -614,36 +614,6 @@ def boundary_aware_shuffled_bag(
     return ordered
 
 
-def build_balanced_shuffled_values(
-    values: Sequence[ItemT],
-    *,
-    count: int,
-    rng: random.Random,
-    key: Callable[[ItemT], KeyT],
-) -> list[ItemT]:
-    """Build repeated balanced bags with no boundary repeat when alternatives exist."""
-
-    if count < 0:
-        raise CompileError("Balanced shuffled value count may not be negative.")
-    if count == 0:
-        return []
-    result: list[ItemT] = []
-    previous_key: KeyT | None = None
-    while len(result) < count:
-        check_compilation_cancelled()
-        bag = boundary_aware_shuffled_bag(
-            values,
-            rng=rng,
-            previous_key=previous_key,
-            key=key,
-        )
-        remaining_count = count - len(result)
-        selected = bag[:remaining_count]
-        result.extend(selected)
-        previous_key = key(selected[-1])
-    return result
-
-
 def pop_preferred_bag_item(
     bag: list[ItemT],
     *,

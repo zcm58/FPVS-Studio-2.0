@@ -1489,9 +1489,6 @@ class ConditionModifierDialog(QDialog):
             compatible.append(module)
         return compatible
 
-    def _edit_post_questions(self) -> None:
-        self._edit_questions(TaskPhase.POST_CONDITION)
-
     def _edit_questions(self, phase: TaskPhase, *, add_question: bool = False) -> None:
         if not self._save_fields():
             return

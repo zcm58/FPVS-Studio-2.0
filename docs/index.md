@@ -7,10 +7,16 @@ development. Keep stable source-of-truth docs here, and keep the compact repo ma
 These are internal developer and agent-facing docs, not the public user guide. The
 public quickstart site lives in `../docs-site/` and is built with MkDocs.
 
-## Start Here
+## Choose A Task
 
 - Agent and architecture context: `../AGENTS.md` and `../ARCHITECTURE.md`
 - Task scopes, skills, and verification routes: `agent/agent-index.md`
+
+Agents should choose one scope and one relevant contract section there. The topics
+below are a catalog, not a required reading list.
+
+## Product And Workflows
+
 - Product direction: `PRODUCT_SENSE.md` and `product-specs/index.md`
 - Design and GUI workflow: `DESIGN.md`, `FRONTEND.md`, and `GUI_WORKFLOW.md`
 - Experiment categories and legacy separation: `EXPERIMENT_CATEGORIES.md`
@@ -22,7 +28,7 @@ public quickstart site lives in `../docs-site/` and is built with MkDocs.
   `exec-plans/plan-review-workflow.md`
 - Quality, reliability, and security: `QUALITY_SCORE.md`, `RELIABILITY.md`, and
   `SECURITY.md`
-- Desktop bug reports and future service connection: `BUG_REPORTING.md`
+- Bug/feature reports and automatic crash diagnostics: `BUG_REPORTING.md`
 - Private whole-experiment library and publishing: `EXPERIMENT_LIBRARY.md`
 - Signed Library bundle evidence and immutable releases: `LIBRARY_ARTIFACT_PROVENANCE.md`
 - Experiment contribution preferences and comparisons: `DATA_SHARING.md` and

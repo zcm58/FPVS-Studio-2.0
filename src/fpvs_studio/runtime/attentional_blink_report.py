@@ -33,7 +33,6 @@ from fpvs_studio.runtime.reporting_lock import project_reporting_lock
 
 ATTENTIONAL_BLINK_BURSTS_FILENAME = "attentional_blink_bursts_v1.csv"
 ATTENTIONAL_BLINK_JOURNAL_FILENAME = "attentional_blink_bursts_v1.jsonl"
-ATTENTIONAL_BLINK_ACCURACY_FILENAME = "attentional_blink_accuracy.xlsx"
 _SOA_HEADER = (
     "SOA (ms)",
     "Trigger codes",

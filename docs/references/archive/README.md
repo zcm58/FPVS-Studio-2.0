@@ -9,6 +9,7 @@ start from `../../../AGENTS.md`, `../../../ARCHITECTURE.md`, and `../../index.md
 
 ## Archived Files
 
+- `FPVS_Studio_v1_Architecture_Spec.md`: historical v1 design; current contracts are routed by the task index.
 - `CODEX_INITIAL_PROMPT.md`: initial app/repo prompt context.
 - `REPO_SCAFFOLD_PLAN.md`: original scaffold plan.
 - `PHASE4_AUDIT.md`: historical Phase 4 audit notes.

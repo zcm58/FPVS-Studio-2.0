@@ -26,7 +26,6 @@ from fpvs_studio.core.paths import (
 
 NORMALIZATION_INPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 COMPILER_READY_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
-NORMALIZED_OUTPUT_SUFFIX = ".png"
 SUPPORTED_NORMALIZATION_SIZES = (256, 512, 1024)
 
 

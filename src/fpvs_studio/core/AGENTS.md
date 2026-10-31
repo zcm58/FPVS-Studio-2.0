@@ -1,202 +1,50 @@
-# AGENTS.md
+# Core Guidance
 
-## Scope of this directory
+Core owns engine-neutral authoring models, validation, compilation and explicit
+project services. It must import without Qt, PsychoPy or hardware dependencies.
 
-`src/fpvs_studio/core/` contains engine-neutral domain logic.
+## Owners and Contracts
 
-This directory is the most important foundation in the repo. It should remain importable without PySide6, PsychoPy, or hardware-specific dependencies.
+- `models.py`, `migrations.py`: persisted editable state and in-memory migration.
+- `run_spec.py`, `session_plan.py`, `execution.py`: run, session and result schemas.
+  Read the relevant section of `docs/RUNSPEC.md` or `docs/SESSION_PLAN.md`.
+- `compiler.py` and compiler helpers: scheduling, asset resolution, frame timing and
+  compile-time fixation realization; runtime owns execution/scoring.
+- `task_models.py`, `condition_modifiers.py`, `modifier_presets.py`: declarative tasks,
+  assignment changes and independent local presets. Preserve unaffected bindings.
+- `paths.py`, `project_service.py`, serialization/config/bundle services: portable I/O.
+  `project_bundle_update.py` owns reviewed same-folder replacement/backups/rollback;
+  ordinary imports never replace existing projects. See `docs/EXPERIMENT_LIBRARY.md`.
+- `recording_hardware.py`: versioned hardware declarations, never measured qualification.
+- `data_sharing.py`: strict neutral wire models and read-only protocol fingerprints;
+  consent, credentials and outbox I/O belong outside core.
+- Manifest schemas belong to `preprocessing/models.py`, with persistence in
+  `preprocessing/manifest.py`; core consumes their neutral contracts.
 
-## Required responsibilities
+## Invariants
 
-- persistent project/data models, including optional project-owned recording device/port
-  configuration; runtime resolves transport outside compiled contracts
-- `recording_hardware.py` owns versioned hardware/montage/decoder declarations used
-  by recording settings, config and acquisition exports. Factory mapping is declared,
-  never measured device qualification. ActiveThree and Brain Products TriggerBox
-  retain distinct hardware selections with no guessed Toolbox acquisition profile.
-- dedicated `RunSpec` schemas in `run_spec.py`
-- dedicated `SessionPlan` schemas in `session_plan.py`
-- dedicated execution-result schemas in `execution.py`
-- allowlisted fixation-report, enrollment-link and comparison models plus read-only
-  authored protocol/selected-asset fingerprinting in `data_sharing.py`; local opt-in,
-  credentials and outbox I/O stay outside authored/compiled contracts. See
-  `docs/DATA_SHARING.md` from the repository root.
-- neutral, versioned recording snapshots and acquisition attempt evidence in
-  `execution.py`; runtime owns qualification, transport selection and file writing.
-  Runtime observations never enter `ProjectFile`, `RunSpec` or `SessionPlan`;
-  selected hardware declarations may persist in project recording settings.
-- reusable declarative condition-task schemas in `task_models.py`
-- compilation of condition-task bindings into `SessionEntry` task specs
-- project-contained task-media services in `task_assets.py`
-- enums and type aliases
-- template metadata
-- app-level condition-template profile storage under the configured FPVS Studio root
-  in `.fpvs-studio/templates/`
-- condition modifier grouping/factories in `condition_modifiers.py`; local preset
-  persistence and staged project media intake in `modifier_presets.py`
-- JSON serialization
-- bundle inventory/JSON validation in `project_bundle.py`, with image decoding delegated
-  to preprocessing; opt-in compilation budgets in `compiler_limits.py` apply before
-  bundle schedules are allocated. See `docs/EXPERIMENT_LIBRARY.md` for limits.
-- optional project-local Library origin receipts in `library_origin.py`, committed
-  inside bundle import staging and excluded from authored project/runtime contracts;
-  its exact managed-origin alias policy preserves receipts during service moves
-- explicit same-folder Library updates in `project_bundle_update.py`: snapshot
-  review, canonical bundle validation, local setting/data preservation, backups
-  and rollback. Ordinary imports retain their no-replacement contract. External
-  policy checks enter through the neutral precommit callback, not core imports.
-- installed-project discovery and duplicate decisions in `library_installations.py`;
-  receipt identity is authoritative, while legacy name matches require explicit review
-- validation
-- project scaffolding helpers
-- configured-root project discovery in `project_service.py`, shared by project
-  management and background reporting; never descend project assets or linked folders
-- compilation of editable project state into a neutral `RunSpec`
-- native masking pools and exact within-item frame compilation in `masking.py`,
-  `compiler_masking.py`, and `scene_models.py`; see `docs/MASKING.md`
-- migration/versioning placeholders
+- Use Pydantic v2, explicit schema versions and `extra="forbid"` for persisted models
+  unless a documented contract requires otherwise. Avoid duplicated derived state.
+- Preserve immutable project categories and existing migration/save compatibility;
+  `experiment_categories.py` and `project_separation.py` own explicit legacy repair.
+- Persist project-relative paths. Task media lives in `stimuli/task-assets/<task-id>/`;
+  validate lexical and resolved containment before copy, compile, bundle or import.
+- Compile one condition per `RunSpec`, sessions as `SessionPlan`, and pre/post tasks
+  on session entries. Task clocks, answers and branches never change FPVS scheduling.
+- `condition_timing.py`, `session_ordering.py` and `randomization.py` own effective
+  frequency/duration, occurrence order and independent seed domains. Preserve seeded
+  realization and occurrence identity; use frames, never sleep-based scheduling.
+- Core owns approved refresh targets and ratio arithmetic. Native AB requires an exact
+  frame grid; ordinary FPVS reports requested/realized rates. `blank_50` needs even
+  frames; sinusoidal mode is image-only with neutral gray and a frame-derived envelope.
+- Normal event codes are integers 1–255; zero is manual reset. Keep `escape` reserved
+  for abort. The oddball marker defaults to `55`; nonstandard codes require explicit
+  user direction and persisted `allow_nonstandard_oddball_trigger_code`.
+- Keep opt-in native AB frame -1 markers and exported timing compatibility. Full marker
+  semantics live in `docs/RUNSPEC.md`, not a second compiler implementation.
+- Filesystem writes belong only to explicit persistence/project/asset services. Image
+  manipulation belongs to preprocessing. Do not implement hardware I/O here.
 
-## Modeling rules
-
-- Use **Pydantic v2** for persisted models and validation.
-- Set `extra="forbid"` on persisted schemas unless there is a strong reason not to.
-- Include `schema_version` in persisted top-level files.
-- Project category is immutable after creation. Use `experiment_categories.py` for
-  homogeneous-category validation and `project_separation.py` for explicit legacy
-  recovery; see `docs/EXPERIMENT_CATEGORIES.md` from the repository root.
-- Keep model names explicit and stable.
-- Use enums instead of loose strings when possible.
-- Store persisted paths as project-relative strings, not absolute machine-local paths.
-- Store task media beneath `stimuli/task-assets/<task-id>/`; validate lexical and
-  resolved containment before copying, compiling, bundling, or importing it.
-- Keep editable project schemas in `models.py`, single-run execution schemas in `run_spec.py`, and multi-run session schemas in `session_plan.py`.
-- Derived/read-only values can be exposed as computed properties, but do not duplicate state unless it is needed for export compatibility.
-
-## v1 model expectations
-
-At minimum, the core layer should define models for:
-
-- `ProjectFile`
-- `ProjectMeta`
-- `ProjectSettings`
-- `ProtocolSettings`
-- `DisplaySettings`
-- `FixationTaskSettings`
-- `TriggerSettings`
-- `StimulusSet`
-- `Condition`
-- `TemplateSpec`
-- `RunSpec`
-- `SessionPlan`
-- `RunExecutionSummary`
-- `SessionExecutionSummary`
-- `ParticipantMetadata`
-- `RuntimeMetadata`
-- `FixationResponseRecord`
-- `ResponseRecord`
-- `TriggerRecord`
-- `SessionBlock`
-- `SessionEntry`
-- `InterConditionTransitionSpec`
-- `DisplayRunSpec`
-- `ConditionRunSpec`
-- `StimulusEvent`
-- `FixationStyleSpec`
-- `FixationEvent`
-- `TriggerEvent`
-- `DisplayValidationReport`
-- `ProjectManifest` / `StimulusManifest`-related models as appropriate
-- `TaskModule`, `TaskStep`, `TaskQuestion`, `TaskBinding`, and their compiled/result
-  counterparts
-
-## Validation expectations
-
-Implement friendly, explicit validation for:
-
-- supported source extensions: `.jpg`, `.jpeg`, `.png`
-- non-empty condition names
-- integer event trigger codes in the `1`-`255` range; code `0` is reserved for explicit
-  manual reset and must not be accepted as a normal event marker
-- response keys that are non-empty and do not use `escape`, which is reserved for abort
-- `changes_per_sequence >= 0`
-- target duration > 0 when fixation task enabled
-- `oddball_cycle_repeats_per_sequence >= 1`
-- image conditions have configured base/oddball image stimulus sources
-- word conditions have non-empty base/oddball word lists
-- valid duty-cycle mode
-- sinusoidal contrast is image-only and requires the neutral-gray presentation
-  background; its envelope must be derived from the resolved frames per stimulus
-- display compatibility:
-  - accept authored monitor refresh targets only from the core-owned approved list
-    (`59.94`, `60`, `120`, `144`, and `240 Hz`)
-  - keep measured-versus-configured tolerance arithmetic engine-neutral while leaving
-    the hardware measurement itself behind the engine boundary
-  - resolve `refresh_hz / base_hz` to the nearest positive whole frame count
-  - report non-integral ratios as approximate timing with requested and realized rates
-  - `blank_50` also requires an even resolved frame count per cycle
-
-## Timing representation
-
-For FPVS Oddball Paradigm, keep protocol defaults explicit while allowing project-level edits:
-
-- `base_hz = 6.0`
-- `oddball_every_n = 5`
-- default `oddball_cycle_repeats_per_sequence = 146`
-
-New Attentional-Blink studies default to five-second 10 Hz letter bursts with a green
-T1 digit and a different white T2 digit at 100/300/500 ms SOAs (codes 1/3/5). The
-default 24 bursts per SOA are shuffled together; `SessionSettings.block_count` retains
-the authored repeats and `randomize_across_blocks` selects the new session-wide order.
-`attentional_blink_stream.py` owns the exact onset grid;
-`attentional_blink_presets.py` owns the native pools and two-question recall task.
-`compiler_tasks.py` resolves correct options from the actual compiled target pair.
-Existing saved digit streams and blockwise session settings retain their behavior.
-These streams require exact whole frames per character, rejecting approximate
-refresh ratios. Explicit repeated targets use `target_count`, `target_interval_slots`
-and `omit_first_t2`; one distinct digit pair is sampled per burst, with separate
-event cycle indices for each repeated pair. See `docs/EXPERIMENT_CATEGORIES.md`.
-Retired image-pair records remain decodable, but category validation
-blocks their saving, export and compilation; runtime rejects old compiled copies. See `docs/EXPERIMENT_CATEGORIES.md` for the
-layout and schema contracts. Each default starter recall burst contains one target pair;
-explicit repeated-target studies reuse that pair throughout the authored burst.
-
-Represent timing in frames after display validation/compilation. Do not use sleep-based millisecond scheduling as a design primitive.
-
-## Compiler guidance
-
-A minimal compiler in this phase should be able to:
-
-- take validated project state plus a target refresh rate/display choice
-- compile one selected condition into one `RunSpec`
-- compile one multi-condition session into one `SessionPlan`
-- keep execution-result/export contracts engine-neutral in `execution.py`
-- derive per-stimulus frames plus on/off frames from duty-cycle mode
-- compile the explicit presentation mode and a deterministic, frame-count-derived
-  sinusoidal contrast envelope without changing event or trigger scheduling
-- build the explicit base/oddball role sequence
-- assign deterministic stimulus payloads: project-relative image paths for image
-  conditions, authored text for word conditions
-- preserve `RunSpec` as a single-condition contract when building `SessionPlan`
-- compile resolved pre/post condition tasks onto `SessionEntry`, never into `RunSpec`
-- keep task clocks, answers, repetition, branching, and response validation outside
-  FPVS frame and trigger scheduling
-- convert fixation timing fields from ms to frames and emit concrete fixation events
-- compile fixation accuracy-task settings into `RunSpec` (response key/window,
-  participant tutorial flag, and realized target count), while keeping `RunSpec`
-  single-condition
-- when randomized fixation target-count mode is enabled, select realized counts during session compilation with session-seed determinism and no immediate repetition across consecutive ordered runs
-- emit trigger events without implementing hardware I/O
-- preserve opt-in native AB distractor markers and their restricted condition-start
-  frame -1 through RunSpec, execution records, and completed project configs; the
-  full marker and clock contract is in `docs/RUNSPEC.md` and `docs/RUNTIME_EXECUTION.md`
-- keep the `oddball_onset` trigger code locked to `55` by default; nonstandard
-  oddball marker codes require explicit user direction and the persisted
-  `allow_nonstandard_oddball_trigger_code` override
-
-## Hard restrictions
-
-- No PySide6 imports here.
-- No PsychoPy imports here.
-- No direct filesystem writes except in explicit serializer, project-service/separation,
-  task-asset, modifier-preset, config, and bundle modules.
-- No image manipulation code here.
+Run the selected `core`, `compiler` or `project-io` focused route; use repo precommit
+for shared contracts. Choose relevant model/validation tests rather than loading a
+historical model inventory.

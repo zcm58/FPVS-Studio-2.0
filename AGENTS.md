@@ -1,134 +1,79 @@
 # AGENTS.md
 
-## Repository Purpose
-
-FPVS Studio is a Windows-focused PySide6 desktop authoring application for FPVS
-experiments. PsychoPy presentation stays isolated behind runtime and engine boundaries.
+FPVS Studio is a Windows-focused PySide6 authoring application for FPVS experiments.
+PsychoPy presentation stays behind runtime and engine boundaries.
 
 ## Efficient Working Route
 
-- Fast path before broad reads: check `git status --short --branch`, read this file,
-  then use `docs/agent/agent-index.md` to choose one task scope and its first reads.
-- Treat `ARCHITECTURE.md` as the compact package and dependency map. Do not read every
-  architecture or workflow document by default.
-- Run the selected focused verification before broad inspection. Read only the files
-  implicated by the request, search results, or failures.
-- Read every nested `AGENTS.md` that governs a path before editing that path.
-- For non-trivial work, read the active execution plan first. Do not treat completed
-  plans or archived references as current behavior.
-- Prefer the smallest behavior-preserving change. Preserve unrelated user changes,
-  existing formats, processing order, and workflows.
-- Do not read `output/`, environments, caches, builds, or archived references unless
-  the task explicitly requires them. Treat untracked output as user-owned.
+- Fast path before broad reads: check `git status --short --branch`, then use
+  [the task index](docs/agent/agent-index.md) to select one scope, its package guide
+  and one relevant contract section. `ARCHITECTURE.md` is the package/dependency map.
+- Read nested `AGENTS.md` files governing edited paths. For non-trivial work, use
+  `docs/PLANS.md` to find the relevant active plan; completed plans are history.
+- Run the selected focused verification before broad inspection. Expand context
+  only for implicated symbols, failures or cross-layer behavior.
+- Preserve unrelated changes, persisted formats, processing order and workflows.
+  Do not read output, environments, caches, builds or archives without task need.
+  Untracked files and retained output are user-owned.
 
-## Canonical Ownership
+## Contract Boundaries
 
-- Editable project models: `src/fpvs_studio/core/models.py`
-- Single-condition execution contract: `src/fpvs_studio/core/run_spec.py`
-- Multi-condition session contract: `src/fpvs_studio/core/session_plan.py`
-- Execution results and export contracts: `src/fpvs_studio/core/execution.py`
-- PySide6 application surface: `src/fpvs_studio/gui/`
-- Image intake, normalization, derived assets, and manifests:
-  `src/fpvs_studio/preprocessing/`
-- Runtime orchestration, preflight, participant flow, and exports:
-  `src/fpvs_studio/runtime/`
-- PsychoPy presentation: `src/fpvs_studio/engines/`
-- Hardware adapters: `src/fpvs_studio/triggers/`
-
-Use the public owner instead of creating a second implementation. Detailed layer
-contracts live in the nearest package `AGENTS.md` and the focused docs linked from
-`docs/agent/agent-index.md`.
-
-## Non-Negotiable Boundaries
-
-- The compiler transforms editable project state into `RunSpec`; runtime and engines
-  consume compiled contracts, not `ProjectFile`.
-- Session compilation produces `SessionPlan`; runtime owns ordered session flow while
-  engines render presentation screens and one `RunSpec` at a time.
-- Runtime produces core-owned execution results. Exporters serialize those contracts;
-  engine code must not own export formats.
-- Keep runtime-only launch and machine settings outside `RunSpec` and `SessionPlan`.
-- Only `src/fpvs_studio/engines/` may import PsychoPy, and imports must remain lazy.
-- Core and preprocessing must remain independent of PySide6, PsychoPy, and hardware.
-- Use PySide6 only for the GUI. Do not introduce CustomTkinter or fallback non-GUI
-  application modes. Import `QAction` from `PySide6.QtGui`.
-- Do not block the UI thread. Use Qt workers and signals; workers must not touch widgets.
-- Use structured logging instead of `print` in production code.
-- Project I/O must use the active project root and preserve persisted/export formats.
-  App-level templates belong under `<FPVS Studio Root>/.fpvs-studio/templates/`.
-- Keep `RunSpec` single-condition and represent compiled timing in frames. Fixation
-  behavior must not alter FPVS base/oddball scheduling.
-- Preserve current session randomization, compile-time fixation realization, runtime
-  scoring, and participant feedback ownership unless an approved plan changes them.
-- Do not add silent trigger, display, dependency, or runtime fallbacks.
-- Treat `Main_App/Legacy_App/**` and `Tools/SourceLocalization/**` as protected legacy
-  boundaries if present; edit only when explicitly requested.
+- Core compiles editable `ProjectFile` state to single-condition `RunSpec` and
+  multi-condition `SessionPlan`. Runtime and engines consume compiled contracts,
+  not editable projects. Use existing owners in `ARCHITECTURE.md`.
+- Runtime owns ordered sessions, participant flow, scoring and core-owned execution
+  results. Exporters serialize them; engines render screens and one run at a time.
+- Keep machine/launch settings outside compiled contracts. Compiled timing uses
+  frames; fixation tasks must not alter base/oddball scheduling. Preserve session
+  randomization and compile-time fixation realization unless explicitly changed.
+- Only engines may import PsychoPy, lazily. Core and preprocessing remain independent
+  of PySide6, PsychoPy and hardware. GUI uses PySide6; import `QAction` from `PySide6.QtGui`.
+  Do not add CustomTkinter or fallback non-GUI application modes.
+- Keep work off the UI thread through workers/signals; workers never touch widgets.
+  Use structured logging, not production `print` calls.
+- Project I/O uses the active project root and preserves portable formats. App
+  templates belong in `<FPVS Studio Root>/.fpvs-studio/templates/`.
+- Do not add silent trigger, display, dependency or runtime fallbacks. Protected
+  `Main_App/Legacy_App/**` and `Tools/SourceLocalization/**`, if present, require an
+  explicit user request before edits.
 
 ## GUI Acceptance
 
-- For substantial UI work, define the user's task, primary action, affected states,
-  and observable success criteria before styling. Use existing screens and relevant
-  visual references to make choices concrete; routine fixes need no design ceremony.
-- Preserve Studio's quiet scientific-tool character and current user preferences.
-  Complete the requested interaction and its recovery paths, then refine appearance.
-  Make routine in-scope design decisions without an extra approval checkpoint.
-- Keep guidance concise and scoped: root rules apply throughout the repo; package
-  files add local requirements rather than repeating a general design prompt.
-  For design work, use [agent UI design guidance](docs/design-docs/agent-ui-design.md)
-  and the current contracts in `docs/FRONTEND.md`.
-- Use `src/fpvs_studio/gui/components.py` before adding local visual primitives or
-  one-off styles.
-- No clipping is the default. Every changed surface must fit at its documented
-  minimum/default size with realistic longest content and all relevant states.
-- The Setup Wizard must fit all eight steps at `1120x820` without required scrolling,
-  child-widget clipping, or unintended truncation.
-- Intentional elision needs an accessible full-value path and explicit coverage.
-- Add or update registered pytest-qt coverage for changed GUI behavior, but do not run
-  Qt tests locally by default. Local GUI verification uses non-Qt checks plus a
-  documented visible/manual smoke path. Run Qt locally only in a user-approved safe
-  visible environment; do not use offscreen Qt execution locally.
+- For substantial UI work, define the task, primary action, affected states and
+  observable success criteria. Follow current `docs/FRONTEND.md` contracts and
+  [UI design guidance](docs/design-docs/agent-ui-design.md); routine decisions need
+  no extra approval checkpoint. Preserve the quiet scientific-tool character.
+- Reuse `gui/components.py`. No clipping is the default: verify each changed surface
+  at its minimum/default size with realistic longest content and relevant states.
+  Setup's eight steps must fit `1120x820` without required scrolling or truncation.
+  Intentional elision requires an accessible full value and coverage.
+- Add/update registered pytest-qt coverage for changed GUI behavior. Do not run Qt
+  locally by default. Use non-Qt checks and document a visible manual smoke path.
+  Qt execution requires user approval for a safe visible environment; never use
+  offscreen Qt locally.
 
-## Skills and Plans
+## Verification and Plans
 
-Repo-local skills in `.agents/skills/` cover PySide6 cleanup, pytest-qt coverage,
-project paths, legacy boundaries, and PsychoPy migration. Use
-`docs/agent/agent-index.md` to select them. Global web, React, mobile, and deployment
-skills are not architecture precedent for this desktop application.
-
-Feature-sized or cross-layer work belongs in `docs/exec-plans/`. Planned, active, and
-completed states must match their directories. Preserve and update the current active
-plan when working within its scope; archive completed work so it is not mistaken for
-active guidance.
-
-## Standard Verification
-
-The verification driver selects `.venv3.10`, then `.venv`, then the current compatible
-Python interpreter. Use the narrowest relevant scope from `docs/agent/agent-index.md`:
+Use the task index for skills and verification routes. Global web/mobile skills do
+not establish desktop architecture. Feature-sized or cross-layer work uses a current
+`docs/exec-plans/` plan; keep its status/location accurate and archive completed work.
 
 ```powershell
 ./scripts/verify.ps1 -Scope <scope> -Tier focused
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
 
-`focused` runs scope checks plus changed-file Ruff/compilation. `precommit` adds repo
-audits, mypy, and the safe non-Qt suite. `full` is an optional comprehensive local tier
-that includes registered Qt tests and requires explicit opt-in in a user-approved safe
-visible environment. Add `-List` to a routed command to inspect its steps and use
-`./scripts/verify.ps1 -CheckConfig` after changing the harness. GitHub does not run a
-repository test or code-quality workflow; developers own these checks locally. The
-independent documentation build and publishing workflow remains automated.
+The driver selects `.venv3.10`, then `.venv`, then compatible current Python.
+`focused` runs scope checks plus changed-file Ruff/compilation; `precommit` adds
+audits, mypy and safe non-Qt tests. Run precommit for shared behavior changes.
+`full` includes Qt and requires the visible-environment approval above. Use `-List`
+to inspect steps and `-CheckConfig` after harness changes. GitHub runs documentation
+publishing, not the repository's local tests or code-quality checks.
 
 ## Documentation Freshness
 
-Update `ARCHITECTURE.md`, `docs/agent/agent-index.md`, and the nearest scoped document
-when ownership, boundaries, supported workflows, or verification routes change. Keep
-detailed contracts in one canonical document and link to them instead of duplicating
-them in always-read guidance.
-
-## Done Means
-
-- The requested behavior is complete and unrelated contracts remain intact.
-- Focused verification passes; precommit runs when shared behavior changed.
-- Skipped platform, GUI, or external checks are reported with residual risk.
-- Generated artifacts are cleaned without deleting user data or retained output.
-- Agent and architecture docs reflect changed ownership or workflows.
+Update `ARCHITECTURE.md`, the task index and the nearest scoped document when
+ownership, boundaries, workflows or verification routes change. Keep detailed
+contracts in one canonical document. Done means requested behavior is complete,
+focused checks pass, applicable precommit runs, skipped external/GUI checks are
+reported and generated artifacts are cleaned without deleting user data.

@@ -204,12 +204,6 @@ def task_assets_root(project_root: Path) -> Path:
     return stimuli_dir(project_root) / TASK_ASSETS_DIRNAME
 
 
-def task_asset_dir(project_root: Path, task_id: str) -> Path:
-    """Return one task module's media directory."""
-
-    return task_assets_root(project_root) / task_id
-
-
 def runs_dir(project_root: Path) -> Path:
     """Return the runs directory path."""
 

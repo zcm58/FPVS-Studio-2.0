@@ -43,6 +43,7 @@ def test_repo_guidance_references_existing_harness_files() -> None:
         "scripts/verify.ps1",
         "docs/FPVS_Studio_v1_Architecture_Spec.md",
         "docs/agent/agent-index.md",
+        "docs/agent/task-recipes.md",
         "docs/GUI_WORKFLOW.md",
         "docs/RUNSPEC.md",
         "docs/SESSION_PLAN.md",
@@ -121,6 +122,61 @@ def test_harness_update_policy_is_documented() -> None:
     assert "Fast path before broad reads" in root_agents
     assert "Documentation Freshness" in architecture
     assert "Task Context Recipes" in architecture
+
+
+def test_agent_entry_context_stays_bounded() -> None:
+    budgets = {
+        "AGENTS.md": 800,
+        "ARCHITECTURE.md": 1000,
+        "docs/agent/agent-index.md": 1200,
+        "src/AGENTS.md": 250,
+    }
+    for relative_path, budget in budgets.items():
+        words = len(_read_repo_file(relative_path).split())
+        assert words <= budget, (
+            f"{relative_path}: {words} words exceeds {budget}; move task detail "
+            "to its canonical contract or the on-demand task recipes"
+        )
+
+
+def test_agent_scope_table_matches_verification_routes() -> None:
+    configured = set(re.findall(
+        r'^\[scopes\."?([a-z-]+)"?\]$',
+        _read_repo_file(".agents/verification.toml"),
+        re.MULTILINE,
+    ))
+    index = _read_repo_file("docs/agent/agent-index.md")
+    table = re.search(
+        r"^\|\s*`?Scope`?\s*\|[^\n]*\n((?:^\|[^\n]*(?:\n|$))+)",
+        index, re.MULTILINE | re.IGNORECASE,
+    )
+    assert table is not None, "Agent index needs one Scope table"
+    documented = {
+        line.split("|")[1].strip(" `")
+        for line in table.group(1).splitlines()
+        if re.fullmatch(r"[a-z-]+", line.split("|")[1].strip(" `"))
+        and set(line.split("|")[1].strip()) != {"-"}
+    }
+    assert documented == configured
+
+
+def test_agent_navigation_links_resolve() -> None:
+    documents = [
+        PROJECT_ROOT / relative_path for relative_path in (
+            "AGENTS.md", "ARCHITECTURE.md", "docs/agent/agent-index.md",
+            "docs/agent/task-recipes.md", "docs/PLANS.md",
+        )
+    ]
+    documents.extend((PROJECT_ROOT / "src").rglob("AGENTS.md"))
+    missing = []
+    for document in documents:
+        for target in re.findall(r"\[[^\]]+\]\(([^)]+)\)", document.read_text(encoding="utf-8")):
+            path = target.split("#", 1)[0].strip("<>")
+            if not path or re.match(r"[a-z][a-z0-9+.-]*:", path, re.IGNORECASE):
+                continue
+            if not (document.parent / path).exists():
+                missing.append(f"{document.relative_to(PROJECT_ROOT)} -> {target}")
+    assert missing == []
 
 
 def test_gui_no_clipping_policy_is_documented() -> None:
