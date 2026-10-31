@@ -26,6 +26,7 @@ from tests.gui.helpers import (
     _assert_visible_children_within_parent,
     _ImmediateProgressTask,
     _open_created_project,
+    record_setup_validation_dialogs,
 )
 
 from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode
@@ -280,7 +281,11 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     ] == [59.94, 60.0, 120.0, 144.0, 240.0]
     assert editor.refresh_is_verified() is False
     assert "Verify this display" in editor.timing_status_label.text()
-    assert guide.setup_wizard_next_button.isEnabled() is False
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert guide.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    assert messages == [("Complete this setup step", editor.timing_blocker())]
 
     editor.detect_refresh_button.click()
     QApplication.processEvents()
@@ -320,7 +325,11 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
     QApplication.processEvents()
     assert editor.refresh_is_verified() is False
-    assert guide.setup_wizard_next_button.isEnabled() is False
+    assert guide.setup_wizard_next_button.isEnabled()
+    messages.clear()
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert messages == [("Complete this setup step", editor.timing_blocker())]
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
 
     windows_mode.update({"numerator": 60_000, "denominator": 1_001})
     measured_refresh["value"] = 59.998
@@ -342,6 +351,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     window.resize(1120, 820)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+    assert guide.experiment_settings_card.width() == guide.experiment_settings_card.maximumWidth()
     qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
     _assert_visible_children_within_parent(editor)
     for label in (
@@ -360,6 +370,7 @@ def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Invalid FPVS Timing")
     guide = window.setup_wizard_page
@@ -372,7 +383,11 @@ def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
 
     assert editor.timing_is_compatible() is False
     assert "at least one display frame" in editor.timing_status_label.text()
-    assert guide.setup_wizard_next_button.isEnabled() is False
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert guide.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert messages == [("Complete this setup step", editor.timing_blocker())]
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
 
 
 def test_setup_wizard_refresh_detection_failure_is_actionable(
@@ -414,7 +429,11 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
 
     assert editor.refresh_is_verified() is False
     assert "stable measurement unavailable" in editor.timing_status_label.text()
-    assert guide.setup_wizard_next_button.isEnabled() is False
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert guide.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert messages == [("Complete this setup step", editor.timing_blocker())]
+    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     window.resize(1120, 720)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
@@ -841,7 +860,7 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
 
 @pytest.mark.parametrize("dark", [False, True])
 def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
-    qtbot, qapp, controller, tmp_path, dark,
+    qtbot, qapp, controller, tmp_path, dark, monkeypatch,
 ):
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QFormLayout
@@ -871,7 +890,10 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         assert not guide.session_structure_editor.isVisible()
         assert not guide.experiment_settings_card.subtitle_label.isVisible()
         assert "Verify" in editor.timing_status_label.text()
-        assert not guide.setup_wizard_next_hint_label.isVisible()
+        assert not any(
+            label.isVisible() and label.text().startswith("To continue:")
+            for label in guide.findChildren(QLabel)
+        )
         assert "SOAs" in editor.refresh_hz_combo.toolTip()
         timing_index = guide._step_index_for_key("experiment")
         assert guide.progress_step_labels[timing_index].text() == "Timing & Display"
@@ -914,7 +936,40 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         QApplication.processEvents()
         assert editor.timing_status_label.property("statusState") == "error"
         assert editor.timing_status_label.isVisible()
-        assert not guide.setup_wizard_next_button.isEnabled()
+        messages = record_setup_validation_dialogs(monkeypatch)
+        assert guide.setup_wizard_next_button.isEnabled()
+        qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+        assert messages == [("Complete this setup step", editor.timing_blocker())]
+        assert guide.step_stack.currentWidget() is guide.experiment_step_surface
         _assert_visible_children_within_parent(editor)
     finally:
         qapp.setPalette(previous)
+
+
+def test_character_size_next_explains_invalid_height_on_click(
+    qtbot, controller, tmp_path, monkeypatch,
+):
+    from fpvs_studio.core.enums import ExperimentCategory
+
+    document = controller.create_project(
+        parent_dir=tmp_path, project_name="Character size requirement",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    window = controller.main_window
+    qtbot.addWidget(window)
+    messages = record_setup_validation_dialogs(monkeypatch)
+    window.show_setup_wizard(step_key="image_size")
+    guide = window.setup_wizard_page
+    editor = guide.image_display_size_editor
+    editor.character_height_edit.setFocus()
+    editor.character_height_edit.setText("0")
+    before = document.project.model_copy(deep=True)
+    QApplication.processEvents()
+    assert guide.setup_wizard_next_button.isEnabled()
+    assert messages == []
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.image_size_step_surface
+    assert document.project == before
+    assert messages == [
+        ("Complete this setup step", "Enter a character height greater than zero."),
+    ]

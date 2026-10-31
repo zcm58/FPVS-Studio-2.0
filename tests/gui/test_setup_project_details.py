@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -19,6 +20,7 @@ from tests.gui.helpers import (
     _write_image_directory,
     assert_setup_wizard_vertical_scrolling_disabled,
     assert_visible_children_within_parent,
+    record_setup_validation_dialogs,
 )
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -29,6 +31,7 @@ from fpvs_studio.core.condition_template_profiles import (
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
 
@@ -292,7 +295,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert guide.conditions_step_surface.content is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
-    assert not next_button.isEnabled()
+    assert next_button.isEnabled()
     assert guide.findChild(QListWidget, "setup_wizard_condition_list") is not None
     assert guide.findChild(QWidget, "setup_conditions_left_panel") is not None
     assert guide.findChild(QWidget, "setup_conditions_main_panel") is not None
@@ -315,15 +318,17 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     )
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == []
-    assert not next_button.isEnabled()
+    assert next_button.isEnabled()
     qtbot.waitUntil(lambda: "image sources" in guide.step_status_label.text().lower())
 
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
     assert guide._document.get_condition(condition_id).name == "Condition 1"
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
-    assert not next_button.isEnabled()
-    assert "image sources" in guide.setup_wizard_next_hint_label.text().lower()
+    assert next_button.isEnabled()
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert information_prompts == ["Choose the image sources for every condition"]
     assert guide.condition_setup_step.selected_condition_id() == condition_id
 
     base_dir = _write_image_directory(tmp_path / "wizard-condition-base")
@@ -334,7 +339,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
         source_dir=base_dir,
     )
     QApplication.processEvents()
-    assert not next_button.isEnabled()
+    assert next_button.isEnabled()
     guide._document.import_condition_stimulus_folder(
         condition_id,
         role="oddball",
@@ -408,10 +413,13 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert window.main_stack.currentWidget() is window.home_page
 
 
-def test_project_details_step_requires_description_before_next(
+@pytest.mark.parametrize("description", ["", " \t\n "])
+def test_project_details_step_accepts_optional_description_unchanged(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
+    description,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Description Gate")
     guide = window.setup_wizard_page
@@ -421,20 +429,17 @@ def test_project_details_step_requires_description_before_next(
     description_edit = guide.project_overview_editor.project_description_edit
     assert next_button is not None
 
-    description_edit.clear()
-    guide.flush_pending_edits()
-    guide.refresh()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    description_edit.setPlainText(description)
     assert guide.step_stack.currentIndex() == 0
-    assert not next_button.isEnabled()
-    assert "project description" in guide.step_status_label.text().lower()
-
-    description_edit.setPlainText("This experiment measures FPVS responses.")
-    guide.flush_pending_edits()
-    guide.refresh()
-    qtbot.waitUntil(next_button.isEnabled)
-
+    assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
+    assert window.document.project.meta.description == description
+    window.document.save()
+    reopened = ProjectDocument.open_existing(window.document.project_root)
+    assert reopened.project.meta.description == description
+    assert messages == []
 
 
 def test_project_description_typing_commits_once_after_debounce(
@@ -512,89 +517,102 @@ def test_project_description_typing_reduces_validation_churn(
     assert validation_calls <= 8
 
 
-def test_setup_footer_show_field_guides_description_and_missing_word_roles(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-    monkeypatch,
+@pytest.mark.parametrize("missing", ["name", "root"])
+def test_project_next_explains_missing_required_field_on_click(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch, missing,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Required Project Field")
+    guide = window.setup_wizard_page
+    messages = record_setup_validation_dialogs(monkeypatch)
+    window.show_setup_wizard(step_key="project")
+    saved_name = document.project.meta.name
+    saved_root = document.project_root
+    name_edit = guide.project_overview_editor.project_name_edit
+    if missing == "name":
+        name_edit.setFocus()
+        name_edit.selectAll()
+        qtbot.keyClick(name_edit, Qt.Key.Key_Backspace)
+        description_edit = guide.project_overview_editor.project_description_edit
+        description_edit.setFocus()
+        qtbot.keyClicks(description_edit, "Description edited while the project name is blank.")
+        qtbot.waitUntil(
+            lambda: document.project.meta.description == (
+                "Description edited while the project name is blank."
+            ),
+            timeout=2000,
+        )
+        assert name_edit.text() == ""
+        assert document.project.meta.name == saved_name
+        expected = "Enter a project name"
+    else:
+        monkeypatch.setattr(document, "_project_root", None)
+        expected = "Choose a project folder"
+    assert guide.setup_wizard_next_button.isEnabled()
+    assert messages == []
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert guide.step_stack.currentWidget() is guide.project_step_surface
+    assert messages == [("Complete this setup step", expected)]
+    assert document.project.meta.name == saved_name
+    if missing == "name":
+        assert name_edit.text() == ""
+        name_edit.setFocus()
+        qtbot.keyClicks(name_edit, "Recovered project name")
+    else:
+        monkeypatch.setattr(document, "_project_root", saved_root)
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert len(messages) == 1
+    assert document.project.meta.name == (
+        "Recovered project name" if missing == "name" else saved_name
+    )
+
+
+@pytest.mark.parametrize(
+    "missing", ["images", "base_words", "oddball_words", "trigger", "category"],
+)
+def test_conditions_next_explains_missing_requirement_only_on_click(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch, missing,
 ) -> None:
     from fpvs_studio.core.enums import StimulusModality
 
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Field Guidance")
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Condition Requirements")
     guide = window.setup_wizard_page
-    step = guide.condition_setup_step
+    messages = record_setup_validation_dialogs(monkeypatch)
     monkeypatch.setattr(guide, "_ensure_condition_image_prescan_started", lambda: None)
-
-    def _unexpected_picker(*_args, **_kwargs):
-        raise AssertionError("Show field must only focus an editor; it must not open a picker.")
-
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.QFileDialog.getExistingDirectory",
-        _unexpected_picker,
-    )
-    window.resize(1120, 720)
-    window.show_setup_wizard(step_key="project")
-    window.show()
-    QApplication.processEvents()
-    fix_button = guide.setup_wizard_fix_button
-    next_button = guide.setup_wizard_next_button
-    description_edit = guide.project_overview_editor.project_description_edit
-    assert fix_button.isVisible()
-    assert not next_button.isEnabled()
-    assert "project description" in guide.setup_wizard_next_hint_label.text().lower()
-
-    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
-    assert description_edit.hasFocus()
-    description_edit.setPlainText("Compare FPVS responses to semantic word categories.")
-    guide.flush_pending_edits()
-    guide.refresh()
-    QApplication.processEvents()
-    assert next_button.isEnabled()
-    assert not fix_button.isVisible()
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
-    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
-    assert step.add_condition_button.hasFocus()
-
     long_name = "Familiar animal words and unfamiliar semantic category exemplars"
-    condition_id = window.document.create_condition(name=long_name)
-    window.document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
-    other_id = window.document.create_condition(name="Object words")
-    window.document.set_condition_stimulus_modality(other_id, modality=StimulusModality.WORD)
-    window.document.update_condition_words(other_id, role="base", words=["table", "chair"])
-    window.document.update_condition_words(other_id, role="oddball", words=["hammer"])
-    step._select_condition(other_id)
-    guide.refresh()
+    condition_id = document.create_condition(name=long_name)
+    document.update_condition(condition_id, trigger_code=10)
+    if missing in {"base_words", "oddball_words"}:
+        document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
+        if missing == "oddball_words":
+            document.update_condition_words(condition_id, role="base", words=["cat", "dog"])
+        expected = f"Add {missing.removesuffix('_words')} words to {long_name}"
+    elif missing == "trigger":
+        document.get_condition(condition_id).trigger_code = 0
+        expected = f"Set a trigger code above 0 for {long_name}"
+    elif missing == "category":
+        condition = document.get_condition(condition_id)
+        condition.t2_stimulus_set_id = condition.base_stimulus_set_id
+        expected = "Separate oddball conditions into another experiment"
+    else:
+        expected = "Choose the image sources for every condition"
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="conditions")
     QApplication.processEvents()
-    hint = guide.setup_wizard_next_hint_label
-    assert f"Add base words to {long_name}" in hint.text()
-    assert long_name in hint.toolTip()
-    assert "folder" not in hint.text().lower()
-    assert not next_button.isEnabled()
-    assert fix_button.isVisible()
-    assert hint.heightForWidth(hint.width()) <= hint.height()
-    assert_visible_children_within_parent(guide.setup_wizard_next_hint_container)
-    assert_setup_wizard_vertical_scrolling_disabled(guide)
-
-    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
-    assert step.selected_condition_id() == condition_id
-    assert step.base_words_edit.hasFocus()
-    step.base_words_edit.setPlainText("cat\ndog")
-    step.flush_pending_edits()
-    guide.refresh()
-    QApplication.processEvents()
-    assert f"Add oddball words to {long_name}" in hint.text()
-    qtbot.mouseClick(fix_button, Qt.MouseButton.LeftButton)
-    assert step.oddball_words_edit.hasFocus()
-    step.oddball_words_edit.setPlainText("hammer\nsaw")
-    step.flush_pending_edits()
-    guide.refresh()
-    QApplication.processEvents()
-
-    assert next_button.isEnabled()
-    assert not fix_button.isVisible()
-    assert not hint.isVisible()
+    before = document.project.model_copy(deep=True)
+    assert guide.findChild(QPushButton, "setup_wizard_fix_button") is None
+    assert not any(
+        label.isVisible() and label.text().startswith("To continue:")
+        for label in guide.findChildren(QLabel)
+    )
+    assert guide.setup_wizard_next_button.isEnabled()
+    assert messages == []
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert document.project == before
+    assert messages == [("Complete this setup step", expected)]
+    assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
 def test_attentional_blink_project_shows_locked_category_and_matching_templates(

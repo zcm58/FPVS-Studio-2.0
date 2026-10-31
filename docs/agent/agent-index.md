@@ -494,6 +494,14 @@ and manual smoke path in `docs/GUI_WORKFLOW.md`.
 The eight-step Setup flow and shared dialog acceptance sizes are documented in
 [GUI workflow](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance). Use the GUI
 focused route for edits and the repo precommit tier for shared component changes.
+For optional Project descriptions and click-triggered Next blockers, read
+[the completed validation-dialog plan](../exec-plans/completed/setup-next-validation-dialog.md),
+`gui/setup_wizard_page.py` and registered `tests/gui/test_setup_project_details.py`
+and `tests/gui/test_setup_wizard_shell.py`. Idle Next stays enabled; a blocked click
+shows the current actionable requirement without advancing or losing drafts.
+Description refresh preserves project-name drafts; image import/normalization and
+display verification retain disabled navigation and concise busy status. Use GUI/docs
+focused verification and repo precommit; visible acceptance follows the existing Qt rule.
 Implementation history is recorded in
 [the completed Timing & Display/Session plan](../exec-plans/completed/setup-timing-session-split.md).
 Start with `gui/setup_wizard_page.py`, `gui/runtime_settings_page.py` and

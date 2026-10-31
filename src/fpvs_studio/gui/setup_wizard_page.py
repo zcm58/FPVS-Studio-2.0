@@ -466,11 +466,6 @@ class SetupWizardPage(QWidget):
         next_hint_layout = QHBoxLayout(self.setup_wizard_next_hint_container)
         next_hint_layout.setContentsMargins(0, 0, 0, 0)
         next_hint_layout.addWidget(self.setup_wizard_next_hint_label)
-        self.setup_wizard_fix_button = QPushButton("Show field", self)
-        self.setup_wizard_fix_button.setObjectName("setup_wizard_fix_button")
-        mark_secondary_action(self.setup_wizard_fix_button)
-        self.setup_wizard_fix_button.clicked.connect(self._focus_step_blocker)
-        next_hint_layout.addWidget(self.setup_wizard_fix_button)
 
         button_row = QWidget(self)
         button_row.setObjectName("setup_wizard_navigation_row")
@@ -715,7 +710,11 @@ class SetupWizardPage(QWidget):
             object_name="setup_wizard_experiment_settings_card",
         )
         self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
-        layout.addWidget(self.experiment_settings_card)
+        # Measure wrapped status text at the card's capped width.
+        display_row = QHBoxLayout()
+        display_row.addWidget(self.experiment_settings_card, 10000)
+        display_row.addStretch(1)
+        layout.addLayout(display_row)
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -756,9 +755,22 @@ class SetupWizardPage(QWidget):
             self.refresh()
 
     def _go_next(self) -> None:
+        if self._next_navigation_busy():
+            return
+        if self._current_step_key() == "project" and not self._project_details_ready():
+            self._show_step_blocker(self._project_details_blocker())
+            return
         if not self.flush_pending_edits():
+            error_label = (
+                self.session_structure_editor.randomization_editor.error_label
+                if self._current_step_key() == "session"
+                else self.condition_timing_table.error_label
+            )
+            if not error_label.isHidden() and error_label.text():
+                self._show_step_blocker(error_label.text())
             return
         if not self._current_step_valid():
+            self._show_step_blocker(self._current_step_blocker())
             return
         if self._active_step_index == len(_WIZARD_STEPS) - 1:
             self._return_home()
@@ -767,6 +779,10 @@ class SetupWizardPage(QWidget):
             self._start_condition_image_readiness_scan()
             return
         self._advance_to_next_step()
+
+    def _show_step_blocker(self, message: str) -> None:
+        QMessageBox.information(self, "Complete this setup step", message)
+        self._focus_step_blocker()
 
     def _advance_to_next_step(self) -> None:
         self._select_step(self._active_step_index + 1)
@@ -786,6 +802,12 @@ class SetupWizardPage(QWidget):
             or self._active_normalization_task is not None
             or self._image_prescan_pending_advance
             or self.condition_setup_step.is_busy()
+        )
+
+    def _next_navigation_busy(self) -> bool:
+        return self._condition_image_task_active() or (
+            self._current_step_key() == "experiment"
+            and self.runtime_settings_editor.is_verifying_display()
         )
 
     def _active_condition_image_task_hint(self) -> str:
@@ -1005,7 +1027,6 @@ class SetupWizardPage(QWidget):
         if step_key == "review":
             self._refresh_review_summary()
 
-        step_valid = self._current_step_valid()
         condition_image_task_active = self._condition_image_task_active()
         self.step_title_label.setVisible(False)
         self.step_status_badge.setVisible(False)
@@ -1014,7 +1035,7 @@ class SetupWizardPage(QWidget):
         self.setup_wizard_back_button.setEnabled(
             self._active_step_index > 0 and not condition_image_task_active
         )
-        self.setup_wizard_next_button.setEnabled(step_valid and not condition_image_task_active)
+        self.setup_wizard_next_button.setEnabled(not self._next_navigation_busy())
         self.setup_wizard_next_button.setText("Next")
         self.setup_wizard_next_button.setVisible(step_key != "review")
         self.setup_wizard_return_home_button.setEnabled(not condition_image_task_active)
@@ -1027,17 +1048,10 @@ class SetupWizardPage(QWidget):
             self._active_condition_image_task_hint()
             if condition_image_task_active
             else ""
-            if step_valid or step_key in {"review", "experiment"}
-            else self._next_step_hint_text()
         )
         self.setup_wizard_next_hint_label.setText(hint_text)
         self.setup_wizard_next_hint_label.setToolTip(hint_text)
         self.setup_wizard_next_hint_label.setVisible(bool(hint_text))
-        self.setup_wizard_fix_button.setVisible(
-            bool(hint_text)
-            and not condition_image_task_active
-            and step_key in {"project", "conditions"}
-        )
         self._sync_guided_panel_height()
         QTimer.singleShot(0, self._sync_guided_panel_height)
         self._ensure_condition_image_prescan_started()
@@ -1488,9 +1502,6 @@ class SetupWizardPage(QWidget):
             return self._readiness_report().status_label
         return "Step needs attention"
 
-    def _next_step_hint_text(self) -> str:
-        return f"To continue: {self._current_step_blocker()}"
-
     def _condition_setup_blocker(self) -> str:
         if category_conflict_condition_ids(self._document.project):
             return "Separate oddball conditions into another experiment"
@@ -1537,25 +1548,20 @@ class SetupWizardPage(QWidget):
             editor = self.project_overview_editor
             target = (
                 editor.project_name_edit
-                if not self._document.project.meta.name.strip()
-                else editor.project_description_edit
+                if not editor.project_name_edit.text().strip()
+                else editor.project_root_value
             )
             target.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _project_details_ready(self) -> bool:
-        project = self._document.project
         return bool(
-            project.meta.name.strip()
-            and self.project_overview_editor.project_description_edit.toPlainText().strip()
+            self.project_overview_editor.project_name_edit.text().strip()
             and self._document.project_root
         )
 
     def _project_details_blocker(self) -> str:
-        project = self._document.project
-        if not project.meta.name.strip():
+        if not self.project_overview_editor.project_name_edit.text().strip():
             return "Enter a project name"
-        if not self.project_overview_editor.project_description_edit.toPlainText().strip():
-            return "Enter a project description"
         if not self._document.project_root:
             return "Choose a project folder"
         return "Project details needed"

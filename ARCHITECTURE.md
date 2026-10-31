@@ -150,7 +150,10 @@ the public contract is in [Bug reporting](docs/BUG_REPORTING.md).
   User-selected project reads and Manage Projects discovery use the app-owned job lifecycle;
   discovery consumes path snapshots and canceled/stale results cannot update a closed dialog.
   GUI documents/windows
-  are constructed after completion on the GUI thread. Authoring save feedback is
+  are constructed after completion on the GUI thread. Project descriptions are optional;
+  idle Next reports blockers on click while image work and display verification retain
+  busy navigation guards.
+  Detailed Setup validation and authoring save feedback are
   specified in `docs/GUI_WORKFLOW.md`.
   `gui/update_lifecycle.py` also owns ordinary GUI tasks and the reusable presentation
   thread through shutdown. `gui/thread_completion.py` waits for native cleanup outside

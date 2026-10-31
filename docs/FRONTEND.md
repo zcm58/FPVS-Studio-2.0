@@ -82,6 +82,13 @@ interaction.
   shell, left-aligned task heading, step count, and stable progress
   stepper. Bottom navigation remains at the window edge with no divider. Forms retain
   bounded readable widths. All steps must fit without clipping or required scrolling.
+- Project's description is optional, editable and persisted; its refresh preserves
+  pending project-name edits. Idle **Next** stays
+  enabled on incomplete steps and reports the current blocking requirement in an
+  actionable modal when clicked, preserving the step and drafts. Page opening and
+  typing do not trigger dialogs. Image import, normalization and display verification
+  still disable Next while busy, with separate concise status; the former
+  `To continue` footer and `Show field` action are removed.
 - Conditions is a combined guided setup area for condition list/actions, names,
   triggers, instructions, modality selection, Base/Oddball image-folder selection, typed word-list
   authoring, control-condition creation, and image normalization. It uses compact list
@@ -186,5 +193,6 @@ result and current errors inline; technical monitor observations remain in toolt
 Keep **Condition order...** beside Timing's table commands so staged presentation
 counts and a mismatched saved order can be repaired atomically; Session retains the
 primary order controls.
-Do not repeat Timing's inline blocker in the footer. Participant-authored instructions
+Keep Next's blocking guidance in its click-triggered dialog, without a duplicate
+footer hint. Participant-authored instructions
 and actual validation rules are preserved.

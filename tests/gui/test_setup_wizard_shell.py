@@ -29,6 +29,7 @@ from tests.gui.helpers import (
     _open_created_project,
     _prepare_compile_ready_project,
     _write_image_directory,
+    record_setup_validation_dialogs,
 )
 
 from fpvs_studio.core.enums import ExperimentCategory
@@ -214,6 +215,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Setup Wizard Shell")
 
@@ -273,10 +275,12 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
     assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
-    next_hint = wizard.findChild(QLabel, "setup_wizard_next_hint_label")
-    assert next_hint is not None
-    assert next_hint.isVisible()
-    assert next_hint.text() == "To continue: Enter a project description"
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert wizard.findChild(QPushButton, "setup_wizard_fix_button") is None
+    assert not any(
+        label.isVisible() and label.text().startswith("To continue:")
+        for label in wizard.findChildren(QLabel)
+    )
     initial_progress_labels = [label.text() for label in wizard.progress_step_labels]
     for item in wizard.progress_steps.step_items:
         item_right = item.mapTo(
@@ -291,16 +295,18 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert next_button is not None
     assert back_button is not None
     qtbot.waitUntil(lambda: next_button.isEnabled())
-    assert not next_hint.isVisible()
+    assert messages == []
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
     assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
-    assert not next_button.isEnabled()
-    assert next_hint.isVisible()
-    assert next_hint.text() == "To continue: Add at least one condition"
+    assert next_button.isEnabled()
+    assert messages == []
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
+    assert messages == [("Complete this setup step", "Add at least one condition")]
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
-    assert not next_hint.isVisible()
+    assert len(messages) == 1
     assert [label.text() for label in wizard.progress_step_labels] == initial_progress_labels
     _assert_balanced_setup_stepper(wizard)
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
@@ -803,10 +809,16 @@ def test_conditions_require_image_sources_before_advancing_to_timing(
     guide.flush_pending_edits()
     window.show_setup_wizard(step_key="conditions")
     QApplication.processEvents()
-    assert not guide.setup_wizard_next_button.isEnabled()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert guide.setup_wizard_next_button.isEnabled()
     assert guide.first_incomplete_step_key() == "conditions"
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
-    assert "image sources" in guide.setup_wizard_next_hint_label.text()
+    assert messages == []
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert messages == [
+        ("Complete this setup step", "Choose the image sources for every condition"),
+    ]
     monkeypatch.setattr(guide, "_ensure_condition_image_prescan_started", lambda: None)
     for role in ("base", "oddball"):
         document.import_condition_stimulus_folder(
@@ -838,10 +850,14 @@ def test_importing_condition_images_blocks_navigation_and_flush(
     monkeypatch.setattr(guide.condition_setup_step, "is_importing", lambda: True)
     guide.condition_setup_step.busy_changed.emit(True)
     guide.refresh()
+    messages = record_setup_validation_dialogs(monkeypatch)
     assert not guide.setup_wizard_back_button.isEnabled()
     assert not guide.setup_wizard_next_button.isEnabled()
     assert not guide.setup_wizard_return_home_button.isEnabled()
     assert guide.setup_wizard_next_hint_label.text() == "Importing condition images..."
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    guide._go_next()
+    assert messages == []
     assert guide.flush_pending_edits() is False
     guide._go_to_step_from_progress(0)
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface

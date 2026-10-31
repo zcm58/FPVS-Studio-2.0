@@ -3,10 +3,14 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel
-from tests.gui.helpers import _open_created_project, assert_visible_children_within_parent
+from tests.gui.helpers import (
+    _open_created_project,
+    assert_visible_children_within_parent,
+    record_setup_validation_dialogs,
+)
 from tests.gui.test_condition_timing_table import _document
 
 from fpvs_studio.core.enums import StimulusModality
@@ -490,6 +494,7 @@ def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
     wizard.show()
     wizard.open_wizard(step_key="session", allow_step_jumps=True)
     original = document.project.model_copy(deep=True)
+    messages = record_setup_validation_dialogs(monkeypatch)
     editor = wizard.session_structure_editor.randomization_editor
     editor.seed_details_button.setChecked(True)
     editor.seed_edits["fixation_seed"].setText("-1")
@@ -500,10 +505,14 @@ def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
     monkeypatch.setattr(
         "fpvs_studio.gui.setup_wizard_page.QMessageBox.question", unexpected_confirmation,
     )
-    if action == "progress":
+    assert messages == []
+    if action == "next":
+        assert wizard.setup_wizard_next_button.isEnabled()
+        qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    elif action == "progress":
         wizard._go_to_step_from_progress(wizard._step_index_for_key("experiment"))
     else:
-        {"next": wizard._go_next, "back": wizard._go_back, "home": wizard._return_home}[action]()
+        {"back": wizard._go_back, "home": wizard._return_home}[action]()
     QApplication.processEvents()
     assert wizard.step_stack.currentWidget() is wizard.session_step_surface
     assert editor.seed_details.isVisible()
@@ -512,6 +521,9 @@ def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
     assert wizard.has_pending_edits()
     assert document.project == original
     assert not home_calls
+    assert messages == (
+        [("Complete this setup step", editor.error_label.text())] if action == "next" else []
+    )
 
     editor.seed_edits["fixation_seed"].setText("44")
     assert wizard.flush_pending_edits()

@@ -187,7 +187,7 @@ class ProjectOverviewEditor(QWidget):
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         metadata_layout.addRow("Experiment Category", self.experiment_category_value)
         metadata_layout.addRow("Project Name", self.project_name_edit)
-        metadata_layout.addRow("Description", self.project_description_edit)
+        metadata_layout.addRow("Description (optional)", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
         metadata_layout.addRow("Experiment Template", condition_profile_group)
         metadata_layout.addRow(self.participant_tutorial_checkbox)
@@ -220,8 +220,9 @@ class ProjectOverviewEditor(QWidget):
         self.experiment_category_value.setText(
             experiment_category_label(project.experiment_category)
         )
-        with QSignalBlocker(self.project_name_edit):
-            self.project_name_edit.setText(project.meta.name)
+        if not self.project_name_edit.isModified():
+            with QSignalBlocker(self.project_name_edit):
+                self.project_name_edit.setText(project.meta.name)
         if not self._description_committer.pending:
             _sync_text_editor_contents(self.project_description_edit, project.meta.description)
         self.project_root_value.set_path_text(str(self._document.project_root), max_length=92)
@@ -320,10 +321,14 @@ class ProjectOverviewEditor(QWidget):
         return None
 
     def _apply_project_name(self) -> None:
+        if not self.project_name_edit.text().strip():
+            return
         try:
             self._document.update_project_name(self.project_name_edit.text())
+            self.project_name_edit.setModified(False)
         except Exception as error:  # pragma: no cover - exercised via GUI tests
             _show_error_dialog(self, "Project Name Error", error)
+            self.project_name_edit.setModified(False)
             self.refresh()
 
     def _apply_project_description(self) -> None:

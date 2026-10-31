@@ -547,9 +547,13 @@ The authoring window is organized around two user-facing modes:
   - in-window setup flow for new/incomplete projects and intentional edits
   - ordered steps: Project, Conditions, Timing & Display, Session, Image Size
     (Character Size for native AB), Fixation, Response, Review
-  - `Next` is disabled until the active step is complete, with a compact footer hint
-    naming the current blocker; Project and Conditions also offer `Show field` to
-    focus the missing input, with image/word-specific source wording
+  - idle `Next` remains enabled on incomplete steps. Clicking it shows a modal with
+    the current blocking requirement and its corrective action, including image/word
+    source wording; the step and drafts remain intact. Opening a page or typing does
+    not trigger dialogs. There is no `To continue` footer hint or `Show field` action
+  - image import, normalization and display verification still disable `Next` while
+    busy and show separate concise status; existing validation and image-readiness
+    gates remain active
   - the top progress indicator is a compact connected numbered stepper with
     completed/current/upcoming states, without redundant complete-state status bars
   - when a user opens setup from a ready project's `Edit Setup` action, the numbered
@@ -566,8 +570,9 @@ The authoring window is organized around two user-facing modes:
   - the wizard avoids generic footer/status copy; individual step cards should
     only show information needed for the current decision
   - Project uses a focused frameless form, keeping the project folder path compact
-    and secondary; project name and description are required before continuing to
-    Conditions; the card uses a single-column form without a redundant readiness
+    and secondary; project name is required before continuing to Conditions, while
+    description remains optional, editable and persisted. Description refresh preserves
+    pending project-name edits. The card uses a single-column form without a redundant readiness
     subsection, and template actions sit below the full-width image-timing selector so
     their labels remain visible at the compact setup size
   - Project displays the experiment category read-only. Its image-timing selector
@@ -589,7 +594,7 @@ The authoring window is organized around two user-facing modes:
     Shared edits preserve custom rates. Apply validates every affected condition before
     committing, preserving its stream duration at the selected refresh target. Invalid
     changes retain the project and show valid duration alternatives. Setup requires a successful
-    PsychoPy fullscreen measurement before `Next`; a visible notice explains the
+    PsychoPy fullscreen measurement before advancing with `Next`; a visible notice explains the
     fullscreen check before activation. Changing the dropdown clears the
     prior verification, and 59.94 Hz retains its visible requested-versus-realized
     whole-frame timing warning; current launches always use PsychoPy, fullscreen

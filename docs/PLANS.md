@@ -35,6 +35,9 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Setup Next validation dialog and optional description](exec-plans/completed/setup-next-validation-dialog.md)
+(optional description, modal blockers and visible GUI acceptance; broad verification limitations recorded).
+
 Recent completion: [Separate Setup timing/display and session pages](exec-plans/completed/setup-timing-session-split.md)
 (eight-step wizard, atomic order repair, visible GUI acceptance and clean integration precommit verified).
 

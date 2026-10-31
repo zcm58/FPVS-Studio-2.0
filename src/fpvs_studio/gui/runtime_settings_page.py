@@ -369,6 +369,9 @@ class DisplaySettingsEditor(QWidget):
             not self._require_refresh_verification or self.refresh_is_verified()
         )
 
+    def is_verifying_display(self) -> bool:
+        return self._refresh_probe_task is not None
+
     def refresh_is_verified(self) -> bool:
         """Return whether the current selection matches the verified native mode."""
 

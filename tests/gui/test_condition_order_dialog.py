@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import assert_visible_children_within_parent, record_setup_validation_dialogs
 from tests.gui.test_condition_timing_table import _document
 
 from fpvs_studio.core.randomization import RandomizationSeeds, configured_randomization_seeds
@@ -316,12 +316,14 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     table = wizard.condition_timing_table
     table.presentation_count_spins[first].setValue(3)
     QApplication.processEvents()
+    messages = record_setup_validation_dialogs(monkeypatch)
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
     assert "current counts" in table.error_label.text()
     assert table.pending_presentation_counts() == {first: 3}
     assert document.project == before
+    assert messages == [("Complete this setup step", table.error_label.text())]
     dialogs = []
 
     def generate_and_save(dialog):
@@ -376,7 +378,12 @@ def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
     before = document.project.model_copy(deep=True)
     table = wizard.condition_timing_table
     assert "current counts" in table.presentation_count_blocker()
-    assert not wizard.setup_wizard_next_button.isEnabled()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert wizard.setup_wizard_next_button.isEnabled()
+    assert messages == []
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+    assert messages == [("Complete this setup step", table.presentation_count_blocker())]
     dialogs = []
 
     def generate_and_save(dialog):

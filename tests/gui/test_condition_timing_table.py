@@ -6,7 +6,7 @@ import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import assert_visible_children_within_parent, record_setup_validation_dialogs
 
 from fpvs_studio.core.condition_timing import resolve_condition_stream_timing
 from fpvs_studio.core.enums import StimulusModality
@@ -582,11 +582,52 @@ def test_saved_impossible_single_condition_count_is_actionable_in_timing(
     assert table.error_label.isVisible()
     assert not wizard._step_valid(wizard._step_index_for_key("experiment"))
     assert wizard._current_step_blocker() == table.presentation_count_blocker()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    before = document.project.model_copy(deep=True)
+    assert wizard.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+    assert messages == [("Complete this setup step", table.presentation_count_blocker())]
+    assert document.project == before
+    assert effective_condition_presentation_count(
+        document.project, document.get_condition(first),
+    ) == 2
     table.presentation_count_spins[first].setValue(1)
     assert wizard.flush_pending_edits()
     assert not table.presentation_count_blocker()
     assert not table.error_label.isVisible()
     assert wizard._step_valid(wizard._step_index_for_key("experiment"))
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert len(messages) == 1
+
+
+def test_next_reports_invalid_duration_draft_once_and_preserves_it(
+    qtbot, monkeypatch, tmp_path,
+):
+    document, first, _second = _document(tmp_path)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
+    table = wizard.condition_timing_table
+    before = document.project.model_copy(deep=True)
+    messages = record_setup_validation_dialogs(monkeypatch)
+    table.duration_spins[first].setValue(10.1)
+    QApplication.processEvents()
+    assert wizard.setup_wizard_next_button.isEnabled()
+    assert messages == []
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+    assert document.project == before
+    assert table.duration_spins[first].value() == pytest.approx(10.1)
+    assert table.has_pending_edits()
+    assert "Valid durations" in table.error_label.text()
+    assert messages == [("Complete this setup step", table.error_label.text())]
 
 
 def test_new_condition_uses_template_total_presentations_for_image_and_word(qtbot, tmp_path):

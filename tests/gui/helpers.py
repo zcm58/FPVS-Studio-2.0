@@ -8,7 +8,7 @@ from typing import Any
 
 from PIL import Image
 from PySide6.QtCore import QObject, QPoint, Qt, Signal
-from PySide6.QtWidgets import QListWidget, QWidget
+from PySide6.QtWidgets import QListWidget, QMessageBox, QWidget
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
@@ -86,6 +86,23 @@ def list_widget_text(list_widget: QListWidget) -> str:
     """Return all visible list-widget text for simple assertions."""
 
     return "\n".join(list_widget.item(index).text() for index in range(list_widget.count()))
+
+
+def record_setup_validation_dialogs(monkeypatch: Any) -> list[tuple[str, str]]:
+    """Capture Setup's click-triggered validation without opening a real modal."""
+
+    messages: list[tuple[str, str]] = []
+
+    def information(
+        _parent: QWidget, title: str, message: str, *_args: Any, **_kwargs: Any,
+    ) -> QMessageBox.StandardButton:
+        messages.append((title, message))
+        return QMessageBox.StandardButton.Ok
+
+    monkeypatch.setattr(
+        "fpvs_studio.gui.setup_wizard_page.QMessageBox.information", information,
+    )
+    return messages
 
 
 def assert_balanced_setup_stepper(wizard: Any) -> None:
