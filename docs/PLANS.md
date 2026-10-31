@@ -35,6 +35,9 @@ Concrete planned work:
 Completed plans are historical implementation notes. Read their directory only when
 the current contracts do not explain why a landed decision exists.
 
+Recent completion: [Simple before and after condition questions](exec-plans/completed/basic-before-after-questions.md)
+(multiple questions, independent display order, basic question actions and Advanced modifiers).
+
 Recent completion: [Setup Next validation dialog and optional description](exec-plans/completed/setup-next-validation-dialog.md)
 (optional description, modal blockers and visible GUI acceptance; broad verification limitations recorded).
 

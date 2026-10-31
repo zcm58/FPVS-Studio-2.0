@@ -399,11 +399,18 @@ The existing task compiler/runner owns execution; grouped workflows do not add a
 third task phase or change FPVS timing. Use core/compiler/project-io/runtime/engine
 focused routes, GUI registered coverage, then repo precommit.
 
-For simple **Post-condition Questions**, start with `core/post_questions.py`,
+For basic **before and after questions**, read
+[the completed authoring plan](../exec-plans/completed/basic-before-after-questions.md),
+then start with `core/post_questions.py`,
 `gui/post_questions_dialog.py`, `runtime/post_condition_responses.py` and
-[the question/CSV contract](../POST_CONDITION_QUESTIONS.md). Core owns marked
-after-only modules and immutable definition/occurrence snapshots; runtime reuses
-original answer journals for the derived root CSV. Use core/compiler/project-io/runtime
+[the question/CSV contract](../POST_CONDITION_QUESTIONS.md). Core reuses ordinary
+unmarked pre questionnaires and preserves protected counting/memory start order.
+Marked after modules retain immutable definition/occurrence snapshots; runtime reuses
+their original journals for the after-only root CSV. The direct basic actions share
+one phase-aware dialog; Counting/Memory/Masking and complex tasks remain Advanced.
+Basic Add Question and numbered Up/Down lists preserve authored order independently
+for each phase through save/compile; CSV tools appear only while Advanced is expanded.
+Use core/compiler/project-io/runtime
 focused routes and `test_post_questions.py`, `test_post_question_lifecycle.py`,
 `test_post_condition_responses.py`, plus registered GUI coverage and repo precommit.
 

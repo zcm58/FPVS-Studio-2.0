@@ -1,4 +1,4 @@
-"""Simple ordered post-question authoring and a non-recording participant preview."""
+"""Simple before/after question authoring and a non-recording participant preview."""
 
 from __future__ import annotations
 
@@ -26,14 +26,19 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.post_questions import (
     apply_post_questionnaire,
+    apply_pre_questionnaire,
     make_post_questionnaire,
+    make_pre_questionnaire,
     make_yes_no_question,
     remove_post_questionnaire,
+    remove_pre_questionnaire,
     validate_simple_post_questionnaire,
+    validate_simple_pre_questionnaire,
 )
 from fpvs_studio.core.task_models import (
     TaskModule,
     TaskOccurrence,
+    TaskPhase,
     TaskQuestion,
     TaskQuestionKind,
     TaskResponseKind,
@@ -220,16 +225,48 @@ class PostQuestionPreview(QDialog):
         self._render()
 
 
+def validate_question_editor_module(
+    project: ProjectFile, module: TaskModule, phase: TaskPhase,
+) -> None:
+    """Keep unsupported existing task settings in the advanced editor."""
+    if any(module.task_id in [*modifier.pre_task_ids, *modifier.post_task_ids,
+                              modifier.baseline_task_id]
+           for modifier in project.condition_modifiers):
+        raise ValueError("Edit modifier-owned questions in Advanced modifiers.")
+    before = phase == TaskPhase.PRE_CONDITION
+    if before:
+        validate_simple_pre_questionnaire(project, module)
+    else:
+        if not module.simple_post_questions:
+            raise ValueError("Keep existing custom tasks in Advanced custom tasks.")
+        validate_simple_post_questionnaire(module)
+    if (len(module.steps) != 1 or module.steps[0].timeout_seconds is not None
+            or module.steps[0].duration_seconds is not None
+            or any(option.image_path is not None for question in module.steps[0].questions
+                   for option in question.options)):
+        raise ValueError("Keep timed, image or multiple-screen questions in Advanced custom tasks.")
+    if any(binding.occurrence != TaskOccurrence.EVERY_ENTRY
+           for condition in project.conditions
+           for binding in (condition.pre_task_bindings if before else condition.post_task_bindings)
+           if binding.task_id == module.task_id):
+        raise ValueError("Keep special question occurrence rules in Advanced custom tasks.")
+
+
 class PostQuestionsDialog(QDialog):
     """Keep question edits, assignment and private/shared scope in one detached draft."""
 
     def __init__(
         self, project: ProjectFile, *, project_root: Path, condition_id: str,
-        task_id: str | None = None, parent: QWidget | None = None,
+        task_id: str | None = None, phase: TaskPhase = TaskPhase.POST_CONDITION,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setObjectName("post_condition_questions_dialog")
-        self.setWindowTitle("Post-condition Questions")
+        self._phase = phase
+        before = phase == TaskPhase.PRE_CONDITION
+        self._timing = "Before" if before else "After"
+        self.setObjectName("pre_condition_questions_dialog" if before
+                           else "post_condition_questions_dialog")
+        self.setWindowTitle(f"{self._timing}-condition Questions")
         self.setMinimumSize(1000, 680)
         self.resize(1060, 740)
         self._project = project.model_copy(deep=True)
@@ -239,30 +276,21 @@ class PostQuestionsDialog(QDialog):
         self.affected_condition_ids: set[str] = set()
         existing = next((task for task in project.task_modules if task.task_id == task_id), None)
         self._existing = existing is not None
-        if existing is not None and not existing.simple_post_questions:
-            raise ValueError("Keep existing custom tasks in Advanced custom tasks.")
-        self._module = existing or make_post_questionnaire([make_yes_no_question("Question")])
-        validate_simple_post_questionnaire(self._module)
+        factory = make_pre_questionnaire if before else make_post_questionnaire
+        self._module = existing or factory(
+            [make_yes_no_question("Question")], name=f"{self._timing}-condition Questions",
+        )
+        self._validate_module(self._module)
         step = self._module.steps[0]
-        if (len(self._module.steps) != 1 or step.timeout_seconds is not None
-                or step.duration_seconds is not None
-                or any(option.image_path is not None for question in step.questions
-                       for option in question.options)):
-            raise ValueError(
-                "Keep timed, image or multiple-screen questions in Advanced custom tasks.",
-            )
         self._using_ids = [condition.condition_id for condition in project.conditions
                            if any(binding.task_id == self._module.task_id
-                                  for binding in condition.post_task_bindings)]
-        if any(binding.occurrence != TaskOccurrence.EVERY_ENTRY
-               for condition in project.conditions for binding in condition.post_task_bindings
-               if binding.task_id == self._module.task_id):
-            raise ValueError("Keep special question occurrence rules in Advanced custom tasks.")
+                                  for binding in (condition.pre_task_bindings if before
+                                                  else condition.post_task_bindings))]
         self._selected_ids = [condition_id]
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
         layout.addWidget(DialogHeader(
-            "Post-condition Questions", "After every presentation of the selected conditions.",
+            self.windowTitle(), f"{self._timing} every presentation of the selected conditions.",
             parent=self,
         ))
         top = QHBoxLayout()
@@ -317,17 +345,29 @@ class PostQuestionsDialog(QDialog):
         layout.addLayout(footer)
         apply_dialog_theme(self)
         self._refresh_scope()
+        self.editor.question_prompt_edit.setFocus()
+
+    def _validate_module(self, module: TaskModule) -> None:
+        validate_question_editor_module(self._project, module, self._phase)
+
+    def add_question(self) -> None:
+        """Start another blank Yes/No question when opened from the Add action."""
+        self.editor.add_kind_combo.setCurrentIndex(0)
+        self.editor.add_button.click()
+        self.editor.question_prompt_edit.setFocus()
 
     def _shared_changed(self, checked: bool) -> None:
         self._selected_ids = self._using_ids[:] if checked else [self._condition_id]
         self._refresh_scope()
 
     def _refresh_scope(self) -> None:
+        names = [condition.name for condition in self._project.conditions
+                 if condition.condition_id in self._selected_ids]
+        target = names[0] if len(names) == 1 else f"{len(names)} selected conditions"
         self.scope_label.setText(
-            f"Shared questions for {len(self._selected_ids)} selected conditions."
+            f"{self._timing} each presentation of {target}. Shared questions."
             if self.shared_checkbox.isChecked() else
-            f"One question set for {len(self._selected_ids)} selected conditions. "
-            "Other conditions stay unchanged.",
+            f"{self._timing} each presentation of {target}.",
         )
         self.scope_label.setToolTip("\n".join(
             condition.name for condition in self._project.conditions
@@ -337,7 +377,8 @@ class PostQuestionsDialog(QDialog):
     def _choose_conditions(self) -> None:
         dialog = ModifierScopeDialog(
             self._project, selected_ids=self._selected_ids, conflicts={},
-            description="Questions run after every presentation of the selected conditions.",
+            description=f"Questions run {self._timing.lower()} every presentation "
+                        "of the selected conditions.",
             parent=self,
         )
         if dialog.exec() == QDialog.DialogCode.Accepted:
@@ -363,7 +404,7 @@ class PostQuestionsDialog(QDialog):
         module = TaskModule.model_validate({
             **self._module.model_dump(), "name": self.name_edit.text(), "steps": [step],
         })
-        validate_simple_post_questionnaire(module)
+        self._validate_module(module)
         return module
 
     def _show_error(self, error: ValueError) -> None:
@@ -381,7 +422,9 @@ class PostQuestionsDialog(QDialog):
 
     def _remove(self) -> None:
         try:
-            self.project_result = remove_post_questionnaire(
+            remove = (remove_pre_questionnaire if self._phase == TaskPhase.PRE_CONDITION
+                      else remove_post_questionnaire)
+            self.project_result = remove(
                 self._project, self._module.task_id, self._selected_ids,
             )
             self.affected_condition_ids = set(self._selected_ids)
@@ -400,7 +443,9 @@ class PostQuestionsDialog(QDialog):
                 self.project_result = self._project.model_copy(deep=True)
                 super().accept()
                 return
-            self.project_result = apply_post_questionnaire(
+            apply = (apply_pre_questionnaire if self._phase == TaskPhase.PRE_CONDITION
+                     else apply_post_questionnaire)
+            self.project_result = apply(
                 self._project, candidate, self._selected_ids,
                 scope="shared" if self.shared_checkbox.isChecked() else "private",
             )

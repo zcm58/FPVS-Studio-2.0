@@ -8,13 +8,20 @@ retaining the FPVS item and oddball cadence.
 
 ## Authoring
 
-The editor lists modifiers added to the selected condition and separates **Overview**, **Settings**, and
-**Participant preview**. Overview describes the full workflow and recorded data.
-Settings exposes the relevant counting, memory or masking controls. Preview uses example
-numbers and does not reserve a session, consume its seed, or write participant data.
+The primary actions add a simple question before or after the selected condition,
+opening the question builder directly with one blank Yes/No question. The editor shows
+the phase and assigned conditions. Edit opens an existing questionnaire without adding
+a question. Use **Add Question** repeatedly, then select a question and use **Up/Down**
+in the numbered list to choose its display order. Before and after lists are independent;
+their authored question order survives saving and compilation without using Advanced.
+Preview does not reserve a session, consume its seed, or write participant data.
 
-**Add modifier** opens **Built-in** and **My presets**. Built-ins include **Backward
-counting**, **Remember four images**, and **Masking: Color, Faces, Number**. Add assigns the new modifier to the current
+The collapsible **Advanced modifiers** section contains Counting, Memory, Masking,
+presets and custom task tools. Existing modifiers retain **Overview**, **Settings**,
+and **Participant preview**. CSV filename/folder/rebuild controls appear only while
+Advanced is expanded. The library offers **Built-in** and **My presets**, including
+**Backward counting**, **Remember four images**, and **Masking: Color, Faces, Number**.
+Add assigns the new modifier to the current
 condition when it has no sustained activity. **Choose conditions…** explicitly changes
 the assignment to other conditions;
 one sustained activity or masking stream is supported per condition. Additional
@@ -183,10 +190,13 @@ Submit, revised choices, incorrect responses, and Escape in each phase. Inspect 
 and compact output. Source/fake-renderer checks do not establish physical display or
 trigger acceptance.
 
-## Simple after-condition questions
+## Simple before and after questions
 
-The common-action dialog also exposes Post-condition Questions beside Counting,
-Memory and Masking. These use ordinary after-only bindings rather than a grouped
-modifier requiring a before module. Existing modifier post-steps run first; detailed
-editing and presets stay under Advanced. See [Post-condition Questions](POST_CONDITION_QUESTIONS.md)
-for the simple editor, immutable context and project-root response CSV contract.
+Simple before questions use compatible ordinary, unmarked questionnaires and run
+before protected counting/memory start screens. Simple after questions retain their
+marked after-only bindings and run after existing modifier post-steps. Assignments
+default to the selected condition; explicit shared assignments and private copies
+preserve other conditions. Complex, specialized, modifier-owned and specially scoped tasks
+remain in Advanced without conversion. See
+[the question and response contracts](POST_CONDITION_QUESTIONS.md) for basic editing,
+ordinary before-task exports and the after-only project-root response CSV.

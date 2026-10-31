@@ -806,7 +806,8 @@ class TaskOptionTable(QTableWidget):
     def add_text_option(self) -> None:
         existing = {option.option_id for option in self.options()}
         option_id = _unique_id("item", existing)
-        self._append_option(TaskOptionDraft(option_id=option_id, label="Item"))
+        with QSignalBlocker(self):
+            self._append_option(TaskOptionDraft(option_id=option_id, label="Item"))
         self.selectRow(self.rowCount() - 1)
         self.changed.emit()
 
@@ -829,7 +830,8 @@ class TaskOptionTable(QTableWidget):
             label=source.stem.replace("_", " ").replace("-", " ").title(),
             source_path=source,
         )
-        self._append_option(option)
+        with QSignalBlocker(self):
+            self._append_option(option)
         self.selectRow(self.rowCount() - 1)
         self.changed.emit()
 
@@ -1187,11 +1189,16 @@ class QuestionnaireEditor(QWidget):
         list_actions = QGridLayout()
         list_actions.setContentsMargins(0, 0, 0, 0)
         list_actions.setSpacing(6)
-        list_actions.addWidget(self.add_kind_combo, 0, 0, 1, 2)
-        list_actions.addWidget(self.add_button, 0, 2)
-        list_actions.addWidget(self.up_button, 1, 0)
-        list_actions.addWidget(self.down_button, 1, 1)
-        list_actions.addWidget(self.remove_button, 1, 2)
+        if simple:
+            list_actions.addWidget(self.add_kind_combo, 0, 0, 1, 3)
+            list_actions.addWidget(self.add_button, 1, 0, 1, 3)
+        else:
+            list_actions.addWidget(self.add_kind_combo, 0, 0, 1, 2)
+            list_actions.addWidget(self.add_button, 0, 2)
+        action_row = 2 if simple else 1
+        list_actions.addWidget(self.up_button, action_row, 0)
+        list_actions.addWidget(self.down_button, action_row, 1)
+        list_actions.addWidget(self.remove_button, action_row, 2)
 
         list_column = QWidget(self)
         list_layout = QVBoxLayout(list_column)
@@ -1490,12 +1497,13 @@ class QuestionnaireEditor(QWidget):
         self._syncing = True
         try:
             self.question_list.clear()
-            for question in self._questions:
+            for index, question in enumerate(self._questions):
                 label = next(label for label, kind in _QUESTION_LABELS if kind == question.kind)
                 prompt = question.prompt or (
                     "New question" if self._simple else question.question_id
                 )
-                item = QListWidgetItem(f"{prompt}\n{label}")
+                display_prompt = f"{index + 1}. {prompt}" if self._simple else prompt
+                item = QListWidgetItem(f"{display_prompt}\n{label}")
                 item.setData(Qt.ItemDataRole.UserRole, question.question_id)
                 item.setToolTip(f"{prompt}\n{label}")
                 self.question_list.addItem(item)
@@ -1589,7 +1597,8 @@ class QuestionnaireEditor(QWidget):
         item = self.question_list.item(row)
         label = next(label for label, item_kind in _QUESTION_LABELS if item_kind == kind)
         prompt = question.prompt or ("New question" if self._simple else question.question_id)
-        item.setText(f"{prompt}\n{label}")
+        display_prompt = f"{row + 1}. {prompt}" if self._simple else prompt
+        item.setText(f"{display_prompt}\n{label}")
         item.setToolTip(f"{prompt}\n{label}")
         self._refresh_type_fields()
         if emit_changed:

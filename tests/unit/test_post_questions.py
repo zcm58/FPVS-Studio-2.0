@@ -11,11 +11,16 @@ from fpvs_studio.core.migrations import migrate_project_payload
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.post_questions import (
     apply_post_questionnaire,
+    apply_pre_questionnaire,
     compile_post_question_context,
     make_post_questionnaire,
+    make_pre_questionnaire,
     make_yes_no_question,
+    pre_questionnaires_for_condition,
     question_definition_version,
     remove_post_questionnaire,
+    remove_pre_questionnaire,
+    validate_simple_pre_questionnaire,
 )
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
@@ -27,6 +32,8 @@ from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_models import (
     PostQuestionnaireContext,
     TaskBinding,
+    TaskBranchRule,
+    TaskFontFamily,
     TaskModule,
     TaskModuleSpec,
     TaskOccurrence,
@@ -34,6 +41,7 @@ from fpvs_studio.core.task_models import (
     TaskPhase,
     TaskQuestion,
     TaskStep,
+    TaskSubmissionMode,
 )
 
 
@@ -54,6 +62,252 @@ def _module():
         make_yes_no_question('Did you see a fearful face, "even briefly"?\n恐怖',
                              question_id="fearful-face"),
     ], task_id="post-questions")
+
+
+def _pre_module():
+    return make_pre_questionnaire([
+        make_yes_no_question("Ready to begin?", question_id="ready"),
+    ], task_id="pre-questions")
+
+
+def test_before_questions_preserve_existing_project_schema(sample_project):
+    changed = apply_pre_questionnaire(sample_project, _pre_module(), ["faces"])
+    assert changed.schema_version == sample_project.schema_version
+    assert ProjectFile.model_validate_json(changed.model_dump_json()) == changed
+    assert "simple_post_questions" not in changed.task_modules[0].model_dump()
+
+
+def test_before_questions_compile_each_presentation_without_after_export_marker(
+    question_project, sample_project_root,
+):
+    question_project = ProjectFile.model_validate(question_project.model_dump())
+    original = question_project.model_dump_json()
+    baseline = compile_session_plan(
+        question_project, refresh_hz=60, project_root=sample_project_root, random_seed=31,
+    )
+    before = apply_pre_questionnaire(question_project, _pre_module(), ["faces", "houses"])
+    assert before.schema_version == question_project.schema_version
+    assert question_project.model_dump_json() == original
+    assert not before.task_modules[0].simple_post_questions
+    assert "simple_post_questions" not in before.task_modules[0].model_dump()
+    project = apply_post_questionnaire(before, _module(), ["faces"])
+    plan = compile_session_plan(
+        project, refresh_hz=60, project_root=sample_project_root, random_seed=31,
+    )
+    for entry, ordinary in zip(plan.ordered_entries(), baseline.ordered_entries(), strict=True):
+        assert entry.run_spec == ordinary.run_spec
+        assert [task.task_id for task in entry.pre_tasks] == ["pre-questions"]
+        assert entry.pre_tasks[0].phase == TaskPhase.PRE_CONDITION
+        assert entry.pre_tasks[0].post_question_context is None
+        assert entry.show_condition_start_gate
+        assert bool(entry.post_tasks) is (entry.condition_id == "faces")
+        if entry.post_tasks:
+            assert entry.post_tasks[0].post_question_context is not None
+    assert SessionPlan.model_validate_json(plan.model_dump_json()) == plan
+    assert ProjectFile.model_validate_json(before.model_dump_json()) == before
+
+
+def test_multiple_before_and_after_question_orders_survive_apply_save_and_compile(
+    sample_project, sample_project_root,
+):
+    before = make_pre_questionnaire([
+        make_yes_no_question(f"Before {suffix}?", question_id=f"before-{suffix}")
+        for suffix in ("a", "b", "c")
+    ], task_id="before-survey", name="Before survey")
+    after = make_post_questionnaire([
+        make_yes_no_question(f"After {suffix}?", question_id=f"after-{suffix}")
+        for suffix in ("a", "b", "c")
+    ], task_id="after-survey", name="After survey")
+    for module in (before, after):
+        module.steps[0].heading = module.name
+        module.steps[0].text = "Keep these participant instructions."
+        module.steps[0].font_family = TaskFontFamily.OPEN_SANS
+        module.steps[0].prompt_height = 0.8
+        for index, question in enumerate(module.steps[0].questions):
+            question.randomize_options = True
+            question.required = index != 1
+            question.max_text_length = 100 + index
+    project = apply_pre_questionnaire(sample_project, before, ["faces"])
+    project = apply_post_questionnaire(project, after, ["faces"])
+    before.steps[0].questions = [before.steps[0].questions[index] for index in (2, 0, 1)]
+    after.steps[0].questions = [after.steps[0].questions[index] for index in (1, 2, 0)]
+    project = apply_pre_questionnaire(project, before, ["faces"])
+    project = apply_post_questionnaire(project, after, ["faces"])
+    path = sample_project_root / "ordered-questions.json"
+    save_project_file(project, path)
+    restored = load_project_file(path)
+    assert restored == project
+    assert {module.task_id: module for module in restored.task_modules} == {
+        before.task_id: before, after.task_id: after,
+    }
+    baseline = compile_session_plan(
+        sample_project, refresh_hz=60, project_root=sample_project_root, random_seed=31,
+    )
+    plan = compile_session_plan(
+        restored, refresh_hz=60, project_root=sample_project_root, random_seed=31,
+    )
+    expected_before = ["before-c", "before-a", "before-b"]
+    expected_after = ["after-b", "after-c", "after-a"]
+    for entry, ordinary in zip(plan.ordered_entries(), baseline.ordered_entries(), strict=True):
+        assert entry.run_spec == ordinary.run_spec
+        for compiled, authored, expected_ids in (
+            (entry.pre_tasks[0], before, expected_before),
+            (entry.post_tasks[0], after, expected_after),
+        ):
+            assert compiled.task_id == authored.task_id
+            assert compiled.name == authored.name
+            step = compiled.steps[0]
+            assert [question.question_id for question in step.questions] == expected_ids
+            assert step.model_dump(exclude={
+                "questions", "random_seed", "realized_item_order",
+                "realized_question_option_orders",
+            }) == authored.steps[0].model_dump(exclude={"questions"})
+            for question, original in zip(step.questions, authored.steps[0].questions, strict=True):
+                assert question.model_dump(exclude={"options"}) == original.model_dump(
+                    exclude={"options"},
+                )
+                assert {option.option_id: option for option in question.options} == {
+                    option.option_id: option for option in original.options
+                }
+        assert [question.question_id for question
+                in entry.post_tasks[0].post_question_context.questions] == expected_after
+
+
+@pytest.mark.parametrize("kind", ["counting", "memory"])
+@pytest.mark.parametrize("legacy", [False, True])
+def test_new_before_questions_preserve_activity_boundary_and_other_task_order(
+    sample_project, sample_project_root, kind, legacy,
+):
+    from fpvs_studio.core.condition_modifiers import (
+        assign_modifier,
+        create_backward_counting_modifier,
+        create_image_memory_modifier,
+    )
+
+    definition = (create_backward_counting_modifier(baseline_enabled=False) if kind == "counting"
+                  else create_image_memory_modifier())
+    project = assign_modifier(sample_project, definition, ["faces"])
+    if legacy:
+        project.condition_modifiers = []
+    custom = TaskModule(task_id="custom-before", name="Existing instructions", steps=[TaskStep(
+        step_id="intro", kind="instruction", text="Keep this order.", continue_key="space",
+    )])
+    project.task_modules.append(custom)
+    project.conditions[0].pre_task_bindings.insert(0, TaskBinding(task_id=custom.task_id))
+    original_post = project.conditions[0].post_task_bindings.copy()
+    changed = apply_pre_questionnaire(project, _pre_module(), ["faces"])
+    assert [binding.task_id for binding in changed.conditions[0].pre_task_bindings] == [
+        "custom-before", "pre-questions", *definition.modifier.pre_task_ids,
+    ]
+    assert changed.conditions[0].post_task_bindings == original_post
+    if kind == "counting":
+        plan = compile_session_plan(changed, refresh_hz=60, project_root=sample_project_root)
+        assert all(entry.pre_tasks[-1].backward_counting.role == "load_start"
+                   for entry in plan.ordered_entries())
+
+
+def test_private_before_edit_preserves_metadata_order_and_other_condition(question_project):
+    module = _pre_module()
+    step = module.steps[0]
+    step.heading = "Original heading"
+    step.text = "Original participant instructions"
+    step.font_family = TaskFontFamily.OPEN_SANS
+    step.prompt_x = 1.25
+    step.prompt_height = 0.8
+    step.submit_label = "Begin"
+    step.show_footer = False
+    shared = apply_pre_questionnaire(question_project, module, ["faces", "houses"])
+    original = shared.model_dump_json()
+    edited = module.model_copy(deep=True)
+    edited.steps[0].questions[0].prompt = "Edited question?"
+    private = apply_pre_questionnaire(shared, edited, ["faces"])
+    assert shared.model_dump_json() == original
+    first, other = private.conditions
+    copy_id = first.pre_task_bindings[0].task_id
+    assert copy_id != module.task_id
+    assert other == shared.conditions[1]
+    copied = next(item for item in private.task_modules if item.task_id == copy_id)
+    expected = edited.model_copy(update={"task_id": copy_id}, deep=True)
+    assert copied == expected
+    assert pre_questionnaires_for_condition(private, "faces") == [copied]
+    removed = remove_pre_questionnaire(private, copy_id, ["faces"])
+    assert removed.conditions[0].pre_task_bindings == []
+    assert removed.conditions[1] == other
+    assert all(item.task_id != copy_id for item in removed.task_modules)
+
+
+def test_shared_before_edit_and_removal_change_only_selected_assignments(question_project):
+    shared = apply_pre_questionnaire(question_project, _pre_module(), ["faces", "houses"])
+    edited = shared.task_modules[0].model_copy(deep=True)
+    edited.steps[0].questions[0].prompt = "Shared change?"
+    changed = apply_pre_questionnaire(shared, edited, ["faces"], scope="shared")
+    assert changed.conditions[1].pre_task_bindings == []
+    assert changed.conditions[0].pre_task_bindings == shared.conditions[0].pre_task_bindings
+    assert changed.task_modules == [edited]
+    removed = remove_pre_questionnaire(shared, "pre-questions", ["faces"])
+    assert removed.conditions[0].pre_task_bindings == []
+    assert removed.conditions[1] == shared.conditions[1]
+    assert removed.task_modules == shared.task_modules
+
+
+@pytest.mark.parametrize("change", [
+    "repeat", "steps", "timeout", "retry", "branch", "image", "immediate", "occurrence",
+    "gate", "cross_phase",
+])
+def test_before_discovery_leaves_complex_or_special_bindings_in_advanced(question_project, change):
+    module = _pre_module()
+    binding = TaskBinding(task_id=module.task_id)
+    if change == "repeat":
+        module.repeat_count = 2
+    elif change == "steps":
+        module.steps.append(module.steps[0].model_copy(update={"step_id": "second"}, deep=True))
+    elif change == "timeout":
+        module.steps[0].timeout_seconds = 3
+    elif change == "retry":
+        module.steps[0].max_attempts = 2
+        module.steps[0].retry_on_invalid = True
+    elif change == "branch":
+        module.steps.append(TaskStep(
+            step_id="after", kind="instruction", text="Next", continue_key="space",
+        ))
+        module.steps[0].branch_rules = [TaskBranchRule(
+            rule_id="skip", question_id="ready", operator="answered", next_step_id="after",
+        )]
+    elif change == "image":
+        module.steps[0].questions[0].options[0].image_path = (
+            "stimuli/task-assets/pre-questions/yes.png"
+        )
+    elif change == "immediate":
+        module.steps[0].submission_mode = TaskSubmissionMode.IMMEDIATE
+    elif change == "occurrence":
+        binding.occurrence = TaskOccurrence.FIRST_OCCURRENCE
+    elif change == "gate":
+        binding.replaces_condition_start_gate = True
+    elif change == "cross_phase":
+        question_project.conditions[1].post_task_bindings = [binding.model_copy()]
+    question_project.task_modules.append(module)
+    question_project.conditions[0].pre_task_bindings = [binding]
+    original = question_project.model_dump_json()
+    assert pre_questionnaires_for_condition(question_project, "faces") == []
+    with pytest.raises(ValueError):
+        validate_simple_pre_questionnaire(question_project, module)
+    with pytest.raises(ValueError):
+        apply_pre_questionnaire(question_project, _pre_module(), ["faces"])
+    assert question_project.model_dump_json() == original
+
+
+def test_before_discovery_excludes_modifier_owned_untyped_questionnaire(sample_project):
+    from fpvs_studio.core.condition_modifiers import assign_modifier
+    from fpvs_studio.core.masking_presets import create_masking_modifier
+
+    project = assign_modifier(sample_project, create_masking_modifier(), ["faces"])
+    owned_id = project.condition_modifiers[0].pre_task_ids[0]
+    module = _pre_module().model_copy(update={"task_id": owned_id}, deep=True)
+    project.task_modules = [module if item.task_id == owned_id else item
+                            for item in project.task_modules]
+    assert pre_questionnaires_for_condition(project, "faces") == []
+    with pytest.raises(ValueError, match="modifier-owned"):
+        validate_simple_pre_questionnaire(project, module)
 
 
 def test_yes_no_factory_is_required_unscored_explicit_and_consumes_no_schedule_rng():

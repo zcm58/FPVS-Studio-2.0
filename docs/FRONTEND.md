@@ -106,11 +106,18 @@ interaction.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
   dimensions within a set are handled by the guided normalization flow when advancing
   from Conditions. Control-condition creation and normalization stay image-only paths. A
-  condition-level `FPVS Condition Modifiers` dialog groups participant activities
-  and exposes local presets while preserving the eight-step wizard. The existing
-  detailed task editor remains available for custom screens and questionnaires;
+  condition-level `FPVS Condition Modifiers` dialog makes simple before/after
+  questions the primary actions, opening a blank Yes/No builder directly. Existing
+  questions remain editable from the dialog's list. Add Question and numbered-list
+  Up/Down controls support multiple questions and independent before/after display
+  order, preserved on save and compilation. Counting, Memory, Masking, presets and
+  custom tasks live in collapsible Advanced modifiers; CSV filename/folder/rebuild
+  controls are shown only while it is expanded. Assignments and
+  detached Apply/Cancel behavior are preserved within the eight-step wizard;
   task media is staged until Apply and stored beneath the active project's
-  `stimuli/task-assets/<task-id>/`. See `CONDITION_MODIFIERS.md`.
+  `stimuli/task-assets/<task-id>/`. Before answers use ordinary task exports; the
+  readable root CSV remains after-only. See `CONDITION_MODIFIERS.md` and
+  `POST_CONDITION_QUESTIONS.md`.
 - Setup has no Design section. Timing & Display retains frequency edits. Saved AB
   settings are preserved; the retained native AB editor and standalone image visual
   editor remain outside the guided workflow.

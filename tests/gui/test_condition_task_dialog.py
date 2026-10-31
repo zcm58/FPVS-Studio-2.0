@@ -438,6 +438,51 @@ def test_pre_task_binding_start_gate_replacement_roundtrips(tmp_path: Path) -> N
     assert copies == []
 
 
+@pytest.mark.parametrize("kind", ["text", "image"])
+def test_adding_task_item_notifies_only_after_the_row_is_complete(
+    qtbot, tmp_path, monkeypatch, kind,
+) -> None:
+    source = tmp_path / "source.png"
+    Image.new("RGB", (12, 12), color=(30, 60, 90)).save(source)
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args: (str(source), ""))
+    existing = TaskOptionDraft(
+        option_id="existing", label="Existing", correct=True, score=2.5,
+        x_degrees=1.25, y_degrees=-0.5, width_degrees=0.3, height_degrees=0.08,
+        unit="window_height_fraction", text_alignment="left",
+    )
+    editor = TaskStepEditor(tmp_path)
+    qtbot.addWidget(editor)
+    editor.resize(1100, 720)
+    editor.set_step(TaskStepDraft(
+        step_id="choices", kind="choice_grid", repeat_count=3, options=[existing],
+    ))
+    editor.show()
+    QApplication.processEvents()
+    observed: list[list[TaskOptionDraft]] = []
+    editor.option_table.changed.connect(lambda: observed.append(editor.option_table.options()))
+
+    button = editor.add_text_item_button if kind == "text" else editor.add_image_item_button
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert len(observed) == 1
+    assert len(observed[0]) == 2
+    assert observed[0][0] == existing
+    added = observed[0][1]
+    assert added.text_alignment == "center"
+    assert added.image_path is None
+    assert added.source_path == (source if kind == "image" else None)
+    step = editor.step()
+    assert step is not None and step.repeat_count == 3
+    assert step.options == observed[0]
+
+    units = editor.option_table.cellWidget(1, 10)
+    assert isinstance(units, QComboBox)
+    units.setCurrentIndex(units.findData("window_height_fraction"))
+    assert len(observed) == 2
+    assert observed[1][1].unit == "window_height_fraction"
+
+
 def test_native_circle_styles_and_spatial_shuffle_survive_task_editor(qtbot, tmp_path) -> None:
     module = TaskModule(
         task_id="masking-report", name="Masking response",

@@ -53,9 +53,18 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
     dialog.show()
     dialog.tabs.setCurrentIndex(1)
     assert dialog.settings_stack.currentIndex() == 2
+    assert dialog.advanced_toggle.isChecked()
+    assert dialog.screens_button.isVisible()
+    dialog.advanced_toggle.setChecked(False)
     assert not dialog.screens_button.isVisible()
+    assert not dialog.tabs.isVisible()
+    assert not dialog.scope_button.isVisible()
+    assert dialog.question_overview.isVisible()
+    assert dialog.question_flow_label.text() == "Expand Advanced modifiers to edit this activity."
     dialog.advanced_toggle.setChecked(True)
     assert dialog.screens_button.isVisible()
+    assert dialog.tabs.isVisible()
+    assert dialog.scope_button.isVisible()
     assert not dialog.instructions_button.isVisible()
     assert not dialog.masking_catch_checkbox.isChecked()
     assert "automatic" in dialog.masking_catch_checkbox.text()
@@ -177,7 +186,9 @@ def test_masking_catch_copy_keeps_other_condition_and_cancel_unchanged(
 def test_catch_tab_is_hidden_for_other_modifier_kinds(qtbot, tmp_path: Path) -> None:
     document, condition_id = _document(tmp_path)
     document.apply_condition_modifier_project(
-        assign_modifier(document.project, create_backward_counting_modifier(), [condition_id])
+        assign_modifier(
+            document.project, create_backward_counting_modifier(), [condition_id], replace=True,
+        )
     )
     dialog = ConditionModifierDialog(document, condition_id=condition_id)
     qtbot.addWidget(dialog)
