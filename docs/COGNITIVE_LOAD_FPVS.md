@@ -2,7 +2,8 @@
 
 ## Create and replace the scaffold
 
-Choose **Cognitive Load FPVS** when creating an experiment. The built-in template
+Choose **Create manually > Cognitive Load FPVS**, then continue to name the experiment
+and select its compatible template and save location. The built-in template
 creates three placeholder image conditions, each represented by a **No load** and
 **Cognitive load** variant. These six entries run once in randomized order. Each pair
 initially shares its base/oddball image sources and timing. Replace those sources in

@@ -193,6 +193,7 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     assert (dialog.width(), dialog.height()) == size
     assert set(dialog.category_buttons) == {
         ExperimentCategory.FPVS, ExperimentCategory.FPVS_ODDBALL,
+        ExperimentCategory.COGNITIVE_LOAD_FPVS,
     }
     assert dialog.category_buttons[ExperimentCategory.FPVS].text() == "Standard FPVS\nComing soon"
     assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
@@ -203,6 +204,12 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     assert standard.geometry().right() < oddball.geometry().left()
     assert standard.y() == oddball.y()
     assert standard.height() == oddball.height()
+    cognitive = dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS]
+    assert cognitive.text().splitlines()[0] == "Cognitive Load FPVS"
+    assert cognitive.isEnabled()
+    assert oddball.geometry().right() < cognitive.geometry().left()
+    assert cognitive.y() == oddball.y()
+    assert cognitive.height() == oddball.height()
     assert_visible_children_within_parent(dialog)
     for button in dialog.category_buttons.values():
         assert button.isVisible()
@@ -212,7 +219,7 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
                    for line in button.text().splitlines()) + 12 <= button.width()
     dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
     assert dialog.condition_profile_combo.count() == 1
-    assert dialog.condition_profile_combo.currentText() == "Digits & letter targets"
+    assert dialog.condition_profile_combo.currentText() == "Five-second digit recall"
     assert_visible_children_within_parent(dialog)
 
 

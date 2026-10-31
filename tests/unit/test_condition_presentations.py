@@ -102,9 +102,13 @@ def test_constraint_arrangement_exact_multiplicities_and_seed_reproducibility():
             assert all(left != right for left, right in zip(order, order[1:], strict=False))
             assert order == constrained_condition_order(counts, rng=random.Random(seed))
     assert constrained_condition_order({"a": 3, "b": 2}, rng=random.Random(42)) == list("ababa")
-    for counts in ({"a": 3, "b": 1}, {"a": 2}):
-        with pytest.raises(ValueError, match="avoid adjacent repeats"):
-            constrained_condition_order(counts, rng=random.Random(42))
+    with pytest.raises(ValueError, match="avoid adjacent repeats"):
+        constrained_condition_order({"a": 3, "b": 1}, rng=random.Random(42))
+
+
+def test_single_condition_order_preserves_every_requested_presentation():
+    for seed in (0, 42, 123):
+        assert constrained_condition_order({"faces": 4}, rng=random.Random(seed)) == ["faces"] * 4
 
 
 def test_pooled_order_can_mix_rounds_and_vary_by_seed():
@@ -181,15 +185,52 @@ def test_unequal_presentations_compile_separate_durations_tasks_and_occurrence_i
         assert len({entry.run_spec.random_seed for entry in entries}) == count
 
 
-def test_infeasible_legacy_single_condition_is_reported_before_manifest_work(
-    sample_project, monkeypatch,
+@pytest.mark.parametrize("explicit_count", [False, True])
+def test_single_condition_compiles_all_presentations_with_distinct_occurrences(
+    sample_project, sample_project_root, explicit_count,
 ):
-    sample_project.settings.session.block_count = 2
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.settings.session.block_count = 9 if explicit_count else 4
+    if explicit_count:
+        sample_project = propose_condition_timing(sample_project, presentation_counts={"faces": 4})
+    before = sample_project.model_dump_json()
+    plan = compile_session_plan(sample_project, refresh_hz=60, project_root=sample_project_root)
+    entries = plan.ordered_entries()
+    assert plan.total_runs == 4
+    assert plan.blocks[0].condition_order == ["faces"] * 4
+    assert [entry.condition_presentation_index for entry in entries] == [1, 2, 3, 4]
+    assert [entry.condition_presentation_count for entry in entries] == [4] * 4
+    assert len({entry.run_id for entry in entries}) == 4
+    assert [entry.run_spec.run_id for entry in entries] == [entry.run_id for entry in entries]
+    assert [entry.run_spec.randomization.condition_presentation_index for entry in entries] == [
+        1, 2, 3, 4,
+    ]
+    assert not any(issue.location == "conditions.presentation_count"
+                   for issue in validate_project(sample_project).issues)
+    assert sample_project.model_dump_json() == before
+    restored = SessionPlan.model_validate_json(plan.model_dump_json())
+    assert restored.total_runs == 4
+
+
+def test_generated_single_condition_subset_keeps_its_configured_count(
+    presentation_project, sample_project_root,
+):
+    presentation_project.settings.session.block_count = 4
+    plan = compile_session_plan(presentation_project, refresh_hz=60,
+                                project_root=sample_project_root, condition_ids=["faces"])
+    assert plan.total_runs == 4
+    assert plan.blocks[0].condition_order == ["faces"] * 4
+
+
+def test_infeasible_multi_condition_pool_is_reported_before_manifest_work(
+    presentation_project, monkeypatch,
+):
+    presentation_project.conditions[0].presentation_count = 4
     monkeypatch.setattr("fpvs_studio.core.compiler.CompilationInputs", lambda *args, **kwargs:
                         pytest.fail("Infeasible session must fail before asset preparation."))
-    with pytest.raises(CompileError, match="Faces.*2 presentations.*another condition"):
-        compile_session_plan(sample_project, refresh_hz=60)
-    report = validate_project(sample_project)
+    with pytest.raises(CompileError, match="Faces.*4 presentations.*another condition"):
+        compile_session_plan(presentation_project, refresh_hz=60)
+    report = validate_project(presentation_project)
     assert any(issue.location == "conditions.presentation_count" for issue in report.issues)
 
 

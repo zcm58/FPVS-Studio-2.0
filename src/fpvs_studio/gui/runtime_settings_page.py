@@ -37,7 +37,6 @@ from fpvs_studio.core.enums import (
     EngineName,
     ExperimentCategory,
     ImageGeometryMode,
-    StimulusModality,
 )
 from fpvs_studio.core.masking import is_masking_project
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings, DisplayValidationReport
@@ -398,10 +397,6 @@ class DisplaySettingsEditor(QWidget):
         preferred_refresh = self._document.project.settings.display.preferred_refresh_hz or 60.0
         protocol = self._document.project.settings.protocol
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-        image_design = not any(
-            source.modality == StimulusModality.WORD
-            for source in self._document.project.stimulus_sets
-        )
         stream = is_attentional_blink_stream_project(self._document.project)
         repeated_targets = stream and any(
             isinstance(condition.attentional_blink, AttentionalBlinkStreamSettings)
@@ -410,7 +405,7 @@ class DisplaySettingsEditor(QWidget):
         )
         _set_form_row_visible(self.form_layout, self.base_hz_spin, False)
         _set_form_row_visible(
-            self.form_layout, self.oddball_every_n_spin, not image_design and not stream,
+            self.form_layout, self.oddball_every_n_spin, not stream,
         )
         cadence_label = self.form_layout.labelForField(self.oddball_every_n_spin)
         if isinstance(cadence_label, QLabel):

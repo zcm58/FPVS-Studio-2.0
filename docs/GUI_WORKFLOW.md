@@ -268,7 +268,8 @@ root unchanged.
 
 Creating an experiment first offers **Create manually** or **Download from library**.
 Downloading opens the Library without creating a blank project. Manual creation next
-offers FPVS Oddball Paradigm and a disabled Standard FPVS Coming soon choice.
+offers FPVS Oddball Paradigm, Cognitive Load FPVS and a disabled Standard FPVS Coming
+soon choice. Cognitive Load uses the existing paired-condition scaffold.
 Name, parent folder and compatible template follow on the details page. Back returns
 through category to the source choice
 while retaining the manual draft. Category is locked when the experiment
@@ -589,7 +590,8 @@ The authoring window is organized around two user-facing modes:
     for the full draft-based presentation editor
   - Timing exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), `Verify display`, derived rate/frame counts/condition duration, and
-    presentation background (`Black`, `Dark Gray`, or `Neutral Gray`); Neutral Gray is
+    presentation background (`Black`, `Dark Gray`, or `Neutral Gray`) and `Oddball every`
+    for image and word experiments; Neutral Gray is
     required when any image condition uses Contrast Modulation. Timing & Display owns
     the shared stimulus presentation frequency and inherited/custom rates for image
     and word conditions. A condition override
@@ -1610,6 +1612,8 @@ condition-specific override, then use the shared value again. Check inherited/cu
 labels, long condition-name tooltips, keyboard focus, pending-draft navigation and
 invalid-duration recovery. Verify that Conditions preserves the frequency, saved custom
 rates survive reopen, and requested/realized rates remain distinguishable at 59.94 Hz.
+Edit Oddball every directly in an image-only project and a word project; save/reopen
+must retain the cadence without changing either condition's modality.
 Registered Qt coverage is maintained separately from the default non-Qt checks.
 
 ### Per-condition stream duration
@@ -1637,12 +1641,14 @@ which count must be reduced or supplemented.
 
 Ordinary FPVS hides the former global-repeat row. Session retains native AB's Bursts
 per SOA and masking's group controls. Timing displays managed counts without unsupported
-individual overrides. Existing global counts are preserved as fallback totals, so a
-single ordinary condition with two requested presentations reports an error until the
-author changes its count or adds a separating condition.
+individual overrides. Existing global counts are preserved as fallback totals. A
+single ordinary condition retains every requested presentation; pools with multiple
+conditions still require enough presentations to separate identical conditions.
 
 Visible acceptance: at 1120x820 in both themes, set A=3/B=2, confirm five separate
 presentations and their stimulation totals, then reject A=3/B=1 without mutation.
+With a single condition, apply four presentations and confirm Session reports four;
+both a generated order and a saved order must retain every occurrence.
 Check required focus, long condition-name tooltips, frequency confirmation alongside
 count drafts, and masking/AB managed states.
 
@@ -1680,7 +1686,7 @@ the same dialog without flushing staged counts so saved-order mismatches can be
 repaired in one atomic save. Session remains the primary order editor surface.
 
 Generate previews a pseudorandom candidate. Manual moves retain a draft and report
-adjacent duplicates or count mismatches. Save persists the exact choice and any
+adjacent duplicates in multi-condition pools or count mismatches. Save persists the exact choice and any
 combined timing/count draft through the existing atomic project save path, selecting
 Same for every participant while preserving configured stimulus/fixation roots.
 Cancel, declined frequency confirmation, stale generation and write failure leave the

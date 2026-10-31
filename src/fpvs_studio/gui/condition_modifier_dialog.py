@@ -10,6 +10,7 @@ from typing import Literal, cast
 from uuid import uuid4
 
 from PIL import Image
+from pydantic import ValidationError
 from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QCloseEvent, QIcon, QPixmap
 from PySide6.QtWidgets import (
@@ -58,7 +59,11 @@ from fpvs_studio.core.condition_modifiers import (
 )
 from fpvs_studio.core.condition_timing import effective_condition_base_hz
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.masking import MaskingSettings
+from fpvs_studio.core.masking import (
+    MaskingEventTriggers,
+    MaskingSettings,
+    validate_masking_event_triggers,
+)
 from fpvs_studio.core.masking_presets import (
     apply_masking_timing_defaults,
     create_masking_modifier,
@@ -570,6 +575,7 @@ class ConditionModifierDialog(QDialog):
         self.settings_stack.addWidget(memory)
         masking = QWidget(settings)
         masking_form = QFormLayout(masking)
+        masking_form.setContentsMargins(0, 0, 0, 0)
         self.masking_timing_spins: dict[str, QDoubleSpinBox] = {}
         for key, title in (
             ("soa_ms", "Target-to-mask SOA"), ("target_duration_ms", "Target duration"),
@@ -606,6 +612,34 @@ class ConditionModifierDialog(QDialog):
             self.masking_background_spins.append(channel_spin)
             rgb_layout.addWidget(channel_spin)
         masking_form.addRow("Background RGB (−1 to 1)", rgb_row)
+        markers_row = QWidget(masking)
+        markers_layout = QHBoxLayout(markers_row)
+        markers_layout.setContentsMargins(0, 0, 0, 0)
+        self.masking_event_triggers_checkbox = QCheckBox("Event markers", markers_row)
+        self.masking_event_triggers_checkbox.setObjectName("modifier_masking_event_triggers")
+        markers_layout.addWidget(self.masking_event_triggers_checkbox)
+        self.masking_mask_onset_spin = QSpinBox(markers_row)
+        self.masking_catch_slot_onset_spin = QSpinBox(markers_row)
+        for title, key, spin, tooltip in (
+            ("Mask onset", "mask_onset_code", self.masking_mask_onset_spin,
+             "EEG code at mask onset in target slots, including catch sequences."),
+            ("Catch slot", "catch_slot_onset_code", self.masking_catch_slot_onset_spin,
+             "EEG code at an omitted target's scheduled onset in a catch sequence; "
+             "separate from the catch condition's start code."),
+        ):
+            label = QLabel(title, markers_row)
+            label.setBuddy(spin)
+            label.setToolTip(tooltip)
+            markers_layout.addWidget(label)
+            spin.setObjectName(f"modifier_masking_{key}")
+            spin.setRange(1, 255)
+            spin.setAccessibleName(f"{title} EEG code")
+            spin.setToolTip(tooltip)
+            self.masking_event_triggers_checkbox.toggled.connect(spin.setEnabled)
+            spin.valueChanged.connect(self._mark_dirty)
+            markers_layout.addWidget(spin, 1)
+        self.masking_event_triggers_checkbox.toggled.connect(self._mark_dirty)
+        masking_form.addRow(markers_row)
         self.masking_sources_label = _label("", masking)
         self.masking_sources_label.setSizePolicy(
             QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred,
@@ -613,11 +647,15 @@ class ConditionModifierDialog(QDialog):
         self.masking_sources_button = QPushButton("Edit native sources…", masking)
         self.masking_sources_button.clicked.connect(self._edit_masking_sources)
         masking_form.addRow(self.masking_sources_label, self.masking_sources_button)
-        self.masking_timing_label = _label("", masking)
-        masking_form.addRow(self.masking_timing_label)
-        self.masking_defaults_button = QPushButton("Use source experiment timing…", masking)
+        timing_row = QWidget(masking)
+        timing_layout = QHBoxLayout(timing_row)
+        timing_layout.setContentsMargins(0, 0, 0, 0)
+        self.masking_timing_label = _label("", timing_row)
+        timing_layout.addWidget(self.masking_timing_label, 1)
+        self.masking_defaults_button = QPushButton("Use source experiment timing…", timing_row)
         self.masking_defaults_button.clicked.connect(self._apply_masking_defaults)
-        masking_form.addRow(self.masking_defaults_button)
+        timing_layout.addWidget(self.masking_defaults_button)
+        masking_form.addRow(timing_row)
         self.settings_stack.addWidget(masking)
         layout.addWidget(self.settings_stack, 1)
         self.instructions_button = QPushButton("Edit participant instructions…", settings)
@@ -787,6 +825,17 @@ class ConditionModifierDialog(QDialog):
                     {"trigger_code": self.masking_catch_trigger_spin.value()}
                     if self.masking_catch_checkbox.isChecked() else None
                 )
+                markers = None
+                if self.masking_event_triggers_checkbox.isChecked():
+                    try:
+                        markers = MaskingEventTriggers(
+                            mask_onset_code=self.masking_mask_onset_spin.value(),
+                            catch_slot_onset_code=self.masking_catch_slot_onset_spin.value(),
+                        )
+                    except ValidationError as error:
+                        message = error.errors(include_url=False)[0]["msg"]
+                        raise ValueError(message.removeprefix("Value error, ")) from error
+                values["event_triggers"] = markers
                 definition.modifier.masking = MaskingSettings.model_validate(values)
             else:
                 kwargs = {}
@@ -834,9 +883,27 @@ class ConditionModifierDialog(QDialog):
                         update={field: getattr(updated, field) for field in fields},
                         deep=True,
                     )
-            self._definitions[self._selected_id] = ModifierDefinition.model_validate(
+            definitions = dict(self._definitions)
+            definitions[self._selected_id] = ModifierDefinition.model_validate(
                 definition.model_dump(),
             )
+            settings = definition.modifier.masking
+            if settings is not None and any(
+                value != self._loaded_controls.get(key)
+                for key, value in self._masking_marker_controls().items()
+            ):
+                for key, other in definitions.items():
+                    other_settings = other.modifier.masking
+                    if other_settings is None or other_settings.variant != settings.variant:
+                        continue
+                    updated_definition = other.model_copy(deep=True)
+                    assert updated_definition.modifier.masking is not None
+                    updated_definition.modifier.masking.event_triggers = (
+                        settings.event_triggers.model_copy(deep=True)
+                        if settings.event_triggers is not None else None
+                    )
+                    definitions[key] = updated_definition
+            self._definitions = definitions
         except ValueError as error:
             self._show_error(error)
             return False
@@ -852,8 +919,16 @@ class ConditionModifierDialog(QDialog):
             **{key: spin.value() for key, spin in self.masking_timing_spins.items()},
             **{f"background_{index}": spin.value()
                for index, spin in enumerate(self.masking_background_spins)},
+            **self._masking_marker_controls(),
         }
         self._loaded_instructions = self._instructions
+
+    def _masking_marker_controls(self) -> dict[str, int]:
+        return {
+            "event_markers_enabled": int(self.masking_event_triggers_checkbox.isChecked()),
+            "mask_onset_code": self.masking_mask_onset_spin.value(),
+            "catch_slot_onset_code": self.masking_catch_slot_onset_spin.value(),
+        }
 
     def _refresh_list(self, selected_id: str | None = None) -> None:
         self._loading = True
@@ -1036,6 +1111,23 @@ class ConditionModifierDialog(QDialog):
             )
             self.masking_catch_checkbox.setChecked(catch is not None)
             self.masking_catch_trigger_spin.setEnabled(catch is not None)
+            markers = settings.event_triggers
+            marker_codes = markers if markers is not None else MaskingEventTriggers()
+            self.masking_mask_onset_spin.setValue(marker_codes.mask_onset_code)
+            self.masking_catch_slot_onset_spin.setValue(marker_codes.catch_slot_onset_code)
+            self.masking_event_triggers_checkbox.setChecked(markers is not None)
+            self.masking_mask_onset_spin.setEnabled(markers is not None)
+            self.masking_catch_slot_onset_spin.setEnabled(markers is not None)
+            self.masking_event_triggers_checkbox.setText(
+                f"{settings.variant.title()} event markers",
+            )
+            self.masking_event_triggers_checkbox.setToolTip(
+                f"Applies to all {settings.variant.title()} SOAs and catch conditions in this "
+                "project. Enables target, mask and omitted-target EEG markers. Target onset "
+                "uses the project oddball code "
+                f"({self._project.settings.triggers.oddball_trigger_code}). "
+                "Other settings and variants are preserved."
+            )
             self._refresh_masking_sources(settings)
         else:
             study = self._study_module(definition)
@@ -1204,7 +1296,10 @@ class ConditionModifierDialog(QDialog):
         )
         self.masking_timing_label.setText(
             f"Assigned conditions: {rate_text}; target every "
-            f"{self._project.settings.protocol.oddball_every_n} items. Source: 5 Hz, "
+            f"{self._project.settings.protocol.oddball_every_n} items."
+        )
+        self.masking_timing_label.setToolTip(
+            "Source: 5 Hz, "
             "40 cycles/run, three randomized SOA triplets. Native sources replace "
             "ordinary condition pools while Masking is assigned."
         )
@@ -2153,6 +2248,9 @@ class ConditionModifierDialog(QDialog):
             return
         try:
             draft = self._build_project()
+            for modifier in draft.condition_modifiers:
+                if modifier.masking is not None:
+                    validate_masking_event_triggers(draft, modifier.masking)
         except ValueError as error:
             self._show_error(error)
             return

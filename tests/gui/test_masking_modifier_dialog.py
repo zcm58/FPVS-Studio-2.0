@@ -10,7 +10,11 @@ from PySide6.QtWidgets import QApplication, QDialog, QFileDialog, QLabel, QMessa
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.condition_modifiers import assign_modifier, create_backward_counting_modifier
-from fpvs_studio.core.masking import MaskingCatchTrialSettings
+from fpvs_studio.core.masking import (
+    MaskingCatchTrialSettings,
+    MaskingEventTriggers,
+    add_masking_catch_condition,
+)
 from fpvs_studio.core.masking_presets import create_masking_modifier
 from fpvs_studio.gui import condition_modifier_dialog
 from fpvs_studio.gui.condition_modifier_dialog import ConditionModifierDialog
@@ -42,8 +46,9 @@ def _document(tmp_path: Path, variant: str = "color"):
 @pytest.mark.parametrize("variant", ["color", "faces", "number"])
 @pytest.mark.parametrize("size", [(1100, 720), (1120, 760)])
 @pytest.mark.parametrize("catch_enabled", [False, True])
+@pytest.mark.parametrize("markers_enabled", [False, True])
 def test_masking_tabs_fit_and_edits_preserve_native_sources(
-    qtbot, tmp_path: Path, variant, size, catch_enabled,
+    qtbot, tmp_path: Path, variant, size, catch_enabled, markers_enabled,
 ) -> None:
     document, condition_id = _document(tmp_path, variant)
     original = document.project.model_dump()
@@ -75,6 +80,18 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
     }[variant]
     dialog.masking_catch_checkbox.setChecked(catch_enabled)
     assert dialog.masking_catch_trigger_spin.isEnabled() == catch_enabled
+    assert not dialog.masking_event_triggers_checkbox.isChecked()
+    assert dialog.masking_mask_onset_spin.value() == 56
+    assert dialog.masking_catch_slot_onset_spin.value() == 57
+    assert "project oddball code (55)" in dialog.masking_event_triggers_checkbox.toolTip()
+    assert dialog.masking_event_triggers_checkbox.text() == f"{variant.title()} event markers"
+    assert f"Applies to all {variant.title()} SOAs and catch conditions" in (
+        dialog.masking_event_triggers_checkbox.toolTip()
+    )
+    dialog.masking_event_triggers_checkbox.setChecked(markers_enabled)
+    for spin in (dialog.masking_mask_onset_spin, dialog.masking_catch_slot_onset_spin):
+        assert spin.isEnabled() == markers_enabled
+        assert (spin.minimum(), spin.maximum()) == (1, 255)
     assert "All SOAs in the same variant must use matching catch settings and code" in (
         dialog.masking_catch_help.text()
     )
@@ -88,6 +105,12 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
             assert dialog.masking_catch_checkbox.width() >= (
                 dialog.masking_catch_checkbox.sizeHint().width()
             )
+        if tab == 1:
+            assert dialog.masking_event_triggers_checkbox.width() >= (
+                dialog.masking_event_triggers_checkbox.sizeHint().width()
+            )
+            for label in dialog.masking_mask_onset_spin.parentWidget().findChildren(QLabel):
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     dialog.tabs.setCurrentIndex(2)
     for phase in range(4):
         dialog.preview_phase.setCurrentIndex(phase)
@@ -105,9 +128,211 @@ def test_masking_tabs_fit_and_edits_preserve_native_sources(
         )
     else:
         assert after.modifier.masking.catch_trial is None
+    assert after.modifier.masking.event_triggers == (
+        MaskingEventTriggers() if markers_enabled else None
+    )
     assert after.task_modules == before.task_modules
     dialog.reject()
     assert document.project.model_dump() == original
+
+
+@pytest.mark.parametrize("initially_enabled", [False, True])
+@pytest.mark.parametrize("enabled", [False, True])
+def test_masking_event_markers_apply_save_and_reopen(
+    qtbot, tmp_path: Path, initially_enabled, enabled,
+) -> None:
+    document, condition_id = _document(tmp_path)
+    if initially_enabled:
+        definition = create_masking_modifier()
+        definition.modifier.masking.event_triggers = MaskingEventTriggers()
+        document.apply_condition_modifier_project(
+            assign_modifier(document.project, definition, [condition_id])
+        )
+    document.save()
+    document = ProjectDocument.open_existing(document.project_root)
+    original = document.project.model_dump()
+    original_settings = document.project.condition_modifiers[0].masking.model_dump()
+    original_tasks = [task.model_dump() for task in document.project.task_modules]
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    assert dialog.masking_event_triggers_checkbox.isChecked() == initially_enabled
+    assert dialog.masking_mask_onset_spin.value() == 56
+    assert dialog.masking_catch_slot_onset_spin.value() == 57
+    dialog.masking_event_triggers_checkbox.setChecked(enabled)
+    dialog.name_edit.setText("Masking with authored event markers")
+    assert document.project.model_dump() == original
+    dialog.accept()
+    qtbot.waitUntil(lambda: dialog._active_task is None, timeout=10000)
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    settings = document.project.condition_modifiers[0].masking
+    assert settings.event_triggers == (MaskingEventTriggers() if enabled else None)
+    assert {
+        key: value for key, value in settings.model_dump().items() if key != "event_triggers"
+    } == {
+        key: value for key, value in original_settings.items() if key != "event_triggers"
+    }
+    assert [task.model_dump() for task in document.project.task_modules] == original_tasks
+    if enabled:
+        assert document.project.schema_version == "1.10.0"
+    else:
+        assert "event_triggers" not in settings.model_dump()
+    document.save()
+    reopened_document = ProjectDocument.open_existing(document.project_root)
+    reopened = ConditionModifierDialog(reopened_document, condition_id=condition_id)
+    qtbot.addWidget(reopened)
+    assert reopened.masking_event_triggers_checkbox.isChecked() == enabled
+    assert reopened.masking_mask_onset_spin.isEnabled() == enabled
+    assert reopened.masking_catch_slot_onset_spin.isEnabled() == enabled
+    assert reopened.masking_mask_onset_spin.value() == 56
+    assert reopened.masking_catch_slot_onset_spin.value() == 57
+    reopened.reject()
+
+
+def test_masking_event_marker_custom_codes_apply_and_cancel(qtbot, tmp_path: Path) -> None:
+    document, condition_id = _document(tmp_path)
+    original = document.project.model_dump()
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    dialog.masking_event_triggers_checkbox.setChecked(True)
+    dialog.masking_mask_onset_spin.setValue(61)
+    dialog.masking_catch_slot_onset_spin.setValue(62)
+    assert dialog._save_fields()
+    assert document.project.model_dump() == original
+    dialog.reject()
+    assert document.project.model_dump() == original
+    applied = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(applied)
+    assert not applied.masking_event_triggers_checkbox.isChecked()
+    applied.masking_event_triggers_checkbox.setChecked(True)
+    applied.masking_mask_onset_spin.setValue(61)
+    applied.masking_catch_slot_onset_spin.setValue(62)
+    applied.accept()
+    qtbot.waitUntil(lambda: applied._active_task is None, timeout=10000)
+    assert applied.result() == QDialog.DialogCode.Accepted
+    assert document.project.condition_modifiers[0].masking.event_triggers == MaskingEventTriggers(
+        mask_onset_code=61, catch_slot_onset_code=62,
+    )
+    reopened = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(reopened)
+    assert reopened.masking_mask_onset_spin.value() == 61
+    assert reopened.masking_catch_slot_onset_spin.value() == 62
+    reopened.reject()
+
+
+@pytest.mark.parametrize("size", [(1100, 720), (1120, 760)])
+@pytest.mark.parametrize("mask_code,catch_code,error", [
+    (56, 56, "Mask and catch-slot onset trigger codes must be distinct"),
+    (55, 57, "Target, mask and catch-slot onset trigger codes must be distinct"),
+    (1, 57, "distinct from condition-start"),
+    (10, 57, "distinct from condition-start"),
+])
+def test_invalid_masking_event_markers_keep_draft_open_and_document_unchanged(
+    qtbot, tmp_path: Path, size, mask_code, catch_code, error,
+) -> None:
+    document, condition_id = _document(tmp_path)
+    original = document.project.model_dump()
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    dialog.resize(*size)
+    dialog.show()
+    dialog.tabs.setCurrentIndex(1)
+    dialog.masking_catch_checkbox.setChecked(True)
+    dialog.masking_catch_trigger_spin.setValue(10)
+    dialog.masking_event_triggers_checkbox.setChecked(True)
+    dialog.masking_mask_onset_spin.setValue(mask_code)
+    dialog.masking_catch_slot_onset_spin.setValue(catch_code)
+    dialog.accept()
+    assert dialog.isVisible()
+    assert dialog._active_task is None
+    assert error in dialog.status.toolTip()
+    assert document.project.model_dump() == original
+    _fit(dialog)
+    assert (dialog.width(), dialog.height()) == size
+    dialog.reject()
+
+
+@pytest.mark.parametrize("cancel", [False, True])
+@pytest.mark.parametrize("initially_enabled,codes", [
+    (False, (56, 57)), (True, (61, 62)), (True, None),
+])
+def test_masking_event_markers_update_variant_soa_and_catch_drafts_together(
+    qtbot, tmp_path: Path, cancel, initially_enabled, codes,
+) -> None:
+    document, condition_id = _document(tmp_path)
+    for index, soa in enumerate((100, 1000 / 60), start=2):
+        other_id = document.create_condition(name=f"Color with {soa:g} ms SOA")
+        document.update_condition(other_id, trigger_code=index)
+        definition = create_masking_modifier(modifier_id=f"another-soa-{index}")
+        definition.modifier.masking.soa_ms = soa
+        definition.modifier.masking.background_rgb = (index / 10, 0, 0)
+        document.apply_condition_modifier_project(
+            assign_modifier(document.project, definition, [other_id])
+        )
+    other_variant_id = document.create_condition(name="Number with independent markers")
+    document.update_condition(other_variant_id, trigger_code=4)
+    number = create_masking_modifier(modifier_id="independent-number", variant="number")
+    number.modifier.masking.event_triggers = MaskingEventTriggers(
+        mask_onset_code=71, catch_slot_onset_code=72,
+    )
+    document.apply_condition_modifier_project(
+        assign_modifier(document.project, number, [other_variant_id])
+    )
+    project, catch_id = add_masking_catch_condition(document.project, condition_id)
+    if initially_enabled:
+        for modifier in project.condition_modifiers:
+            if modifier.masking.variant == "color":
+                modifier.masking.event_triggers = MaskingEventTriggers()
+    document.apply_condition_modifier_project(project)
+    document.save()
+    original = document.project.model_dump()
+    saved_project = (document.project_root / "project.json").read_bytes()
+    dialog = ConditionModifierDialog(document, condition_id=condition_id)
+    qtbot.addWidget(dialog)
+    assert dialog.modifier_list.count() == 1
+    assert "Applies to all Color SOAs and catch conditions" in (
+        dialog.masking_event_triggers_checkbox.toolTip()
+    )
+    dialog.masking_event_triggers_checkbox.setChecked(codes is not None)
+    if codes is not None:
+        dialog.masking_mask_onset_spin.setValue(codes[0])
+        dialog.masking_catch_slot_onset_spin.setValue(codes[1])
+    assert dialog._save_fields()
+    expected_markers = (
+        MaskingEventTriggers(mask_onset_code=codes[0], catch_slot_onset_code=codes[1])
+        if codes is not None else None
+    )
+    for definition in dialog._definitions.values():
+        settings = definition.modifier.masking
+        if settings.variant == "color":
+            assert settings.event_triggers == expected_markers
+        else:
+            assert settings.event_triggers == number.modifier.masking.event_triggers
+    assert document.project.model_dump() == original
+    if cancel:
+        dialog.reject()
+        assert document.project.model_dump() == original
+        assert (document.project_root / "project.json").read_bytes() == saved_project
+        return
+    dialog.accept()
+    qtbot.waitUntil(lambda: dialog._active_task is None, timeout=10000)
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    updated = document.project.model_dump()
+    assert updated["conditions"] == original["conditions"]
+    assert {task["task_id"]: task for task in updated["task_modules"]} == {
+        task["task_id"]: task for task in original["task_modules"]
+    }
+    assert updated["settings"] == original["settings"]
+    assert document.get_condition(catch_id).masking_catch
+    updated_modifiers = {
+        item["modifier_id"]: item for item in updated["condition_modifiers"]
+    }
+    for before in original["condition_modifiers"]:
+        if before["masking"]["variant"] == "color":
+            if codes is None:
+                before["masking"].pop("event_triggers", None)
+            else:
+                before["masking"]["event_triggers"] = expected_markers.model_dump()
+        assert updated_modifiers[before["modifier_id"]] == before
 
 
 @pytest.mark.parametrize("initially_enabled", [False, True])

@@ -562,7 +562,7 @@ def test_three_total_presentations_compile_as_three_separate_streams_after_reloa
     assert all(entry.run_spec.condition.requested_duration_seconds == 60 for entry in entries)
 
 
-def test_saved_impossible_single_condition_count_is_actionable_in_timing(
+def test_single_condition_repeats_apply_and_advance_to_session(
     qtbot, monkeypatch, tmp_path,
 ):
     document, first, second = _document(tmp_path)
@@ -579,27 +579,29 @@ def test_saved_impossible_single_condition_count_is_actionable_in_timing(
     wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
     table = wizard.condition_timing_table
     assert table.presentation_count_spins[first].value() == 2
-    assert table.error_label.isVisible()
-    assert not wizard._step_valid(wizard._step_index_for_key("experiment"))
-    assert wizard._current_step_blocker() == table.presentation_count_blocker()
+    assert not table.error_label.isVisible()
+    assert wizard._step_valid(wizard._step_index_for_key("experiment"))
     messages = record_setup_validation_dialogs(monkeypatch)
-    before = document.project.model_copy(deep=True)
-    assert wizard.setup_wizard_next_button.isEnabled()
-    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
-    assert messages == [("Complete this setup step", table.presentation_count_blocker())]
-    assert document.project == before
     assert effective_condition_presentation_count(
         document.project, document.get_condition(first),
     ) == 2
-    table.presentation_count_spins[first].setValue(1)
+    table.presentation_count_spins[first].setValue(4)
     assert wizard.flush_pending_edits()
     assert not table.presentation_count_blocker()
     assert not table.error_label.isVisible()
     assert wizard._step_valid(wizard._step_index_for_key("experiment"))
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.session_step_surface
-    assert len(messages) == 1
+    assert not messages
+    assert effective_condition_presentation_count(
+        document.project, document.get_condition(first),
+    ) == 4
+    assert wizard.session_structure_editor.presentation_total_label.text() == "4 total"
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert effective_condition_presentation_count(
+        reopened.project, reopened.get_condition(first),
+    ) == 4
 
 
 def test_next_reports_invalid_duration_draft_once_and_preserves_it(

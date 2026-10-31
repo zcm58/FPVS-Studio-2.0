@@ -31,6 +31,7 @@ from tests.gui.helpers import (
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
     ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
+    COGNITIVE_LOAD_PROFILE_ID,
     SINUSOIDAL_CONTRAST_PROFILE_ID,
     SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
@@ -964,62 +965,57 @@ def test_open_existing_project_dialog_uses_saved_root_as_default(
     assert captured_initial_dirs == [str(root_dir)]
 
 
-def test_open_project_randomizes_session_seed_per_open_without_dirtying_document(
+@pytest.mark.parametrize("mode", ["fixed", "new"])
+def test_open_project_preserves_configured_seeds_without_dirtying_document(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    monkeypatch,
+    mode: str,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Seed Randomization")
+    window.document.update_randomization_settings(
+        mode=mode, condition_order_seed=111_111_111,
+        stimulus_seed=222_222_222, fixation_seed=333_333_333,
+    )
+    window.document.save()
     project_root = window.document.project_root
     project_file_path = window.document.project_file_path
-    persisted_seed = load_project_file(project_file_path).settings.session.session_seed
+    persisted_session = load_project_file(project_file_path).settings.session
     qtbot.waitUntil(
         lambda: window._deferred_open_tasks_started and window._session_seed_task is None
     )
 
-    seed_values = iter((111_111_111, 222_222_222))
-
-    class _DeterministicSystemRandom:
-        def randrange(self, _upper_bound: int) -> int:
-            return next(seed_values)
-
-    deterministic_rng = _DeterministicSystemRandom()
-    monkeypatch.setattr(
-        "fpvs_studio.gui.document.random.SystemRandom",
-        lambda: deterministic_rng,
-    )
-
-    first_opened = controller.open_project(project_root)
-    assert first_opened is not None
-    assert controller.main_window is not None
-    qtbot.addWidget(controller.main_window)
-    qtbot.waitUntil(
-        lambda: controller.main_window.document.project.settings.session.session_seed == 111_111_111
-    )
-    assert controller.main_window.document.project.settings.session.session_seed == 111_111_111
-    assert controller.main_window.document.dirty is False
-
-    second_opened = controller.open_project(project_root)
-    assert second_opened is not None
-    assert controller.main_window is not None
-    qtbot.addWidget(controller.main_window)
-    qtbot.waitUntil(
-        lambda: controller.main_window.document.project.settings.session.session_seed == 222_222_222
-    )
-    assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
-    assert controller.main_window.document.dirty is False
-    assert load_project_file(project_file_path).settings.session.session_seed == persisted_seed
+    for _ in range(2):
+        opened = controller.open_project(project_root)
+        assert opened is not None
+        assert controller.main_window is not None
+        opened_window = controller.main_window
+        qtbot.addWidget(opened_window)
+        qtbot.waitUntil(
+            lambda current=opened_window: current._deferred_open_tasks_started
+            and current._session_seed_ready
+        )
+        assert opened_window._session_seed_task is None
+        assert opened.project.settings.session == persisted_session
+        assert opened.dirty is False
+    assert load_project_file(project_file_path).settings.session == persisted_session
 
 
-def test_open_project_session_seed_skips_completed_prior_seed(
+@pytest.mark.parametrize("mode", ["fixed", "new"])
+def test_open_project_keeps_configured_seeds_despite_completed_prior_session(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    monkeypatch,
+    mode: str,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Seed History Skip")
+    window.document.update_randomization_settings(
+        mode=mode, condition_order_seed=111_111_111,
+        stimulus_seed=222_222_222, fixation_seed=333_333_333,
+    )
+    window.document.save()
     project_root = window.document.project_root
+    persisted_session = load_project_file(window.document.project_file_path).settings.session
     qtbot.waitUntil(
         lambda: window._deferred_open_tasks_started and window._session_seed_task is None
     )
@@ -1037,27 +1033,19 @@ def test_open_project_session_seed_skips_completed_prior_seed(
     )
     write_json_file(project_root / "runs" / "0001" / "session_summary.json", summary)
 
-    seed_values = iter((111_111_111, 222_222_222))
-
-    class _DeterministicSystemRandom:
-        def randrange(self, _upper_bound: int) -> int:
-            return next(seed_values)
-
-    monkeypatch.setattr(
-        "fpvs_studio.gui.document.random.SystemRandom",
-        lambda: _DeterministicSystemRandom(),
-    )
-
     opened = controller.open_project(project_root)
 
     assert opened is not None
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
     qtbot.waitUntil(
-        lambda: controller.main_window.document.project.settings.session.session_seed == 222_222_222
+        lambda: controller.main_window._deferred_open_tasks_started
+        and controller.main_window._session_seed_ready
     )
-    assert controller.main_window.document.project.settings.session.session_seed == 222_222_222
-    assert controller.main_window.document.dirty is False
+    assert controller.main_window._session_seed_task is None
+    assert opened.project.settings.session == persisted_session
+    assert opened.dirty is False
+    assert load_project_file(opened.project_file_path).settings.session == persisted_session
 
 
 def test_create_project_dialog_prefills_saved_root_parent_directory(
@@ -2336,6 +2324,51 @@ def test_create_dialog_forwards_selected_attentional_blink_category(
     persisted = load_project_file(document.project_root / "project.json")
     assert persisted.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert persisted.conditions == document.project.conditions
+
+
+def test_create_dialog_cognitive_choice_scaffolds_and_saves_paired_conditions(
+    qtbot, controller: StudioController, monkeypatch
+) -> None:
+    def accept_cognitive(dialog: CreateProjectDialog) -> int:
+        qtbot.addWidget(dialog)
+        dialog.show()
+        qtbot.mouseClick(dialog.manual_button, Qt.MouseButton.LeftButton)
+        qtbot.mouseClick(
+            dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS],
+            Qt.MouseButton.LeftButton,
+        )
+        continue_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+        assert continue_button is not None
+        qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
+        assert dialog.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
+        dialog.project_name_edit.setText("New Cognitive Load Study")
+        assert not (dialog.parent_directory / "new-cognitive-load-study").exists()
+        qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
+        return int(dialog.result())
+
+    monkeypatch.setattr(CreateProjectDialog, "exec", accept_cognitive)
+    controller.show_create_project_dialog()
+    assert controller.main_window is not None
+    qtbot.addWidget(controller.main_window)
+    document = controller.main_window.document
+    project = document.project
+    assert project.experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS
+    assert project.settings.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
+    assert project.settings.protocol.base_hz == 6.0
+    assert project.settings.protocol.oddball_every_n == 5
+    assert project.settings.session.block_count == 1
+    assert project.settings.session.randomize_conditions_per_block
+    assert len(project.conditions) == 6
+    for no_load, load in zip(project.conditions[::2], project.conditions[1::2], strict=True):
+        assert no_load.base_stimulus_set_id == load.base_stimulus_set_id
+        assert no_load.oddball_stimulus_set_id == load.oddball_stimulus_set_id
+        assert no_load.oddball_cycle_repeats_per_sequence == 108
+        assert load.oddball_cycle_repeats_per_sequence == 108
+    assert len(list((document.project_root / "stimuli" / "original-images").rglob("*.png"))) == 6
+    persisted = load_project_file(document.project_root / "project.json")
+    assert persisted.experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS
+    assert persisted.settings.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
+    assert persisted.conditions == project.conditions
 
 
 def test_pilot_settings_toggle_and_layout(qtbot, tmp_path):

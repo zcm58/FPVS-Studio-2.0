@@ -29,13 +29,14 @@ from tests.gui.helpers import (
     record_setup_validation_dialogs,
 )
 
-from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode
+from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode, StimulusModality
 from fpvs_studio.core.models import (
     ImageGeometrySettings,
     ProjectPresentationSettings,
     StimulusPresentationDefaults,
 )
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.runtime_settings_page import ImageSizePreview, ImageSizePreviewDialog
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
@@ -160,6 +161,38 @@ def test_setup_wizard_separates_timing_session_and_image_size(
     assert session.randomization_editor.condition_order_button.isVisible()
     assert not session.randomization_editor.seed_details.isVisible()
     assert not session.show_condition_title_checkbox.isVisible()
+
+
+@pytest.mark.parametrize("modality", [StimulusModality.IMAGE, StimulusModality.WORD])
+def test_oddball_cadence_is_directly_editable_and_survives_reopen(
+    qtbot, controller: StudioController, tmp_path: Path, modality,
+) -> None:
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Oddball cadence")
+    document = window.document
+    condition_id = document.create_condition()
+    if modality == StimulusModality.WORD:
+        document.set_condition_stimulus_modality(condition_id, modality=modality)
+        document.update_condition_words(condition_id, role="base", words=["house", "tree"])
+        document.update_condition_words(condition_id, role="oddball", words=["fear", "anger"])
+    window.show_setup_wizard(step_key="experiment")
+    editor = window.setup_wizard_page.runtime_settings_editor
+    for width, height in ((1120, 820), (1180, 860)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        assert editor.oddball_every_n_spin.isVisible()
+        assert editor.oddball_every_n_spin.isEnabled()
+        label = editor.form_layout.labelForField(editor.oddball_every_n_spin)
+        assert label.text() == "Oddball every"
+        assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(label.text())
+        _assert_visible_children_within_parent(window.setup_wizard_page.experiment_step_surface)
+        _assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
+    editor.oddball_every_n_spin.setValue(4)
+    assert document.project.settings.protocol.oddball_every_n == 4
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.protocol.oddball_every_n == 4
+    condition = reopened.get_condition(condition_id)
+    assert reopened.get_stimulus_set(condition.base_stimulus_set_id).modality == modality
 
 
 def test_contrast_modulation_background_guidance_fits_setup_minimum(

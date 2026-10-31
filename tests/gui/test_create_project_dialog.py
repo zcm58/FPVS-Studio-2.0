@@ -12,6 +12,7 @@ from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.condition_template_profiles import (
     ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
+    COGNITIVE_LOAD_PROFILE_ID,
     built_in_condition_template_profiles,
 )
 from fpvs_studio.core.enums import ExperimentCategory
@@ -112,6 +113,81 @@ def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> Non
     assert not dialog.from_library
     dialog.reject()
     assert list(tmp_path.iterdir()) == []
+
+
+def test_creation_cognitive_choice_filters_templates_and_preserves_selection(qtbot) -> None:
+    profiles = built_in_condition_template_profiles()
+    cognitive = next(
+        profile for profile in profiles if profile.profile_id == COGNITIVE_LOAD_PROFILE_ID
+    )
+    custom = cognitive.model_copy(update={
+        "profile_id": "lab-counting-study", "display_name": "Lab counting study", "built_in": False,
+    })
+    dialog = CreateProjectDialog(condition_template_profiles=[*profiles, custom])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.mouseClick(dialog.manual_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(
+        dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS], Qt.MouseButton.LeftButton,
+    )
+    continue_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
+    assert continue_button is not None
+    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
+    assert dialog.category_summary_label.text() == "Cognitive Load FPVS"
+    assert dialog.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
+    assert {
+        dialog.condition_profile_combo.itemData(index)
+        for index in range(dialog.condition_profile_combo.count())
+    } == {COGNITIVE_LOAD_PROFILE_ID, custom.profile_id}
+    dialog.condition_profile_combo.setCurrentIndex(
+        dialog.condition_profile_combo.findData(custom.profile_id)
+    )
+    qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
+    assert dialog.condition_profile_id == custom.profile_id
+    assert dialog.template_description_label.text() == custom.description
+    qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(
+        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton,
+    )
+    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
+    assert dialog.condition_profile_combo.findData(COGNITIVE_LOAD_PROFILE_ID) == -1
+    assert dialog.condition_profile_combo.findData(custom.profile_id) == -1
+
+
+@pytest.mark.parametrize("size", [(760, 500), (800, 500)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_creation_cognitive_details_fit_with_long_content(qtbot, size, background) -> None:
+    profile = next(
+        profile for profile in built_in_condition_template_profiles()
+        if profile.profile_id == COGNITIVE_LOAD_PROFILE_ID
+    ).model_copy(update={
+        "display_name": "Paired image conditions with backward counting and baseline",
+        "description": (
+            "Three image conditions with paired no-load and backward-counting variants. "
+            "Replace the placeholder images and review each pair before collecting data."
+        ),
+    })
+    dialog = CreateProjectDialog(condition_template_profiles=[profile])
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.select_category(ExperimentCategory.COGNITIVE_LOAD_FPVS)
+    dialog.accept()
+    dialog.project_name_edit.setText("Cognitive Load Visual Recognition Follow Up Study")
+    dialog.project_root_edit.setText(
+        "C:/Users/Researcher/OneDrive - Mississippi State University/Research Projects/"
+        "Cognitive Load and Visual Recognition/FPVS Studio Project Root"
+    )
+    dialog.resize(*size)
+    dialog.show()
+    _assert_details_fit(dialog)
+    assert (dialog.width(), dialog.height()) == size
+    assert dialog.category_summary_label.text() == "Cognitive Load FPVS"
+    assert dialog.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
+    assert dialog.condition_profile_combo.toolTip() == profile.display_name
+    assert dialog.template_description_label.text() == profile.description
 
 
 @pytest.mark.parametrize("size", [(760, 500), (800, 500)])

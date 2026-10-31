@@ -117,6 +117,10 @@ class CreateProjectDialog(QDialog):
         choices = (
             (ExperimentCategory.FPVS, "Standard FPVS\nComing soon"),
             (ExperimentCategory.FPVS_ODDBALL, "FPVS Oddball Paradigm\nBase images and oddballs"),
+            (
+                ExperimentCategory.COGNITIVE_LOAD_FPVS,
+                "Cognitive Load FPVS\nWith and without counting",
+            ),
         )
         for index, (category, text) in enumerate(choices):
             button = QPushButton(text, self.category_page)
@@ -131,7 +135,7 @@ class CreateProjectDialog(QDialog):
             )
             self.category_button_group.addButton(button)
             self.category_buttons[category] = button
-            category_row.addWidget(button, index // 2, index % 2)
+            category_row.addWidget(button, 0, index)
         category_layout.addWidget(self.category_cards)
         category_layout.addStretch(1)
         self.category_stack.addWidget(self.category_page)

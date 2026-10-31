@@ -52,6 +52,39 @@ def test_saved_order_validation_rejects_unknown_counts_or_adjacent_duplicates(or
         validate_saved_condition_order(order, {"faces": 3, "houses": 2})
 
 
+def test_single_condition_saved_order_preserves_four_distinct_presentations(
+    sample_project, sample_project_root,
+):
+    sample_project.settings.fixation_task.enabled = False
+    order = ["faces"] * 4
+    assert validate_saved_condition_order(order, {"faces": 4}) == order
+    assert preview_condition_order(sample_project, presentation_counts={"faces": 4}) == order
+    before = sample_project.model_dump_json()
+    project = propose_condition_timing(sample_project, presentation_counts={"faces": 4},
+                                      saved_condition_order=order)
+    assert active_saved_condition_order(project) == order
+    assert sample_project.model_dump_json() == before
+    plan = compile_session_plan(project, refresh_hz=60, project_root=sample_project_root)
+    entries = plan.ordered_entries()
+    assert plan.schema_version == "1.8.0"
+    assert plan.ordering_policy == "saved_no_adjacent"
+    assert plan.total_runs == 4
+    assert [entry.condition_id for entry in entries] == order
+    assert [entry.condition_presentation_index for entry in entries] == [1, 2, 3, 4]
+    assert [entry.condition_presentation_count for entry in entries] == [4] * 4
+    assert len({entry.run_id for entry in entries}) == 4
+    assert SessionPlan.model_validate_json(plan.model_dump_json()).total_runs == 4
+
+
+@pytest.mark.parametrize("order, match", [
+    (["faces"] * 3, "does not match"),
+    (["faces", "faces", "faces", "unknown"], "unknown condition IDs"),
+])
+def test_single_condition_saved_order_still_requires_exact_known_occurrences(order, match):
+    with pytest.raises(ValueError, match=match):
+        validate_saved_condition_order(order, {"faces": 4})
+
+
 def test_preview_is_pure_asset_free_and_accepts_pending_counts(order_project):
     project = order_project
     project.settings.display.preferred_refresh_hz = None
@@ -194,6 +227,10 @@ def test_exact_manual_order_reuses_occurrence_schedules_and_has_distinct_protoco
     assert [entry.condition_id for entry in subset.ordered_entries()] == [
         "faces", "houses", "faces", "houses",
     ]
+    single = compile_session_plan(first, refresh_hz=60, project_root=sample_project_root,
+                                  condition_ids=["faces"])
+    assert [entry.condition_id for entry in single.ordered_entries()] == ["faces", "faces"]
+    assert [entry.condition_presentation_index for entry in single.ordered_entries()] == [1, 2]
     entries = [entry for entry in plan.ordered_entries() if entry.condition_id == "faces"]
     recovered = plan.model_copy(deep=True, update={"total_runs": 2, "blocks": [SessionBlock(
         block_index=0, condition_order=["faces", "faces"], entries=entries,

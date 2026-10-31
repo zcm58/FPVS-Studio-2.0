@@ -124,8 +124,11 @@ Represents one randomized block in the session:
 Ordinary FPVS sessions resolve each optional `Condition.presentation_count` or inherit
 `SessionSettings.block_count` as a total (never as another multiplier). Core pools
 all occurrences into one compiled block and uses a deterministic constrained order
-with no adjacent equal condition IDs. Counts are strict positive integers. If the
-largest count `m` exceeds `N-m+1`, compilation rejects the configuration with guidance;
+with no adjacent equal condition IDs when the selected pool has two or more conditions.
+A pool containing one condition retains every requested presentation consecutively,
+including when compilation selects only that condition from a larger project. Counts
+are strict positive integers. For multi-condition pools, if the largest count `m`
+exceeds `N-m+1`, compilation rejects the configuration with guidance;
 no count, adjacency rule or stream duration is silently changed. `core/session_ordering.py`
 owns count resolution, feasibility and bounded arrangement.
 
@@ -154,8 +157,9 @@ Top-level session fields:
 
 The current v1 policy is:
 
-- ordinary FPVS sessions contain exact per-condition multiplicities in one pooled,
-  non-adjacent order; per-condition occurrence indices are chronological within that order
+- ordinary FPVS sessions contain exact per-condition multiplicities in one pooled
+  order, separating equal conditions when the selected pool has multiple conditions;
+  per-condition occurrence indices are chronological within that order
 - sessions opting into randomization across blocks shuffle the complete balanced
   repeated pool; this removes three-condition block boundaries from AB burst order
 - current Studio GUI/runtime behavior does not honor legacy fixed-order settings
@@ -269,7 +273,8 @@ contracts and are outside these three controls.
 
 `SessionSettings.saved_condition_order` optionally retains an exact list of condition
 IDs, including repeated presentations. In overall Fixed mode, core validates known
-IDs, exact configured multiplicities and no adjacent duplicate conditions, then compiles
+IDs, exact configured multiplicities and no adjacent duplicate conditions in pools with
+two or more conditions, then compiles
 that list as SessionPlan 1.8 with `ordering_policy="saved_no_adjacent"`. RunSpec remains
 single-condition with the existing independent seed provenance. Chronological within-
 condition presentation indices are recomputed in the chosen global order, preserving
@@ -280,7 +285,8 @@ may become a stale authoring draft after condition/count edits; project validati
 compilation block an active invalid list without repairing it. Explicit order Save and
 combined count/timing/order proposals validate atomically. `preview_condition_order`
 uses a private copy, needs no assets/display and bounds work at 10,000 presentations.
-A selected subset that removes needed separators is rejected rather than reshuffled.
+A selected subset with two or more conditions that removes needed separators is
+rejected rather than reshuffled. A single-condition subset retains every occurrence.
 Historical plans and exact-occurrence recovery retain their original order/provenance.
 
 Saved-source fields use Project 1.15/config 1.13 and are omitted when absent. They are

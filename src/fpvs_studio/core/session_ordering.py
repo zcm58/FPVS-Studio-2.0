@@ -1,4 +1,4 @@
-"""Resolve total presentations and arrange ordinary FPVS sessions without repeats."""
+"""Resolve ordinary FPVS presentations, separating repeats in multi-condition pools."""
 
 from __future__ import annotations
 
@@ -74,6 +74,8 @@ def validate_saved_condition_order(
             "Saved condition order does not match the total presentations. "
             "Open Condition order to generate an order matching the current counts."
         )
+    if len(counts) == 1:
+        return list(order)
     for index, (left, right) in enumerate(zip(order, order[1:], strict=False), 1):
         if left == right:
             raise ValueError(
@@ -181,7 +183,7 @@ def _validate_pool(counts: Mapping[str, int], names: Mapping[str, str] | None = 
     for count in counts.values():
         if type(count) is not int or count < 1:
             raise ValueError("Total presentations must be positive integers.")
-    if not counts:
+    if len(counts) < 2:
         return
     total = sum(counts.values())
     condition_id = max(counts, key=lambda key: counts[key])
@@ -223,9 +225,14 @@ def constrained_condition_order(counts: Mapping[str, int], *, rng: random.Random
     An odd-sized remainder with a majority condition must start with that condition.
     Otherwise every available condition other than the previous one is feasible;
     choose among them weighted by their remaining multiplicities.
+    A single-condition pool retains all presentations without separator conditions.
     """
 
     _validate_pool(counts)
+    if len(counts) == 1:
+        check_compilation_cancelled()
+        condition_id, count = next(iter(counts.items()))
+        return [condition_id] * count
     remaining = dict(sorted(counts.items()))
     total = sum(remaining.values())
     order: list[str] = []

@@ -12,8 +12,9 @@ experiment. Supported values and behavior are:
 
 ## Creation and shared Setup
 
-After choosing manual creation, new-experiment Setup offers only FPVS Oddball Paradigm
-and the disabled Standard FPVS Coming soon choice. Nothing is selected initially.
+After choosing manual creation, new-experiment Setup offers FPVS Oddball Paradigm,
+Cognitive Load FPVS and the disabled Standard FPVS Coming soon choice. Attentional-Blink
+is not a manual creation choice. Nothing is selected initially.
 Name, folder and compatible experiment-template choices follow on the next page;
 Cancel creates no project. Category becomes locked when the
 experiment is created and appears read-only on Project. Changing category requires

@@ -9,10 +9,11 @@ letter-stream compiler.
 
 Open Setup > Conditions > FPVS Condition Modifiers > Add modifier and choose
 Masking: Color, Faces or Number. Settings exposes SOA, target/base/mask duration,
-background RGB, and native source editing. Faces requires real base and target images;
-each target must be mapped to an identification answer. Source images are staged until
-Apply and become project-owned media. Edit the pre/post screens through the existing
-task editor. Defaults are a source-based starting point, not a hidden import routine.
+background RGB, optional event markers, and native source editing. Faces requires real
+base and target images; each target must be mapped to an identification answer.
+Source images are staged until Apply and become project-owned media. Edit the pre/post
+screens through the existing task editor. Defaults are a source-based starting point,
+not a hidden import routine.
 
 The explicit masking timing action sets a 5 Hz item rate, every-fifth-item target,
 40 cycles per run, and three repetitions. It affects project timing and clearly
@@ -151,6 +152,16 @@ uses the existing project `oddball_trigger_code` (55 by default, with its existi
 explicit nonstandard-code policy). Codes must be distinct from each other and from
 condition/automatic-catch start codes. Omitting the object preserves legacy behavior.
 
+In **Advanced modifiers > Masking > Settings**, enable the variant's **event markers**,
+then set **Mask onset** and **Catch slot** EEG codes. Saved settings populate these controls;
+projects without event markers open with the checkbox cleared and codes 56/57 ready
+to enable. Clearing it removes the optional object on Apply. Target onset continues
+to use the project oddball code shown in the checkbox tooltip. Marker edits apply to
+all SOAs and catch conditions of that variant in the project, including modifiers
+assigned to other conditions. Other variants, timing, native sources, task screens and
+assignments are preserved. Apply rejects conflicting codes through core validation.
+Cancel preserves the saved project.
+
 | Event | Default code | Frame in each target slot |
 | --- | --- | --- |
 | Sequence start | Condition's saved code (1–12 in Masking) | Stream frame 0, once |
@@ -263,6 +274,11 @@ Setup's 1120x820: all three presets, long image paths, source/answer editing, Ap
 Cancel, shared assignment, copy, preset reload and modifier removal. At both 1100x720
 and 1120x760, inspect all four Masking tabs and the Catch trials enabled/disabled states,
 trigger persistence, matching-SOA guidance and participant-instruction reminder.
+In Settings, check variant event markers enabled/disabled states, saved 56/57 and custom
+codes, Apply/save/reopen, Cancel, and clear validation for duplicate or conflicting codes.
+With distinct modifiers for several SOAs and a catch, check that one marker edit updates
+the whole variant while preserving other variants and all non-marker settings.
+All marker controls and their full labels must fit both sizes, including validation states.
 The tab must remain hidden for other modifier kinds. In Setup Conditions, inspect Add
 Catch Condition, the actual saved rows and editable markers, the visible scheduling
 summary, and disabled-action explanations when an automatic or explicit catch already
@@ -273,6 +289,8 @@ is ready with complete masking pools and that ordinary source editors do not cla
 to control those visuals. Physical acceptance must verify Open Sans/Arial Black,
 circle edges and hit testing, the restored 1/3/6-frame SOAs, target-absent catches,
 final break/cross, and EEG start markers 1–12 on the intended monitor and serial device.
-Registered Qt and visible/manual acceptance remain unrun for this revision; focused
-non-Qt checks do not establish visible layout or physical timing/EEG acceptance.
+Registered Masking authoring tests passed in an approved visible Windows environment,
+including marker controls and validation at 1100x720 and 1120x760, staged variant-wide
+marker updates, save/reopen and Cancel. Settings was also inspected in both themes at
+the minimum size. Physical timing/EEG acceptance remains a separate check.
 No offscreen Qt or physical PsychoPy playback is part of the default local check.

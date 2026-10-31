@@ -12,7 +12,8 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   Timing retains `experiment`/timing/display/runtime aliases; `session` opens Session.
   Frequency/duration/counts/display stay on Timing; seeds/order/totals on Session.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
-  offers FPVS Oddball and disabled Standard FPVS; Library uses reviewed bundle import.
+  offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
+  reviewed bundle import.
   Categories are locked. Retain standalone image/native AB editors outside guided
   Setup; use `docs/EXPERIMENT_CATEGORIES.md` for current/retired behavior.
 - Conditions owns modality and Base/Oddball source folders/word lists. Fresh image
