@@ -9,6 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Studio 2.5.8 release](exec-plans/active/release-2.5.8.md) | Shared participant-instruction layout repair, regression checks, build and publication |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
 | [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Manual service implemented; retained native/packaged acceptance and automatic-crash follow-up have separate evidence |

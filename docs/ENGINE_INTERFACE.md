@@ -88,6 +88,13 @@ as PsychoPy. Runtime owns flow and calls engines through
   footer stimuli once per screen, update the countdown only when its displayed text
   changes, and release them on continue, cancellation and exceptions. They never
   allocate a replacement set of text stimuli on every display refresh.
+  Their heading, body and footer flow as separate measured blocks using pixel
+  units and top anchors. Wrapping follows the actual viewport with screen margins;
+  rendered bounds determine spacing instead of fixed vertical offsets. Layout
+  recomputes when the viewport or countdown text changes. Font fitting stops at a
+  readable minimum (16 px footer, proportionally larger heading/body); content
+  that still cannot fit raises an actionable error rather than clipping or adding
+  pages. Authored text, continuation keys and countdown behavior remain unchanged.
 
 ## First Files
 

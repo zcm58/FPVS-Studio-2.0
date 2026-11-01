@@ -42,12 +42,24 @@ class _Screen:
     def _text_stim(self, *args, **kwargs):
         stimulus = SimpleNamespace(**kwargs)
 
+        def set_text(text=None, log=None):
+            if text is not None:
+                stimulus.text = text
+            height = stimulus.height
+            stimulus.boundingBox = (
+                min(getattr(stimulus, "wrapWidth", None) or 1200,
+                    len(stimulus.text) * height * 0.55),
+                height * 1.3,
+            )
+
         def draw():
             self.text_draws.append(stimulus.text)
             if stimulus.text == "[selected]":
                 self.selected_draws.append((self.flips, stimulus.pos))
 
         stimulus.draw = draw
+        stimulus.setText = set_text
+        set_text()
         self.created_text.append(stimulus)
         return stimulus
 

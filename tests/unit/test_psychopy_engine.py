@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import logging
 from concurrent.futures import ThreadPoolExecutor
+from math import ceil
 from pathlib import Path
 from threading import get_ident
 from traceback import extract_tb
@@ -166,6 +167,20 @@ class _FakeKeyboard:
         return [key for key in keys if getattr(key, "name", str(key)) in keyList]
 
 
+class _TextMetrics:
+    @property
+    def boundingBox(self):
+        height = float(self.height or 28)
+        width = float(self.wrapWidth or 1200)
+        line_widths = [len(line) * height * 0.55 for line in self.text.split("\n")]
+        lines = sum(max(1, ceil(line_width / width)) for line_width in line_widths)
+        return min(width, max(line_widths)), lines * height * 1.3
+
+    def setText(self, text=None, log=None):  # noqa: N802 - PsychoPy API
+        if text is not None:
+            self.text = text
+
+
 class _FakeStim:
     def __init__(self, *args, **kwargs) -> None:
         self.lineColor = kwargs.get("lineColor")
@@ -266,13 +281,14 @@ def _build_fake_psychopy(
             self.clear_textures_count += 1
             events.append(("clear", self.image))
 
-    class _FakeTextStim(_FakeStim):
+    class _FakeTextStim(_FakeStim, _TextMetrics):
         def __init__(self, *args, text: str, **kwargs) -> None:
             super().__init__(*args, **kwargs)
             self.text = text
             self.font = kwargs.get("font")
             self.pos = kwargs.get("pos")
             self.height = kwargs.get("height")
+            self.wrapWidth = kwargs.get("wrapWidth", 1200)
             self.color = kwargs.get("color")
             self.flipHoriz = kwargs.get("flipHoriz")
             self.flipVert = kwargs.get("flipVert")
@@ -769,8 +785,11 @@ def test_psychopy_engine_uses_final_thanks_copy_and_preserves_duration(monkeypat
 def test_text_screen_uses_custom_space_begin_prompt() -> None:
     captured_text: list[str] = []
 
-    class _PromptStim:
+    class _PromptStim(_TextMetrics):
         def __init__(self, *args, text: str, **kwargs) -> None:
+            self.text = text
+            self.height = kwargs.get("height", 28)
+            self.wrapWidth = kwargs.get("wrapWidth", 1200)
             captured_text.append(text)
 
         def draw(self) -> None:
@@ -3289,9 +3308,11 @@ def test_graphics_cleanup_rejects_unrecognized_pyglet_interface() -> None:
 def test_text_screens_reuse_stimuli_and_release_on_all_exits(termination) -> None:
     created = []
 
-    class TextStim:
+    class TextStim(_TextMetrics):
         def __init__(self, *args, text, **kwargs):
             self.text = text
+            self.height = kwargs.get("height", 28)
+            self.wrapWidth = kwargs.get("wrapWidth", 1200)
             self.draw_count = 0
             self.cleanup_count = 0
             created.append(self)

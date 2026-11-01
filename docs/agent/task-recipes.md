@@ -37,6 +37,7 @@ caches are scoped to an update; do not cache mutable project validation across e
 | Exact saved condition arrangements | `core/session_ordering.py`, `gui/condition_order_dialog.py` | [Saved arrangements](../SESSION_PLAN.md#saved-condition-arrangements) |
 | Task numeric precision and tolerance | `core/task_models.py`, `runtime/task_runner.py`, `engines/psychopy_tasks.py`; `tests/unit/test_runtime_tasks.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
 | Mouse choices and handlers | `engines/psychopy_tasks.py`; `tests/unit/test_psychopy_task_mouse.py`, `tests/unit/test_psychopy_task_hitboxes.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
+| Participant instructions, transitions and feedback text layout | `engines/psychopy_text_screens.py`; `tests/unit/test_psychopy_text_screens.py` | [Engine rendering](../ENGINE_INTERFACE.md#boundary-rules) |
 | Basic before/after questions and readable CSV | `core/post_questions.py`, `runtime/post_condition_responses.py` | [Questions](../POST_CONDITION_QUESTIONS.md) |
 | Advanced modifiers and Masking | `core/condition_modifiers.py`, `core/modifier_presets.py`, `core/compiler_masking.py` | [Modifiers](../CONDITION_MODIFIERS.md), [Masking](../MASKING.md) |
 | Cognitive Load baseline/counting | `core/cognitive_load_presets.py`, `core/backward_counting.py` | [Cognitive Load FPVS](../COGNITIVE_LOAD_FPVS.md) |
