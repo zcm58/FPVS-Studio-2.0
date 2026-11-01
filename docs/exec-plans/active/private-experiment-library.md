@@ -4,6 +4,111 @@ Status: Active
 
 Date: 2026-09-16
 
+## Further shared mouse-input repairs (October 31, 2026)
+
+The follow-up code inspection reproduced two additional renderer defects and fixed
+them in `engines/psychopy_tasks.py`, without changing authored projects:
+
+- Mouse capture was armed only after `window.flip()` returned. PsychoPy's event
+  keyboard backend can pump mouse events during its first-flip keyboard clear,
+  after buffer swap but before that return. Capture now arms as the first flip
+  callback, retaining those visible-screen clicks while ignoring pre-swap input.
+  Eight image/text, scaling and carried-input regressions fail against the old
+  renderer and pass with the repair.
+- PsychoPy's text containment centers its rendered content box, whereas Pyglet
+  draws left/right aligned labels inside the wrapping frame and left-aligns
+  overflowing lines. Hit tests now translate the click using actual rendered
+  metrics. Native vertical bounds, image/shape containment and ordinary centered
+  text behavior remain intact. Thirty new cases cover alignment, overflow,
+  multiline bounds, odd frame widths and nonselectable controls; six initial
+  reproductions failed before the fix. Installed dependency bytecode matches the
+  inspected PsychoPy/Pyglet behavior.
+
+The repairs apply globally to image/text choices and other mouse task screens,
+including Creatine, Cognitive Decline and Cognitive Load. All five saved recognition
+grids were compiled and exercised with 40 simulated first-visible-frame clicks,
+covering every target at scales 1 and 2; all accepted the correct target on that
+first frame. Project JSON remained byte-identical. Existing centered study grids
+do not exhibit the aligned-text defect; neither reproduction proves the cause of
+every previously reported installed-app failure.
+
+Focused engine verification passes 547 tests; the mouse/hitbox files pass 108 tests.
+The new hitbox module is registered in the engine route, and verification config
+checks pass. Broad precommit passed Ruff, compilation, mypy over 261 source modules,
+repository audits and 4,536 non-Qt tests, with 13 Windows symlink-permission skips.
+Docs focused passed 10 tests, and independent review found no must-fix issues.
+No Qt/PsychoPy windows were launched for this follow-up. The renderer repairs must
+ship in an updated Studio build before an existing installed app can use them;
+re-uploading unchanged study bundles cannot deliver application code.
+
+## Recognition mouse compatibility audit (October 31, 2026)
+
+Pulled Studio through `e904dac`, preserving the existing pilot-timing edits and
+merging their plan-index entry. A read-only audit of all 15 current configured-root
+projects found five reachable pre-task recognition grids in three studies:
+Creatine (image/word), Cognitive Decline (word), and Cognitive Load (load/no-load).
+All three compile with their saved scheduling at 60 Hz. Each grid resolves to the
+shared single-choice renderer, with four selectable targets, four nonselectable
+foils and four authored repetitions. No saved pointer setting or project setup
+error was found; tasks, timing, scoring, assets and local project files are unchanged.
+
+The known short-click defect belongs to Studio's shared PsychoPy input renderer,
+not a project-specific condition modifier. Native press capture and current pixel
+geometry shipped in Studio 2.5.0; pointer visibility is already enabled/restored by
+that same renderer. No new runtime defect was substantiated. The earlier reported
+failure inside installed 2.5.6 remains unconfirmed: isolated real-click diagnostics
+had passed, and full-app visible verification was interrupted by the user. This
+audit did not launch Qt or PsychoPy and does not claim Windows/fullscreen acceptance.
+
+Added cursor-lifecycle regression coverage for image/text single and multiple
+choices, rating, editable-text submit controls, four recognition repeats and
+success/abort/render/setup-error cleanup. Clean Library preparation now rejects
+bound mouse tasks declaring a minimum below 2.5.0. Final prepared-bundle verification
+independently checks the actual archive project, preventing an edited report from
+lowering the floor. Unbound tasks and condition-only scope retain their own rules;
+other features can require a newer app. These prevention changes are in source;
+no new installed Studio build was produced.
+
+Published and admitted [Creatine 1.0.1](https://openfpvs.com/experiments/creatine/1.0.1)
+and [Cognitive Decline 1.0.1](https://openfpvs.com/experiments/cognitive-decline/1.0.1),
+each with minimum Studio 2.5.0. These compatibility-only releases reuse the exact
+previously published bundle bytes after canonical clean/import/compile review;
+their SHA-256 values remain `4a367e0cd6b744afd992539ce6560ec364c2f6d19bbb9ff768af7c75feaf21cb`
+and `73956c7d370467f811741e1cc5be0497f4b692b50bcd336ea3e8a75dfb354896`.
+Catalog commits are `5025c2709c0debcf7a77e7dfc92a2857f3a9b03e` and
+`4b55524eacdd163c1b4e7c407e8f6ce86c432989`. Existing immutable releases remain intact.
+Their original 1.0.0 minimum of 1.8.1 allowed apps predating the input repair.
+Cognitive Load 1.0.4 already requires 2.5.5, and 1.0.5 requires 2.5.7; no duplicate
+release or reduction of its existing requirement was needed.
+
+The installed canonical signer refreshed ClamAV definitions, validated/scanned
+each exact bundle and verified signatures against the existing public pin.
+Registered the proofs through the authorized D1 query operator and verified both
+the live native catalog and live provenance endpoint. No key/toolchain changes,
+participant-data uploads or service deployment occurred. A D1 file-import request
+was rejected by its API authorization; the existing authorized query operation
+accepted the exact canonical registration SQL.
+
+Verification: all 70 mouse tests and all 121 publisher tests passed; repo precommit
+passed Ruff, compilation, mypy over 261 modules, audits and 4,498 non-Qt tests with
+13 Windows symlink-permission skips. Engine/Library focused reruns passed 508/511
+tests respectively, each encountering one intermittent Windows staging-folder rename
+failure; both failing cases passed isolated reruns and the complete precommit suite.
+Docs focused passed 10 tests. Fullscreen pointer/focus and physical timing remain
+manual checks; new versions cannot update already installed applications or guarantee
+all operating-system input behavior.
+
+## Cognitive Load FPVS 1.0.5 publication (October 30, 2026)
+
+Published the existing pilot with subtract-three counting from 1000–2000, three
+40-second repetitions per condition, immediate load endpoints and one fixation
+target 10–3 seconds before each stream ends. The exact bundle is scanned, signed,
+registered and confirmed in the live native catalog; prior releases remain intact.
+Minimum Studio is 2.5.7 because released 2.5.6 cannot decode the new authored onset
+window. The compatible packaged app release remains pending. Publication details
+and verification are recorded in the
+[completed pilot timing plan](../completed/cognitive-load-pilot-timing.md#experiment-library-publication).
+
 ## Local signing and current-project updates (October 30, 2026)
 
 The completed [implementation record](../completed/local-signing-current-project-updates.md)

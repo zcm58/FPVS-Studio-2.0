@@ -65,7 +65,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.5.6`.
+For the current release package, use the PEP 440-compatible package version `2.5.7`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -75,6 +75,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
+The [2.5.7 release plan](exec-plans/active/release-2.5.7.md) tracks shared task mouse
+repairs and compatibility with the Cognitive Load pilot project.
 The [2.5.6 release record](exec-plans/completed/release-2.5.6.md) tracks automatic
 Library project update detection and safe review offers.
 The [2.5.3 release record](exec-plans/completed/release-2.5.3.md) tracks the updater

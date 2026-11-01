@@ -36,10 +36,11 @@ caches are scoped to an update; do not cache mutable project validation across e
 | Independent seeds and pending launch snapshot | `core/randomization.py`, `gui/randomization_editor.py`, document/main-window launch coordination | [Independent randomization](../SESSION_PLAN.md#independent-randomization) |
 | Exact saved condition arrangements | `core/session_ordering.py`, `gui/condition_order_dialog.py` | [Saved arrangements](../SESSION_PLAN.md#saved-condition-arrangements) |
 | Task numeric precision and tolerance | `core/task_models.py`, `runtime/task_runner.py`, `engines/psychopy_tasks.py`; `tests/unit/test_runtime_tasks.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
-| Mouse choices and handlers | `engines/psychopy_tasks.py`; `tests/unit/test_psychopy_task_mouse.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
+| Mouse choices and handlers | `engines/psychopy_tasks.py`; `tests/unit/test_psychopy_task_mouse.py`, `tests/unit/test_psychopy_task_hitboxes.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
 | Basic before/after questions and readable CSV | `core/post_questions.py`, `runtime/post_condition_responses.py` | [Questions](../POST_CONDITION_QUESTIONS.md) |
 | Advanced modifiers and Masking | `core/condition_modifiers.py`, `core/modifier_presets.py`, `core/compiler_masking.py` | [Modifiers](../CONDITION_MODIFIERS.md), [Masking](../MASKING.md) |
 | Cognitive Load baseline/counting | `core/cognitive_load_presets.py`, `core/backward_counting.py` | [Cognitive Load FPVS](../COGNITIVE_LOAD_FPVS.md) |
+| Simran & Sarah pilot late fixation target | `core/compiler_fixation.py`; ordinary scaffold defaults remain unchanged | [FixationEvent](../RUNSPEC.md#fixationevent), [pilot timing](../exec-plans/completed/cognitive-load-pilot-timing.md) |
 | Native AB rate, repeated targets and recall | `core/attentional_blink_stream.py`, `core/attentional_blink_presets.py`, `runtime/attentional_blink_report.py` | [Categories](../EXPERIMENT_CATEGORIES.md), [recall results](../RUNTIME_EXECUTION.md#attentional-blink-recall-results) |
 | AB all-character markers | `core/compiler_schedules.py`, `engines/psychopy_triggers.py`, `runtime/preflight.py`; `tests/unit/test_attentional_blink_distractor_triggers.py` | [TriggerEvent](../RUNSPEC.md#triggerevent) |
 | Fixation visibility and accuracy export | `gui/fixation_settings_page.py`, runtime fixation-report owner; `tests/gui/test_fixation_settings_page.py` | [Fixation accuracy](../RUNTIME_EXECUTION.md#fixation-task-accuracy-query-and-export) |
@@ -49,6 +50,14 @@ Use core/compiler for realization, runtime for sequencing/scoring and engine for
 rendering. Keep task clocks outside FPVS frames and preserve compiled provenance.
 AB's opted-in frame -1 marker is an explicit neutral flip; it is not a scheduling
 fallback. Software mouse/input checks do not replace visible presentation acceptance.
+The engine focused route covers first-flip mouse capture, retained press/release events,
+pixel coordinates, text alignment and per-screen handler cleanup without opening a
+presentation window. Projects have no pointer setting; verify affected grids visibly
+on the presentation machine. Native capture first shipped in Studio 2.5.0; first-flip
+capture and text hit-testing repairs ship in 2.5.7.
+`core/library_publish.py::require_library_task_compatibility` and final publisher
+verification require 2.5.7 for new publications with bound mouse-response tasks.
+Use engine and Library focused routes when changing this guarantee.
 
 ## Recording, Recovery and Native Lifetime
 

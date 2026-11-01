@@ -16,6 +16,14 @@ import pytest
 from fpvs_studio.core.library_publish import LibraryBundlePreparation
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled
 from fpvs_studio.core.serialization import save_project_file
+from fpvs_studio.core.task_models import (
+    TaskBinding,
+    TaskDisplayItem,
+    TaskItemModality,
+    TaskModule,
+    TaskStep,
+    TaskStepKind,
+)
 from fpvs_studio.developer import library_publisher as publisher
 from fpvs_studio.developer.library_publisher import (
     PublicationRequest,
@@ -158,6 +166,29 @@ def test_preparation_preserves_source_and_writes_reviewed_metadata(
     service.discard(result)
     assert not result.directory.exists()
     assert sample_project_root.exists()
+
+
+def test_service_preserves_mouse_task_minimum_error_and_cleans_preparation(
+    configured, sample_project, sample_project_root,
+):
+    service, temporary = configured
+    sample_project.task_modules = [TaskModule(
+        task_id="selection", name="Selection", steps=[TaskStep(
+            step_id="choose", kind=TaskStepKind.CHOICE_GRID, items=[TaskDisplayItem(
+                item_id="object", modality=TaskItemModality.TEXT, text="Object", selectable=True,
+            )],
+        )],
+    )]
+    sample_project.conditions[0].pre_task_bindings = [TaskBinding(task_id="selection")]
+    save_project_file(sample_project, sample_project_root / "project.json")
+    write_stimulus_manifest(
+        sample_project_root, create_empty_manifest(sample_project.meta.project_id),
+    )
+    before = (sample_project_root / "project.json").read_bytes()
+    with pytest.raises(PublisherError, match="selection.*minimum Studio version of 2.5.7"):
+        service.prepare(sample_project_root, request(minimum_studio_version="2.5.6"))
+    assert (sample_project_root / "project.json").read_bytes() == before
+    assert not list(temporary.glob("fpub-*"))
 
 
 def test_failed_or_canceled_preparation_removes_only_generated_workspace(

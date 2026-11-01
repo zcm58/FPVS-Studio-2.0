@@ -455,6 +455,26 @@ class ProtocolSettings(FPVSBaseModel):
         return self.base_hz / self.oddball_every_n
 
 
+class FixationTargetOnsetWindow(FPVSBaseModel):
+    """Inclusive single-target onset window measured backward from stream offset."""
+
+    earliest_seconds_before_end: float = Field(gt=0)
+    latest_seconds_before_end: float = Field(ge=0)
+
+    @model_validator(mode="after")
+    def validate_window(self) -> FixationTargetOnsetWindow:
+        if not all(isfinite(value) for value in (
+            self.earliest_seconds_before_end, self.latest_seconds_before_end,
+        )):
+            raise ValueError("Fixation target onset window values must be finite.")
+        if self.earliest_seconds_before_end < self.latest_seconds_before_end:
+            raise ValueError(
+                "Fixation target onset window earliest time must be at least "
+                "the latest time before the end."
+            )
+        return self
+
+
 class FixationTaskSettings(FPVSBaseModel):
     """Project-level fixation-cross color-change task settings."""
 
@@ -471,6 +491,7 @@ class FixationTaskSettings(FPVSBaseModel):
     target_count_min: int = Field(default=DEFAULT_FIXATION_TARGET_COUNT_MIN, ge=0)
     target_count_max: int = Field(default=DEFAULT_FIXATION_TARGET_COUNT_MAX, ge=0)
     no_immediate_repeat_count: bool = True
+    target_onset_window: FixationTargetOnsetWindow | None = None
     base_color: str | tuple[int, int, int] = "#0000FF"
     target_color: str | tuple[int, int, int] = "#FF0000"
     target_duration_ms: int = Field(default=DEFAULT_FIXATION_TARGET_DURATION_MS, ge=0)
@@ -481,6 +502,14 @@ class FixationTaskSettings(FPVSBaseModel):
     response_keys: list[str] = Field(default_factory=lambda: ["space"])
     cross_size_px: int = Field(default=27, gt=0)
     line_width_px: int = Field(default=2, gt=0)
+
+    @model_serializer(mode="wrap")
+    def serialize_settings(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.target_onset_window is None:
+            # Preserve existing persisted settings and protocol fingerprints when unused.
+            data.pop("target_onset_window", None)
+        return data
 
     @property
     def color_changes_per_condition(self) -> int:
@@ -523,6 +552,16 @@ class FixationTaskSettings(FPVSBaseModel):
         if self.accuracy_task_enabled and not self.enabled:
             raise ValueError(
                 "Fixation task must be enabled when the fixation accuracy task is enabled."
+            )
+        if self.target_onset_window is not None and (
+            not self.show_cross
+            or not self.enabled
+            or self.target_count_mode != "fixed"
+            or self.changes_per_sequence != 1
+        ):
+            raise ValueError(
+                "A fixation target onset window requires an enabled, visible cross "
+                "with exactly one fixed color change per condition."
             )
         if self.target_count_mode == "randomized":
             if self.target_count_min > self.target_count_max:

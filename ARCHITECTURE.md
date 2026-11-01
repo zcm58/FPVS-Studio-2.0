@@ -57,6 +57,8 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Effective frequency/duration and ordering | `core/condition_timing.py`, `core/session_ordering.py` |
 | Independent randomization domains | `core/randomization.py` |
 | Task definitions and condition modifiers | `core/task_models.py`, `core/condition_modifiers.py` |
+| Optional single-target fixation onset window | `core/compiler_fixation.py`; compiled frame events remain the runtime contract |
+| Library mouse-task compatibility floor | `core/library_publish.py`; final prepared-bundle verification rechecks it |
 | Manifest schemas and persistence | `preprocessing/models.py`, `preprocessing/manifest.py` |
 | Portable paths and project persistence | `core/paths.py`, `core/project_service.py` |
 | Guarded current-project Library replacement | `core/project_bundle_update.py`; ordinary imports never replace projects |

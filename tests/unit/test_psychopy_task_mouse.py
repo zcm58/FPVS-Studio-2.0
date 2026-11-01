@@ -135,6 +135,29 @@ class _Screen:
         )
 
 
+class _CursorScreen(_Screen):
+    """Model PsychoPy's visibility property forwarding to its native backend."""
+
+    def __init__(self, *, initially_visible=False):
+        super().__init__()
+        self.native_cursor_visible = initially_visible
+        self.cursor_changes = []
+        self.visible_frames = []
+
+    @property
+    def mouseVisible(self):  # noqa: N802
+        return self.native_cursor_visible
+
+    @mouseVisible.setter
+    def mouseVisible(self, visible):  # noqa: N802
+        self.native_cursor_visible = visible
+        self.cursor_changes.append(visible)
+
+    def flip(self):
+        self.visible_frames.append(self.native_cursor_visible)
+        super().flip()
+
+
 def _recognition_step():
     return ResolvedTaskStep(
         task_id="custom-recognition",
@@ -304,4 +327,127 @@ def test_shared_choice_modes_accept_native_clicks_from_arbitrary_modifiers(
     assert result.selected_item_ids == expected
     if response_kind == "multiple_choice":
         assert result.key == "mouse-submit"
+    _assert_handlers_released(screen)
+
+
+@pytest.mark.parametrize("initially_visible", [False, True])
+@pytest.mark.parametrize(("response_kind", "modality"), [
+    (kind, modality)
+    for kind in ("single_choice", "multiple_choice", "rating")
+    for modality in ("image", "text")
+] + [("short_text", "text"), ("long_text", "text")])
+@pytest.mark.parametrize("exit_kind", ["submit", "abort", "display_error"])
+def test_mouse_task_cursor_is_visible_throughout_screen_and_restored(
+    tmp_path, initially_visible, response_kind, modality, exit_kind,
+):
+    screen = _CursorScreen(initially_visible=initially_visible)
+    step = replace(_recognition_step(), response_kind=response_kind)
+    if modality == "image":
+        step = replace(step, items=tuple(
+            replace(item, text=None, image_path=f"stimuli/task-assets/custom/{item.item_id}.png")
+            for item in step.items
+        ))
+    click_position = (-200, -120)
+    if response_kind in {"short_text", "long_text"}:
+        step = replace(step, kind="questionnaire", items=(), required=False)
+        click_position = (0, -720 * 0.32)
+    screen.actions = [None, ("click", click_position, 1)]
+    if exit_kind != "submit":
+        screen.actions = [None, "escape" if exit_kind == "abort" else "error"]
+
+    if exit_kind == "display_error":
+        with pytest.raises(RuntimeError, match="display failed"):
+            screen.render(tmp_path, step=step)
+    else:
+        result = screen.render(tmp_path, step=step)
+        assert result.aborted is (exit_kind == "abort")
+
+    assert len(screen.visible_frames) >= 2
+    assert all(screen.visible_frames)
+    assert screen.cursor_changes == [True, initially_visible]
+    assert screen.native_cursor_visible is initially_visible
+    assert screen.winHandle.handlers == []
+
+
+def test_four_recognition_repeats_each_enable_cursor_and_accept_a_short_click(tmp_path):
+    screen = _CursorScreen()
+    step = replace(_recognition_step(), items=tuple(
+        ResolvedTaskItem(
+            f"target-{index}", image_path=f"stimuli/task-assets/recognition/{index}.png",
+            position_px=((index - 1.5) * 200, -120), size_px=(100, 100), selectable=True,
+        ) for index in range(4)
+    ))
+
+    for item in step.items:
+        screen.actions = [None, ("click", item.position_px, 1)]
+        result = screen.render(tmp_path, step=step)
+        assert result.selected_item_ids == (item.item_id,)
+        assert not result.aborted
+        assert not screen.native_cursor_visible
+        assert screen.winHandle.handlers == []
+
+    assert screen.visible_frames == [True] * 8
+    assert screen.cursor_changes == [True, False] * 4
+
+
+@pytest.mark.parametrize("initially_visible", [False, True])
+def test_mouse_setup_failure_restores_native_cursor_without_opening_a_screen(
+    tmp_path, initially_visible,
+):
+    screen = _CursorScreen(initially_visible=initially_visible)
+
+    def reject_handler(**handlers):
+        raise RuntimeError("native input unavailable")
+
+    screen.winHandle.push_handlers = reject_handler
+
+    with pytest.raises(RuntimeError, match="native input unavailable"):
+        screen.render(tmp_path)
+
+    assert screen.cursor_changes == [True, initially_visible]
+    assert screen.native_cursor_visible is initially_visible
+    assert screen.visible_frames == []
+
+
+@pytest.mark.parametrize("modality", ["image", "text"])
+@pytest.mark.parametrize("scale", [1, 2])
+@pytest.mark.parametrize("carried_click", [False, True])
+def test_first_visible_flip_keeps_clicks_pumped_by_keyboard_clear(
+    tmp_path, modality, scale, carried_click,
+):
+    screen = _Screen(scale=scale)
+    step = _recognition_step()
+    if modality == "image":
+        step = replace(step, items=tuple(
+            replace(item, text=None, image_path=f"stimuli/task-assets/choice/{item.item_id}.png")
+            for item in step.items
+        ))
+    # PsychoPy pumps carried events before swapping buffers. Its first-flip
+    # keyboard clear then pumps events again, after the choices become visible.
+    screen.actions = [
+        ("click", (-200, -120), 1) if carried_click else None,
+        "escape",
+    ]
+    cleared_at = []
+
+    def clear_keyboard_events():
+        screen.keys.clear()
+        cleared_at.append(screen.flips)
+        screen.buttons = (1, 0, 0)
+        screen.winHandle.press(
+            (200 + screen.size[0] / 2) / scale,
+            (-120 + screen.size[1] / 2) / scale,
+            1,
+        )
+        screen.buttons = (0, 0, 0)
+
+    screen.keyboard.clearEvents = clear_keyboard_events
+
+    result = screen.render(tmp_path, step=step)
+
+    assert cleared_at == [1]
+    assert result.selected_item_ids == ("lamp-target",)
+    assert not result.aborted
+    assert screen.flips == 1
+    assert result.mouse_position_px == (200, -120)
     _assert_handlers_released(screen)

@@ -29,6 +29,7 @@ from fpvs_studio.core.enums import (
 )
 from fpvs_studio.core.migrations import migrate_project_payload
 from fpvs_studio.core.models import (
+    FixationTaskSettings,
     ImageGeometrySettings,
     StimulusPresentationOverride,
     TextHeightScheduleSettings,
@@ -36,6 +37,45 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.core.run_spec import StimulusEvent, TriggerEvent
 from fpvs_studio.preprocessing.importer import materialize_project_assets
+
+
+@pytest.mark.parametrize("refresh_hz", [59.94, 60, 120, 144, 240])
+def test_fixation_window_compiles_within_requested_seconds_at_each_refresh(
+    sample_project, sample_project_root, refresh_hz,
+) -> None:
+    sample_project.conditions[0].sequence_count = 1
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 48
+    sample_project.settings.fixation_task = FixationTaskSettings.model_validate({
+        **sample_project.settings.fixation_task.model_dump(),
+        "changes_per_sequence": 1,
+        "target_onset_window": {
+            "earliest_seconds_before_end": 10, "latest_seconds_before_end": 3,
+        },
+    })
+    for seed in (0, 11, 83):
+        run = compile_run_spec(sample_project, refresh_hz=refresh_hz,
+                               project_root=sample_project_root, random_seed=seed)
+        assert len(run.fixation_events) == run.fixation.realized_target_count == 1
+        remaining_seconds = (
+            run.display.total_frames - run.fixation_events[0].start_frame
+        ) / refresh_hz
+        assert 3 <= remaining_seconds <= 10
+
+
+def test_fixation_window_rejects_conditions_shorter_than_requested_window(
+    sample_project, sample_project_root,
+) -> None:
+    sample_project.conditions[0].sequence_count = 1
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 6
+    sample_project.settings.fixation_task = FixationTaskSettings.model_validate({
+        **sample_project.settings.fixation_task.model_dump(),
+        "changes_per_sequence": 1,
+        "target_onset_window": {
+            "earliest_seconds_before_end": 10, "latest_seconds_before_end": 3,
+        },
+    })
+    with pytest.raises(CompileError, match="onset window does not fit"):
+        compile_run_spec(sample_project, refresh_hz=60, project_root=sample_project_root)
 
 
 def test_runspec_creation_at_60hz_continuous_mode(sample_project, sample_project_root) -> None:

@@ -9,6 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Studio 2.5.7 release](exec-plans/active/release-2.5.7.md) | Shared mouse-selection repairs, source verification, build and publication |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
 | [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Manual service implemented; retained native/packaged acceptance and automatic-crash follow-up have separate evidence |
@@ -37,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Cognitive Load pilot timing](exec-plans/completed/cognitive-load-pilot-timing.md):
+  project-specific 40-second repetitions, subtract-three counting, immediate endpoints
+  and one late fixation target; source checks passed, visible presentation remains manual.
 
 Completed plans are historical evidence, not initial task context. Consult them only
 when current contracts omit the rationale needed for the task. Keep old verification

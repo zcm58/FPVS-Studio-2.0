@@ -208,6 +208,10 @@ def _render_prepared_task_step(
                 submitted_from_text_box[0] = False
 
         if callable(call_on_flip):
+            # Keyboard clearing can dispatch native mouse events after the swap.
+            # Capture those visible-screen clicks while still ignoring pre-swap input.
+            if mouse_presses is not None:
+                call_on_flip(mouse_presses.arm)
             call_on_flip(keyboard.clearEvents)
             call_on_flip(reset_text_input)
             keyboard_clock = getattr(keyboard, "clock", None)
@@ -258,7 +262,10 @@ def _render_prepared_task_step(
             )
             window.flip()
             presented_frames += 1
-            if mouse_presses is not None and presented_frames == 1:
+            if (
+                mouse_presses is not None and presented_frames == 1
+                and not callable(call_on_flip)
+            ):
                 mouse_presses.arm()
 
             key_result = _handle_keys(
@@ -1015,12 +1022,13 @@ def _item_at_position(
         stimulus = (stimuli or {}).get(item.item_id)
         contains = getattr(stimulus, "contains", None)
         if callable(contains):
+            hit_x = _text_hit_test_x(item, stimulus, x)
             try:
-                if bool(contains((x, y), units="pix")):
+                if bool(contains((hit_x, y), units="pix")):
                     return item
                 continue
             except TypeError:
-                if bool(contains((x, y))):
+                if bool(contains((hit_x, y))):
                     return item
                 continue
         width, height = _item_hitbox(item)
@@ -1030,6 +1038,35 @@ def _item_at_position(
         ):
             return item
     return None
+
+
+def _text_hit_test_x(item: ResolvedTaskItem, stimulus: Any, x: float) -> float:
+    """Align native TextStim containment with its rendered wrapping frame.
+
+    PsychoPy centers ``contains`` on the content width, while Pyglet positions
+    left/right aligned glyphs within the center-anchored wrapping frame. It also
+    left-aligns overflowing lines. Translate the point instead of guessing label
+    width or changing the drawing.
+    """
+    if item.image_path is not None or item.shape is not None:
+        return x
+    bounding_box = getattr(stimulus, "boundingBox", None)
+    wrapping_width = getattr(stimulus, "_wrapWidthPix", None)
+    if item.text_alignment == "center" and (bounding_box is None or wrapping_width is None):
+        return x
+    if bounding_box is None or wrapping_width is None:
+        raise RuntimeError("Aligned text hit-testing requires rendered wrapping-frame metrics.")
+    content_width = float(bounding_box[0])
+    frame_width = float(wrapping_width)
+    if not isfinite(content_width) or not isfinite(frame_width) or frame_width <= 0:
+        raise RuntimeError("Text hit-testing requires finite, positive wrapping-frame metrics.")
+    if item.text_alignment == "center" and content_width <= frame_width:
+        return x
+    content_left = -(frame_width // 2.0)
+    # Pyglet left-aligns an overflowing line regardless of the requested alignment.
+    if item.text_alignment == "right" and content_width <= frame_width:
+        content_left += frame_width - content_width
+    return x - (content_left + content_width / 2.0)
 
 
 def _point_in_box(

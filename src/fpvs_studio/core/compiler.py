@@ -10,6 +10,7 @@ from __future__ import annotations
 import random
 from collections import Counter
 from collections.abc import Callable
+from math import ceil, floor
 from pathlib import Path
 
 from fpvs_studio.core.attentional_blink_presets import RECALL_TASK_ID
@@ -315,6 +316,14 @@ def _compile_prepared_run(
             target_duration_frames=target_duration_frames,
             min_gap_frames=min_gap_frames,
             rng=run_rng,
+            onset_window_frames=(
+                (
+                    ceil(total_frames - window.earliest_seconds_before_end * refresh_hz),
+                    floor(total_frames - window.latest_seconds_before_end * refresh_hz),
+                )
+                if (window := fixation_settings.target_onset_window) is not None
+                else None
+            ),
         )
         if fixation_settings.enabled
         else []

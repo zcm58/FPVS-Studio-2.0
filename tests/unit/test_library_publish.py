@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 from threading import Event
@@ -12,7 +14,10 @@ import pytest
 
 import fpvs_studio.core.library_publish as publisher
 from fpvs_studio.core.enums import StimulusVariant
-from fpvs_studio.core.library_publish import prepare_library_bundle
+from fpvs_studio.core.library_publish import (
+    prepare_library_bundle,
+    require_library_task_compatibility,
+)
 from fpvs_studio.core.models import StimulusSet
 from fpvs_studio.core.project_bundle import (
     ProjectBundleCancelled,
@@ -26,6 +31,9 @@ from fpvs_studio.core.task_models import (
     TaskDisplayItem,
     TaskItemModality,
     TaskModule,
+    TaskOption,
+    TaskQuestion,
+    TaskQuestionKind,
     TaskStep,
     TaskStepKind,
 )
@@ -59,6 +67,116 @@ def _snapshot(root):
         for path in root.rglob("*")
         if path.is_file()
     }
+
+
+def _mouse_module(kind="grid"):
+    if kind in {"grid", "image-grid"}:
+        item = TaskDisplayItem(
+            item_id="choice", modality=TaskItemModality.TEXT, text="Object", selectable=True,
+        )
+        if kind == "image-grid":
+            item = TaskDisplayItem(
+                item_id="choice", modality=TaskItemModality.IMAGE,
+                image_path="stimuli/task-assets/mouse/object.png", selectable=True,
+            )
+        step = TaskStep(step_id="select", kind=TaskStepKind.CHOICE_GRID, items=[item])
+    else:
+        question_kind = TaskQuestionKind(kind)
+        question_args = {}
+        if question_kind in {TaskQuestionKind.SINGLE_CHOICE, TaskQuestionKind.MULTIPLE_CHOICE}:
+            question_args["options"] = [TaskOption(option_id="object", label="Object")]
+        if question_kind in {TaskQuestionKind.RATING, TaskQuestionKind.NUMERIC}:
+            question_args.update(min_value=0, max_value=5)
+        step = TaskStep(
+            step_id="answer", kind=TaskStepKind.QUESTIONNAIRE,
+            questions=[TaskQuestion(
+                question_id="question", kind=question_kind, prompt="Remember the object?",
+                **question_args,
+            )],
+        )
+    return TaskModule(task_id="mouse", name="Object task", steps=[step])
+
+
+@pytest.mark.parametrize("phase", ["pre_task_bindings", "post_task_bindings"])
+@pytest.mark.parametrize("kind", [
+    "grid", "image-grid", "single_choice", "multiple_choice", "rating", "short_text", "long_text",
+])
+@pytest.mark.parametrize("version", ["2.4.9", "2.5.0", "2.5.6"])
+def test_mouse_task_compatibility_floor_covers_bound_shared_controls(
+    sample_project, phase, kind, version,
+):
+    sample_project.task_modules = [_mouse_module(kind)]
+    setattr(sample_project.conditions[0], phase, [TaskBinding(task_id="mouse")])
+    with pytest.raises(ProjectBundleError, match="mouse.*2.5.7.*reliable mouse responses"):
+        require_library_task_compatibility(sample_project, version)
+
+
+@pytest.mark.parametrize("version", ["2.5.7", "2.5.10", "10.0.0"])
+def test_mouse_task_floor_compares_versions_semantically(sample_project, version):
+    sample_project.task_modules = [_mouse_module()]
+    sample_project.conditions[0].pre_task_bindings = [TaskBinding(task_id="mouse")]
+    require_library_task_compatibility(sample_project, version)
+
+
+def test_older_minimum_remains_valid_for_unbound_or_keyboard_only_tasks(sample_project):
+    sample_project.task_modules = [_mouse_module()]
+    require_library_task_compatibility(sample_project, "1.8.1")
+    sample_project.task_modules = [_mouse_module("numeric")]
+    sample_project.conditions[0].post_task_bindings = [TaskBinding(task_id="mouse")]
+    require_library_task_compatibility(sample_project, "1.8.1")
+
+
+@pytest.mark.parametrize("archive_source", [False, True])
+def test_preparation_rejects_mouse_task_minimum_without_changing_source_or_output(
+    sample_project, sample_project_root, tmp_path, archive_source,
+):
+    sample_project.task_modules = [_mouse_module()]
+    sample_project.conditions[0].pre_task_bindings = [TaskBinding(task_id="mouse")]
+    _ready_project(sample_project_root, sample_project)
+    source = sample_project_root
+    if archive_source:
+        source = tmp_path / "original.fpvsbundle"
+        export_project_bundle(sample_project_root, source)
+    before = _snapshot(sample_project_root)
+    output = tmp_path / "understated.fpvsbundle"
+    with pytest.raises(ProjectBundleError, match="minimum Studio version of 2.5.7"):
+        prepare_library_bundle(source, output, minimum_studio_version="2.5.6")
+    assert _snapshot(sample_project_root) == before
+    assert not output.exists()
+
+
+def test_selected_condition_ignores_mouse_tasks_on_excluded_conditions(
+    multi_condition_project, multi_condition_project_root, tmp_path,
+):
+    project = multi_condition_project
+    project.settings.session.block_count = 1
+    project.task_modules = [_mouse_module()]
+    project.conditions[0].pre_task_bindings = [TaskBinding(task_id="mouse")]
+    _ready_project(multi_condition_project_root, project)
+    result = prepare_library_bundle(
+        multi_condition_project_root, tmp_path / "keyboard.fpvsbundle",
+        minimum_studio_version="1.8.1", condition_id=project.conditions[1].condition_id,
+    )
+    assert result.minimum_studio_version == "1.8.1"
+    assert result.task_count == 0
+
+
+def test_cli_preparation_cannot_override_mouse_compatibility_floor(
+    sample_project, sample_project_root, tmp_path,
+):
+    sample_project.task_modules = [_mouse_module()]
+    sample_project.conditions[0].pre_task_bindings = [TaskBinding(task_id="mouse")]
+    _ready_project(sample_project_root, sample_project)
+    output = tmp_path / "cli.fpvsbundle"
+    script = Path(__file__).resolve().parents[2] / "scripts" / "prepare_library_bundle.py"
+    result = subprocess.run(
+        [sys.executable, str(script), str(sample_project_root), str(output),
+         "--minimum-studio-version", "2.5.6", "--dry-run"],
+        capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode != 0
+    assert "minimum Studio version of 2.5.7" in result.stderr
+    assert not output.exists()
 
 
 def test_publishing_copies_only_declared_content_and_sanitizes_project(

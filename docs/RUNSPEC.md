@@ -240,6 +240,16 @@ participant reports colorblindness. This does not mutate editable project settin
 
 Each fixation event contains a concrete target onset and duration in frames.
 
+Editable `FixationTaskSettings.target_onset_window` optionally restricts the single
+target's onset using `earliest_seconds_before_end` and
+`latest_seconds_before_end`, measured backward from the end of the stimulus stream.
+It requires a visible, enabled cross with exactly one fixed color change. The
+compiler samples an inclusive seeded frame window and rejects a window that cannot
+fit the run, target duration and minimum-gap edge buffers. The pre-stream fixation
+phase is outside this interval. Only the resulting concrete `FixationEvent` enters
+`RunSpec`; runtime and engines need no authored window or project special case.
+Absent this option, balanced seeded-jitter scheduling is unchanged.
+
 ### `TriggerEvent`
 
 Trigger events remain generic and frame-based. The compiler emits the condition
@@ -348,7 +358,8 @@ For ordinary FPVS Oddball Paradigm, the compiler emits a seed-deterministic sche
   no immediate repeat across bag boundaries; style randomization does not perturb
   stimulus selection order
 - balanced seeded-jitter fixation target onsets from the realized target count,
-  target duration, and minimum-gap edge/inter-target buffers
+  target duration, and minimum-gap edge/inter-target buffers, or one seeded random
+  onset inside an explicitly authored `target_onset_window`
 - a condition-start trigger event at the first stimulus onset when a condition trigger
   code is present
 - an `oddball_onset` trigger event at each oddball stimulus onset, using marker code

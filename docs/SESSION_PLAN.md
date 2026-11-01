@@ -170,7 +170,12 @@ The current v1 policy is:
   randomized mode realizes one count per ordered run from the session seed while
   preserving no-immediate-repeat constraints when enabled
 - each embedded `RunSpec` then distributes the realized fixation targets across
-  the whole condition with balanced seeded jitter and minimum-gap buffers
+  the whole condition with balanced seeded jitter and minimum-gap buffers; an
+  optional `FixationTaskSettings.target_onset_window` instead samples exactly one
+  fixed target inside the inclusive window before that entry's stream offset.
+  Each repetition is realized independently from its run seed. The window remains
+  an authored setting; compiled entries retain concrete frame events. See the
+  [FixationEvent contract](RUNSPEC.md#fixationevent) for validation and edge buffers.
 - task option randomization uses a task-specific deterministic seed namespace and
   records stable item/option ids in the compiled task spec
 - AB recall answer keys are resolved from the actual T1/T2 events for each entry;

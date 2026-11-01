@@ -17,8 +17,9 @@ from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import Condition, StimulusSet
 from fpvs_studio.core.project_bundle import export_project_bundle
 from fpvs_studio.core.project_service import build_starter_project
-from fpvs_studio.core.serialization import save_project_file
+from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.task_models import (
+    TaskBinding,
     TaskDisplayItem,
     TaskItemModality,
     TaskModule,
@@ -231,6 +232,43 @@ class PublishCatalogTests(unittest.TestCase):
         self.metadata["size_bytes"] = self.path.stat().st_size
         self.write_metadata()
         with self.assertRaisesRegex(publisher.PublishError, "checksum differs"):
+            publisher.verify_bundle(self.metadata_path)
+
+    def test_lowered_preparation_minimum_cannot_publish_mouse_tasks_on_unfixed_apps(self):
+        source = self.root / "source"
+        with zipfile.ZipFile(io.BytesIO(self.bundle_bytes)) as archive:
+            for relative in ("project.json", "stimuli/manifest.json"):
+                target = source / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(archive.read(relative))
+        project = load_project_file(source / "project.json")
+        project.task_modules = [TaskModule(
+            task_id="selection", name="Selection", steps=[TaskStep(
+                step_id="choose", kind=TaskStepKind.CHOICE_GRID, items=[TaskDisplayItem(
+                    item_id="object", modality=TaskItemModality.TEXT,
+                    text="Object", selectable=True,
+                )],
+            )],
+        )]
+        project.conditions[0].pre_task_bindings = [TaskBinding(task_id="selection")]
+        save_project_file(project, source / "project.json")
+        self.path.unlink()
+        manifest = export_project_bundle(source, self.path)
+        self.metadata.update(
+            size_bytes=self.path.stat().st_size,
+            sha256=publisher.file_sha256(self.path),
+            included_paths=[record.path for record in manifest.files],
+            minimum_studio_version="2.5.7",
+        )
+        self.write_metadata()
+        self.assertEqual(
+            publisher.verify_bundle(self.metadata_path).entry["min_studio_version"], "2.5.7",
+        )
+        # The inventory, project and archive digest still match after editing only
+        # the review metadata; the final publisher must independently enforce it.
+        self.metadata["minimum_studio_version"] = "2.5.6"
+        self.write_metadata()
+        with self.assertRaisesRegex(publisher.PublishError, "minimum Studio version of 2.5.7"):
             publisher.verify_bundle(self.metadata_path)
 
     def test_wrong_manifest_counts_and_unsafe_filename_fail(self):

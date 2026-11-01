@@ -16,8 +16,31 @@ def build_fixation_events(
     target_duration_frames: int,
     min_gap_frames: int,
     rng: random.Random,
+    onset_window_frames: tuple[int, int] | None = None,
 ) -> list[FixationEvent]:
-    """Generate balanced, seeded fixation events across one full condition run."""
+    """Generate seeded fixation events, optionally within a single-target window."""
+
+    if onset_window_frames is not None:
+        first_start_frame, last_start_frame = onset_window_frames
+        if total_event_count != 1 or target_duration_frames <= 0 or total_frames <= 0:
+            raise CompileError(
+                "A fixation target onset window requires exactly one positive-duration "
+                "target in a non-empty condition run."
+            )
+        if (
+            first_start_frame > last_start_frame
+            or first_start_frame < min_gap_frames
+            or last_start_frame + target_duration_frames > total_frames - min_gap_frames
+        ):
+            raise CompileError(
+                "Fixation target onset window does not fit within one condition run "
+                "after reserving the target duration and minimum-gap edge buffers."
+            )
+        return [FixationEvent(
+            event_index=0,
+            start_frame=rng.randint(first_start_frame, last_start_frame),
+            duration_frames=target_duration_frames,
+        )]
 
     if total_event_count <= 0 or target_duration_frames <= 0 or total_frames <= 0:
         return []

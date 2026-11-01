@@ -29,12 +29,15 @@ from pathlib import Path, PurePosixPath
 from threading import Event
 from typing import Any, TypeGuard
 
+from fpvs_studio.core.library_publish import require_library_task_compatibility
 from fpvs_studio.core.project_bundle import (
+    MAX_BUNDLE_PROJECT_JSON_BYTES,
     ProjectBundleCancelled,
     ProjectBundleError,
     open_project_bundle_archive,
     validate_project_bundle,
 )
+from fpvs_studio.core.serialization import project_from_json
 
 REPOSITORY = "zcm58/OpenFPVS-Website"
 REPO_PATH = f"/repos/{REPOSITORY}"
@@ -244,7 +247,11 @@ def verify_bundle(metadata_path: Path, cancel_event: Event | None = None) -> Pre
             raise PublishError("Bundle inventory differs from the preparation report.")
         if metadata.get("project_id") != manifest.get("project", {}).get("project_id"):
             raise PublishError("Bundle project identity differs from the preparation report.")
-    entry = {
+        project_info = archive.getinfo("project.json")
+        if project_info.file_size > MAX_BUNDLE_PROJECT_JSON_BYTES:
+            raise PublishError("Bundle project JSON is too large.")
+        project = project_from_json(archive.read(project_info))
+    entry: dict[str, Any] = {
         "item_id": metadata.get("item_id"),
         "kind": "experiment",
         "version": metadata.get("version"),
@@ -259,6 +266,10 @@ def verify_bundle(metadata_path: Path, cancel_event: Event | None = None) -> Pre
         "min_studio_version": metadata.get("minimum_studio_version"),
     }
     validate_entry(entry)
+    try:
+        require_library_task_compatibility(project, entry["min_studio_version"])
+    except ProjectBundleError as exc:
+        raise PublishError(str(exc)) from exc
     return PreparedBundle(path=path, entry=entry)
 
 

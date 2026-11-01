@@ -15,6 +15,8 @@ from pathlib import Path, PureWindowsPath
 from threading import Event
 from typing import Any
 
+from packaging.version import Version
+
 from fpvs_studio import __version__
 from fpvs_studio.core.compiler_assets import resolve_image_paths
 from fpvs_studio.core.condition_modifiers import modifier_task_ids
@@ -37,12 +39,45 @@ from fpvs_studio.core.project_bundle import (
 )
 from fpvs_studio.core.serialization import project_from_json, read_json_bytes, save_project_file
 from fpvs_studio.core.task_assets import SUPPORTED_TASK_ASSET_SUFFIXES, owned_image_references
+from fpvs_studio.core.task_models import TaskQuestionKind, TaskStepKind
 from fpvs_studio.preprocessing.inspection import MAX_BUNDLE_IMAGE_BYTES
 from fpvs_studio.preprocessing.manifest import write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 # GitHub requires each Release asset to be strictly smaller than 2 GiB.
 GITHUB_RELEASE_ASSET_LIMIT = 2 * 1024 * 1024 * 1024
+MOUSE_TASK_MINIMUM_STUDIO_VERSION = "2.5.7"
+
+
+def require_library_task_compatibility(
+    project: ProjectFile, minimum_studio_version: str,
+) -> None:
+    """Require the shared mouse capture and rendered text hit-testing repairs."""
+    if Version(minimum_studio_version) >= Version(MOUSE_TASK_MINIMUM_STUDIO_VERSION):
+        return
+    bound_ids = {
+        binding.task_id
+        for condition in project.conditions
+        for binding in (*condition.pre_task_bindings, *condition.post_task_bindings)
+    }
+    mouse_questions = {
+        TaskQuestionKind.SINGLE_CHOICE, TaskQuestionKind.MULTIPLE_CHOICE,
+        TaskQuestionKind.RATING, TaskQuestionKind.SHORT_TEXT, TaskQuestionKind.LONG_TEXT,
+    }
+    for module in project.task_modules:
+        if module.task_id not in bound_ids:
+            continue
+        if any(
+            step.kind == TaskStepKind.CHOICE_GRID
+            or (step.kind == TaskStepKind.QUESTIONNAIRE and any(
+                question.kind in mouse_questions for question in step.questions
+            ))
+            for step in module.steps
+        ):
+            raise ProjectBundleError(
+                f"Mouse-response task '{module.task_id}' requires a minimum Studio version "
+                f"of {MOUSE_TASK_MINIMUM_STUDIO_VERSION} or later for reliable mouse responses."
+            )
 
 
 @dataclass(frozen=True)
@@ -286,6 +321,7 @@ def prepare_library_bundle(
             project.task_modules = [
                 task for task in project.task_modules if task.task_id in task_ids
             ]
+        require_library_task_compatibility(project, minimum_studio_version)
         clean, clean_manifest, paths = _clean_inventory(source_root, project, manifest)
         clean_root = staging / "project"
         clean_root.mkdir()

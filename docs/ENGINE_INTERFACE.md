@@ -204,13 +204,28 @@ flip-locked trigger schedule.
 
 Pyglet task screens retain native mouse presses and their pixel positions until the
 renderer consumes them, including a press and release delivered between polls. Capture
-starts after the first visible flip, passes events through to PsychoPy controls, and
-is removed on every exit. Recognition selectability and submission rules stay authored.
+is armed as the first visible-flip callback, before keyboard clearing can dispatch
+more native events. Pre-swap clicks remain ignored. Capture passes events through to
+PsychoPy controls and is removed on every exit. Recognition selectability and
+submission rules stay authored.
 Capture uses the presentation window's native event pump without reading PsychoPy's
 separate legacy mouse state. Each press uses current window dimensions and content
 scaling so its hit-test coordinates match the visible choice after a resize or DPI change.
 This path is shared by image/text single choice, multiple choice and rating screens
 from any condition modifier, plus editable-text submit controls.
+
+Text-choice hit testing accounts for left/right alignment inside Pyglet's wrapping
+frame and for overflowing lines, using the actual rendered content width. The native
+containment check retains ownership of vertical bounds; image/shape and ordinary
+centered text tests are unchanged. Missing aligned-text metrics fail explicitly.
+
+Cursor visibility is engine-owned: every mouse-response screen enables the native
+pointer and restores its prior visibility on completion, Escape, rendering errors,
+and input-setup failures. Projects do not store a cursor setting. Regression checks
+exercise visibility throughout repeated recognition screens as well as queued clicks;
+they do not establish Windows cursor rendering or fullscreen focus on a lab machine.
+The native capture repair first shipped in Studio 2.5.0; Library compatibility guards
+are documented in [Experiment Library](EXPERIMENT_LIBRARY.md).
 
 Each task screen reuses its text and controls across frames, updating them when the
 response, selection or validation state changes. Task graphics use the same

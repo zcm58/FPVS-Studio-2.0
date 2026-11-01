@@ -624,6 +624,17 @@ not repository write permission.
 
 Keep the same study ID and increase the version for a revised experiment. Fields lock
 after preparation so Publish cannot send different metadata from the reviewed bundle.
+
+New publications with bound image/text choice grids, choice/rating questions or
+editable-text questions require a declared minimum of Studio **2.5.7** or later.
+Native mouse-press capture first shipped in 2.5.0; 2.5.7 also retains clicks during
+first-flip keyboard clearing and aligns text hit-testing with visible labels.
+Clean preparation and final prepared-bundle verification reject a lower declaration,
+including manually edited reports. This floor applies to both before and after tasks;
+unused modules do not raise it. Other features may require a
+newer minimum. This guard changes no task content, selection rules or timing, and
+cannot update an already installed application or change a previously published release.
+
 Failed publications retain their prepared files and can retry the same payload.
 Cancellation checks run between requests and during hashing/upload reads. An active
 network request may take its timeout (30 seconds, or 120 seconds for uploads) to return;
@@ -743,7 +754,8 @@ $report | ConvertTo-Json -Depth 20 |
 Use a stable lowercase, hyphenated `item_id` for one study. Use a new version, filename
 and release tag when its content changes. Published item/version pairs are immutable.
 The minimum Studio version defaults to the exporting checkout's version; preparation
-does not infer compatibility from the study's features. Preparation reports may be up
+enforces the mouse-task floor above but does not infer all other feature requirements.
+Preparation reports may be up
 to 16 MiB; the published catalog retains its separate 1 MiB bound.
 
 In a clean Library checkout, update `main`, preview the release, then publish:

@@ -52,6 +52,8 @@ def validate_masking_settings(
     refresh_hz: float,
 ) -> MaskingEventTriggers | None:
     owned_image_references([], project.condition_modifiers)
+    if project.settings.fixation_task.target_onset_window is not None:
+        raise ValueError("Masking does not support a fixation target onset window.")
     if (
         condition.attentional_blink is not None
         or condition.duty_cycle_mode != DutyCycleMode.CONTINUOUS

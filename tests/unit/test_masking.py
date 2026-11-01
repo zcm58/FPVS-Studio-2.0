@@ -13,7 +13,7 @@ from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.enums import PresentationUnit, ProjectSchemaVersion
 from fpvs_studio.core.masking import MaskingCatchTrialSettings, condition_masking
 from fpvs_studio.core.masking_presets import apply_masking_timing_defaults, create_masking_modifier
-from fpvs_studio.core.models import Condition, ProjectFile, ProjectMeta
+from fpvs_studio.core.models import Condition, FixationTaskSettings, ProjectFile, ProjectMeta
 from fpvs_studio.core.project_config import (
     ProjectConfigFile,
     create_project_from_config,
@@ -65,6 +65,17 @@ class ValidationEngine:
 
     def validate_run_spec(self, run_spec):
         return validate_display_refresh(run_spec.display.refresh_hz, base_hz=5, oddball_every_n=5)
+
+
+def test_masking_rejects_a_fixation_window_instead_of_ignoring_it(tmp_path):
+    project = masking_project()
+    project.settings.fixation_task = FixationTaskSettings(
+        changes_per_sequence=1,
+        target_onset_window={"earliest_seconds_before_end": 10, "latest_seconds_before_end": 3},
+    )
+    with pytest.raises(CompileError, match="Masking does not support a fixation target onset"):
+        compile_run_spec(project, project_root=tmp_path, refresh_hz=60,
+                         condition_id=project.conditions[0].condition_id)
 
 
 def test_masking_randomizes_whole_variant_blocks_across_seeds(tmp_path):

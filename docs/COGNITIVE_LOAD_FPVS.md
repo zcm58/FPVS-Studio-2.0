@@ -20,6 +20,29 @@ Placeholder circles, squares, and triangles are generated locally as 512×512 PN
 with ordinary hashes, resolution metadata, and project-relative manifest paths.
 They are scaffolding assets, not validated experimental stimuli.
 
+## Simran & Sarah pilot settings
+
+The existing **Simran & Sarah Pilot** project uses three randomized session blocks
+of its six conditions. Each entry contains one 40-second stream (48 oddball cycles
+at 6 Hz, every fifth item oddball). These project-specific edits do not change the
+built-in scaffold or reusable modifier defaults.
+
+Counting assignments subtract 3 from an inclusive random starting range of
+1000–2000. The active 30-second baseline is retained. Each of the nine load entries
+has its own starting number and an immediate endpoint question after the stream,
+before any other post-condition task.
+
+The pilot enables exactly one fixation target per stream, with
+`target_onset_window` spanning 10–3 seconds before stream offset. Every condition
+and displayed fixation reminder includes the participant instruction:
+
+> There will be a cross at the center of the screen. The cross will change colors
+> only ONCE throughout each condition. Press the space bar when you see the color change
+
+Counting and recognition-memory instructions remain alongside this shared wording.
+The compiler resolves the optional onset window to concrete frame events; see
+[RunSpec](RUNSPEC.md#fixationevent).
+
 ## Reusable condition modifiers
 
 Open **FPVS Condition Modifiers** from Setup > Conditions. **Backward counting**
