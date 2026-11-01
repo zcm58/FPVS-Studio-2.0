@@ -89,9 +89,10 @@ The exact SHA-256 is:
 
 `12e38beeecb44a7f823bf2f66156000bf8839566e6694542706b14dfe40a6895`
 
-The catalog explicitly requires Studio 2.5.7; the compatible packaged application
-release is pending. Released 2.5.6 rejects the new authored fixation field and is
-correctly prevented from downloading this version.
+The catalog explicitly requires Studio 2.5.7. The compatible packaged application
+was published on November 1, 2026; see the [2.5.7 release record](release-2.5.7.md).
+Released 2.5.6 rejects the new authored fixation field and is correctly prevented
+from downloading this version.
 
 Preparation validates the clean bundle through canonical import/compilation.
 The unchanged canonical offline validator and DPAPI signer ran with the updated

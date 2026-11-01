@@ -4,6 +4,17 @@ Status: Active
 
 Date: 2026-09-16
 
+## Studio mouse-repair release (November 1, 2026)
+
+The additional shared renderer repairs below are now published in
+[Studio 2.5.7](../completed/release-2.5.7.md), including first-visible-flip capture
+and rendered text hit areas. New Library mouse-task publications must declare a
+minimum of 2.5.7; preparation and final archive verification enforce it. Historical
+immutable experiment releases retain their original declared requirements. This
+application release does not alter local study protocols or replace the installed
+2.5.6 app. The release record contains final integrated test, artifact and public
+updater evidence; native/fullscreen and installed-lifecycle checks remain separate.
+
 ## Further shared mouse-input repairs (October 31, 2026)
 
 The follow-up code inspection reproduced two additional renderer defects and fixed
