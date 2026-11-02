@@ -565,7 +565,10 @@ class SetupWizardPage(QWidget):
             self.refresh()
             return False
         if not defer_timing and not self.condition_timing_table.apply_pending_edits():
-            self._active_step_index = self._step_index_for_key("experiment")
+            order_blocker = self.condition_timing_table.saved_order_blocker()
+            self._active_step_index = self._step_index_for_key(
+                "session" if order_blocker else "experiment",
+            )
             self.refresh()
             return False
         self.project_overview_editor.flush_pending_edits()
@@ -756,13 +759,10 @@ class SetupWizardPage(QWidget):
             )
             QWidget.setTabOrder(
                 self.runtime_settings_editor.oddball_every_n_spin,
-                self.condition_timing_table.condition_order_button,
+                self.condition_timing_table.discard_button,
             )
         self.session_structure_editor.randomization_editor.set_timing_table(
             self.condition_timing_table,
-        )
-        self.condition_timing_table.order_edit_requested.connect(
-            self.session_structure_editor.randomization_editor.condition_order_button.click,
         )
         layout.addWidget(self.condition_timing_table)
         self.native_timing_summary_label = QLabel(page)
@@ -1085,6 +1085,8 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.setCurrentIndex(0)
         self.content_stack.setCurrentWidget(self.guided_panel)
         self._refresh_current_editor_page()
+        if step_key == "session":
+            self.session_structure_editor.randomization_editor.refresh()
         self._sync_timing_refresh_hz()
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         self.native_timing_summary_label.setVisible(ab)
@@ -1572,9 +1574,12 @@ class SetupWizardPage(QWidget):
         if step_key == "conditions":
             return not self._condition_setup_blocker()
         if step_key == "experiment":
-            return not self.condition_timing_table.presentation_count_blocker()
+            return not self.condition_timing_table.presentation_count_blocker(
+                include_saved_order=False,
+            )
         if step_key == "session":
-            return self.runtime_settings_editor.timing_is_compatible()
+            return (not self.condition_timing_table.saved_order_blocker()
+                    and self.runtime_settings_editor.timing_is_compatible())
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
@@ -1594,10 +1599,12 @@ class SetupWizardPage(QWidget):
         if step_key == "conditions":
             return self._condition_setup_blocker()
         if step_key == "experiment":
-            return (self.condition_timing_table.presentation_count_blocker()
-                    or self.runtime_settings_editor.timing_blocker())
+            return (self.condition_timing_table.presentation_count_blocker(
+                include_saved_order=False,
+            ) or self.runtime_settings_editor.timing_blocker())
         if step_key == "session":
-            return self.runtime_settings_editor.timing_blocker()
+            return (self.condition_timing_table.saved_order_blocker()
+                    or self.runtime_settings_editor.timing_blocker())
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
@@ -1658,7 +1665,9 @@ class SetupWizardPage(QWidget):
             target.setFocus(Qt.FocusReason.OtherFocusReason)
         elif self._current_step_key() == "session":
             randomization = self.session_structure_editor.randomization_editor
-            if randomization.error_label.isVisible():
+            if self.condition_timing_table.saved_order_blocker():
+                focus_control: QWidget = randomization.condition_order_button
+            elif randomization.error_label.isVisible():
                 focus_control = (randomization.reset_patterns_button
                                  if randomization.reset_patterns_button.isVisible()
                                  else randomization.mode_combos["stimulus"])

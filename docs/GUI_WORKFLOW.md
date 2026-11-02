@@ -167,7 +167,7 @@ Cadence keeps its existing document binding and persists immediately; changing i
 placement does not change stimulus scheduling or pending frequency drafts. AB retains
 its existing cadence/summary surface outside the hidden FPVS table. Visible acceptance:
 at 1120x820 in both themes, check 5 and 1000 stimuli, Tab from frequency to cadence to
-condition order, then change cadence and save/reopen. Registered coverage is in
+Discard/Apply timing, then change cadence and save/reopen. Registered coverage is in
 `tests/gui/test_setup_experiment_display.py`; visible Qt checks remain opt-in.
 Its **Display refresh rate** selector edits the same target as Display & Session,
 so legacy durations can be resolved before leaving Timing. An unset target stays
@@ -1733,16 +1733,21 @@ scrolling. Registered Qt coverage remains opt-in.
 
 ### Choose and save condition order
 
-**Condition order...** on Session opens a plain list with
-Generate, Move up, Move down and Save. Repeated occurrences show chronological
-presentation numbers; long names remain available by tooltip. Participant reuse choices
-and order editing remain together on Session.
-Timing retains a **Condition order...** shortcut beside its table commands, opening
-the same dialog without flushing staged counts so saved-order mismatches can be
-repaired in one atomic save. Session remains the primary order editor surface.
+**Edit condition order...** in Display & Session is Setup's sole entry to the
+**Pseudorandom Condition Order Editor**. One short instruction explains selecting a
+presentation and using Move up/Move down. **Generate new order** creates another
+candidate; **Save order** uses the exact displayed arrangement for every participant.
+Repeated occurrences show chronological presentation numbers; long names remain
+available by tooltip. The modal fits 700x520 minimum / 780x620 default in both themes.
 
-Generate previews a pseudorandom candidate. Manual moves retain a draft and report
-adjacent duplicates in multi-condition pools or count mismatches. Save persists the exact
+Timing checks count feasibility separately from saved-order validity and has no order
+editor shortcut. Order-only conflicts stay on Display & Session, including persisted
+orders invalidated by adding/removing conditions. The editor receives staged counts;
+Save order validates and commits order plus timing/count edits atomically. Other timing
+or count errors return to Timing with drafts retained. Back also retains timing drafts.
+
+Generate new order previews a pseudorandom candidate. Manual moves retain a draft and report
+adjacent duplicates in multi-condition pools or count mismatches. Save order persists the exact
 choice and any combined timing/count draft through the existing atomic project save
 path, selecting Pseudorandom for condition order while preserving the image/word and
 fixation reuse choices and their configured roots.

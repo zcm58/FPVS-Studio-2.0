@@ -297,7 +297,7 @@ def test_structural_edits_keep_stale_fixed_order_visible_and_repairable(
     assert not table.presentation_count_blocker()
 
 
-def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
+def test_wizard_session_order_editor_repairs_staged_counts_before_advancing(
     qtbot, monkeypatch, tmp_path, preview_jobs,
 ):
     document, first, second = _document(tmp_path)
@@ -323,11 +323,11 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
-    assert "current counts" in table.error_label.text()
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+    assert "order" in table.saved_order_blocker().lower()
     assert table.pending_presentation_counts() == {first: 3}
     assert document.project == before
-    assert messages == [("Complete this setup step", table.error_label.text())]
+    assert messages == [("Complete this setup step", table.saved_order_blocker())]
     dialogs = []
 
     def generate_and_save(dialog):
@@ -345,8 +345,10 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
         return dialog.result()
 
     monkeypatch.setattr(ConditionOrderDialog, "exec", generate_and_save)
-    assert table.condition_order_button.isVisible()
-    qtbot.mouseClick(table.condition_order_button, Qt.MouseButton.LeftButton)
+    assert not hasattr(table, "condition_order_button")
+    editor = wizard.session_structure_editor.randomization_editor
+    assert editor.condition_order_button.isVisible()
+    qtbot.mouseClick(editor.condition_order_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
     assert len(dialogs) == 1
     assert not table.has_pending_edits()
@@ -355,12 +357,10 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
-    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.image_size_step_surface
 
 
-def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
+def test_wizard_session_order_editor_repairs_persisted_structural_mismatch(
     qtbot, monkeypatch, tmp_path, preview_jobs,
 ):
     document, first, second = _document(tmp_path)
@@ -388,8 +388,12 @@ def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
     assert wizard.setup_wizard_next_button.isEnabled()
     assert messages == []
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
-    assert messages == [("Complete this setup step", table.presentation_count_blocker())]
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+    assert messages == []
+    assert table.presentation_count_blocker(include_saved_order=False) == ""
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+    assert messages == [("Complete this setup step", table.saved_order_blocker())]
     dialogs = []
 
     def generate_and_save(dialog):
@@ -409,8 +413,10 @@ def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
         return dialog.result()
 
     monkeypatch.setattr(ConditionOrderDialog, "exec", generate_and_save)
-    assert table.condition_order_button.isVisible()
-    qtbot.mouseClick(table.condition_order_button, Qt.MouseButton.LeftButton)
+    assert not hasattr(table, "condition_order_button")
+    editor = wizard.session_structure_editor.randomization_editor
+    assert editor.condition_order_button.isVisible()
+    qtbot.mouseClick(editor.condition_order_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
     assert len(dialogs) == 1
     assert not table.presentation_count_blocker()
@@ -418,7 +424,7 @@ def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
     assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.image_size_step_surface
 
 
 @pytest.mark.parametrize("seconds", [0, 20])
@@ -477,7 +483,13 @@ def test_order_editor_plain_list_and_long_names_fit_documented_sizes(
     assert dialog.size().toTuple() == size
     assert dialog.minimumSize().toTuple() == (700, 520)
     assert_visible_children_within_parent(dialog)
-    assert dialog.effect_label.text() == "Save uses this condition order for every participant."
+    assert dialog.windowTitle() == "Pseudorandom Condition Order Editor"
+    assert dialog.instruction_label.text() == (
+        "Select a condition, then use Move up or Move down to arrange the order."
+    )
+    assert dialog.generate_button.text() == "Generate new order"
+    assert dialog.save_button.text() == "Save order"
+    assert dialog.effect_label.text() == "Every participant receives this saved condition order."
     if state == "valid":
         item = next(dialog.order_list.item(row) for row in range(dialog.order_list.count())
                     if dialog.order_list.item(row).data(Qt.ItemDataRole.UserRole) == first)
@@ -521,6 +533,8 @@ def test_order_actions_and_independent_choices_fit_wizard(
     combo.setCurrentIndex(combo.findData("fixed" if repeatable else "new"))
     QApplication.processEvents()
     assert editor.condition_order_button.isVisible()
+    assert editor.condition_order_button.text() == "Edit condition order..."
+    assert not hasattr(wizard.condition_timing_table, "condition_order_button")
     assert editor.clear_saved_order_button.isVisible()
     assert editor.saved_order_status_label.isVisible()
     assert editor.saved_order_status_label.text() == (

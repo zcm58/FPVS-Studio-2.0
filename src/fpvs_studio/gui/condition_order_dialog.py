@@ -29,7 +29,8 @@ from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mar
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 
 _STALE_SETUP_MESSAGE = (
-    "Setup changed. Close and reopen Condition order to use the current settings."
+    "Setup changed. Close and reopen the Pseudorandom Condition Order Editor "
+    "to use the current settings."
 )
 
 
@@ -42,7 +43,7 @@ class ConditionOrderDialog(QDialog):
         save_order: Callable[[list[str], RandomizationSeeds], None], parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Condition order")
+        self.setWindowTitle("Pseudorandom Condition Order Editor")
         self.setObjectName("condition_order_dialog")
         self.setMinimumSize(700, 520)
         self.resize(780, 620)
@@ -59,9 +60,14 @@ class ConditionOrderDialog(QDialog):
         self._dismissed = False
         layout = QVBoxLayout(self)
         layout.setSpacing(10)
+        self.instruction_label = QLabel(
+            "Select a condition, then use Move up or Move down to arrange the order.", self,
+        )
+        self.instruction_label.setWordWrap(True)
+        layout.addWidget(self.instruction_label)
         commands = QHBoxLayout()
         commands.setSpacing(8)
-        self.generate_button = QPushButton("Generate", self)
+        self.generate_button = QPushButton("Generate new order", self)
         self.generate_button.setObjectName("generate_condition_order_button")
         self.generate_button.setToolTip(
             "Generate a pseudorandom order for the requested presentations. "
@@ -78,6 +84,7 @@ class ConditionOrderDialog(QDialog):
         self.order_list = QListWidget(self)
         self.order_list.setObjectName("condition_order_list")
         self.order_list.setAccessibleName("Ordered condition presentations")
+        self.order_list.setAccessibleDescription(self.instruction_label.text())
         self.order_list.setTextElideMode(Qt.TextElideMode.ElideRight)
         self.order_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         layout.addWidget(self.order_list, 1)
@@ -87,13 +94,13 @@ class ConditionOrderDialog(QDialog):
         mark_error_text(self.error_label)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        self.effect_label = QLabel("Save uses this condition order for every participant.", self)
+        self.effect_label = QLabel("Every participant receives this saved condition order.", self)
         self.effect_label.setWordWrap(True)
         layout.addWidget(self.effect_label)
         footer = QHBoxLayout()
         footer.addStretch(1)
         self.cancel_button = QPushButton("Cancel", self)
-        self.save_button = QPushButton("Save", self)
+        self.save_button = QPushButton("Save order", self)
         self.save_button.setObjectName("save_condition_order_button")
         mark_secondary_action(self.cancel_button)
         mark_primary_action(self.save_button)

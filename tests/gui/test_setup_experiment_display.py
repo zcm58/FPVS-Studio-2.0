@@ -219,11 +219,14 @@ def test_oddball_cadence_is_directly_editable_and_survives_reopen(
         assert cadence.width() >= cadence.fontMetrics().horizontalAdvance(
             f"{cadence.maximum()}{cadence.suffix()}",
         ) + 40
+        frequency.setValue(5.0)
+        assert table.discard_button.isEnabled()
         frequency.setFocus()
         qtbot.keyClick(frequency, Qt.Key.Key_Tab)
         assert cadence.hasFocus()
         qtbot.keyClick(cadence, Qt.Key.Key_Tab)
-        assert table.condition_order_button.hasFocus()
+        assert table.discard_button.hasFocus()
+        assert not hasattr(table, "condition_order_button")
         _assert_visible_children_within_parent(window.setup_wizard_page.experiment_step_surface)
         _assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
     editor.oddball_every_n_spin.setValue(4)

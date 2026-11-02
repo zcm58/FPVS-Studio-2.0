@@ -13,6 +13,8 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   Frequency/duration/counts/cadence stay on Timing. The combined step uses Display
   controls on the left and Session controls on the right at 1040 px; both columns fit
   the 1120x820 window with shared section headings and compact field labels.
+  Display & Session has the sole condition-order editor entry. Timing defers order-only
+  conflicts there while retaining drafts for atomic order/timing save.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
   offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
   reviewed bundle import.

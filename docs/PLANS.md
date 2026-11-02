@@ -37,6 +37,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [One pseudorandom condition-order editor](exec-plans/completed/single-condition-order-editor.md):
+  sole Display & Session entry, clearer arrangement controls and retained atomic
+  order repair; verification results and a transient Windows access failure recorded.
 - [Display and Session columns](exec-plans/completed/display-session-columns.md):
   combined step 4 with eight-step navigation; safe precommit passed, visible Qt
   acceptance remains manual.

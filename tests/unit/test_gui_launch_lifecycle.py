@@ -83,6 +83,141 @@ def test_next_keeps_timing_drafts_until_display_choices_are_accepted(
     wizard.flush_pending_edits.assert_called_once_with(defer_timing=deferred)
 
 
+
+def test_persisted_order_mismatch_does_not_block_timing_count_feasibility(multi_condition_project):
+    from fpvs_studio.core.models import SessionSettings
+    from fpvs_studio.core.session_ordering import (
+        active_saved_condition_order,
+        validate_condition_presentation_counts,
+    )
+
+    project = multi_condition_project
+    project.settings.session = SessionSettings.model_validate({
+        **project.settings.session.model_dump(), "randomization_mode": "fixed",
+        "session_seed": 1, "stimulus_seed": 2, "fixation_seed": 3,
+        "saved_condition_order": [item.condition_id for item in project.conditions] * 2,
+    })
+    project.conditions.pop()
+    before = project.model_dump_json()
+    table = SimpleNamespace(_document=SimpleNamespace(project=project))
+    _bind_methods(
+        table, "condition_timing_table.py", "ConditionTimingTable", ["presentation_count_blocker"],
+        active_saved_condition_order=active_saved_condition_order,
+        validate_condition_presentation_counts=validate_condition_presentation_counts,
+    )
+    assert table.presentation_count_blocker()
+    assert table.presentation_count_blocker(include_saved_order=False) == ""
+    assert project.model_dump_json() == before
+
+
+
+@pytest.mark.parametrize("state", [
+    "valid", "staged_counts", "persisted_mismatch",
+    "invalid_duration", "invalid_counts", "inactive",
+])
+def test_saved_order_blocker_classifies_only_order_conflicts_without_mutation(
+    multi_condition_project, state,
+):
+    from fpvs_studio.core.condition_timing import propose_condition_timing
+    from fpvs_studio.core.models import SessionSettings
+    from fpvs_studio.core.randomization import (
+        effective_randomization_modes,
+        supports_independent_randomization,
+    )
+    from fpvs_studio.core.session_ordering import (
+        condition_presentation_counts,
+        validate_saved_condition_order,
+    )
+
+    project = multi_condition_project
+    project.settings.display.preferred_refresh_hz = 60.0
+    project.settings.session = SessionSettings.model_validate({
+        **project.settings.session.model_dump(), "randomization_mode": "fixed",
+        "session_seed": 1, "stimulus_seed": 2, "fixation_seed": 3,
+        "saved_condition_order": [item.condition_id for item in project.conditions] * 2,
+    })
+    first = project.conditions[0].condition_id
+    durations, counts = {}, {}
+    if state == "staged_counts":
+        counts[first] = 3
+    elif state == "persisted_mismatch":
+        project.conditions.pop()
+    elif state == "invalid_duration":
+        durations[first] = 0.0
+        counts[first] = 3
+    elif state == "invalid_counts":
+        counts[first] = 8
+    elif state == "inactive":
+        project.settings.session.randomization_mode = "new"
+        project.conditions.pop()
+    before = project.model_dump_json()
+    table = SimpleNamespace(
+        _document=SimpleNamespace(project=project), _shared_dirty=False,
+        shared_frequency_spin=SimpleNamespace(value=lambda: 6.0),
+        _overrides={}, _durations=durations, _presentation_counts=counts,
+    )
+    _bind_methods(
+        table, "condition_timing_table.py", "ConditionTimingTable", ["saved_order_blocker"],
+        propose_condition_timing=propose_condition_timing,
+        supports_independent_randomization=supports_independent_randomization,
+        effective_randomization_modes=effective_randomization_modes,
+        condition_presentation_counts=condition_presentation_counts,
+        validate_saved_condition_order=validate_saved_condition_order,
+    )
+    message = table.saved_order_blocker()
+    assert bool(message) == (state in {"staged_counts", "persisted_mismatch"})
+    if message:
+        assert "Edit condition order" in message
+        assert "Display & Session" in message
+    assert project.model_dump_json() == before
+
+
+def test_saved_order_validation_belongs_to_session_after_timing(wizard_steps):
+    order_message = "Update the saved condition order in Display & Session."
+    table = SimpleNamespace(
+        presentation_count_blocker=Mock(return_value=""),
+        saved_order_blocker=Mock(return_value=order_message),
+    )
+    wizard = SimpleNamespace(
+        _active_step_index=3, condition_timing_table=table,
+        runtime_settings_editor=SimpleNamespace(
+            timing_is_compatible=lambda: True, timing_blocker=lambda: "",
+        ),
+    )
+    _bind_methods(
+        wizard, "setup_wizard_page.py", "SetupWizardPage",
+        ["_step_valid", "_current_step_blocker"], _WIZARD_STEPS=wizard_steps,
+    )
+    assert wizard._step_valid(2)
+    table.presentation_count_blocker.assert_called_once_with(include_saved_order=False)
+    assert not wizard._step_valid(3)
+    assert wizard._current_step_blocker() == order_message
+
+
+
+@pytest.mark.parametrize("order_conflict,expected_index", [(True, 3), (False, 2)])
+def test_failed_timing_flush_routes_order_repair_to_its_single_session_entry(
+    order_conflict, expected_index,
+):
+    table = SimpleNamespace(
+        apply_pending_edits=Mock(return_value=False),
+        saved_order_blocker=Mock(return_value="Edit condition order" if order_conflict else ""),
+    )
+    wizard = SimpleNamespace(
+        _active_step_index=3, _next_navigation_busy=lambda: False,
+        condition_timing_table=table,
+        session_structure_editor=SimpleNamespace(randomization_editor=SimpleNamespace(
+            apply_pending_edits=lambda: True,
+        )),
+        _step_index_for_key=lambda key: {"session": 3, "experiment": 2}[key],
+        refresh=Mock(),
+    )
+    _bind_methods(wizard, "setup_wizard_page.py", "SetupWizardPage", ["flush_pending_edits"])
+    assert not wizard.flush_pending_edits()
+    assert wizard._active_step_index == expected_index
+    wizard.refresh.assert_called_once()
+
+
 def test_display_check_worker_blocks_navigation_from_every_setup_step(wizard_steps):
     wizard = SimpleNamespace(
         _condition_image_task_active=lambda: False,

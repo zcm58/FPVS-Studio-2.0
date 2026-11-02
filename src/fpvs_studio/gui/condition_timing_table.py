@@ -29,11 +29,17 @@ from fpvs_studio.core.condition_timing import (
 )
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.masking import condition_masking
-from fpvs_studio.core.randomization import RandomizationSeeds, supports_independent_randomization
+from fpvs_studio.core.randomization import (
+    RandomizationSeeds,
+    effective_randomization_modes,
+    supports_independent_randomization,
+)
 from fpvs_studio.core.session_ordering import (
     active_saved_condition_order,
+    condition_presentation_counts,
     effective_condition_presentation_count,
     validate_condition_presentation_counts,
+    validate_saved_condition_order,
 )
 from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
 from fpvs_studio.gui.document import ProjectDocument
@@ -48,7 +54,6 @@ class ConditionTimingTable(QWidget):
     """Apply timing and count drafts together after validation and confirmation."""
 
     draft_changed = Signal()
-    order_edit_requested = Signal()
 
     def __init__(
         self, document: ProjectDocument, parent: QWidget | None = None,
@@ -101,14 +106,6 @@ class ConditionTimingTable(QWidget):
             cadence_controls.setMaximumWidth(240)
             shared.addWidget(cadence_controls, 0, Qt.AlignmentFlag.AlignBottom)
         shared.addStretch(1)
-        self.condition_order_button = QPushButton("Condition order...", self)
-        self.condition_order_button.setObjectName("timing_condition_order_button")
-        self.condition_order_button.setToolTip(
-            "Update the condition order together with pending presentation counts.",
-        )
-        mark_secondary_action(self.condition_order_button)
-        self.condition_order_button.clicked.connect(self.order_edit_requested)
-        shared.addWidget(self.condition_order_button, 0, Qt.AlignmentFlag.AlignBottom)
         self.apply_button = QPushButton("Apply timing", self)
         self.apply_button.setObjectName("apply_condition_frequencies_button")
         self.apply_button.setToolTip(
@@ -188,7 +185,6 @@ class ConditionTimingTable(QWidget):
             return
         project = self._document.project
         self.setVisible(project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK)
-        self.condition_order_button.setVisible(supports_independent_randomization(project))
         self._syncing = True
         self._shared_hz = project.settings.protocol.base_hz
         self.shared_frequency_spin.setValue(self._shared_hz)
@@ -287,16 +283,45 @@ class ConditionTimingTable(QWidget):
         self._update_actions()
         self.error_label.hide()
         self.duration_choices.hide()
-        if message := self.presentation_count_blocker():
+        if message := self.presentation_count_blocker(include_saved_order=False):
             self.error_label.setText(message)
             self.error_label.show()
 
-    def presentation_count_blocker(self) -> str:
+    def presentation_count_blocker(self, *, include_saved_order: bool = True) -> str:
         try:
             validate_condition_presentation_counts(self._document.project)
-            active_saved_condition_order(self._document.project)
+            if include_saved_order:
+                active_saved_condition_order(self._document.project)
         except ValueError as error:
             return str(error)
+        return ""
+
+    def saved_order_blocker(self) -> str:
+        """Classify an order-only conflict without changing timing or stored settings."""
+        project = self._document.project
+        saved = project.settings.session.saved_condition_order
+        if (not supports_independent_randomization(project) or saved is None
+                or effective_randomization_modes(project).condition_order != "fixed"):
+            return ""
+        try:
+            draft = propose_condition_timing(
+                project,
+                shared_base_hz=self.shared_frequency_spin.value() if self._shared_dirty else None,
+                overrides=dict(self._overrides), durations=dict(self._durations),
+                presentation_counts=dict(self._presentation_counts),
+                clear_saved_condition_order=True,
+                refresh_hz=project.settings.display.preferred_refresh_hz,
+            )
+        except ValueError:
+            return ""
+        try:
+            validate_saved_condition_order(saved, condition_presentation_counts(draft))
+        except ValueError:
+            return (
+                "The saved condition order no longer fits these conditions "
+                "and presentation counts. "
+                "Open Edit condition order in Display & Session to update it."
+            )
         return ""
 
     def _sync_presentation_count_cells(self) -> None:

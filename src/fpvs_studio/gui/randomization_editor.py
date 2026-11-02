@@ -66,10 +66,11 @@ class RandomizationEditor(QWidget):
             combo.currentIndexChanged.connect(self._mode_changed)
         commands = QHBoxLayout()
         commands.setSpacing(8)
-        self.condition_order_button = QPushButton("Condition order...", self)
+        self.condition_order_button = QPushButton("Edit condition order...", self)
         self.condition_order_button.setObjectName("condition_order_button")
         self.condition_order_button.setToolTip(
-            "Preview, generate or arrange the exact condition order.",
+            "Open the Pseudorandom Condition Order Editor to arrange the order "
+            "for every participant.",
         )
         mark_secondary_action(self.condition_order_button)
         commands.addWidget(self.condition_order_button)
@@ -182,7 +183,10 @@ class RandomizationEditor(QWidget):
             self._document.project.settings.session.saved_condition_order is not None,
         )
         self._refresh_choice_details()
-        self._validate_patterns()
+        if self._validate_patterns() and self._timing_table is not None:
+            if message := self._timing_table.saved_order_blocker():
+                self.error_label.setText(message)
+                self.error_label.show()
 
     def _refresh_choice_details(self) -> None:
         saved = self._document.project.settings.session.saved_condition_order is not None
