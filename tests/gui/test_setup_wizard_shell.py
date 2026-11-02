@@ -480,6 +480,13 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.session_structure_editor.isVisible()
             assert not wizard.condition_timing_table.isVisible()
             assert not wizard.runtime_settings_editor.isVisible()
+            editor = wizard.session_structure_editor.randomization_editor
+            for domain, combo in editor.mode_combos.items():
+                assert combo.isVisible()
+                text_width = combo.fontMetrics().horizontalAdvance(combo.currentText())
+                assert combo.width() >= text_width + 32
+                effect = editor.effect_labels[domain]
+                assert effect.height() >= effect.heightForWidth(effect.width())
         elif step_key == "image_size":
             assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()

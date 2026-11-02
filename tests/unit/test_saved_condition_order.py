@@ -111,7 +111,9 @@ def test_save_selects_fixed_and_captures_roots_without_deriving_them_from_order_
         order_seeds=_candidate_seeds(project, 999),
     )
     session = saved.settings.session
-    assert session.randomization_mode == "fixed"
+    assert session.randomization_mode == "new"
+    assert session.randomization_modes.condition_order == "fixed"
+    assert session.randomization_modes.stimulus == session.randomization_modes.fixation == "new"
     assert session.saved_condition_order == ["houses", "faces"]
     assert session.session_seed == 999
     assert session.stimulus_seed == roots.stimulus_seed
@@ -166,6 +168,7 @@ def test_new_mode_retains_and_ignores_stale_order_in_compile_and_identity(
 ):
     project = propose_condition_timing(order_project, saved_condition_order=["faces", "houses"])
     project.settings.session.randomization_mode = "new"
+    project.settings.session.randomization_modes = None
     project.settings.session.saved_condition_order = ["removed-condition", "removed-condition"]
     project = ProjectFile.model_validate(project.model_dump())
     assert active_saved_condition_order(project) is None
@@ -270,7 +273,9 @@ def test_compiled_saved_policy_requires_fixed_mode(order_project, sample_project
     plan = compile_session_plan(project, refresh_hz=60, project_root=sample_project_root)
     payload = plan.model_dump()
     payload["randomization_mode"] = "new"
+    payload.pop("randomization_modes", None)
     for entry in payload["blocks"][0]["entries"]:
         entry["run_spec"]["randomization"]["mode"] = "new"
+        entry["run_spec"]["randomization"].pop("modes", None)
     with pytest.raises(ValidationError, match="requires fixed randomization"):
         SessionPlan.model_validate(payload)

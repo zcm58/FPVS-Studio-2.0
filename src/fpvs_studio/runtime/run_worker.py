@@ -420,6 +420,7 @@ class RuntimeWorker:
                 participant_metadata=participant_metadata or ParticipantMetadata(),
                 random_seed=session_plan.random_seed,
                 randomization_mode=session_plan.randomization_mode,
+                randomization_modes=session_plan.randomization_modes,
                 randomization_seeds=session_plan.randomization_seeds,
                 randomization_algorithm_version=session_plan.randomization_algorithm_version,
                 ordering_policy=session_plan.ordering_policy,

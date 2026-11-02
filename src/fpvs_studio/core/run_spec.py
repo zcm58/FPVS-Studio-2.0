@@ -31,6 +31,7 @@ from fpvs_studio.core.models import (
     ImageGeometrySettings,
     ImageResolution,
     RandomizationAlgorithmVersion,
+    RandomizationModes,
     RandomizationSeeds,
     validate_color,
     validate_presentation_text_color,
@@ -378,12 +379,26 @@ class RunRandomizationSpec(FPVSBaseModel):
     """Resolved roots and stable per-condition presentation schedule seeds."""
 
     mode: Literal["fixed", "new"]
+    modes: RandomizationModes | None = None
     seeds: RandomizationSeeds
     algorithm_version: RandomizationAlgorithmVersion = 1
     condition_presentation_index: StrictInt = Field(ge=1)
     stimulus_order_seed: StrictInt = Field(ge=0, lt=2**31)
     fixation_count_seed: StrictInt = Field(ge=0, lt=2**31)
     fixation_onset_seed: StrictInt = Field(ge=0, lt=2**31)
+
+    @model_serializer(mode="wrap")
+    def serialize_optional_modes(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.modes is None:
+            payload.pop("modes", None)
+        return payload
+
+    @model_validator(mode="after")
+    def validate_modes(self) -> RunRandomizationSpec:
+        if self.modes is not None and self.mode != self.modes.aggregate:
+            raise ValueError("Per-category randomization must match the overall policy.")
+        return self
 
 
 class RunSpec(FPVSBaseModel):

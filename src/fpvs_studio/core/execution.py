@@ -24,6 +24,7 @@ from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import (
     FPVSBaseModel,
     RandomizationAlgorithmVersion,
+    RandomizationModes,
     RandomizationSeeds,
     normalize_manual_removed_electrodes,
     validate_project_relative_path,
@@ -538,6 +539,7 @@ class SessionExecutionSummary(FPVSBaseModel):
     participant_metadata: ParticipantMetadata = Field(default_factory=ParticipantMetadata)
     random_seed: int | None = Field(default=None, ge=0)
     randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_modes: RandomizationModes | None = None
     randomization_seeds: RandomizationSeeds | None = None
     randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
     ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
@@ -559,7 +561,8 @@ class SessionExecutionSummary(FPVSBaseModel):
     ) -> dict[str, Any]:
         payload: dict[str, Any] = handler(self)
         for field in (
-            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+            "randomization_mode", "randomization_modes", "randomization_seeds",
+            "randomization_algorithm_version",
             "ordering_policy",
         ):
             if getattr(self, field) is None:
@@ -572,12 +575,17 @@ class SessionExecutionSummary(FPVSBaseModel):
             if self.schema_version != "1.4.0":
                 raise ValueError("Session ordering policy requires result schema 1.4.0.")
             if self.ordering_policy == "saved_no_adjacent" and (
-                self.randomization_mode != "fixed" or self.randomization_seeds is None
+                (self.randomization_modes.condition_order if self.randomization_modes is not None
+                 else self.randomization_mode) != "fixed" or self.randomization_seeds is None
             ):
                 raise ValueError("Saved session ordering requires fixed randomization.")
+        if self.randomization_modes is not None and (
+            self.randomization_mode != self.randomization_modes.aggregate
+        ):
+            raise ValueError("Per-category randomization must match the overall policy.")
         values = (self.randomization_mode, self.randomization_seeds,
                   self.randomization_algorithm_version)
-        if any(value is not None for value in values):
+        if self.randomization_modes is not None or any(value is not None for value in values):
             if self.schema_version not in {"1.3.0", "1.4.0"} or any(
                 value is None for value in values
             ):
@@ -590,6 +598,7 @@ class SessionExecutionSummary(FPVSBaseModel):
             if any(run.randomization is None
                    or run.randomization.seeds != self.randomization_seeds
                    or run.randomization.mode != self.randomization_mode
+                   or run.randomization.modes != self.randomization_modes
                    or run.randomization.algorithm_version != self.randomization_algorithm_version
                    for run in self.run_results):
                 raise ValueError("Run results must match the session randomization provenance.")

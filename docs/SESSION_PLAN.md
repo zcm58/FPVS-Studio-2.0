@@ -255,12 +255,16 @@ Task-module repetition indices remain separate from condition presentations.
 `core/randomization.py` resolves a frozen `RandomizationSeeds` snapshot with
 condition-order, stimulus-order and fixation roots. `SessionSettings.session_seed`
 remains the configured condition-order seed; optional `stimulus_seed`, `fixation_seed`
-and `randomization_mode` add the other domains and one overall fixed/new reuse policy.
+and `randomization_mode` add the other roots and the historical overall fixed/new policy.
+Optional `randomization_modes` records independent `condition_order`, `stimulus` and
+`fixation` choices. Absent category choices inherit the overall mode. The overall mode
+is fixed only when all categories are fixed; otherwise it is new.
 Legacy null settings resolve compatibly without rewriting the source project on load.
 Explicit settings use Project 1.14/config 1.12 and require the complete validated triplet.
 
 Ordinary SessionPlan 1.7 records `randomization_mode`, `randomization_seeds` and
-`randomization_algorithm_version`. Each RunSpec 1.7 records its `randomization`
+`randomization_algorithm_version`, plus optional `randomization_modes`. Each RunSpec 1.7
+records matching optional `randomization.modes` alongside its `randomization`
 provenance. Derived stimulus, fixation-count and fixation-onset seeds use the domain
 root, stable condition ID and one-based chronological presentation index. Participant,
 visit, session/run ID and global order are excluded. Changing only condition order
@@ -268,7 +272,8 @@ preserves the corresponding condition-occurrence streams; randomized count const
 that conflict with a seeded schedule are reported, not repaired by rerolling.
 
 Fixed mode reuses configured roots across participants and rejects inconsistent supplied
-snapshots. New mode resolves one fresh triplet per confirmed participant launch; preview
+snapshots for each fixed category. A confirmed participant launch resolves fresh roots
+only for new categories and preserves configured roots for fixed categories; preview
 compilation uses configured values and performs no entropy generation. Pending retries
 reuse their resolved snapshot. Concrete compiled schedules remain authoritative during
 recovery. Native AB, specialized masking and pre/post-task randomness retain their prior
@@ -277,7 +282,7 @@ contracts and are outside these three controls.
 ## Saved condition arrangements
 
 `SessionSettings.saved_condition_order` optionally retains an exact list of condition
-IDs, including repeated presentations. In overall Fixed mode, core validates known
+IDs, including repeated presentations. When condition order is fixed, core validates known
 IDs, exact configured multiplicities and no adjacent duplicate conditions in pools with
 two or more conditions, then compiles
 that list as SessionPlan 1.8 with `ordering_policy="saved_no_adjacent"`. RunSpec remains
@@ -285,11 +290,13 @@ single-condition with the existing independent seed provenance. Chronological wi
 condition presentation indices are recomputed in the chosen global order, preserving
 stimulus/fixation namespaces across moves.
 
-New mode ignores a retained list and compiles seeded pooled ordering. A retained list
-may become a stale authoring draft after condition/count edits; project validation and
+New condition-order mode ignores a retained list and compiles seeded pooled ordering.
+A retained list may become a stale authoring draft after condition/count edits; project validation and
 compilation block an active invalid list without repairing it. Explicit order Save and
-combined count/timing/order proposals validate atomically. `preview_condition_order`
-uses a private copy, needs no assets/display and bounds work at 10,000 presentations.
+combined count/timing/order proposals validate atomically. Saving an arrangement fixes
+condition order while preserving the stimulus and fixation reuse choices.
+`preview_condition_order` uses a private copy, needs no assets/display and bounds work
+at 10,000 presentations.
 A selected subset with two or more conditions that removes needed separators is
 rejected rather than reshuffled. A single-condition subset retains every occurrence.
 Historical plans and exact-occurrence recovery retain their original order/provenance.

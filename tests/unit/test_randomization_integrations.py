@@ -12,7 +12,12 @@ from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.enums import ExperimentCategory, ProjectSchemaVersion, StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.masking_presets import create_masking_modifier
-from fpvs_studio.core.models import ProjectFile, RandomizationSeeds, SessionSettings
+from fpvs_studio.core.models import (
+    ProjectFile,
+    RandomizationModes,
+    RandomizationSeeds,
+    SessionSettings,
+)
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
     ProjectConfigFile,
@@ -21,6 +26,7 @@ from fpvs_studio.core.project_config import (
     read_project_config,
     write_project_config,
 )
+from fpvs_studio.core.randomization import participant_randomization_seeds
 from fpvs_studio.core.serialization import load_project_file, save_project_file, write_json_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.engines.registry import register_engine, unregister_engine
@@ -65,6 +71,76 @@ def _fixed_project(project, *, modality="image"):
 def _rows(path):
     with path.open(encoding="utf-8", newline="") as stream:
         return list(csv.DictReader(stream))
+
+
+@pytest.mark.parametrize("export_mode", ["full", "compact"])
+def test_mixed_policy_saved_order_survives_interchange_execution_and_recovery(
+    sample_project, sample_project_root, tmp_path, export_mode,
+):
+    project = _fixed_project(sample_project, modality="word")
+    modes = RandomizationModes(condition_order="fixed", stimulus="new", fixation="fixed")
+    project.settings.session = SessionSettings.model_validate({
+        **project.settings.session.model_dump(), "randomization_mode": "new",
+        "randomization_modes": modes,
+        "saved_condition_order": [project.conditions[0].condition_id, "second",
+                                  project.conditions[0].condition_id],
+    })
+    save_project_file(project, sample_project_root / "project.json")
+    loaded = load_project_file(sample_project_root / "project.json")
+    assert loaded.settings.session == project.settings.session
+    config = export_project_config(project, None)
+    received = create_project_from_config(tmp_path / "received", config)
+    assert received.project.settings.session.randomization_modes == modes
+    assert received.project.settings.session.saved_condition_order == (
+        project.settings.session.saved_condition_order
+    )
+    seeds = participant_randomization_seeds(project, RandomizationSeeds(
+        condition_order_seed=901, stimulus_seed=902, fixation_seed=903,
+    ))
+    plan = compile_session_plan(project, refresh_hz=60, project_root=sample_project_root,
+                                resolved_seeds=seeds)
+    assert plan.randomization_seeds == RandomizationSeeds(
+        condition_order_seed=31, stimulus_seed=902, fixation_seed=109,
+    )
+    assert plan.ordering_policy == "saved_no_adjacent"
+    selected = plan.ordered_entries()[-1]
+    recorder = ConditionRecoveryRecorder(
+        sample_project_root, plan, participant_number="009", participant_session_number=1,
+    )
+    recorder.start_run(selected.run_id)
+    recorder.stage("playback")
+    recorder.close()
+    record, = query_condition_recovery(sample_project_root).records
+    recovered = build_recovery_session_plan(sample_project_root, record)
+    assert recovered.randomization_modes == modes
+    assert recovered.randomization_seeds == seeds
+    assert recovered.ordered_entries()[0].run_spec == selected.run_spec
+    assert SessionPlan.model_validate_json(recovered.model_dump_json()) == recovered
+    register_engine("mixed-policy", lambda: StubEngine({}))
+    try:
+        result = launch_session(
+            sample_project_root, plan, participant_number="001",
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False, engine_name="mixed-policy",
+                export_mode=export_mode, verify_refresh_rate=False,
+            ),
+        )
+    finally:
+        unregister_engine("mixed-policy")
+    assert result.randomization_modes == modes
+    assert SessionExecutionSummary.model_validate_json(result.model_dump_json()) == result
+    rows = _rows(sample_project_root / "logs/session_condition_history.csv")
+    assert all(row["condition_order_randomization_mode"] == "fixed" for row in rows)
+    assert all(row["stimulus_randomization_mode"] == "new" for row in rows)
+    assert all(row["fixation_randomization_mode"] == "fixed" for row in rows)
+    completed = sample_project_root / "runs" / "snapshot"
+    write_json_file(completed / "session_plan.json", plan)
+    project.settings.session.randomization_modes = None
+    completed_config = export_project_config(project, sample_project_root,
+                                             completed_session_dir=completed)
+    assert completed_config.completed_session.randomization_modes == modes
+    restored_config = ProjectConfigFile.model_validate_json(completed_config.model_dump_json())
+    assert restored_config == completed_config
 
 
 @pytest.mark.parametrize("mode", ["fixed", "new"])

@@ -786,6 +786,9 @@ def _compile_session_plan(
             effective_randomization_mode(project) if seed_snapshot is not None else None
         ),
         randomization_seeds=seed_snapshot,
+        randomization_modes=(
+            project.settings.session.randomization_modes if seed_snapshot is not None else None
+        ),
         randomization_algorithm_version=(
             RANDOMIZATION_ALGORITHM_VERSION if seed_snapshot is not None else None
         ),

@@ -79,6 +79,9 @@ RANDOMIZATION_PROVENANCE_HEADER = [
     "stimulus_order_seed",
     "fixation_count_seed",
     "fixation_onset_seed",
+    "condition_order_randomization_mode",
+    "stimulus_randomization_mode",
+    "fixation_randomization_mode",
 ]
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
@@ -1704,6 +1707,9 @@ def _run_randomization_values(run_spec: RunSpec) -> tuple[object, ...]:
         provenance.stimulus_order_seed,
         provenance.fixation_count_seed,
         provenance.fixation_onset_seed,
+        provenance.modes.condition_order if provenance.modes is not None else provenance.mode,
+        provenance.modes.stimulus if provenance.modes is not None else provenance.mode,
+        provenance.modes.fixation if provenance.modes is not None else provenance.mode,
     )
 
 

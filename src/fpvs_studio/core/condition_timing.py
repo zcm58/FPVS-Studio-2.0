@@ -124,7 +124,10 @@ def propose_condition_timing(
 
     draft = project.model_copy(deep=True)
     if saved_condition_order is not None:
-        from fpvs_studio.core.randomization import configured_randomization_seeds
+        from fpvs_studio.core.randomization import (
+            configured_randomization_seeds,
+            effective_randomization_modes,
+        )
 
         if clear_saved_condition_order or isinstance(saved_condition_order, (str, bytes)):
             raise ValueError("Supply one saved condition-order list or explicitly clear it.")
@@ -136,8 +139,17 @@ def propose_condition_timing(
             raise ValueError(
                 "Stimulus or fixation seeds changed. Reopen Condition order before saving."
             )
+        modes = effective_randomization_modes(project).model_copy(
+            update={"condition_order": "fixed"},
+        )
+        stored_modes = (
+            None if modes.aggregate == "fixed"
+            and project.settings.session.randomization_modes is None else modes
+        )
         draft.settings.session = type(draft.settings.session).model_validate({
-            **draft.settings.session.model_dump(), "randomization_mode": "fixed",
+            **draft.settings.session.model_dump(),
+            "randomization_mode": modes.aggregate,
+            "randomization_modes": stored_modes,
             "session_seed": captured.condition_order_seed,
             "stimulus_seed": captured.stimulus_seed, "fixation_seed": captured.fixation_seed,
             "saved_condition_order": list(saved_condition_order),

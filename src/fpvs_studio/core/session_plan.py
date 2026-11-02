@@ -17,7 +17,12 @@ from pydantic import (
 )
 
 from fpvs_studio.core.enums import InterConditionMode, SchemaVersion
-from fpvs_studio.core.models import FPVSBaseModel, RandomizationAlgorithmVersion, RandomizationSeeds
+from fpvs_studio.core.models import (
+    FPVSBaseModel,
+    RandomizationAlgorithmVersion,
+    RandomizationModes,
+    RandomizationSeeds,
+)
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.task_models import TaskModuleSpec, task_requires_text_alignment_schema
 
@@ -139,6 +144,7 @@ class SessionPlan(FPVSBaseModel):
     authored_task_flow: bool | None = None
     ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
     randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_modes: RandomizationModes | None = None
     randomization_seeds: RandomizationSeeds | None = None
     randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
 
@@ -152,7 +158,8 @@ class SessionPlan(FPVSBaseModel):
         if self.ordering_policy is None:
             payload.pop("ordering_policy", None)
         for name in (
-            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+            "randomization_mode", "randomization_modes", "randomization_seeds",
+            "randomization_algorithm_version",
         ):
             if getattr(self, name) is None:
                 payload.pop(name, None)
@@ -160,6 +167,10 @@ class SessionPlan(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_totals(self) -> SessionPlan:
+        if self.randomization_modes is not None and (
+            self.randomization_mode != self.randomization_modes.aggregate
+        ):
+            raise ValueError("Per-category randomization must match the overall policy.")
         entries = [entry for block in self.blocks for entry in block.entries]
         has_questions = any(task.post_question_context is not None
                             for entry in entries for task in [*entry.pre_tasks, *entry.post_tasks])
@@ -168,12 +179,14 @@ class SessionPlan(FPVSBaseModel):
         if self.schema_version == "1.9.0" and not has_questions:
             raise ValueError("SessionPlan schema 1.9.0 requires post-question context.")
         has_randomization = (
-            self.randomization_mode is not None or self.randomization_seeds is not None
+            self.randomization_mode is not None or self.randomization_modes is not None
+            or self.randomization_seeds is not None
             or self.randomization_algorithm_version is not None
             or any(entry.run_spec.randomization is not None for entry in entries)
         )
         if (self.schema_version == "1.8.0" or self.ordering_policy == "saved_no_adjacent") and (
-            self.randomization_mode != "fixed"
+            (self.randomization_modes.condition_order if self.randomization_modes is not None
+                 else self.randomization_mode) != "fixed"
         ):
             raise ValueError("Saved condition ordering requires fixed randomization mode.")
         if self.schema_version in {"1.7.0", "1.8.0"} or (
@@ -192,6 +205,7 @@ class SessionPlan(FPVSBaseModel):
                 raise ValueError("Session seed must match the resolved condition-order seed.")
             if any(entry.run_spec.randomization is None
                    or entry.run_spec.randomization.mode != self.randomization_mode
+                   or entry.run_spec.randomization.modes != self.randomization_modes
                    or entry.run_spec.randomization.seeds != self.randomization_seeds
                    or entry.run_spec.randomization.algorithm_version
                    != self.randomization_algorithm_version for entry in entries):

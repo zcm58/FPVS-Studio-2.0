@@ -35,7 +35,7 @@ from fpvs_studio.core.models import (
     ConditionTemplateProfile,
 )
 from fpvs_studio.core.randomization import (
-    effective_randomization_mode,
+    effective_randomization_modes,
     supports_independent_randomization,
 )
 from fpvs_studio.core.session_ordering import (
@@ -1317,13 +1317,19 @@ class SetupWizardPage(QWidget):
         )
         seed_summary: tuple[str, ...] = ()
         if supports_independent_randomization(project):
-            if effective_randomization_mode(project) == "fixed":
-                seed_summary = ("Same schedules for every participant.",)
-                if session.saved_condition_order is not None:
+            reuse_modes = effective_randomization_modes(project)
+            seed_summary = tuple(
+                f"{label}: " + ("same for every participant"
+                               if getattr(reuse_modes, domain) == "fixed" else
+                               "new for each participant")
+                for domain, label in (("stimulus", "Image / word order"),
+                                      ("condition_order", "Condition order"),
+                                      ("fixation", "Fixation timing"))
+            )
+            if session.saved_condition_order is not None:
+                if reuse_modes.condition_order == "fixed":
                     session_count_summary = f"{presentation_total} presentations · saved order"
-            else:
-                seed_summary = ("New seeds for each participant; saved with the session.",)
-                if session.saved_condition_order is not None:
+                else:
                     session_count_summary = (
                         f"{presentation_total} presentations · new order (saved order inactive)"
                     )

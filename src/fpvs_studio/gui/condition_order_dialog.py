@@ -87,7 +87,7 @@ class ConditionOrderDialog(QDialog):
         mark_error_text(self.error_label)
         self.error_label.hide()
         layout.addWidget(self.error_label)
-        self.effect_label = QLabel("Save selects Same for every participant.", self)
+        self.effect_label = QLabel("Save uses this condition order for every participant.", self)
         self.effect_label.setWordWrap(True)
         layout.addWidget(self.effect_label)
         footer = QHBoxLayout()

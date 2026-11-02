@@ -90,8 +90,10 @@ def active_saved_condition_order(
 ) -> list[str] | None:
     """Return the exact Fixed order, rejecting invalid filtered subsets rather than repairing."""
 
+    from fpvs_studio.core.randomization import effective_randomization_modes
+
     saved = project.settings.session.saved_condition_order
-    if project.settings.session.randomization_mode != "fixed" or saved is None:
+    if effective_randomization_modes(project).condition_order != "fixed" or saved is None:
         return None
     if not uses_pooled_condition_order(project):
         raise ValueError("Saved condition order is unavailable for native AB or masking groups.")

@@ -46,6 +46,7 @@ from fpvs_studio.core.randomization import (
     configured_randomization_seeds,
     effective_randomization_mode,
     generate_randomization_seeds,
+    participant_randomization_seeds,
     supports_independent_randomization,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
@@ -490,6 +491,7 @@ class ProjectDocument(
     def _randomization_signature(project: ProjectFile) -> tuple[object, ...]:
         session = project.settings.session
         return (supports_independent_randomization(project), session.randomization_mode,
+                session.randomization_modes,
                 session.session_seed, session.stimulus_seed, session.fixation_seed,
                 tuple(session.saved_condition_order) if session.saved_condition_order is not None
                 else None)
@@ -502,6 +504,7 @@ class ProjectDocument(
     def update_randomization_settings(
         self, *, mode: str | None = None, stimulus_seed: int | None = None,
         condition_order_seed: int | None = None, fixation_seed: int | None = None,
+        modes: dict[str, str] | None = None,
     ) -> None:
         """Initialize the legacy bridge and atomically edit the three configured seeds."""
 
@@ -516,9 +519,15 @@ class ProjectDocument(
                 and fixation_seed is not None)
             else configured_randomization_seeds(self._project)
         )
+        from fpvs_studio.core.models import RandomizationModes
+
+        choices = (RandomizationModes.model_validate(modes) if modes is not None else
+                   None if mode is not None else self._project.settings.session.randomization_modes)
         self.update_session_settings(
-            randomization_mode=(mode if mode is not None
-                                else effective_randomization_mode(self._project)),
+            randomization_mode=(choices.aggregate if choices is not None else
+                                mode if mode is not None else
+                                effective_randomization_mode(self._project)),
+            randomization_modes=choices,
             session_seed=(configured.condition_order_seed if condition_order_seed is None
                           else condition_order_seed),
             stimulus_seed=configured.stimulus_seed if stimulus_seed is None else stimulus_seed,
@@ -548,9 +557,11 @@ class ProjectDocument(
             pending_key, pending_signature, seeds = self._pending_randomization
             if key == pending_key and signature == pending_signature:
                 return seeds
-        seeds = (configured_randomization_seeds(self._project)
-                 if effective_randomization_mode(self._project) == "fixed"
-                 else generate_randomization_seeds())
+        seeds = (
+            configured_randomization_seeds(self._project)
+            if effective_randomization_mode(self._project) == "fixed" else
+            participant_randomization_seeds(self._project, generate_randomization_seeds())
+        )
         self._pending_randomization = (key, signature, seeds)
         self.randomization_changed.emit()
         return seeds

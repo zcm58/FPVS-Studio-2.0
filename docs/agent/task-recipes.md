@@ -33,7 +33,7 @@ caches are scoped to an update; do not cache mutable project validation across e
 | --- | --- | --- |
 | Shared/condition frequency and exact stream seconds | `core/condition_timing.py`, `gui/condition_timing_table.py` | [Run timing](../RUNSPEC.md#timing-model) |
 | Presentation counts and occurrence identity | `core/session_ordering.py`, `gui/session_structure_page.py` | [Count/recovery compatibility](../SESSION_PLAN.md#presentation-count-compatibility-and-recovery) |
-| Independent seeds and pending launch snapshot | `core/randomization.py`, `gui/randomization_editor.py`, document/main-window launch coordination | [Independent randomization](../SESSION_PLAN.md#independent-randomization) |
+| Independent participant reuse choices and pending launch snapshot | `core/randomization.py`, `gui/randomization_editor.py`, document/main-window launch coordination | [Independent randomization](../SESSION_PLAN.md#independent-randomization) |
 | Exact saved condition arrangements | `core/session_ordering.py`, `gui/condition_order_dialog.py` | [Saved arrangements](../SESSION_PLAN.md#saved-condition-arrangements) |
 | Task numeric precision and tolerance | `core/task_models.py`, `runtime/task_runner.py`, `engines/psychopy_tasks.py`; `tests/unit/test_runtime_tasks.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
 | Mouse choices and handlers | `engines/psychopy_tasks.py`; `tests/unit/test_psychopy_task_mouse.py`, `tests/unit/test_psychopy_task_hitboxes.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |

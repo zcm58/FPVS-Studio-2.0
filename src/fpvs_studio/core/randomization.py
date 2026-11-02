@@ -11,7 +11,13 @@ from typing import TYPE_CHECKING, Final, Literal
 from fpvs_studio.core.compiler_support import CompileError
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.masking import condition_masking
-from fpvs_studio.core.models import Condition, ProjectFile, RandomizationSeeds, SessionSettings
+from fpvs_studio.core.models import (
+    Condition,
+    ProjectFile,
+    RandomizationModes,
+    RandomizationSeeds,
+    SessionSettings,
+)
 
 if TYPE_CHECKING:
     from fpvs_studio.core.run_spec import RunRandomizationSpec
@@ -36,6 +42,29 @@ def effective_randomization_mode(project: ProjectFile) -> Literal["fixed", "new"
     """Legacy absence means fresh launch resolution, without rewriting the source."""
 
     return project.settings.session.randomization_mode or "new"
+
+
+def effective_randomization_modes(project: ProjectFile) -> RandomizationModes:
+    """Expand historical overall choices without mutating authored state."""
+
+    mode = effective_randomization_mode(project)
+    return project.settings.session.randomization_modes or RandomizationModes(
+        condition_order=mode, stimulus=mode, fixation=mode,
+    )
+
+
+def participant_randomization_seeds(
+    project: ProjectFile, fresh: RandomizationSeeds,
+) -> RandomizationSeeds:
+    """Keep configured roots for repeatable domains and refresh only the others."""
+
+    configured = configured_randomization_seeds(project)
+    modes = effective_randomization_modes(project)
+    return RandomizationSeeds(**{
+        field: getattr(configured if getattr(modes, domain) == "fixed" else fresh, field)
+        for domain, field in (("condition_order", "condition_order_seed"),
+                              ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed"))
+    })
 
 
 def derive_schedule_seed(
@@ -99,8 +128,12 @@ def resolve_randomization_seeds(
         resolved = RandomizationSeeds.model_validate({
             **resolved.model_dump(), "condition_order_seed": condition_order_seed,
         })
-    if effective_randomization_mode(project) == "fixed" and resolved != configured:
-        raise CompileError("Fixed randomization must use the configured seed triplet.")
+    modes = effective_randomization_modes(project)
+    for domain, field in (("condition_order", "condition_order_seed"),
+                          ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed")):
+        if (getattr(modes, domain) == "fixed"
+                and getattr(resolved, field) != getattr(configured, field)):
+            raise CompileError("Fixed randomization must use the configured seed for each domain.")
     return resolved
 
 
@@ -114,6 +147,7 @@ def run_randomization_spec(
 
     return RunRandomizationSpec(
         mode=effective_randomization_mode(project), seeds=seeds,
+        modes=project.settings.session.randomization_modes,
         condition_presentation_index=presentation_index,
         stimulus_order_seed=derive_schedule_seed(
             seeds.stimulus_seed, domain="stimulus-order", condition_id=condition_id,
@@ -144,4 +178,14 @@ def randomization_protocol_identity(project: ProjectFile) -> dict[str, object] |
     }
     if mode == "fixed":
         identity["seeds"] = configured_randomization_seeds(project).model_dump()
+    elif "fixed" in effective_randomization_modes(project).model_dump().values():
+        modes = effective_randomization_modes(project)
+        identity["modes"] = modes.model_dump()
+        seeds = configured_randomization_seeds(project)
+        identity["seeds"] = {
+            field: getattr(seeds, field)
+            for domain, field in (("condition_order", "condition_order_seed"),
+                                  ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed"))
+            if getattr(modes, domain) == "fixed"
+        }
     return identity

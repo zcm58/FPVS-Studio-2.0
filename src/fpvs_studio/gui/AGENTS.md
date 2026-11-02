@@ -10,7 +10,7 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   steps are Project, Conditions, Timing & Display, Session, Image Size (Character Size
   for native AB), Fixation, Response, Review, fitting `1120x820` without required scroll.
   Timing retains `experiment`/timing/display/runtime aliases; `session` opens Session.
-  Frequency/duration/counts/display stay on Timing; seeds/order/totals on Session.
+  Frequency/duration/counts/display stay on Timing; participant reuse choices/order/totals on Session.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
   offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
   reviewed bundle import.

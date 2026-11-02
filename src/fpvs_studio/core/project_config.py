@@ -58,6 +58,7 @@ from fpvs_studio.core.models import (
     ProjectSettings,
     ProtocolSettings,
     RandomizationAlgorithmVersion,
+    RandomizationModes,
     RandomizationSeeds,
     SessionSettings,
     StimulusSet,
@@ -278,6 +279,7 @@ class ProjectConfigSession(FPVSBaseModel):
     block_count: int = Field(ge=1)
     session_seed: int = Field(ge=0)
     randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_modes: RandomizationModes | None = None
     stimulus_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
     fixation_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
     saved_condition_order: list[StrictStr] | None = None
@@ -295,7 +297,8 @@ class ProjectConfigSession(FPVSBaseModel):
         if isinstance(value, dict) and any(
             value.get(field) is not None
             for field in (
-                "randomization_mode", "stimulus_seed", "fixation_seed", "saved_condition_order",
+                "randomization_mode", "randomization_modes", "stimulus_seed", "fixation_seed",
+                "saved_condition_order",
             )
         ):
             # Preserve the source owner's strict seed/policy validation before coercion.
@@ -308,7 +311,8 @@ class ProjectConfigSession(FPVSBaseModel):
     ) -> dict[str, Any]:
         payload: dict[str, Any] = handler(self)
         for field in (
-            "randomization_mode", "stimulus_seed", "fixation_seed", "saved_condition_order",
+            "randomization_mode", "randomization_modes", "stimulus_seed", "fixation_seed",
+            "saved_condition_order",
         ):
             if getattr(self, field) is None:
                 payload.pop(field, None)
@@ -394,6 +398,7 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
     session_id: str
     session_seed: int = Field(ge=0)
     randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_modes: RandomizationModes | None = None
     randomization_seeds: RandomizationSeeds | None = None
     randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
     ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
@@ -415,7 +420,8 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
         if "manual_removed_electrodes" in self.model_fields_set:
             payload["manual_removed_electrodes"] = self.manual_removed_electrodes
         for field in (
-            "randomization_mode", "randomization_seeds", "randomization_algorithm_version",
+            "randomization_mode", "randomization_modes", "randomization_seeds",
+            "randomization_algorithm_version",
             "ordering_policy",
         ):
             if getattr(self, field) is None:
@@ -425,7 +431,8 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
     @model_validator(mode="after")
     def validate_randomization_provenance(self) -> ProjectConfigCompletedSession:
         if self.ordering_policy == "saved_no_adjacent" and (
-            self.randomization_mode != "fixed" or self.randomization_seeds is None
+            (self.randomization_modes.condition_order if self.randomization_modes is not None
+                 else self.randomization_mode) != "fixed" or self.randomization_seeds is None
         ):
             raise ValueError("Saved ordering policy requires fixed randomization.")
         if self.ordering_policy is not None and (
@@ -433,9 +440,13 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
             != [run.condition_id for run in self.ordered_runs]
         ):
             raise ValueError("Completed block order must match the ordered runs.")
+        if self.randomization_modes is not None and (
+            self.randomization_mode != self.randomization_modes.aggregate
+        ):
+            raise ValueError("Per-category randomization must match the overall policy.")
         values = (self.randomization_mode, self.randomization_seeds,
                   self.randomization_algorithm_version)
-        if any(value is not None for value in values):
+        if self.randomization_modes is not None or any(value is not None for value in values):
             if any(value is None for value in values):
                 raise ValueError("Completed randomization provenance requires mode and all seeds.")
             assert self.randomization_seeds is not None
@@ -444,6 +455,7 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
             if any(run.randomization is None
                    or run.randomization.seeds != self.randomization_seeds
                    or run.randomization.mode != self.randomization_mode
+                   or run.randomization.modes != self.randomization_modes
                    or run.randomization.algorithm_version != self.randomization_algorithm_version
                    or run.randomization.stimulus_order_seed != run.random_seed
                    for run in self.ordered_runs):
@@ -569,7 +581,9 @@ class ProjectConfigFile(FPVSBaseModel):
                     or any(binding.task_id in masking_tasks for condition in self.conditions
                            for binding in condition.pre_task_bindings)):
                 raise ValueError("Saved condition order is unavailable for native AB or masking.")
-            if self.session.randomization_mode == "fixed":
+            if (self.session.randomization_modes.condition_order
+                if self.session.randomization_modes is not None
+                else self.session.randomization_mode) == "fixed":
                 validate_saved_condition_order(saved_order, {
                     condition.condition_id: (condition.presentation_count
                                              if condition.presentation_count is not None
@@ -1338,6 +1352,7 @@ def _session_config(session: SessionSettings) -> ProjectConfigSession:
         block_count=session.block_count,
         session_seed=session.session_seed,
         randomization_mode=session.randomization_mode,
+        randomization_modes=session.randomization_modes,
         stimulus_seed=session.stimulus_seed,
         fixation_seed=session.fixation_seed,
         saved_condition_order=session.saved_condition_order,
@@ -1437,6 +1452,7 @@ def _completed_session_config(
         session_id=session_plan.session_id,
         session_seed=session_plan.random_seed,
         randomization_mode=session_plan.randomization_mode,
+        randomization_modes=session_plan.randomization_modes,
         randomization_seeds=session_plan.randomization_seeds,
         randomization_algorithm_version=session_plan.randomization_algorithm_version,
         ordering_policy=session_plan.ordering_policy,
@@ -1571,6 +1587,7 @@ def _session_settings(config: ProjectConfigSession) -> SessionSettings:
         block_count=config.block_count,
         session_seed=config.session_seed,
         randomization_mode=config.randomization_mode,
+        randomization_modes=config.randomization_modes,
         stimulus_seed=config.stimulus_seed,
         fixation_seed=config.fixation_seed,
         saved_condition_order=config.saved_condition_order,

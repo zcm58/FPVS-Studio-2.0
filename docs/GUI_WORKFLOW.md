@@ -161,7 +161,7 @@ Review remains 880 px, and Conditions retains its wider working area. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
 Timing & Display places the FPVS timing/presentation table above the frameless
-Display group. Session places seeds, condition order and session totals on a separate
+Display group. Session places participant reuse choices, condition order and session totals on a separate
 page, with managed AB/masking repeats and the fixed start key. Session shortcuts and
 Review links open Session; timing/display/runtime aliases continue to open Timing.
 
@@ -615,7 +615,7 @@ The authoring window is organized around two user-facing modes:
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
     size and 2 px line width
-  - the Session step exposes seed reuse/details, condition order, session totals,
+  - the Session step exposes image/word order, condition order and fixation-timing reuse choices, session totals,
     managed AB/masking repeats and the fixed Space start key. Ordinary FPVS presentation
     counts stay on Timing & Display. Condition names remain internal during participant
     transition screens; fixed/new seed policy and exact saved arrangements retain their
@@ -1652,51 +1652,55 @@ both a generated order and a saved order must retain every occurrence.
 Check required focus, long condition-name tooltips, frequency confirmation alongside
 count drafts, and masking/AB managed states.
 
-### Seed reuse and launch snapshots
+### Participant reuse choices and launch snapshots
 
-Session has one overall Same for every participant / New for each participant
-choice and three clearly labeled configured seeds: stimulus order (images/words),
-condition order and fixation. Generate seeds is an explicit author action. The existing
-order field remains the condition-order seed; there is no fourth independent setting.
-Pending/last-launch resolved values are shown separately from configured preview values.
+Session has three independent choices: **Image / word display order**, **Condition
+order**, and **Fixation color-change timing**. Each offers **Randomized — new for each
+participant** or **Pseudorandom — same for every participant**, with a short explanation
+of the selected effect. Numeric seeds and launch seed values are not shown. Pseudorandom
+reuses a stored random pattern for corresponding condition presentations while inputs
+stay unchanged; different image pools, condition durations and repeat numbers retain
+independently valid schedules. Both choices preserve existing balancing/timing rules.
 
-Fixed mode survives reopening, previews, compilation, completion history and later
-participants. Ordinary app-open workers cannot replace it, and stale results are rejected
-after policy or seed edits. New mode resolves one fresh triplet after participant/visit
-confirmation, reuses it for preflight retries, and clears it after an executed session or
-relevant author changes. Home, Run and direct document launch paths share this policy.
-Frozen occurrence recovery replays the original plan; an explicitly chosen current-setup
-replacement is a fresh compilation and is labeled accordingly.
+The document resolves one launch snapshot after participant/visit confirmation, keeping
+configured roots for pseudorandom categories and refreshing randomized categories.
+Retries reuse that snapshot; completion or relevant author edits clear it. Existing
+projects inherit their former overall choice without changing stored patterns merely
+by opening Session. Home, Run and direct document launches share this lifecycle.
+Frozen occurrence recovery replays the original plan; a current-setup replacement is
+freshly compiled and labeled accordingly.
 
 The panel applies to ordinary FPVS image/word streams. AB and masking retain their
-existing seed/group/task workflows. Visible acceptance at 1120x820 in both themes:
-switch modes, edit all three seeds including zero, generate values, reopen Fixed,
-exercise New retry/completion and stale-worker cases, and check long resolved-value
-labels without clipping. Registered Qt coverage remains opt-in.
+existing group/task workflows. Legacy invalid stored patterns show an actionable
+**Create new random patterns** repair. Visible acceptance at 1120x820 in both themes:
+exercise each choice and mixed combinations, reopen, check saved/inactive arrangements,
+retry failed edits, and verify all labels, controls, errors and Review fit without
+scrolling. Registered Qt coverage remains opt-in.
 
 ### Choose and save condition order
 
-Session keeps the overall Fixed/New choice visible and numerical controls
-under collapsed **Seed details**. **Condition order...** opens a plain list with
+**Condition order...** on Session opens a plain list with
 Generate, Move up, Move down and Save. Repeated occurrences show chronological
-presentation numbers; long names remain available by tooltip. Seed reuse and order
-editing remain together on Session, without additional reuse-mode switches.
+presentation numbers; long names remain available by tooltip. Participant reuse choices
+and order editing remain together on Session.
 Timing retains a **Condition order...** shortcut beside its table commands, opening
 the same dialog without flushing staged counts so saved-order mismatches can be
 repaired in one atomic save. Session remains the primary order editor surface.
 
 Generate previews a pseudorandom candidate. Manual moves retain a draft and report
-adjacent duplicates in multi-condition pools or count mismatches. Save persists the exact choice and any
-combined timing/count draft through the existing atomic project save path, selecting
-Same for every participant while preserving configured stimulus/fixation roots.
+adjacent duplicates in multi-condition pools or count mismatches. Save persists the exact
+choice and any combined timing/count draft through the existing atomic project save
+path, selecting Pseudorandom for condition order while preserving the image/word and
+fixation reuse choices and their configured roots.
 Cancel, declined frequency confirmation, stale generation and write failure leave the
-live project and previous project file unchanged. New mode retains the choice inactive.
-A contextual Use seed-generated order action lives inside optional details.
+live project and previous project file unchanged. Randomized condition order retains
+the saved arrangement inactive.
+**Use automatic condition order** removes the saved list without changing reuse choices.
 
 If counts or conditions invalidate a saved arrangement, open the editor and generate
 or arrange a matching list; it can save matching count/order changes together. Studio
 never silently inserts, drops or reshuffles presentations. The editor is 780x620,
 minimum 700x520; the list intentionally scrolls. Registered coverage checks both
-sizes/themes, the 1120x820 wizard with details collapsed/expanded, keyboard moves,
-validation/retry, Save/reopen and fixed-vs-inactive behavior. Visible Qt checks remain
+sizes/themes, the 1120x820 wizard with all three choices and saved/inactive orders,
+keyboard moves, validation/retry, Save/reopen and fixed-vs-inactive behavior. Visible Qt checks remain
 unperformed unless explicitly approved.

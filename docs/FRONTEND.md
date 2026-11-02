@@ -198,7 +198,7 @@ confirmed per-condition overrides, stream-only seconds and total presentation co
 plus refresh selection,
 verification and background.
 The frequency table spans the form above Display. Timing uses 1040 px for FPVS and
-880 px for native AB; the separate Session form uses 760 px for seeds, condition
+880 px for native AB; the separate Session form uses 760 px for participant reuse choices, condition
 order, totals and AB/masking repeats/start key. Timing retains the `experiment` key
 and timing/display/runtime aliases; `session` opens Session. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.

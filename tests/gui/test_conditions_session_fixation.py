@@ -312,7 +312,8 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     assert "Condition order" in form_labels
     assert page.randomization_editor.isVisible()
     assert page.randomization_editor.condition_order_button.isVisible()
-    assert not page.randomization_editor.seed_details.isVisible()
+    assert len(page.randomization_editor.mode_combos) == 3
+    assert all(combo.isVisible() for combo in page.randomization_editor.mode_combos.values())
     assert page.seed_help_label.text() == "Pooled shuffle · no adjacent same condition"
     assert not page.block_count_spin.isVisible()
     assert page.presentation_total_label.isVisible()

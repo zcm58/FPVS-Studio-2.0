@@ -159,7 +159,8 @@ def test_setup_wizard_separates_timing_session_and_image_size(
     assert not window.document.project.settings.session.show_condition_title_on_screen
     assert session.randomization_editor.isVisible()
     assert session.randomization_editor.condition_order_button.isVisible()
-    assert not session.randomization_editor.seed_details.isVisible()
+    assert len(session.randomization_editor.mode_combos) == 3
+    assert all(combo.isVisible() for combo in session.randomization_editor.mode_combos.values())
     assert not session.show_condition_title_checkbox.isVisible()
 
 

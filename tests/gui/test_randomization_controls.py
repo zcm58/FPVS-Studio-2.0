@@ -1,11 +1,13 @@
-"""Registered configured seed editing, launch lifecycle and compact layout coverage."""
+"""Registered participant reuse choices, launch lifecycle and compact layout coverage."""
 
 from __future__ import annotations
+
+from itertools import product
 
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
 from tests.gui.helpers import (
     _open_created_project,
     assert_visible_children_within_parent,
@@ -50,9 +52,7 @@ def _word_document(tmp_path):
     return document, first, second
 
 
-def test_legacy_seed_controls_do_not_rewrite_source_and_one_policy_covers_all_fields(
-    qtbot, tmp_path,
-):
+def test_legacy_choices_do_not_rewrite_source_and_can_be_changed_independently(qtbot, tmp_path):
     document, _first, _second = _document(tmp_path)
     original = document.project.model_copy(deep=True)
     expected = configured_randomization_seeds(original)
@@ -60,73 +60,91 @@ def test_legacy_seed_controls_do_not_rewrite_source_and_one_policy_covers_all_fi
     qtbot.addWidget(editor)
     editor.show()
     assert document.project == original
-    assert editor.mode_combo.currentData() == "new"
-    assert set(editor.seed_edits) == {"stimulus_seed", "condition_order_seed", "fixation_seed"}
-    assert editor.seed_edits["condition_order_seed"].text() == str(expected.condition_order_seed)
-    editor.mode_combo.setCurrentIndex(editor.mode_combo.findData("fixed"))
+    assert set(editor.mode_combos) == {"stimulus", "condition_order", "fixation"}
+    assert all(combo.currentData() == "new" for combo in editor.mode_combos.values())
+    for domain in editor.mode_combos:
+        combo = editor.mode_combos[domain]
+        combo.setCurrentIndex(combo.findData("fixed"))
+        choices = document.project.settings.session.randomization_modes
+        assert getattr(choices, domain) == "fixed"
+        assert configured_randomization_seeds(document.project) == expected
+        assert "Every participant receives the same" in editor.effect_labels[domain].text()
     assert document.project.settings.session.randomization_mode == "fixed"
-    assert configured_randomization_seeds(document.project) == expected
-    editor.seed_edits["stimulus_seed"].setText("101")
-    assert editor.apply_pending_edits()
-    assert configured_randomization_seeds(document.project) == _seeds(
-        order=expected.condition_order_seed, stimulus=101, fixation=expected.fixation_seed,
-    )
-    assert "Configured seeds reused" in editor.resolved_label.text()
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.session.randomization_modes == choices
+    assert configured_randomization_seeds(reopened.project) == expected
 
 
-@pytest.mark.parametrize("invalid", ["", "-1", "1.5", "2147483648"])
-def test_invalid_seed_draft_preserves_source_until_corrected(qtbot, tmp_path, invalid):
+def test_failed_policy_edit_retains_draft_and_can_be_retried(qtbot, monkeypatch, tmp_path):
     document, _first, _second = _document(tmp_path)
-    document.update_randomization_settings(
-        mode="fixed", condition_order_seed=22, stimulus_seed=11, fixation_seed=33,
-    )
     original = document.project.model_copy(deep=True)
     editor = RandomizationEditor(document)
     qtbot.addWidget(editor)
     editor.show()
-    editor.seed_edits["fixation_seed"].setText(invalid)
-    assert not editor.apply_pending_edits()
+    update = document.update_randomization_settings
+
+    def fail(**_kwargs):
+        raise DocumentError("Could not apply the change. Try again.")
+
+    monkeypatch.setattr(document, "update_randomization_settings", fail)
+    combo = editor.mode_combos["fixation"]
+    combo.setCurrentIndex(combo.findData("fixed"))
     assert editor.error_label.isVisible()
-    assert "integer seed" in editor.error_label.text()
+    assert editor.has_pending_edits()
     assert document.project == original
-    assert editor.seed_edits["fixation_seed"].text() == invalid
-    editor.seed_edits["fixation_seed"].setText("44")
+    monkeypatch.setattr(document, "update_randomization_settings", update)
     assert editor.apply_pending_edits()
-    assert document.project.settings.session.fixation_seed == 44
+    assert document.project.settings.session.randomization_modes.fixation == "fixed"
+    assert not editor.has_pending_edits()
 
 
-def test_explicit_generation_replaces_exactly_three_configured_seeds(qtbot, monkeypatch, tmp_path):
-    document, _first, _second = _document(tmp_path)
-    calls = []
-    generated = _seeds()
-    monkeypatch.setattr(
-        "fpvs_studio.gui.document.generate_randomization_seeds",
-        lambda: calls.append(True) or generated,
+@pytest.mark.parametrize("choices", list(product(("fixed", "new"), repeat=3)))
+def test_participant_retry_reuses_mixed_snapshot_and_policy_edits_invalidate_it(
+    qtbot, monkeypatch, tmp_path, choices,
+):
+    document, _first, _second = _word_document(tmp_path)
+    document.update_randomization_settings(
+        mode="new", condition_order_seed=22, stimulus_seed=11, fixation_seed=33,
     )
     editor = RandomizationEditor(document)
     qtbot.addWidget(editor)
-    editor.generate_button.click()
-    assert calls == [True]
-    assert configured_randomization_seeds(document.project) == generated
-    assert editor.seed_edits["stimulus_seed"].text() == "11"
-    assert editor.seed_edits["condition_order_seed"].text() == "22"
-    assert editor.seed_edits["fixation_seed"].text() == "33"
-    assert document.dirty
+    modes = dict(zip(("stimulus", "condition_order", "fixation"), choices, strict=True))
+    for domain, mode in modes.items():
+        combo = editor.mode_combos[domain]
+        combo.setCurrentIndex(combo.findData(mode))
+    generated = iter((_seeds(101, 102, 103), _seeds(201, 202, 203), _seeds(301, 302, 303)))
+    monkeypatch.setattr(
+        "fpvs_studio.gui.document.generate_randomization_seeds", lambda: next(generated),
+    )
+    first = document.prepare_participant_randomization("0001", 1)
+    assert document.prepare_participant_randomization("0001", 1) == first
+    document.finish_participant_randomization()
+    second = document.prepare_participant_randomization("0002", 1)
+    for domain, field in (("condition_order", "condition_order_seed"),
+                          ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed")):
+        assert (getattr(first, field) == getattr(second, field)) == (modes[domain] == "fixed")
+    combo = editor.mode_combos["fixation"]
+    combo.setCurrentIndex(combo.findData("new" if modes["fixation"] == "fixed" else "fixed"))
+    assert document.resolved_randomization_status()[0] is None
 
 
-def test_legacy_out_of_range_seed_opens_for_explicit_repair(qtbot, monkeypatch, tmp_path):
+def test_legacy_out_of_range_patterns_have_an_explicit_repair_action(qtbot, monkeypatch, tmp_path):
     document, _first, _second = _document(tmp_path)
     document.update_session_settings(session_seed=2**40)
     original = document.project.model_copy(deep=True)
     editor = RandomizationEditor(document)
     qtbot.addWidget(editor)
-    assert editor.seed_edits["condition_order_seed"].text() == str(2**40)
+    editor.show()
     assert not editor.apply_pending_edits()
     assert document.project == original
+    assert editor.reset_patterns_button.isVisible()
     monkeypatch.setattr("fpvs_studio.gui.document.generate_randomization_seeds", lambda: _seeds())
-    editor.generate_button.click()
+    editor.reset_patterns_button.click()
     assert configured_randomization_seeds(document.project) == _seeds()
     assert editor.apply_pending_edits()
+    assert not editor.error_label.isVisible()
+    assert not editor.reset_patterns_button.isVisible()
 
 
 def test_fixed_seeds_survive_reload_compilation_and_completed_seed_history(
@@ -183,11 +201,11 @@ def test_new_mode_resolves_once_for_pending_retry_and_does_not_change_configured
     assert compiled.randomization_seeds == pending
     assert document.compile_session(refresh_hz=60).randomization_seeds == _seeds()
     assert calls == [True]
-    assert "Pending launch: images/words 102" in editor.resolved_label.text()
-    assert editor.seed_edits["stimulus_seed"].text() == "11"
+    assert document.resolved_randomization_status() == (pending, "Pending launch")
+    assert configured_randomization_seeds(document.project) == _seeds()
     assert document.project == original
     document.finish_participant_randomization()
-    assert "Last launch:" in editor.resolved_label.text()
+    assert document.resolved_randomization_status() == (pending, "Last launch")
     assert document.prepare_participant_randomization("0001", 2) != pending
     assert len(calls) == 2
     document.update_randomization_settings(stimulus_seed=12)
@@ -407,8 +425,8 @@ def test_recovery_preserves_frozen_seeds_or_builds_explicit_current_setup_replac
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-@pytest.mark.parametrize("state", ["fixed", "new", "invalid", "pending", "last"])
-def test_seed_controls_and_long_resolved_triplet_fit_session_and_review(
+@pytest.mark.parametrize("state", ["fixed", "new", "mixed", "invalid", "saved", "inactive"])
+def test_plain_language_choices_fit_session_and_review(
     qtbot, monkeypatch, tmp_path, background, state,
 ):
     document, first, second = _document(tmp_path)
@@ -422,11 +440,21 @@ def test_seed_controls_and_long_resolved_triplet_fit_session_and_review(
         mode="fixed" if state == "fixed" else "new", condition_order_seed=2_147_483_647,
         stimulus_seed=2_147_483_647, fixation_seed=2_147_483_647,
     )
+    if state == "mixed":
+        document.update_randomization_settings(modes={
+            "stimulus": "fixed", "condition_order": "new", "fixation": "fixed",
+        })
+    elif state in {"saved", "inactive"}:
+        document.update_condition_timing(saved_condition_order=[first, second, first, second])
+        if state == "inactive":
+            document.update_randomization_settings(mode="new")
+    elif state == "invalid":
+        document.update_randomization_settings(mode="new")
+        document.project.settings.session.randomization_mode = None
+        document.project.settings.session.stimulus_seed = None
+        document.project.settings.session.fixation_seed = None
+        document.project.settings.session.session_seed = 2**40
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    monkeypatch.setattr(
-        "fpvs_studio.gui.document.generate_randomization_seeds",
-        lambda: _seeds(2_147_483_647, 2_147_483_647, 2_147_483_647),
-    )
     wizard = SetupWizardPage(
         document, load_condition_template_profiles=lambda: [],
         manage_condition_templates=lambda: [],
@@ -439,15 +467,6 @@ def test_seed_controls_and_long_resolved_triplet_fit_session_and_review(
     wizard.show()
     wizard.open_wizard(step_key="session", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
-    editor.seed_details_button.setChecked(state != "new")
-    if state == "invalid":
-        editor.seed_edits["fixation_seed"].setText("-1")
-        assert not wizard.flush_pending_edits()
-        assert wizard.has_pending_edits()
-    elif state in {"pending", "last"}:
-        document.prepare_participant_randomization("0001", 1)
-        if state == "last":
-            document.finish_participant_randomization()
     QApplication.processEvents()
     assert wizard.size().toTuple() == (1120, 820)
     assert wizard.step_stack.currentWidget() is wizard.session_step_surface
@@ -457,33 +476,34 @@ def test_seed_controls_and_long_resolved_triplet_fit_session_and_review(
     assert not wizard.session_settings_card.title_label.isVisible()
     assert wizard.session_structure_editor.presentation_total_label.text() == "4 total"
     assert_visible_children_within_parent(wizard.session_step_surface)
-    for edit in editor.seed_edits.values():
-        if edit.isVisible():
-            assert edit.width() >= edit.fontMetrics().horizontalAdvance(edit.text()) + 12
+    for combo in editor.mode_combos.values():
+        assert combo.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText()) + 32
+        assert combo.accessibleName()
     for label in editor.findChildren(QLabel):
         if label.isVisible() and label.text():
             assert label.height() >= label.heightForWidth(label.width()) if label.wordWrap() else (
                 label.width() >= label.fontMetrics().horizontalAdvance(label.text())
             )
-    if editor.generate_button.isVisible():
-        assert editor.generate_button.width() >= editor.generate_button.sizeHint().width()
+    for button in (editor.condition_order_button, editor.clear_saved_order_button,
+                   editor.reset_patterns_button):
+        if button.isVisible():
+            assert button.width() >= button.sizeHint().width()
+    assert not editor.findChildren(QLineEdit)
     if state != "invalid":
         wizard.open_wizard(step_key="review", allow_step_jumps=True)
         QApplication.processEvents()
         assert_visible_children_within_parent(wizard.review_step_surface)
         text = " ".join(label.text() for label in wizard.review_card.findChildren(QLabel))
-        assert ("Same schedules for every participant." if state == "fixed"
-                else "New seeds for each participant") in text
+        for title in ("Image / word order:", "Condition order:", "Fixation timing:"):
+            assert title in text
+        assert "seed" not in text.lower()
 
 
 @pytest.mark.parametrize("action", ["next", "back", "home", "progress"])
-def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
+def test_failed_choice_draft_blocks_navigation_until_retry(
     qtbot, monkeypatch, tmp_path, action,
 ):
     document, _first, _second = _document(tmp_path)
-    document.update_randomization_settings(
-        mode="fixed", condition_order_seed=22, stimulus_seed=11, fixation_seed=33,
-    )
     home_calls = []
     wizard = SetupWizardPage(
         document, load_condition_template_profiles=lambda: [],
@@ -496,18 +516,15 @@ def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
     original = document.project.model_copy(deep=True)
     messages = record_setup_validation_dialogs(monkeypatch)
     editor = wizard.session_structure_editor.randomization_editor
-    editor.seed_details_button.setChecked(True)
-    editor.seed_edits["fixation_seed"].setText("-1")
+    update = document.update_randomization_settings
 
-    def unexpected_confirmation(*_args, **_kwargs):
-        pytest.fail("Invalid seed drafts must block navigation before opening a confirmation")
+    def fail(**_kwargs):
+        raise DocumentError("Could not apply the change. Try again.")
 
-    monkeypatch.setattr(
-        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question", unexpected_confirmation,
-    )
-    assert messages == []
+    monkeypatch.setattr(document, "update_randomization_settings", fail)
+    combo = editor.mode_combos["fixation"]
+    combo.setCurrentIndex(combo.findData("fixed"))
     if action == "next":
-        assert wizard.setup_wizard_next_button.isEnabled()
         qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     elif action == "progress":
         wizard._go_to_step_from_progress(wizard._step_index_for_key("experiment"))
@@ -515,19 +532,17 @@ def test_invalid_seed_draft_blocks_navigation_on_the_session_step(
         {"back": wizard._go_back, "home": wizard._return_home}[action]()
     QApplication.processEvents()
     assert wizard.step_stack.currentWidget() is wizard.session_step_surface
-    assert editor.seed_details.isVisible()
     assert editor.error_label.isVisible()
-    assert editor.seed_edits["fixation_seed"].text() == "-1"
+    assert combo.currentData() == "fixed"
     assert wizard.has_pending_edits()
     assert document.project == original
     assert not home_calls
     assert messages == (
         [("Complete this setup step", editor.error_label.text())] if action == "next" else []
     )
-
-    editor.seed_edits["fixation_seed"].setText("44")
+    monkeypatch.setattr(document, "update_randomization_settings", update)
     assert wizard.flush_pending_edits()
     wizard.open_wizard(step_key="experiment", allow_step_jumps=True)
     assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
-    assert document.project.settings.session.fixation_seed == 44
+    assert document.project.settings.session.randomization_modes.fixation == "fixed"
     assert not wizard.has_pending_edits()

@@ -1236,9 +1236,11 @@ total, while historical plans without those fields remain readable.
 
 ## Independent randomization provenance
 
-Ordinary compiled sessions/results preserve reuse mode, resolved condition-order,
+Ordinary compiled sessions/results preserve the overall reuse mode, optional per-category
+`randomization_modes`, resolved condition-order,
 stimulus and fixation root seeds and algorithm version. Full/compact condition/history
-exports also retain derived `stimulus_order_seed`, `fixation_count_seed` and
+exports also retain `condition_order_randomization_mode`, `stimulus_randomization_mode`,
+`fixation_randomization_mode` and derived `stimulus_order_seed`, `fixation_count_seed` and
 `fixation_onset_seed`. Root values describe the participant launch; derived values describe
 one chronological condition presentation. Completed configs use the compiled snapshot,
 not later document edits. Older rows/artifacts without these fields remain readable.

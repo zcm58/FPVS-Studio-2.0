@@ -37,6 +37,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Plain-language randomization](exec-plans/completed/plain-language-randomization.md):
+  independent participant reuse choices and seed-free Session/Review; source checks
+  passed, visible Qt acceptance remains manual.
 - [Studio 2.5.8 release](exec-plans/completed/release-2.5.8.md): measured participant
   instruction layout, Birth Control overlap repair, full installer and public updater checks.
 - [Studio 2.5.7 release](exec-plans/completed/release-2.5.7.md): shared mouse-selection

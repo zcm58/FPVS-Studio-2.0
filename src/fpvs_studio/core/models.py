@@ -635,12 +635,27 @@ class RandomizationSeeds(FPVSBaseModel):
 RandomizationAlgorithmVersion = Annotated[StrictInt, Field(ge=1, le=1)]
 
 
+class RandomizationModes(FPVSBaseModel):
+    """Participant reuse choices for the three independent schedule domains."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    condition_order: Literal["fixed", "new"]
+    stimulus: Literal["fixed", "new"]
+    fixation: Literal["fixed", "new"]
+
+    @property
+    def aggregate(self) -> Literal["fixed", "new"]:
+        return "fixed" if all(value == "fixed" for value in self.model_dump().values()) else "new"
+
+
 class SessionSettings(FPVSBaseModel):
     """Project-level session flow settings."""
 
     block_count: int = Field(default=2, ge=1)
     session_seed: int = Field(default_factory=default_session_seed, ge=0)
     randomization_mode: Literal["fixed", "new"] | None = None
+    randomization_modes: RandomizationModes | None = None
     stimulus_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
     fixation_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
     saved_condition_order: list[StrictStr] | None = Field(default=None, min_length=1)
@@ -657,7 +672,8 @@ class SessionSettings(FPVSBaseModel):
     ) -> dict[str, Any]:
         payload: dict[str, Any] = handler(self)
         for name in (
-            "randomization_mode", "stimulus_seed", "fixation_seed", "saved_condition_order",
+            "randomization_mode", "randomization_modes", "stimulus_seed", "fixation_seed",
+            "saved_condition_order",
         ):
             if getattr(self, name) is None:
                 payload.pop(name, None)
@@ -676,6 +692,10 @@ class SessionSettings(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_randomization_fields(self) -> SessionSettings:
+        if self.randomization_modes is not None and (
+            self.randomization_mode != self.randomization_modes.aggregate
+        ):
+            raise ValueError("Per-category randomization must match the overall policy.")
         if self.randomization_mode is None:
             if self.stimulus_seed is not None or self.fixation_seed is not None:
                 raise ValueError("Independent seeds require a fixed or new randomization mode.")

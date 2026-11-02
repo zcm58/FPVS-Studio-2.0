@@ -1,5 +1,7 @@
 """Independent, stable occurrence schedules and explicit seed provenance."""
 
+from itertools import product
+
 import pytest
 from pydantic import ValidationError
 
@@ -7,11 +9,19 @@ from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_se
 from fpvs_studio.core.condition_modifiers import assign_modifier
 from fpvs_studio.core.data_sharing import protocol_fingerprint
 from fpvs_studio.core.masking_presets import create_masking_modifier
-from fpvs_studio.core.models import ProjectFile, RandomizationSeeds, SessionSettings, StimulusSet
+from fpvs_studio.core.models import (
+    ProjectFile,
+    RandomizationModes,
+    RandomizationSeeds,
+    SessionSettings,
+    StimulusSet,
+)
 from fpvs_studio.core.randomization import (
     configured_randomization_seeds,
     derive_schedule_seed,
     effective_randomization_mode,
+    effective_randomization_modes,
+    participant_randomization_seeds,
     supports_independent_randomization,
 )
 from fpvs_studio.core.run_spec import RunSpec
@@ -45,6 +55,78 @@ def _schedules(plan):
              for event in entry.run_spec.fixation_events],
         ) for entry in plan.ordered_entries()
     }
+
+
+@pytest.mark.parametrize("choices", list(product(("fixed", "new"), repeat=3)))
+def test_independent_participant_policies_preserve_only_selected_domains(
+    fixed_project, multi_condition_project_root, choices,
+):
+    project = fixed_project
+    modes = RandomizationModes(condition_order=choices[0], stimulus=choices[1], fixation=choices[2])
+    project.settings.session = SessionSettings.model_validate({
+        **project.settings.session.model_dump(),
+        "randomization_mode": modes.aggregate, "randomization_modes": modes,
+    })
+    before = project.model_dump_json()
+    configured = configured_randomization_seeds(project)
+    participants = [participant_randomization_seeds(project, seeds) for seeds in (
+        RandomizationSeeds(condition_order_seed=7, stimulus_seed=8, fixation_seed=9),
+        RandomizationSeeds(condition_order_seed=17, stimulus_seed=18, fixation_seed=19),
+    )]
+    plans = [compile_session_plan(
+        project, refresh_hz=60, project_root=multi_condition_project_root, resolved_seeds=seeds,
+    ) for seeds in participants]
+    assert effective_randomization_modes(project) == modes
+    assert project.model_dump_json() == before
+    for domain, field in (("condition_order", "condition_order_seed"),
+                          ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed")):
+        roots = [getattr(seeds, field) for seeds in participants]
+        if getattr(modes, domain) == "fixed":
+            assert roots == [getattr(configured, field)] * 2
+            invalid = participants[0].model_copy(update={field: getattr(configured, field) + 1})
+            with pytest.raises(CompileError, match="configured seed"):
+                compile_session_plan(project, refresh_hz=60, resolved_seeds=invalid)
+        else:
+            assert roots[0] != roots[1]
+    first, second = map(_schedules, plans)
+    for key in first:
+        assert (first[key][0] == second[key][0]) == (modes.stimulus == "fixed")
+        assert (first[key][1:] == second[key][1:]) == (modes.fixation == "fixed")
+    if modes.condition_order == "fixed":
+        assert [entry.condition_id for entry in plans[0].ordered_entries()] == [
+            entry.condition_id for entry in plans[1].ordered_entries()
+        ]
+    for plan in plans:
+        assert plan.randomization_modes == modes
+        assert SessionPlan.model_validate_json(plan.model_dump_json()) == plan
+        assert all(entry.run_spec.randomization.modes == modes for entry in plan.ordered_entries())
+
+
+def test_mixed_protocol_identity_ignores_only_fresh_roots(
+    fixed_project, multi_condition_project_root,
+):
+    project = fixed_project
+    project.settings.session = SessionSettings.model_validate({
+        **project.settings.session.model_dump(), "randomization_mode": "new",
+        "randomization_modes": {"condition_order": "new", "stimulus": "fixed", "fixation": "new"},
+    })
+    digest = protocol_fingerprint(project, multi_condition_project_root)
+    project.settings.session.session_seed += 1
+    project.settings.session.fixation_seed += 1
+    assert protocol_fingerprint(project, multi_condition_project_root) == digest
+    project.settings.session.stimulus_seed += 1
+    assert protocol_fingerprint(project, multi_condition_project_root) != digest
+
+
+@pytest.mark.parametrize("overall", [None, "fixed"])
+def test_invalid_overall_policy_cannot_hide_domain_modes(overall):
+    with pytest.raises(ValidationError, match="Per-category randomization"):
+        SessionSettings(
+            session_seed=1, stimulus_seed=2, fixation_seed=3, randomization_mode=overall,
+            randomization_modes=RandomizationModes(
+                condition_order="new", stimulus="fixed", fixation="new",
+            ),
+        )
 
 
 @pytest.mark.parametrize("modality", ["image", "word"])
@@ -192,7 +274,7 @@ def test_fixed_snapshot_override_is_rejected_and_new_snapshot_is_recorded(
 ):
     project = fixed_project
     seeds = RandomizationSeeds(condition_order_seed=4, stimulus_seed=5, fixation_seed=6)
-    with pytest.raises(CompileError, match="configured seed triplet"):
+    with pytest.raises(CompileError, match="configured seed"):
         compile_session_plan(project, refresh_hz=60, resolved_seeds=seeds)
     project.settings.session.randomization_mode = "new"
     plan = compile_session_plan(project, refresh_hz=60, project_root=multi_condition_project_root,

@@ -105,7 +105,9 @@ def test_preview_needs_no_assets_or_display_and_save_persists_exact_pending_coun
     assert reopened.project.settings.session.saved_condition_order == (
         [first, second, first, second, first]
     )
-    assert reopened.project.settings.session.randomization_mode == "fixed"
+    assert reopened.project.settings.session.randomization_modes.condition_order == "fixed"
+    assert reopened.project.settings.session.randomization_modes.stimulus == "new"
+    assert reopened.project.settings.session.randomization_modes.fixation == "new"
     assert reopened.project.settings.session.session_seed == 777
     assert reopened.project.settings.session.stimulus_seed == roots.stimulus_seed
     assert reopened.project.settings.session.fixation_seed == roots.fixation_seed
@@ -443,7 +445,7 @@ def test_order_save_validates_frequency_duration_and_count_drafts_together(
         assert condition.base_hz == 4
         assert condition.stream_duration_seconds == 20
         assert condition.presentation_count == 3
-        assert reopened.project.settings.session.randomization_mode == "fixed"
+        assert reopened.project.settings.session.randomization_modes.condition_order == "fixed"
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
@@ -471,7 +473,7 @@ def test_order_editor_plain_list_and_long_names_fit_documented_sizes(
     assert dialog.size().toTuple() == size
     assert dialog.minimumSize().toTuple() == (700, 520)
     assert_visible_children_within_parent(dialog)
-    assert dialog.effect_label.text() == "Save selects Same for every participant."
+    assert dialog.effect_label.text() == "Save uses this condition order for every participant."
     if state == "valid":
         item = next(dialog.order_list.item(row) for row in range(dialog.order_list.count())
                     if dialog.order_list.item(row).data(Qt.ItemDataRole.UserRole) == first)
@@ -488,9 +490,9 @@ def test_order_editor_plain_list_and_long_names_fit_documented_sizes(
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-@pytest.mark.parametrize("expanded", [False, True])
-def test_main_order_action_and_optional_seed_details_fit_wizard(
-    qtbot, monkeypatch, tmp_path, background, expanded,
+@pytest.mark.parametrize("repeatable", [False, True])
+def test_order_actions_and_independent_choices_fit_wizard(
+    qtbot, monkeypatch, tmp_path, background, repeatable,
 ):
     document, first, second = _document(tmp_path)
     document.update_condition_timing(
@@ -511,17 +513,13 @@ def test_main_order_action_and_optional_seed_details_fit_wizard(
     wizard.show()
     wizard.open_wizard(step_key="session", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
-    assert not editor.seed_details_button.isChecked()
-    editor.seed_details_button.setChecked(expanded)
+    combo = editor.mode_combos["condition_order"]
+    combo.setCurrentIndex(combo.findData("fixed" if repeatable else "new"))
     QApplication.processEvents()
     assert editor.condition_order_button.isVisible()
-    assert editor.seed_details.isVisible() == expanded
-    assert editor.generate_button.isVisible() == expanded
-    assert editor.clear_saved_order_button.isVisible() == expanded
-    assert "inactive" in editor.condition_order_button.toolTip()
-    assert "saved arrangement" in editor.seed_edits["condition_order_seed"].toolTip()
+    assert editor.clear_saved_order_button.isVisible()
+    assert ("used" if repeatable else "inactive") in editor.effect_labels["condition_order"].text()
     assert_visible_children_within_parent(wizard.session_step_surface)
-    if expanded:
-        editor.clear_saved_order_button.click()
-        assert document.project.settings.session.saved_condition_order is None
-        assert document.project.settings.session.randomization_mode == "new"
+    editor.clear_saved_order_button.click()
+    assert document.project.settings.session.saved_condition_order is None
+    assert document.project.settings.session.randomization_mode == "new"
