@@ -80,8 +80,9 @@ adapters remain lazy and preserve existing secure-store/file-operation boundarie
 
 `core/portable_paths.py` and `core/project_bundle.py` retain the bundle schema and
 payload bytes while rejecting ambiguous/unportable paths, source links and archive
-links/special files. Signature-recognized Finder metadata is omitted at image intake;
-authored dot-prefixed images and word content are preserved. Bundle staging, hashes,
+links/special files. Signature-recognized, unreferenced Finder metadata is omitted at
+image intake, owned folder discovery and export; explicit image references are never
+silently removed. Authored dot-prefixed images and word content are preserved. Bundle staging, hashes,
 compile validation, cancellation and collision-safe installation remain in place.
 
 Source paths above are relative to `src/fpvs_studio/`. The

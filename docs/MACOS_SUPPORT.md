@@ -32,8 +32,27 @@ advertised supported matrix yet.
 ## Install, run and update from source
 
 Use the same Studio version or commit on the Mac and Windows computers. Install
-native Python 3.10 for the Mac's CPU architecture, obtain the source checkout, then
-run from its directory in Terminal:
+native Python 3.10 for the Mac's CPU architecture and obtain the source checkout.
+
+Intel installation also requires Apple command-line tools, Rust 1.83 or later and
+OpenSSL 3. The current [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/#files)
+and [zeroconf 0.152.1](https://pypi.org/project/zeroconf/0.152.1/#files) releases provide
+Apple Silicon wheels but build from source on Intel. Install Apple's tools with
+`xcode-select --install` if absent. With [Homebrew](https://brew.sh/) already installed:
+
+```bash
+brew install openssl@3 rust
+```
+
+See [cryptography's native build requirements](https://cryptography.io/en/50.0.2/installation/#building-cryptography-on-macos).
+Apple's system SSL libraries cannot substitute for OpenSSL 3. If setup cannot locate
+Homebrew's OpenSSL, prefix the `setup` command below with its explicit location:
+
+```bash
+OPENSSL_DIR="$(brew --prefix openssl@3)" bash scripts/macos-source.sh setup
+```
+
+On either architecture, run from the checkout directory in Terminal:
 
 ```bash
 bash scripts/macos-source.sh setup
@@ -113,8 +132,12 @@ pass; retain the actual CI artifact chain for that claim.
 `bash scripts/macos-source.sh verify` runs the safe `macos` focused scope. Native
 checks require `FPVS_MACOS_NATIVE_CHECKS=1`; CI enables it explicitly. Those checks
 import native bindings and PsychoPy without opening a window, probe available display
-information, and use unique synthetic Keychain/Trash items with cleanup. They do not
-contact EEG devices, use real projects or establish physical display timing. Neutral
+information, and use unique synthetic Keychain/Trash items with cleanup. The hosted-only
+Keychain check creates an unlocked temporary store and restores the runner's previous
+default/search list afterward; it does not unlock or change access controls on the login
+Keychain. A real child-process IPC check rejects acquisition settings before any engine
+or hardware is created. These checks do not contact EEG devices, use real projects or
+establish physical display timing. Neutral
 core imports must remain independent of Qt/PsychoPy/hardware. Qt execution requires
 the approved visible-environment policy in [Environment](ENVIRONMENT.md#gui-test-environment).
 
@@ -143,9 +166,11 @@ spelling when the source filesystem presents a canonically equivalent name, with
 renaming source files or normalizing word content. Ambiguous references fail with an
 actionable error.
 
-Image intake omits only signature-recognized Finder metadata; ordinary `._*` images
-are retained. Finder metadata already copied into an owned image pool requires
-reimport before export, so compilation cannot silently include/exclude an image.
+Image intake, owned folder discovery and bundle export omit only signature-recognized,
+unreferenced Finder metadata (`.DS_Store`/AppleDouble). Ordinary authored `._*` images
+remain included in the same sorted order. Explicit manifest/task image references are
+never silently removed: a reference to recognized metadata fails validation and must
+be replaced with an actual image. Original files and manifest membership are unchanged.
 Checksums, active-payload rules, resource limits and compile validation still apply.
 See [Experiment Library](EXPERIMENT_LIBRARY.md) for stricter publication inventory.
 

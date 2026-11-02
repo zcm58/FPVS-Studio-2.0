@@ -14,10 +14,13 @@ This is enforced in:
 
 For experimental macOS source setup, use `bash scripts/macos-source.sh setup`, then
 `bash scripts/macos-source.sh run` from the checkout. This creates `.venv3.10`,
-installs the GUI/engine/dev extras and checks dependency consistency. Python 3.10
-must already be installed; `FPVS_PYTHON` can select its executable. See
-[Mac support and acceptance](MACOS_SUPPORT.md) for the CI matrix, test-only scope,
-local calibration and portable Windows handoff. No Developer ID is needed for source.
+installs the GUI/engine/dev extras and checks dependency consistency. Native Python
+3.10 must match the Mac's CPU architecture; `FPVS_PYTHON` can select its executable.
+Intel also needs Apple command-line tools, Rust 1.83 or later and OpenSSL 3 to build
+security-required dependencies that lack Intel wheels. See
+[Mac installation prerequisites](MACOS_SUPPORT.md#install-run-and-update-from-source)
+for Homebrew/OpenSSL setup, the CI matrix, test-only scope, local calibration and
+portable Windows handoff. No Developer ID is needed for source.
 
 PowerShell:
 

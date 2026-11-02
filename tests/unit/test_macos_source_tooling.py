@@ -7,6 +7,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -78,3 +79,50 @@ for prefix in ('PySide6', 'psychopy', 'AppKit', 'Foundation', 'objc'):
         timeout=30,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_ci_keychain_restores_selection_and_deletes_only_its_own_file(monkeypatch, tmp_path):
+    from tests.integration import test_macos_native as native
+
+    calls = []
+    previous = "/Users/runner/Library/Keychains/login.keychain-db"
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "github-hosted")
+
+    def security(*arguments):
+        calls.append(arguments)
+        if arguments == ("default-keychain", "-d", "user"):
+            return f'"{previous}"\n'
+        if arguments == ("list-keychains", "-d", "user"):
+            return f'"{previous}"\n'
+        return ""
+
+    monkeypatch.setattr(native, "_security", security)
+    try:
+        with native._temporary_ci_keychain(tmp_path) as owned:
+            assert owned.parent == tmp_path
+            raise RuntimeError("synthetic failure")
+    except RuntimeError:
+        pass
+
+    assert calls[-3:] == [
+        ("default-keychain", "-d", "user", "-s", previous),
+        ("list-keychains", "-d", "user", "-s", previous),
+        ("delete-keychain", str(owned)),
+    ]
+    assert ("unlock-keychain", "-p") == calls[4][:2]
+    assert calls[4][-1] == str(owned)
+    assert previous not in calls[4]
+
+
+def test_ci_keychain_never_changes_a_personal_or_self_hosted_mac(monkeypatch, tmp_path):
+    from tests.integration import test_macos_native as native
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "self-hosted")
+    monkeypatch.setattr(
+        native, "_security", lambda *_: pytest.fail("Changed a non-hosted Keychain"),
+    )
+    with pytest.raises(pytest.skip.Exception):
+        with native._temporary_ci_keychain(tmp_path):
+            pytest.fail("The hosted-only resource must not be created")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import stat
@@ -669,6 +670,26 @@ def test_bundle_directory_guard_accepts_zip64_and_archive_comment(tmp_path, monk
         archive.comment = b"FPVS Studio portable project"
     with project_bundle_module.open_project_bundle_archive(bundle) as archive:
         assert archive.read("stimuli/base.png") == b"valid payload"
+
+
+@pytest.mark.parametrize("location_signature", [b"PK\x05\x06", b"PK\x06\x06"])
+@pytest.mark.parametrize("comment", [b"", b"FPVS Studio portable project"])
+def test_zip64_directory_guard_accepts_old_and_new_cpython_end_locations(
+    tmp_path, monkeypatch, location_signature, comment,
+):
+    bundle = tmp_path / "zip64-location.fpvsbundle"
+    monkeypatch.setattr(zipfile, "ZIP64_LIMIT", 1)
+    with zipfile.ZipFile(bundle, "w") as archive:
+        archive.writestr("stimuli/base.png", b"valid payload")
+        archive.comment = comment
+    payload = bundle.read_bytes()
+    with bundle.open("rb") as stream:
+        end_record = zipfile._EndRecData(stream)
+    assert end_record is not None
+    end_record[zipfile._ECD_LOCATION] = payload.rfind(location_signature)
+    assert end_record[zipfile._ECD_LOCATION] >= 0
+    monkeypatch.setattr(zipfile, "_EndRecData", lambda _stream: end_record)
+    project_bundle_module._validate_archive_directory(io.BytesIO(payload))
 
 
 @pytest.mark.parametrize("compression", [zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA])

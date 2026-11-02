@@ -10,8 +10,14 @@ from __future__ import annotations
 import importlib
 import os
 import platform
+import secrets
+import shlex
+import subprocess
 import sys
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from dataclasses import asdict
 from importlib.metadata import version
 from pathlib import Path
 from types import SimpleNamespace
@@ -53,25 +59,85 @@ def test_native_display_api_links_and_reports_fixed_mode_or_explicit_unknown(
     record_property("physical_display_qualified", "false")
 
 
-def test_native_keychain_roundtrip_uses_and_cleans_only_a_unique_synthetic_entry() -> None:
-    from fpvs_studio.library.credentials import MacOSKeychainCredentialStore
-    from fpvs_studio.library.models import DeviceCredential
+def _security(*arguments: str) -> str:
+    return subprocess.run(
+        ["/usr/bin/security", *arguments],
+        capture_output=True, text=True, check=True, timeout=15,
+    ).stdout
 
-    target = f"FPVS-Studio/CI/{uuid.uuid4().hex}"
-    store = MacOSKeychainCredentialStore(target)
-    credential = DeviceCredential(
-        token="synthetic_ci_" + uuid.uuid4().hex + uuid.uuid4().hex,
-        device_name="Synthetic macOS CI",
-        library_api_version=2,
-    )
+
+@contextmanager
+def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
+    """Isolate OS defaults only on a disposable hosted runner and restore them."""
+    if (
+        os.environ.get("GITHUB_ACTIONS") != "true"
+        or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
+    ):
+        pytest.skip("Private Keychain selection requires a disposable GitHub-hosted Mac")
+    previous = shlex.split(_security("default-keychain", "-d", "user"))
+    search_list = shlex.split(_security("list-keychains", "-d", "user"))
+    if len(previous) != 1:
+        pytest.fail("Cannot safely snapshot the hosted runner's default Keychain")
+    keychain = root / f"fpvs-ci-{uuid.uuid4().hex}.keychain-db"
+    password = secrets.token_urlsafe(32)
+    created = False
+    selected = False
     try:
-        assert store.load() is None
-        store.save(credential)
-        assert MacOSKeychainCredentialStore(target).load() == credential
-        store.delete()
-        assert store.load() is None
+        _security("create-keychain", "-p", password, str(keychain))
+        created = True
+        _security("set-keychain-settings", "-lut", "3600", str(keychain))
+        _security("unlock-keychain", "-p", password, str(keychain))
+        selected = True
+        _security("list-keychains", "-d", "user", "-s", str(keychain), *search_list)
+        _security("default-keychain", "-d", "user", "-s", str(keychain))
+        yield keychain
     finally:
-        store.delete()
+        try:
+            if selected:
+                _security("default-keychain", "-d", "user", "-s", previous[0])
+        finally:
+            try:
+                if selected:
+                    _security("list-keychains", "-d", "user", "-s", *search_list)
+            finally:
+                if created:
+                    _security("delete-keychain", str(keychain))
+
+
+@pytest.mark.timeout(120)
+def test_native_keychain_roundtrip_uses_and_cleans_only_a_unique_synthetic_entry(
+    tmp_path: Path, record_property,
+) -> None:
+    # keyring 25 ignores KEYCHAIN_PATH; use the actual backend against a temporary
+    # OS default. Never unlock the login Keychain or weaken its access controls.
+    code = """
+import sys
+import uuid
+from fpvs_studio.library.credentials import MacOSKeychainCredentialStore
+from fpvs_studio.library.models import DeviceCredential
+store = MacOSKeychainCredentialStore(sys.argv[1])
+credential = DeviceCredential(token='synthetic_ci_' + uuid.uuid4().hex + uuid.uuid4().hex,
+                              device_name='Synthetic macOS CI', library_api_version=2)
+try:
+    assert store.load() is None
+    store.save(credential)
+    assert MacOSKeychainCredentialStore(sys.argv[1]).load() == credential
+    store.delete()
+    assert store.load() is None
+finally:
+    store.delete()
+"""
+    with _temporary_ci_keychain(tmp_path):
+        # A blocked Security prompt must fail this check without killing pytest
+        # before its fixture restores the original OS selection.
+        result = subprocess.run(
+            [sys.executable, "-c", code, f"FPVS-Studio/CI/{uuid.uuid4().hex}"],
+            capture_output=True, text=True, check=False, timeout=20,
+        )
+        assert result.returncode == 0, result.stderr
+    record_property(
+        "keychain_scope", "temporary hosted-runner Keychain, original selection restored",
+    )
 
 
 def test_native_trash_moves_and_cleans_only_a_task_owned_temporary_file(
@@ -113,3 +179,40 @@ def test_native_trash_moves_and_cleans_only_a_task_owned_temporary_file(
         for item in trashed:
             if item.name == filename and item.is_file():
                 item.unlink()
+
+
+def test_native_child_ipc_rejects_acquisition_before_engine_or_hardware(
+    monkeypatch: pytest.MonkeyPatch, sample_project, sample_project_root, record_property,
+) -> None:
+    from fpvs_studio.core.compiler import compile_session_plan
+    from fpvs_studio.core.execution import ParticipantMetadata
+    from fpvs_studio.runtime import macos_session_process as process
+    from fpvs_studio.runtime.launcher import LaunchSettings
+
+    plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
+    request = process._Request(
+        project_root=str(sample_project_root), session_plan=plan, participant_number="001",
+        participant_metadata=ParticipantMetadata(),
+        launch_settings=asdict(LaunchSettings(
+            experiment_test_mode=False, serial_enabled=True, verify_refresh_rate=True,
+        )),
+    )
+    responses = []
+    original = process._private_file
+
+    def private_file(path, *, write=None):
+        value = original(path, write=write)
+        if path.name == "response.json" and write is None:
+            responses.append(process._Response.model_validate_json(value))
+        return value
+
+    monkeypatch.setattr(process, "_private_file", private_file)
+    with pytest.raises(process.MacOSSessionProcessError):
+        process._exchange(request)
+    assert len(responses) == 1
+    assert responses[0].error == "invalid_request"
+    assert responses[0].summary is None and responses[0].verification is None
+    assert any("_settings" in frame for frame in responses[0].child_traceback)
+    record_property(
+        "child_ipc", "real private request/response; acquisition rejected before engine",
+    )

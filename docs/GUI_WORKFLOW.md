@@ -1151,8 +1151,9 @@ opening it, so the user can reopen it later through `Open Existing Project`.
 Bundles use the same format on Mac and Windows. Transfer validation rejects ambiguous
 case/Unicode aliases, unsupported filename components and link/special-file payloads.
 Canonical-equivalent filesystem spellings are exported using authored reference
-spelling. Finder metadata is ignored only when recognized by its file signature during
-external image intake; ordinary authored `._` images and word bytes remain unchanged.
+spelling. Unreferenced Finder metadata is ignored only when recognized by its file
+signature during image discovery and bundle export. Explicit references to metadata
+are errors; ordinary authored `._` images and word bytes remain unchanged.
 `Import > Project Config...` creates a new
 Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
 setup handoff; it does not merge into the current project or carry the FPVS base and

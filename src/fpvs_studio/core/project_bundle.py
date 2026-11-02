@@ -339,11 +339,19 @@ def _validate_archive_directory(stream: BinaryIO) -> None:
     directory_size = end_record[zip_format._ECD_SIZE]
     if directory_size > MAX_BUNDLE_DIRECTORY_BYTES:
         raise ProjectBundleError("Project bundle archive directory exceeds its byte limit.")
-    directory_start = end_record[zip_format._ECD_LOCATION] - directory_size
+    directory_end = end_record[zip_format._ECD_LOCATION]
     if end_record[zip_format._ECD_SIGNATURE] == zip_format.stringEndArchive64:
-        directory_start -= (
-            zip_format.sizeEndCentDir64 + zip_format.sizeEndCentDir64Locator
-        )
+        # Older 3.10 patch releases report the ordinary EOCD location; newer ones
+        # report the ZIP64 EOCD location. Inspect the record, not Python's version.
+        stream.seek(directory_end)
+        signature = stream.read(4)
+        if signature == zip_format.stringEndArchive:
+            directory_end -= (
+                zip_format.sizeEndCentDir64 + zip_format.sizeEndCentDir64Locator
+            )
+        elif signature != zip_format.stringEndArchive64:
+            raise zipfile.BadZipFile("Invalid ZIP64 directory end record.")
+    directory_start = directory_end - directory_size
     if directory_start < 0:
         raise zipfile.BadZipFile("Invalid ZIP directory offset.")
     stream.seek(directory_start)
@@ -974,6 +982,15 @@ def _validate_bundle_source(
         raise ProjectBundleError(
             "Stimulus manifest project_id does not match project.json project_id."
         )
+    for reference, is_directory in _bundle_references(project, manifest):
+        name = PurePosixPath(reference).name
+        if not is_directory and (name == ".DS_Store" or name.startswith("._")):
+            candidate = _resolve_existing_relative_file(project_root, reference)
+            if is_finder_metadata_file(candidate):
+                raise ProjectBundleError(
+                    f"Explicit image reference identifies Finder metadata: {reference}. "
+                    "Replace it with an actual image and update the reference before exporting."
+                )
     _validate_bundle_references(
         project, manifest,
         payload_paths if payload_paths is not None else _bundle_export_paths(
@@ -985,14 +1002,6 @@ def _validate_bundle_source(
         if stimulus_set.source_dir is None:
             continue
         source_dir = _resolve_existing_relative_dir(project_root, stimulus_set.source_dir)
-        for path in filesystem_path(source_dir).iterdir():
-            if (path.is_file() and path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
-                    and is_finder_metadata_file(path)):
-                raise ProjectBundleError(
-                    "Stimulus folder contains Finder metadata: "
-                    f"{stimulus_set.source_dir}/{path.name}. "
-                    "Reimport the source folder to omit metadata before exporting."
-                )
         if not any(path.is_file() for path in filesystem_path(source_dir).iterdir()):
             raise ProjectBundleError(
                 f"Stimulus set '{stimulus_set.name}' does not contain any files."
@@ -1014,7 +1023,8 @@ def _validate_bundle_source(
     try:
         validate_image_files(
             (path for path in filesystem_path(stimuli_dir(project_root)).rglob("*")
-             if path.is_file() and path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES),
+             if path.is_file() and path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
+             and not is_finder_metadata_file(path)),
             cancel_check=lambda: _check_cancelled(cancel_event),
         )
     except ImageInspectionError as exc:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -21,10 +22,13 @@ def is_finder_metadata_file(path: Path) -> bool:
     )
 
 
-def source_image_directory_files(source_dir: Path) -> list[Path]:
+def source_image_directory_files(
+    source_dir: Path, *, sort_key: Callable[[Path], str] | None = None,
+) -> list[Path]:
     """Return regular source entries, omitting only recognized Finder metadata."""
 
     return sorted(
-        path for path in source_dir.iterdir()
-        if path.is_file() and not is_finder_metadata_file(path)
+        (path for path in source_dir.iterdir()
+         if path.is_file() and not is_finder_metadata_file(path)),
+        key=sort_key,
     )

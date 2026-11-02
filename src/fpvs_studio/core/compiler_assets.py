@@ -24,6 +24,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.preprocessing.manifest import asset_variant_path, find_manifest_set
 from fpvs_studio.preprocessing.models import StimulusManifest
+from fpvs_studio.preprocessing.source_files import source_image_directory_files
 
 
 def load_manifest(
@@ -147,7 +148,9 @@ def _resolve_filesystem_image_paths(
     if source_dir.exists() and source_dir.is_dir():
         resolved = [
             to_project_relative_posix(project_root, path)
-            for path in sorted(source_dir.iterdir(), key=lambda item: item.name.lower())
+            for path in source_image_directory_files(
+                source_dir, sort_key=lambda item: item.name.lower(),
+            )
             if path.is_file() and path.suffix.lower() in allowed_suffixes
         ]
         if resolved:

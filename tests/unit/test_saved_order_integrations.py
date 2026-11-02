@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from types import SimpleNamespace
 
 import pytest
 from tests.unit.runtime_launcher_helpers import StubEngine
@@ -26,6 +27,7 @@ from fpvs_studio.core.serialization import load_project_file, save_project_file,
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
+from fpvs_studio.runtime import launcher as launcher_module
 from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryRecorder,
     build_recovery_session_plan,
@@ -37,6 +39,17 @@ from fpvs_studio.runtime.session_export import (
     SESSION_CONDITION_HISTORY_HEADER,
     append_session_condition_history,
 )
+
+
+@pytest.fixture(autouse=True)
+def _fake_windows_engine_policy(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Exercise shared schedules/exports using the Windows fake-engine test policy.
+
+    Native Mac launch requirements have separate guard coverage; these runs never
+    query a connected display or create a presentation window.
+    """
+    monkeypatch.setattr(launcher_module, "sys", SimpleNamespace(platform="win32"))
+
 
 ORDER = ["faces", "second", "faces", "third", "second"]
 ALTERNATIVE_ORDER = ["second", "faces", "third", "faces", "second"]

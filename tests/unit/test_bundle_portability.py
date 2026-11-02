@@ -13,17 +13,36 @@ import pytest
 from PIL import Image
 
 import fpvs_studio.core.project_bundle as bundles
-from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.compiler_assets import resolve_image_paths
+from fpvs_studio.core.enums import StimulusModality, StimulusVariant
 from fpvs_studio.core.paths import app_data_dir, filesystem_path
 from fpvs_studio.core.portable_paths import (
     validate_portable_path_inventory,
     validate_portable_relative_path,
 )
 from fpvs_studio.core.serialization import save_project_file
-from fpvs_studio.preprocessing.importer import import_stimulus_source_directory
+from fpvs_studio.core.task_models import TaskModule
+from fpvs_studio.preprocessing.importer import (
+    import_stimulus_source_directory,
+    materialize_project_assets,
+)
 from fpvs_studio.preprocessing.inspection import inspect_source_directory
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
-from fpvs_studio.preprocessing.source_files import is_finder_metadata_file
+from fpvs_studio.preprocessing.models import DerivedImageRecord
+from fpvs_studio.preprocessing.source_files import (
+    is_finder_metadata_file,
+    source_image_directory_files,
+)
+
+
+def test_image_discovery_preserves_existing_order_for_case_insensitive_sort_ties():
+    # Model a case-sensitive source directory on every host, including Windows.
+    entries = [SimpleNamespace(name=name, is_file=lambda: True) for name in ("a.png", "A.png")]
+    directory = SimpleNamespace(iterdir=lambda: iter(entries))
+    assert source_image_directory_files(
+        directory, sort_key=lambda item: item.name.lower(),
+    ) == entries
 
 
 def _save(root, project):
@@ -287,16 +306,131 @@ def test_bundle_omits_recognized_finder_metadata_but_keeps_authored_dot_image(
     assert metadata.exists()
 
 
-def test_bundle_rejects_finder_metadata_inside_an_existing_image_pool(
+@pytest.mark.parametrize("populated_manifest", [False, True])
+def test_owned_pool_metadata_does_not_change_compiled_or_exported_image_membership(
+    tmp_path, sample_project, sample_project_root, populated_manifest,
+):
+    pool = sample_project_root / "stimuli/original-images/base-set"
+    authored = pool / "._authored.png"
+    Image.new("RGB", (256, 256), "blue").save(authored)
+    sample_project.stimulus_sets[0].image_count += 1
+    _save(sample_project_root, sample_project)
+    manifest = (
+        materialize_project_assets(
+            sample_project, project_root=sample_project_root, variants=[StimulusVariant.ORIGINAL],
+        ) if populated_manifest else create_empty_manifest(sample_project.meta.project_id)
+    )
+    manifest_before = (sample_project_root / "stimuli/manifest.json").read_bytes()
+    compile_args = {"refresh_hz": 60, "random_seed": 17, "session_id": "metadata-invariance"}
+    before = compile_session_plan(
+        sample_project, project_root=sample_project_root, manifest=manifest, **compile_args,
+    ).model_dump(mode="json")
+    metadata = pool / "._base-set-01.png"
+    metadata.write_bytes(b"\x00\x05\x16\x07\x00\x02\x00\x00" + b"\x00" * 18)
+    (pool / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1" + b"\x00" * 32)
+    after = compile_session_plan(
+        sample_project, project_root=sample_project_root, manifest=manifest, **compile_args,
+    ).model_dump(mode="json")
+    assert after == before
+    resolved = resolve_image_paths(
+        sample_project.stimulus_sets[0], variant=StimulusVariant.ORIGINAL,
+        project_root=sample_project_root, manifest=manifest,
+    )
+    assert [Path(path).name for path in resolved] == [
+        "._authored.png", "base-set-01.png", "base-set-02.png", "base-set-03.png",
+    ]
+    bundle = tmp_path / "metadata.fpvsbundle"
+    bundles.export_project_bundle(sample_project_root, bundle)
+    with zipfile.ZipFile(bundle) as archive:
+        assert not any(Path(path).name in {metadata.name, ".DS_Store"}
+                       for path in archive.namelist())
+        assert (
+            archive.read("stimuli/original-images/base-set/._authored.png") == authored.read_bytes()
+        )
+    imported = bundles.import_project_bundle(bundle, tmp_path / "receiver")
+    assert compile_session_plan(
+        imported.project, project_root=imported.project_root, **compile_args,
+    ).model_dump(mode="json") == before
+    assert (sample_project_root / "stimuli/manifest.json").read_bytes() == manifest_before
+    assert metadata.exists()
+
+
+@pytest.mark.parametrize("reference_kind", ["source", "derivative", "task"])
+def test_explicit_metadata_image_references_fail_without_changing_authored_members(
+    tmp_path, sample_project, sample_project_root, reference_kind,
+):
+    _save(sample_project_root, sample_project)
+    manifest = materialize_project_assets(
+        sample_project, project_root=sample_project_root,
+        variants=[StimulusVariant.ORIGINAL, StimulusVariant.GRAYSCALE],
+    )
+    relative = (
+        "stimuli/task-assets/metadata/._image.png" if reference_kind == "task"
+        else "stimuli/original-images/base-set/._image.png"
+    )
+    metadata = sample_project_root / relative
+    metadata.parent.mkdir(parents=True, exist_ok=True)
+    metadata.write_bytes(b"\x00\x05\x16\x07\x00\x02\x00\x00" + b"\x00" * 18)
+    asset = manifest.sets[0].assets[0]
+    if reference_kind == "source":
+        asset.source.relative_path = relative
+    elif reference_kind == "derivative":
+        asset.derivatives = [DerivedImageRecord(
+            variant=StimulusVariant.GRAYSCALE, relative_path=relative,
+            resolution=asset.source.resolution,
+        )]
+    else:
+        sample_project.task_modules = [TaskModule.model_validate({
+            "task_id": "metadata", "name": "Explicit metadata reference",
+            "steps": [{"step_id": "study", "kind": "study", "continue_key": "space", "items": [
+                {"item_id": "image", "modality": "image", "image_path": relative},
+            ]}],
+        })]
+    write_stimulus_manifest(sample_project_root, manifest)
+    save_project_file(sample_project, sample_project_root / "project.json")
+    manifest_before = (sample_project_root / "stimuli/manifest.json").read_bytes()
+    project_before = (sample_project_root / "project.json").read_bytes()
+    bundle = tmp_path / "explicit-metadata.fpvsbundle"
+    with pytest.raises(
+        bundles.ProjectBundleError, match="Explicit image reference.*Finder metadata",
+    ):
+        bundles.export_project_bundle(sample_project_root, bundle)
+    assert not bundle.exists()
+    assert (sample_project_root / "stimuli/manifest.json").read_bytes() == manifest_before
+    assert (sample_project_root / "project.json").read_bytes() == project_before
+    assert metadata.exists()
+    if reference_kind != "task":
+        variant = (StimulusVariant.ORIGINAL if reference_kind == "source"
+                   else StimulusVariant.GRAYSCALE)
+        # Folder discovery filtering must not silently remove a declared manifest member.
+        assert relative in resolve_image_paths(
+            sample_project.stimulus_sets[0], variant=variant,
+            project_root=sample_project_root, manifest=manifest,
+        )
+
+
+def test_bundle_import_rejects_explicit_metadata_even_with_valid_payload_hashes(
     tmp_path, sample_project, sample_project_root,
 ):
     _save(sample_project_root, sample_project)
-    metadata = sample_project_root / "stimuli/original-images/base-set/._image.png"
-    metadata.write_bytes(b"\x00\x05\x16\x07\x00\x02\x00\x00" + b"\x00" * 18)
-    with pytest.raises(bundles.ProjectBundleError, match="Reimport the source folder"):
-        bundles.export_project_bundle(sample_project_root, tmp_path / "metadata.fpvsbundle")
-    assert metadata.exists()
-
+    manifest = materialize_project_assets(
+        sample_project, project_root=sample_project_root, variants=[StimulusVariant.ORIGINAL],
+    )
+    bundle = tmp_path / "declared-metadata.fpvsbundle"
+    bundles.export_project_bundle(sample_project_root, bundle)
+    relative = "stimuli/original-images/base-set/._image.png"
+    payload = b"\x00\x05\x16\x07\x00\x02\x00\x00" + b"\x00" * 18
+    manifest.sets[0].assets[0].source.relative_path = relative
+    manifest.sets[0].assets[0].source.sha256 = hashlib.sha256(payload).hexdigest()
+    _rewrite_bundle(bundle, {
+        relative: payload, "stimuli/manifest.json": manifest.model_dump_json().encode("utf-8"),
+    })
+    receiver = tmp_path / "receiver"
+    with pytest.raises(
+        bundles.ProjectBundleError, match="Explicit image reference.*Finder metadata",
+    ):
+        bundles.import_project_bundle(bundle, receiver)
+    assert not (receiver / sample_project.meta.project_id).exists()
 
 
 def test_source_intake_rejects_normalization_aliases_before_copying(tmp_path):
