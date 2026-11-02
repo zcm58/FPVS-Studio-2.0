@@ -518,8 +518,20 @@ def test_order_actions_and_independent_choices_fit_wizard(
     QApplication.processEvents()
     assert editor.condition_order_button.isVisible()
     assert editor.clear_saved_order_button.isVisible()
-    assert ("used" if repeatable else "inactive") in editor.effect_labels["condition_order"].text()
+    assert editor.saved_order_status_label.isVisible()
+    assert editor.saved_order_status_label.text() == (
+        "Saved order in use" if repeatable else "Saved order inactive"
+    )
+    assert editor.condition_order_button.y() < editor.heading_labels["fixation"].y()
+    combo.setFocus()
+    qtbot.keyClick(combo, Qt.Key.Key_Tab)
+    assert editor.condition_order_button.hasFocus()
+    qtbot.keyClick(editor.condition_order_button, Qt.Key.Key_Tab)
+    assert editor.clear_saved_order_button.hasFocus()
+    qtbot.keyClick(editor.clear_saved_order_button, Qt.Key.Key_Tab)
+    assert editor.mode_combos["fixation"].hasFocus()
     assert_visible_children_within_parent(wizard.session_step_surface)
     editor.clear_saved_order_button.click()
     assert document.project.settings.session.saved_condition_order is None
+    assert not editor.saved_order_status_label.isVisible()
     assert document.project.settings.session.randomization_mode == "new"

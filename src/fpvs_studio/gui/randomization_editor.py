@@ -14,7 +14,7 @@ from fpvs_studio.core.randomization import (
     effective_randomization_modes,
     supports_independent_randomization,
 )
-from fpvs_studio.gui.components import mark_error_text, mark_secondary_action
+from fpvs_studio.gui.components import PAGE_SECTION_GAP, mark_error_text, mark_secondary_action
 from fpvs_studio.gui.condition_order_dialog import ConditionOrderDialog
 from fpvs_studio.gui.document import ProjectDocument
 
@@ -37,36 +37,31 @@ class RandomizationEditor(QWidget):
         self._timing_table: ConditionTimingTable | None = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setSpacing(PAGE_SECTION_GAP)
         self.mode_combos: dict[str, QComboBox] = {}
-        self.effect_labels: dict[str, QLabel] = {}
+        self.heading_labels: dict[str, QLabel] = {}
+        choice_layouts: dict[str, QVBoxLayout] = {}
         for domain, title in (
             ("stimulus", "Image / word display order"),
             ("condition_order", "Condition order"),
             ("fixation", "Fixation color-change timing"),
         ):
             group = QVBoxLayout()
-            group.setSpacing(4)
+            group.setSpacing(6)
             label = QLabel(title, self)
+            label.setObjectName(f"{domain}_randomization_heading")
+            label.setProperty("sectionCardRole", "title")
             combo = QComboBox(self)
             combo.setObjectName(f"{domain}_randomization_mode_combo")
             combo.setAccessibleName(title)
             combo.addItem("Randomized — new for each participant", "new")
             combo.addItem("Pseudorandom — same for every participant", "fixed")
-            combo.setToolTip(
-                "Pseudorandom generates a random pattern once and reuses it for every "
-                "participant while the project settings stay the same. Existing balancing "
-                "and timing rules apply to both choices."
-            )
             label.setBuddy(combo)
-            effect = QLabel(self)
-            effect.setObjectName(f"{domain}_randomization_effect")
-            effect.setWordWrap(True)
             self.mode_combos[domain] = combo
-            self.effect_labels[domain] = effect
+            self.heading_labels[domain] = label
+            choice_layouts[domain] = group
             group.addWidget(label)
             group.addWidget(combo)
-            group.addWidget(effect)
             layout.addLayout(group)
             combo.currentIndexChanged.connect(self._mode_changed)
         commands = QHBoxLayout()
@@ -86,7 +81,13 @@ class RandomizationEditor(QWidget):
         mark_secondary_action(self.clear_saved_order_button)
         commands.addWidget(self.clear_saved_order_button)
         commands.addStretch(1)
-        layout.addLayout(commands)
+        choice_layouts["condition_order"].addLayout(commands)
+        self.saved_order_status_label = QLabel(self)
+        self.saved_order_status_label.setObjectName("saved_condition_order_status")
+        self.saved_order_status_label.setProperty("setupMetricLabel", "true")
+        self.saved_order_status_label.setWordWrap(True)
+        self.saved_order_status_label.hide()
+        choice_layouts["condition_order"].addWidget(self.saved_order_status_label)
         self.error_label = QLabel(self)
         self.error_label.setObjectName("randomization_error")
         self.error_label.setWordWrap(True)
@@ -103,6 +104,9 @@ class RandomizationEditor(QWidget):
         self.condition_order_button.clicked.connect(self._edit_order)
         self.clear_saved_order_button.clicked.connect(self._clear_saved_order)
         self.reset_patterns_button.clicked.connect(self._reset_patterns)
+        QWidget.setTabOrder(self.mode_combos["condition_order"], self.condition_order_button)
+        QWidget.setTabOrder(self.condition_order_button, self.clear_saved_order_button)
+        QWidget.setTabOrder(self.clear_saved_order_button, self.mode_combos["fixation"])
         document.project_changed.connect(self.refresh)
         self.refresh()
 
@@ -154,7 +158,7 @@ class RandomizationEditor(QWidget):
     def _mode_changed(self) -> None:
         if not self._syncing:
             self.error_label.hide()
-            self._refresh_effects()
+            self._refresh_choice_details()
             self.draft_changed.emit()
             self.apply_pending_edits()
 
@@ -177,10 +181,10 @@ class RandomizationEditor(QWidget):
         self.clear_saved_order_button.setVisible(
             self._document.project.settings.session.saved_condition_order is not None,
         )
-        self._refresh_effects()
+        self._refresh_choice_details()
         self._validate_patterns()
 
-    def _refresh_effects(self) -> None:
+    def _refresh_choice_details(self) -> None:
         saved = self._document.project.settings.session.saved_condition_order is not None
         for domain, combo in self.mode_combos.items():
             fixed = combo.currentData() == "fixed"
@@ -196,10 +200,17 @@ class RandomizationEditor(QWidget):
             else:
                 text = ("Every participant receives the same condition order." if fixed else
                         "Condition order is randomized separately for each participant.")
-                if saved:
-                    text += (" The saved arrangement is used." if fixed else
-                             " The saved arrangement is inactive.")
-            self.effect_labels[domain].setText(text)
+            detail = (
+                f"{text} Pseudorandom reuses a stored random pattern while the project "
+                "settings stay the same. Existing balancing and timing rules apply to both choices."
+            )
+            combo.setToolTip(detail)
+            combo.setAccessibleDescription(detail)
+        fixed_order = self.mode_combos["condition_order"].currentData() == "fixed"
+        self.saved_order_status_label.setText(
+            "Saved order in use" if fixed_order else "Saved order inactive",
+        )
+        self.saved_order_status_label.setVisible(saved)
 
     def _validate_patterns(self) -> bool:
         try:

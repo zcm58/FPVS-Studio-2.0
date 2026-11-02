@@ -1656,8 +1656,11 @@ count drafts, and masking/AB managed states.
 
 Session has three independent choices: **Image / word display order**, **Condition
 order**, and **Fixation color-change timing**. Each offers **Randomized — new for each
-participant** or **Pseudorandom — same for every participant**, with a short explanation
-of the selected effect. Numeric seeds and launch seed values are not shown. Pseudorandom
+participant** or **Pseudorandom — same for every participant**. Each uses the shared
+section-title style above its dropdown; optional explanation stays in the tooltip and
+accessible description. Condition-order actions sit in that section, with a concise
+status shown only for a saved arrangement (in use or inactive). Numeric seeds and
+launch seed values are not shown. Pseudorandom
 reuses a stored random pattern for corresponding condition presentations while inputs
 stay unchanged; different image pools, condition durations and repeat numbers retain
 independently valid schedules. Both choices preserve existing balancing/timing rules.
@@ -1673,8 +1676,9 @@ freshly compiled and labeled accordingly.
 The panel applies to ordinary FPVS image/word streams. AB and masking retain their
 existing group/task workflows. Legacy invalid stored patterns show an actionable
 **Create new random patterns** repair. Visible acceptance at 1120x820 in both themes:
-exercise each choice and mixed combinations, reopen, check saved/inactive arrangements,
-retry failed edits, and verify all labels, controls, errors and Review fit without
+exercise each choice and mixed combinations, reopen, check heading hierarchy, tooltips,
+saved/inactive arrangements and keyboard order. Retry failed edits and verify all
+labels, controls, errors and Review fit without
 scrolling. Registered Qt coverage remains opt-in.
 
 ### Choose and save condition order

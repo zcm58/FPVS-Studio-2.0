@@ -485,8 +485,10 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                 assert combo.isVisible()
                 text_width = combo.fontMetrics().horizontalAdvance(combo.currentText())
                 assert combo.width() >= text_width + 32
-                effect = editor.effect_labels[domain]
-                assert effect.height() >= effect.heightForWidth(effect.width())
+                heading = editor.heading_labels[domain]
+                assert heading.font().bold()
+                assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
+                assert combo.toolTip()
         elif step_key == "image_size":
             assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()

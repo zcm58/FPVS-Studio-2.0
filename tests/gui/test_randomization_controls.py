@@ -68,7 +68,10 @@ def test_legacy_choices_do_not_rewrite_source_and_can_be_changed_independently(q
         choices = document.project.settings.session.randomization_modes
         assert getattr(choices, domain) == "fixed"
         assert configured_randomization_seeds(document.project) == expected
-        assert "Every participant receives the same" in editor.effect_labels[domain].text()
+        assert "Every participant receives the same" in combo.toolTip()
+        assert combo.accessibleDescription() == combo.toolTip()
+        assert editor.heading_labels[domain].buddy() is combo
+        assert editor.heading_labels[domain].property("sectionCardRole") == "title"
     assert document.project.settings.session.randomization_mode == "fixed"
     document.save()
     reopened = ProjectDocument.open_existing(document.project_root)
@@ -476,9 +479,19 @@ def test_plain_language_choices_fit_session_and_review(
     assert not wizard.session_settings_card.title_label.isVisible()
     assert wizard.session_structure_editor.presentation_total_label.text() == "4 total"
     assert_visible_children_within_parent(wizard.session_step_surface)
-    for combo in editor.mode_combos.values():
+    for domain, combo in editor.mode_combos.items():
         assert combo.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText()) + 32
         assert combo.accessibleName()
+        heading = editor.heading_labels[domain]
+        assert heading.font().bold()
+        assert heading.fontMetrics().height() > combo.fontMetrics().height()
+        assert heading.geometry().bottom() < combo.geometry().top()
+        assert combo.toolTip() == combo.accessibleDescription()
+    assert editor.saved_order_status_label.isVisible() == (state in {"saved", "inactive"})
+    if state not in {"saved", "inactive", "invalid"}:
+        assert [label for label in editor.findChildren(QLabel) if label.isVisible()] == list(
+            editor.heading_labels.values()
+        )
     for label in editor.findChildren(QLabel):
         if label.isVisible() and label.text():
             assert label.height() >= label.heightForWidth(label.width()) if label.wordWrap() else (
