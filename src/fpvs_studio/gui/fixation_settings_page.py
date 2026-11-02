@@ -621,9 +621,11 @@ class FixationSettingsEditor(QWidget):
         settings_column_layout.setContentsMargins(0, 0, 0, 0)
         settings_column_layout.setSpacing(section_spacing)
         settings_column_layout.addLayout(enablement_layout)
+        guidance_after_sections = compact and not framed and section_mode == "fixation"
         if section_mode in {"all", "fixation"}:
-            settings_column_layout.addWidget(feasibility_card)
-            settings_column_layout.addWidget(self.fixation_adjustment_label)
+            if not guidance_after_sections:
+                settings_column_layout.addWidget(feasibility_card)
+                settings_column_layout.addWidget(self.fixation_adjustment_label)
         else:
             feasibility_card.setVisible(False)
         self.fixation_behavior_panel = _settings_section(
@@ -676,9 +678,12 @@ class FixationSettingsEditor(QWidget):
             settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
             settings_grid.setVerticalSpacing(section_spacing)
             for index, panel in enumerate(visible_panels):
-                settings_grid.addWidget(
-                    panel, index // 2, index % 2, Qt.AlignmentFlag.AlignTop,
-                )
+                if compact and not framed:
+                    settings_grid.addWidget(panel, index // 2, index % 2)
+                else:
+                    settings_grid.addWidget(
+                        panel, index // 2, index % 2, Qt.AlignmentFlag.AlignTop,
+                    )
             if section_mode == "fixation" and not framed:
                 settings_grid.setColumnStretch(0, 3)
                 settings_grid.setColumnStretch(1, 2)
@@ -691,6 +696,9 @@ class FixationSettingsEditor(QWidget):
                 settings_grid.setColumnStretch(0, 1)
                 settings_grid.setColumnStretch(1, 1)
             settings_column_layout.addLayout(settings_grid)
+        if guidance_after_sections:
+            settings_column_layout.addWidget(feasibility_card)
+            settings_column_layout.addWidget(self.fixation_adjustment_label)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -702,7 +710,9 @@ class FixationSettingsEditor(QWidget):
             self.preview_panel = QFrame(self)
             self.preview_panel.setObjectName("fixation_cross_preview_panel")
             self.preview_panel.setProperty("fixationPreviewPanel", "true")
-            self.preview_panel.setMaximumHeight(220 if compact else 360)
+            inline_preview = compact and section_mode == "response" and self._layout_mode == "grid"
+            if not inline_preview:
+                self.preview_panel.setMaximumHeight(220 if compact else 360)
             preview_panel_layout = QVBoxLayout(self.preview_panel)
             preview_panel_layout.setContentsMargins(10, 8, 10, 8)
             preview_panel_layout.setSpacing(8)
@@ -711,7 +721,7 @@ class FixationSettingsEditor(QWidget):
             preview_panel_layout.addWidget(preview_title)
 
             self.preview_widget = FixationCrossPreview(self.preview_panel)
-            if compact:
+            if compact and not inline_preview:
                 self.preview_widget.setMaximumHeight(170)
             preview_panel_layout.addWidget(self.preview_widget, 1)
 
@@ -726,9 +736,7 @@ class FixationSettingsEditor(QWidget):
             )
             if compact:
                 if section_mode == "response" and self._layout_mode == "grid":
-                    settings_grid.addWidget(
-                        self.preview_panel, 0, 2, Qt.AlignmentFlag.AlignTop,
-                    )
+                    settings_grid.addWidget(self.preview_panel, 0, 2)
                 else:
                     fixation_panel_layout.addWidget(self.preview_panel)
                 fixation_panel_layout.insertWidget(0, settings_column)

@@ -106,3 +106,35 @@ navigation, save actions and persisted formats are preserved. Tests stub dialogs
 runtime calls and use temporary projects. Manual smoke path: open Edit Setup at the
 minimum window size, visit all eight steps in both themes, inspect long values and
 the count-mode/draft states, and confirm bottom navigation remains available.
+
+## Card-alignment follow-up
+
+The user requested consistent vertical card alignment after the initial cleanup.
+Cards in the same row now share top and bottom edges, while headings and fields stay
+at the top inside each card. Removing frameless wrapper padding gives every step's
+first visible panel the same 24px start. Fixation guidance follows its card row.
+Review uses aligned Project/Conditions and Timing/Display rows, with Session spanning
+the two rows beside Image Size and Fixation/Response. Native Character Size validation
+stays inside its size card instead of creating another column.
+
+Changed production files: `gui/setup_wizard_page.py`, `gui/runtime_settings_page.py`,
+`gui/fixation_settings_page.py`, `gui/attentional_blink_character_size.py`.
+Changed registered tests: `test_setup_wizard_shell.py`, `test_setup_experiment_display.py`,
+`test_conditions_session_fixation.py`, `test_setup_review.py`. The two canonical GUI
+documents and this record describe the alignment contract. No data, seed or timing
+behavior changed. Visible synthetic previews covered all eight steps at 1120x820,
+including Review in both themes. Focused geometry checks include both themes,
+fixed/ranged/hidden fixation, native AB, long text and invalid character height.
+
+Follow-up safe verification passed: GUI focused (163), docs focused (13), and repo
+precommit (4809 passed, 13 Windows-symlink skips), including Ruff, compilation, mypy
+and audits. The 26 focused visible cases passed: 2 shell, 8 display/size, 6 fixation,
+2 review and 8 native AB cases, covering both themes at 1120x820.
+The invalid-height fixture first flushes the valid initial session-seed state so its
+full-project no-mutation assertion isolates the invalid height. A native AB batch
+became unresponsive during visible Qt execution and was stopped; those cases are
+verified in fresh individual processes instead. No general theme-performance or
+complete GUI-suite claim is made.
+Task-owned test logs remain in `build/setup-card-alignment-qt/` because automatic
+approval review blocked their cleanup with `blocked by policy`. The isolated preview
+and test windows are closed; no helper or participant runtime is left running.

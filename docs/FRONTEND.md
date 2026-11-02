@@ -207,7 +207,8 @@ that uses the remaining height; native AB retains its dedicated timing surface.
 Display & Session has two soft-framed columns with shared section headings; the three
 reuse choices use compact semibold field labels. Image geometry uses two cards for
 stimulus size and calibration, Response uses three columns for response/appearance/preview,
-and Review uses independent summary columns. Timing retains the `experiment` key
+and Review uses an aligned summary grid with Session spanning two rows. Side-by-side
+cards share top and bottom edges, with content anchored at the top. Timing retains the `experiment` key
 and timing aliases; display/runtime/session open the combined step. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
 Keep **Edit condition order...** only in Display & Session. It opens the

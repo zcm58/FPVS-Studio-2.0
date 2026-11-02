@@ -40,9 +40,7 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
         self.size_validation_label = QLabel(self)
         self.size_validation_label.setWordWrap(True)
         mark_error_text(self.size_validation_label)
-        layout = self.layout()
-        assert layout is not None
-        layout.addWidget(self.size_validation_label)
+        self.size_card.body_layout.addWidget(self.size_validation_label)
         self.character_height_edit.editingFinished.connect(self._apply_character_size)
         self.character_height_edit.textChanged.connect(self._validate_character_size)
         self.character_unit_combo.currentIndexChanged.connect(self._apply_character_size)

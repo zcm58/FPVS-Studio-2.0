@@ -1001,7 +1001,10 @@ def test_setup_fixation_and_response_have_aligned_compact_sections(
         page = wizard.fixation_schedule_editor
         panels = (page.fixation_behavior_panel, page.fixation_timing_panel)
         assert panels[0].geometry().top() == panels[1].geometry().top()
+        assert panels[0].geometry().bottom() == panels[1].geometry().bottom()
         assert panels[0].geometry().right() < panels[1].geometry().left()
+        guidance = page.findChild(QWidget, "fixation_feasibility_card")
+        assert guidance.geometry().top() > max(panel.geometry().bottom() for panel in panels)
         assert_visible_children_within_parent(wizard.fixation_step_surface)
         assert page.target_count_min_spin.isVisible()
         assert page.target_count_max_spin.isVisible()
@@ -1013,6 +1016,9 @@ def test_setup_fixation_and_response_have_aligned_compact_sections(
                            if label.property("fixationSettingsSectionTitle") == "true")
             assert heading.alignment() & Qt.AlignmentFlag.AlignLeft
             assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
+            body = panel.layout().itemAt(1).widget()
+            assert heading.geometry().bottom() < body.geometry().top()
+            assert body.geometry().top() - heading.geometry().bottom() <= 12
         for control in (page.changes_per_sequence_spin, page.target_count_min_spin,
                         page.target_count_max_spin, page.target_duration_spin, page.min_gap_spin,
                         page.pre_stream_fixation_spin):
@@ -1024,6 +1030,7 @@ def test_setup_fixation_and_response_have_aligned_compact_sections(
         panels = (page.fixation_response_panel, page.fixation_appearance_panel, page.preview_panel)
         assert all(panel is not None and panel.isVisible() for panel in panels)
         assert len({panel.geometry().top() for panel in panels}) == 1
+        assert len({panel.geometry().bottom() for panel in panels}) == 1
         assert all(left.geometry().right() < right.geometry().left()
                    for left, right in zip(panels, panels[1:], strict=False))
         assert page.preview_panel.width() < wizard.response_step_surface.width() // 2

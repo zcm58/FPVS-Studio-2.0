@@ -160,6 +160,10 @@ ordinary Timing, Display & Session, ordinary image geometry, Fixation, Response 
 Review use a workspace capped at 1040 px. Native AB Timing remains 880 px and Character
 Size remains 760 px. Conditions and the ordinary timing table use the available height;
 forms and summary columns stay aligned at the top without required page scrolling.
+Cards that share a row have matching top and bottom edges. Keep their headings and
+controls at the top inside the frame; do not distribute spare height between fields.
+Frameless wrappers add no vertical padding above the first visible card. Fixation's
+feasibility and adjustment guidance follows its aligned card row.
 
 Project has **Project details** and **Experiment setup** columns. Name, optional
 multiline description and folder sit on the left; category, template actions and
@@ -188,8 +192,9 @@ headings and 16 px internal padding. Reuse choices use compact semibold field la
 Session owns participant reuse, condition order, totals, managed AB/masking repeats
 and the fixed start key. Image geometry pairs **Stimulus size** (or **Viewing geometry**
 for masking) with **Display calibration** in two cards. Response places response
-controls, cross appearance and preview in three columns. Review uses two independent
-vertical summary columns so a taller summary does not stretch its neighbor.
+controls, cross appearance and preview in three aligned columns. Review pairs Project
+with Conditions and Timing with Display; Session spans the two rows beside Image Size
+and Fixation/Response. The shared grid aligns row edges and both column bottoms.
 Experiment/timing aliases open Timing; display/runtime/session aliases open the
 combined step. Separate Review summaries for Display and Session both link there.
 

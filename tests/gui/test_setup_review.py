@@ -208,7 +208,7 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_review_uses_independent_natural_height_columns_at_setup_minimum(
+def test_review_aligns_card_rows_with_session_spanning_size_and_response_at_setup_minimum(
     qtbot, controller: StudioController, tmp_path: Path, background,
 ):
     document, window = _open_created_project(controller, qtbot, tmp_path, "Review grouping")
@@ -229,25 +229,29 @@ def test_review_uses_independent_natural_height_columns_at_setup_minimum(
     assert guide.review_step_surface.content.mapTo(
         guide.review_step_surface, QPoint(0, 0),
     ).y() == 24
-    columns = guide._review_column_layouts
-    assert len(columns) == 2
-    sections = {widgets.section: str(widgets.edit_button.property("reviewStepKey"))
+    sections = {str(widgets.edit_button.property("reviewStepKey")): widgets.section
                 for widgets in guide._review_summary_widgets}
-    expected = ({"project", "experiment", "session"},
-                {"conditions", "display", "image_size", "response"})
-    for column, keys in zip(columns, expected, strict=True):
-        cards = [column.itemAt(index).widget() for index in range(column.count())]
-        cards = [card for card in cards if card is not None and card.isVisible()]
-        assert {sections[card] for card in cards} == keys
-        for upper, lower in zip(cards, cards[1:], strict=False):
-            assert upper.geometry().bottom() < lower.geometry().top()
-        for card in cards:
-            required = card.layout().heightForWidth(card.width())
-            if required >= 0:
-                assert abs(card.height() - required) <= 2
-    left, right = (column.parentWidget() for column in columns)
-    assert left.geometry().top() == right.geometry().top()
-    assert left.geometry().right() < right.geometry().left()
+    assert set(sections) == {
+        "project", "conditions", "experiment", "display", "session", "image_size", "response",
+    }
+    for left_key, right_key in (("project", "conditions"), ("experiment", "display")):
+        left, right = (sections[key].geometry() for key in (left_key, right_key))
+        assert left.top() == right.top()
+        assert left.bottom() == right.bottom()
+        assert left.right() < right.left()
+    session, image_size, response = (sections[key].geometry()
+                                     for key in ("session", "image_size", "response"))
+    assert session.top() == image_size.top()
+    assert session.bottom() == response.bottom()
+    assert image_size.bottom() < response.top()
+    assert session.right() < image_size.left() == response.left()
+    for keys in (("project", "experiment", "session"),
+                 ("conditions", "display", "image_size", "response")):
+        assert len({sections[key].geometry().left() for key in keys}) == 1
+        assert len({sections[key].width() for key in keys}) == 1
+    assert sections["project"].geometry().bottom() < sections["experiment"].geometry().top()
+    assert sections["experiment"].geometry().bottom() < session.top()
+    assert guide.review_checklist_layout.verticalSpacing() == 8
     assert_visible_children_within_parent(guide.review_step_surface)
     for label in guide.review_card.findChildren(QLabel):
         if label.isVisible() and label.text():

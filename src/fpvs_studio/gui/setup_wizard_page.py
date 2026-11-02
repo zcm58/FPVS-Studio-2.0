@@ -645,8 +645,9 @@ class SetupWizardPage(QWidget):
         columns = QHBoxLayout(display_session_page)
         columns.setContentsMargins(0, 0, 0, 0)
         columns.setSpacing(PAGE_SECTION_GAP * 2)
-        columns.addWidget(self.display_settings_card, 2, Qt.AlignmentFlag.AlignTop)
-        columns.addWidget(self.session_settings_card, 3, Qt.AlignmentFlag.AlignTop)
+        columns.setAlignment(Qt.AlignmentFlag.AlignTop)
+        columns.addWidget(self.display_settings_card, 2)
+        columns.addWidget(self.session_settings_card, 3)
         QWidget.setTabOrder(
             self.runtime_settings_editor.runtime_background_color_combo,
             self.session_structure_editor.block_count_spin,
@@ -717,7 +718,7 @@ class SetupWizardPage(QWidget):
             if framed:
                 card.card_layout.setContentsMargins(16, 16, 16, 16)
             else:
-                card.card_layout.setContentsMargins(0, 8, 0, 8)
+                card.card_layout.setContentsMargins(0, 0, 0, 0)
             refresh_widget_style(card)
 
     def _settings_step_card(
@@ -726,6 +727,8 @@ class SetupWizardPage(QWidget):
         card = SectionCard(title=title, subtitle=subtitle, object_name=object_name, parent=self)
         card.setMaximumWidth(_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH)
         card.setMinimumWidth(0)
+        card.card_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        card.body_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         card.body_layout.addWidget(editor)
         return card
 
@@ -831,18 +834,9 @@ class SetupWizardPage(QWidget):
         self.review_checklist_layout = QGridLayout(self.review_checklist_container)
         self.review_checklist_layout.setContentsMargins(0, 0, 0, 0)
         self.review_checklist_layout.setHorizontalSpacing(8)
-        self.review_checklist_layout.setVerticalSpacing(6)
-        self._review_column_layouts: list[QVBoxLayout] = []
+        self.review_checklist_layout.setVerticalSpacing(8)
+        self.review_checklist_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         for column_index in range(2):
-            column = QWidget(self.review_checklist_container)
-            column_layout = QVBoxLayout(column)
-            column_layout.setContentsMargins(0, 0, 0, 0)
-            column_layout.setSpacing(8)
-            column_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
-            self._review_column_layouts.append(column_layout)
-            self.review_checklist_layout.addWidget(
-                column, 0, column_index, Qt.AlignmentFlag.AlignTop,
-            )
             self.review_checklist_layout.setColumnStretch(column_index, 1)
         self._review_summary_widgets: list[_ReviewSummaryWidgets] = []
         self.review_card.body_layout.addWidget(self.review_checklist_container)
@@ -1222,8 +1216,13 @@ class SetupWizardPage(QWidget):
             widgets = self._create_review_summary_section()
             self._review_summary_widgets.append(widgets)
             step_key = sections[index][0]
-            column = 0 if step_key in {"project", "experiment", "session"} else 1
-            self._review_column_layouts[column].addWidget(widgets.section)
+            row, column, row_span = {
+                "project": (0, 0, 1), "conditions": (0, 1, 1),
+                "experiment": (1, 0, 1), "display": (1, 1, 1),
+                "session": (2, 0, 2), "image_size": (2, 1, 1),
+                "response": (3, 1, 1),
+            }[step_key]
+            self.review_checklist_layout.addWidget(widgets.section, row, column, row_span, 1)
 
         for widgets, (step_key, section_title, lines) in zip(
             self._review_summary_widgets,

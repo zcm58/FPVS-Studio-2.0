@@ -97,13 +97,18 @@ def _refresh_verification(
     )
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_setup_wizard_combines_display_and_session_in_two_columns(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    background: str,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Experiment Settings Guided")
     guide = window.setup_wizard_page
+    palette = QPalette(QColor(background))
+    window.setPalette(palette)
+    guide.setPalette(palette)
     window.show_setup_wizard(step_key="experiment")
     editor = guide.runtime_settings_editor
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
@@ -168,6 +173,11 @@ def test_setup_wizard_combines_display_and_session_in_two_columns(
             < guide.session_settings_card.geometry().left())
     assert (guide.display_settings_card.geometry().top()
             == guide.session_settings_card.geometry().top())
+    assert (guide.display_settings_card.geometry().bottom()
+            == guide.session_settings_card.geometry().bottom())
+    assert guide.display_settings_card.mapTo(
+        guide.display_session_step_surface, guide.display_settings_card.rect().topLeft(),
+    ).y() == 24
     session = guide.session_structure_editor
     assert session.block_count_spin.value() == 2
     session.block_count_spin.setValue(3)
@@ -472,6 +482,7 @@ def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
     assert editor.calibration_card.title_label.text() == "Display calibration"
     assert editor.size_card.geometry().right() < editor.calibration_card.geometry().left()
     assert editor.size_card.geometry().top() == editor.calibration_card.geometry().top()
+    assert editor.size_card.geometry().bottom() == editor.calibration_card.geometry().bottom()
     for form, fields in (
         (editor.form_layout, (editor.width_degrees_spin, editor.viewing_distance_spin)),
         (editor.calibration_form_layout, (editor.screen_width_spin,
@@ -1096,8 +1107,9 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
 
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_character_size_next_explains_invalid_height_on_click(
-    qtbot, controller, tmp_path, monkeypatch,
+    qtbot, controller, tmp_path, monkeypatch, background,
 ):
     from fpvs_studio.core.enums import ExperimentCategory
 
@@ -1111,6 +1123,21 @@ def test_character_size_next_explains_invalid_height_on_click(
     window.show_setup_wizard(step_key="image_size")
     guide = window.setup_wizard_page
     editor = guide.image_display_size_editor
+    palette = QPalette(QColor(background))
+    window.setPalette(palette)
+    guide.setPalette(palette)
+    window.resize(1120, 820)
+    window.show()
+    QApplication.processEvents()
+    assert editor.size_card.geometry().top() == editor.calibration_card.geometry().top()
+    assert editor.size_card.geometry().bottom() == editor.calibration_card.geometry().bottom()
+    assert editor.size_card.mapTo(
+        guide.image_size_step_surface, editor.size_card.rect().topLeft(),
+    ).y() == 24
+    _assert_visible_children_within_parent(guide.image_size_step_surface)
+    # Commit the valid initial shared-editor seed state before testing a local error.
+    assert guide.flush_pending_edits()
+    QApplication.processEvents()
     editor.character_height_edit.setFocus()
     editor.character_height_edit.setText("0")
     before = document.project.model_copy(deep=True)
@@ -1119,7 +1146,12 @@ def test_character_size_next_explains_invalid_height_on_click(
     assert messages == []
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.image_size_step_surface
-    assert document.project == before
+    assert document.project.model_dump() == before.model_dump()
     assert messages == [
         ("Complete this setup step", "Enter a character height greater than zero."),
     ]
+    assert editor.size_validation_label.isVisible()
+    assert editor.size_card.isAncestorOf(editor.size_validation_label)
+    assert editor.size_card.geometry().top() == editor.calibration_card.geometry().top()
+    assert editor.size_card.geometry().bottom() == editor.calibration_card.geometry().bottom()
+    _assert_visible_children_within_parent(guide.image_size_step_surface)

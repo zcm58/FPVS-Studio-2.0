@@ -414,14 +414,14 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
 @pytest.mark.parametrize("dark", [False, True])
 def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     qtbot,
-    qapp,
     controller: StudioController,
     tmp_path: Path,
     dark: bool,
 ) -> None:
-    previous_palette = qapp.palette()
-    qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     document, window = _open_created_project(controller, qtbot, tmp_path, "Setup No Clip")
+    local_palette = QPalette(QColor("#202124" if dark else "#f4f7fb"))
+    window.setPalette(local_palette)
+    window.setup_wizard_page.setPalette(local_palette)
     base = _write_image_directory(tmp_path / "base")
     oddball = _write_image_directory(tmp_path / "oddball")
     condition_ids = [document.create_condition(name=name) for name in (
@@ -447,6 +447,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     window.show_setup_wizard()
     QApplication.processEvents()
 
+    first_visible_tops: list[int] = []
     frame_heights: list[int] = []
     frame_tops: list[int] = []
     progress_tops: list[int] = []
@@ -522,6 +523,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                     < wizard.session_settings_card.geometry().left())
             assert (wizard.display_settings_card.geometry().top()
                     == wizard.session_settings_card.geometry().top())
+            assert (wizard.display_settings_card.geometry().bottom()
+                    == wizard.session_settings_card.geometry().bottom())
             check_button = wizard.runtime_settings_editor.detect_refresh_button
             assert check_button.text() == "Check refresh rate"
             assert check_button.width() >= check_button.sizeHint().width()
@@ -550,10 +553,33 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert size_editor.size_card.geometry().top() == (
                 size_editor.calibration_card.geometry().top()
             )
+            assert size_editor.size_card.geometry().bottom() == (
+                size_editor.calibration_card.geometry().bottom()
+            )
         elif step_key == "fixation":
             assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
             assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()
 
+        surface = wizard.step_stack.currentWidget()
+        if step_key == "review":
+            first_panel = next(item.section for item in wizard._review_summary_widgets
+                               if item.section.isVisible())
+        else:
+            first_panel = {
+                "project": wizard.project_overview_editor.project_overview_card,
+                "conditions": wizard.condition_setup_step.condition_details_section,
+                "experiment": wizard.condition_timing_table,
+                "session": wizard.display_settings_card,
+                "image_size": wizard.image_display_size_editor.size_card,
+                "fixation": wizard.fixation_schedule_editor.fixation_behavior_panel,
+                "response": wizard.fixation_response_editor.fixation_response_panel,
+            }[step_key]
+        assert first_panel.isVisible()
+        panel_top = first_panel.mapTo(surface, first_panel.rect().topLeft()).y()
+        assert panel_top == 24, step_key
+        first_visible_tops.append(first_panel.mapTo(wizard, first_panel.rect().topLeft()).y())
+        assert surface.layout().contentsMargins().top() == 24
+        assert surface.layout().contentsMargins().bottom() == 24
         frame_heights.append(wizard.step_card.height())
         frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
         progress_tops.append(
@@ -582,12 +608,12 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                 bottom = button.mapTo(wizard, button.rect().bottomLeft()).y()
                 assert bottom <= wizard.height()
 
+    assert max(first_visible_tops) - min(first_visible_tops) <= 1
     assert len(set(frame_heights)) == 1
     assert len(set(frame_tops)) == 1
     assert len(set(progress_tops)) == 1
     assert len(set(back_button_lefts)) == 1
     assert progress_tops[0] <= 12
-    qapp.setPalette(previous_palette)
 
 
 def test_major_tabs_share_page_container_width_presets(

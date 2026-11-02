@@ -1109,6 +1109,8 @@ class ImageDisplaySizeEditor(QWidget):
         )
         for card in (self.size_card, self.calibration_card):
             card.card_layout.setContentsMargins(16, 16, 16, 16)
+            card.card_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+            card.body_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
             card.body_layout.setSpacing(12)
         self.form_layout = QFormLayout()
         self.form_layout.setContentsMargins(0, 0, 0, 0)
@@ -1153,8 +1155,9 @@ class ImageDisplaySizeEditor(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
-        layout.addWidget(self.size_card, 1, Qt.AlignmentFlag.AlignTop)
-        layout.addWidget(self.calibration_card, 1, Qt.AlignmentFlag.AlignTop)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.size_card, 1)
+        layout.addWidget(self.calibration_card, 1)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
