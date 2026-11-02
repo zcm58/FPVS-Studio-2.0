@@ -30,6 +30,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md)
 - [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md)
 - [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)
+- [macOS source support: Phase 1](exec-plans/planned/macos-source-phase-1.md):
+  non-hardware authoring/local testing and Windows/Mac bundle roundtrips; acquisition
+  and hardware qualification are deferred to Phase 2.
 
 ## Plan Rules and History
 
