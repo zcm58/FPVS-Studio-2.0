@@ -108,7 +108,7 @@ def test_setup_wizard_separates_timing_session_and_image_size(
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
     assert editor.card is None
-    assert editor.detect_refresh_button.text() == "Verify display"
+    assert editor.detect_refresh_button.text() == "Check refresh rate"
     assert editor.refresh_verification_notice.isVisible()
     assert "fullscreen" in editor.refresh_verification_notice.text()
     assert "will not start" in editor.refresh_verification_notice.text()
@@ -314,12 +314,15 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
         editor.refresh_hz_combo.itemData(index) for index in range(editor.refresh_hz_combo.count())
     ] == [59.94, 60.0, 120.0, 144.0, 240.0]
     assert editor.refresh_is_verified() is False
-    assert "Verify this display" in editor.timing_status_label.text()
+    assert not editor.timing_status_label.isVisible()
+    assert editor.timing_is_compatible()
+    assert editor.timing_blocker() == ""
     messages = record_setup_validation_dialogs(monkeypatch)
     assert guide.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
-    assert messages == [("Complete this setup step", editor.timing_blocker())]
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    assert messages == []
+    guide.open_wizard(step_key="experiment", allow_step_jumps=True)
 
     editor.detect_refresh_button.click()
     QApplication.processEvents()
@@ -362,8 +365,9 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert guide.setup_wizard_next_button.isEnabled()
     messages.clear()
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert messages == [("Complete this setup step", editor.timing_blocker())]
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    assert messages == []
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    guide.open_wizard(step_key="experiment", allow_step_jumps=True)
 
     windows_mode.update({"numerator": 60_000, "denominator": 1_001})
     measured_refresh["value"] = 59.998
@@ -463,12 +467,15 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
 
     assert editor.refresh_is_verified() is False
     assert "stable measurement unavailable" in editor.timing_status_label.text()
+    assert editor.timing_is_compatible()
+    assert editor.timing_blocker() == ""
     messages = record_setup_validation_dialogs(monkeypatch)
     assert guide.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert messages == [("Complete this setup step", editor.timing_blocker())]
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
-    window.resize(1120, 720)
+    assert messages == []
+    assert guide.step_stack.currentWidget() is guide.session_step_surface
+    guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+    window.resize(1120, 820)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
     _assert_visible_children_within_parent(editor)
@@ -923,7 +930,8 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         assert guide.experiment_settings_card.title_label.text() == "Display"
         assert not guide.session_structure_editor.isVisible()
         assert not guide.experiment_settings_card.subtitle_label.isVisible()
-        assert "Verify" in editor.timing_status_label.text()
+        assert not editor.timing_status_label.isVisible()
+        assert editor.timing_is_compatible()
         assert not any(
             label.isVisible() and label.text().startswith("To continue:")
             for label in guide.findChildren(QLabel)

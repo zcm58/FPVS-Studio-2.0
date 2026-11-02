@@ -476,6 +476,9 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.condition_timing_table.isVisible()
             assert wizard.runtime_settings_editor.isVisible()
             assert not wizard.session_structure_editor.isVisible()
+            check_button = wizard.runtime_settings_editor.detect_refresh_button
+            assert check_button.text() == "Check refresh rate"
+            assert check_button.width() >= check_button.sizeHint().width()
         elif step_key == "session":
             assert wizard.session_structure_editor.isVisible()
             assert not wizard.condition_timing_table.isVisible()

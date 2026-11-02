@@ -130,7 +130,8 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     assert "Response: G within" in label_text
     assert "Participant tutorial: On" in label_text
     assert "Task flow: 0 pre-condition, 0 post-condition bindings" in label_text
-    assert "Display verification required" in label_text
+    assert "Monitor:" in label_text
+    assert "Display verification required" not in label_text
     assert not [
         label
         for label in review_card.findChildren(QLabel)

@@ -29,6 +29,35 @@ def _bind_methods(instance, filename, owner, names, **namespace):
         setattr(instance, name, MethodType(namespace[name], instance))
 
 
+@pytest.mark.parametrize("check_state", ["unchecked", "checked", "failed"])
+@pytest.mark.parametrize("compatible", [True, False])
+def test_optional_refresh_check_does_not_gate_timing_readiness(check_state, compatible):
+    errors = [] if compatible else ["The selected base rate needs at least one display frame."]
+    editor = SimpleNamespace(
+        timing_report=lambda: SimpleNamespace(compatible=compatible, errors=errors),
+        refresh_is_verified=lambda: check_state == "checked",
+        _refresh_probe_task=None,
+        _refresh_measurement_error="Measurement unavailable" if check_state == "failed" else None,
+    )
+    _bind_methods(
+        editor, "runtime_settings_page.py", "DisplaySettingsEditor",
+        ["timing_is_compatible", "timing_blocker"],
+    )
+    assert editor.timing_is_compatible() is compatible
+    assert editor.timing_blocker() == ("" if compatible else errors[0])
+
+
+def test_an_optional_refresh_check_in_progress_still_waits_for_worker_cleanup():
+    editor = SimpleNamespace(
+        timing_report=lambda: SimpleNamespace(compatible=True, errors=[]),
+        _refresh_probe_task=object(),
+    )
+    _bind_methods(
+        editor, "runtime_settings_page.py", "DisplaySettingsEditor", ["timing_blocker"],
+    )
+    assert editor.timing_blocker() == "Wait for display verification to finish"
+
+
 @pytest.mark.parametrize("closed_at", ["before_completion", "before_dispatch", None])
 @pytest.mark.parametrize("shutting_down", [False, True])
 def test_deferred_seed_launch_does_not_resume_after_close_or_shutdown(

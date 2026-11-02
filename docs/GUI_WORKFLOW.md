@@ -165,7 +165,10 @@ Display group. Session places participant reuse choices, condition order and ses
 page, with managed AB/masking repeats and the fixed start key. Session shortcuts and
 Review links open Session; timing/display/runtime aliases continue to open Timing.
 
-Timing keeps refresh, Verify display and background controls. Successful frame math
+Timing keeps refresh, optional **Check refresh rate**, and background controls. Setup
+can continue without running this check or after a failed check; there is no mandatory
+verification banner or required-verification state in Review. Busy checks still finish
+before navigation, and incompatible timing remains blocking. Successful frame math
 and SOA recaps are available through the refresh tooltip, with measured monitor detail
 on the verification status tooltip. Errors, approximate-timing warnings and verification
 state remain visible. Conditions removes repeated AB stream/SOA explanations and
@@ -185,7 +188,7 @@ Run the authoring application with:
 
 The installed script entry point is also available as `fpvs-studio`.
 
-Setup's `Verify display` action and launch preflight use the native configured
+Setup's optional **Check refresh rate** action and automatic launch preflight use the native configured
 mode for the primary/default display plus a temporary fullscreen PsychoPy stability
 observation. Windows uses its exact rational display path; KDE Linux uses KScreen's
 structured current-mode and VRR data, while Linux X11 uses XRandR. Variable-refresh
@@ -589,7 +592,7 @@ The authoring window is organized around two user-facing modes:
   - Timing & Display and Session are separate frameless steps; Image Size retains `Configure Presentation...`
     for the full draft-based presentation editor
   - Timing exposes an approved monitor-refresh dropdown (`59.94`, `60`,
-    `120`, `144`, or `240 Hz`), `Verify display`, derived rate/frame counts/condition duration, and
+    `120`, `144`, or `240 Hz`), optional `Check refresh rate`, derived rate/frame counts/condition duration, and
     presentation background (`Black`, `Dark Gray`, or `Neutral Gray`) and `Oddball every`
     for image and word experiments; Neutral Gray is
     required when any image condition uses Contrast Modulation. Timing & Display owns

@@ -93,13 +93,11 @@ class DisplaySettingsEditor(QWidget):
         editable: bool = True,
         framed: bool = False,
         show_scope_label: bool = True,
-        require_refresh_verification: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._document = document
         self._editable = editable
-        self._require_refresh_verification = require_refresh_verification
         self._background_refresh_guard = False
         self._refresh_probe_task: ProgressTask | None = None
         self._refresh_verification: DisplayRefreshVerification | None = None
@@ -112,12 +110,12 @@ class DisplaySettingsEditor(QWidget):
         for refresh_hz in APPROVED_MONITOR_REFRESH_RATES_HZ:
             self.refresh_hz_combo.addItem(f"{refresh_hz:g} Hz", userData=refresh_hz)
         self.refresh_hz_combo.setToolTip(
-            "Approved presentation-display rates. Verify display checks the active "
+            "Approved presentation-display rates. Check refresh rate reads the active "
             "native display mode and applies its approved value."
         )
         self.refresh_hz_combo.currentIndexChanged.connect(self._apply_refresh_hz)
 
-        self.detect_refresh_button = QPushButton("Verify display", self)
+        self.detect_refresh_button = QPushButton("Check refresh rate", self)
         self.detect_refresh_button.setObjectName(
             _prefixed_object_name(object_name_prefix, "detect_refresh_button")
         )
@@ -364,9 +362,7 @@ class DisplaySettingsEditor(QWidget):
         return report
 
     def timing_is_compatible(self) -> bool:
-        return self.timing_report().compatible and (
-            not self._require_refresh_verification or self.refresh_is_verified()
-        )
+        return self.timing_report().compatible
 
     def is_verifying_display(self) -> bool:
         return self._refresh_probe_task is not None
@@ -386,11 +382,7 @@ class DisplaySettingsEditor(QWidget):
             return report.errors[0]
         if self._refresh_probe_task is not None:
             return "Wait for display verification to finish"
-        if self._refresh_measurement_error:
-            return self._refresh_measurement_error
-        if self._require_refresh_verification and not self.refresh_is_verified():
-            return "Verify the connected display before continuing"
-        return "Set compatible FPVS timing"
+        return "" if report.compatible else "Set compatible FPVS timing"
 
     def refresh(self) -> None:
         background_color = self._normalized_background_color()
@@ -522,12 +514,6 @@ class DisplaySettingsEditor(QWidget):
         elif self._refresh_measurement_error:
             self.timing_status_label.setProperty("statusState", "error")
             self.timing_status_label.setText(self._refresh_measurement_error)
-            self.timing_status_label.setVisible(True)
-        elif self._require_refresh_verification and not self.refresh_is_verified():
-            self.timing_status_label.setProperty("statusState", "warning")
-            self.timing_status_label.setText(
-                "Verify this display to continue."
-            )
             self.timing_status_label.setVisible(True)
         elif report.warnings:
             self.timing_status_label.setProperty("statusState", "warning")
@@ -661,7 +647,7 @@ class DisplaySettingsEditor(QWidget):
             parent_widget=self,
             label="Measuring the connected display refresh rate...",
             callback=_measure,
-            window_title="Detect Display Refresh Rate",
+            window_title="Check Refresh Rate",
             persistent_thread=True,
         )
         self._refresh_probe_task = task

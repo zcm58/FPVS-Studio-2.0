@@ -251,7 +251,6 @@ class SetupWizardPage(QWidget):
             document,
             framed=False,
             show_scope_label=False,
-            require_refresh_verification=True,
             parent=self,
         )
         self.runtime_settings_editor.refresh_verification_changed.connect(self.schedule_refresh)
@@ -706,7 +705,7 @@ class SetupWizardPage(QWidget):
         self.experiment_settings_card = self._settings_step_card(
             self.runtime_settings_editor,
             title="Display",
-            subtitle="Verify display timing and choose the experiment background.",
+            subtitle="Set the refresh rate and experiment background.",
             object_name="setup_wizard_experiment_settings_card",
         )
         self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
@@ -1288,10 +1287,10 @@ class SetupWizardPage(QWidget):
             size_summary = f"Character height: {height.values[0]:g} {unit}"
         pre_count = sum(len(item.pre_task_bindings) for item in conditions)
         post_count = sum(len(item.post_task_bindings) for item in conditions)
-        verified = (
-            "Verified on this display"
+        refresh_check = (
+            " · Refresh rate checked"
             if self.runtime_settings_editor.refresh_is_verified()
-            else "Display verification required"
+            else ""
         )
         response = (
             f"Response: {fixation.response_key.upper()} "
@@ -1356,7 +1355,7 @@ class SetupWizardPage(QWidget):
                 "experiment",
                 "Timing",
                 (
-                    f"Monitor: {refresh_hz:g} Hz · {verified}",
+                    f"Monitor: {refresh_hz:g} Hz{refresh_check}",
                     cadence_summary,
                     self._display_background_label(str(display.background_color)),
                 ),
