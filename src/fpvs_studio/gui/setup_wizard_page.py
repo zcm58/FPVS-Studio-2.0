@@ -182,12 +182,11 @@ class _SetupStepSurface(_NaturalSizePanel):
         row_layout.addStretch(1)
         row_layout.addWidget(content, 10000)
         row_layout.addStretch(1)
+        layout.setContentsMargins(0, 24, 0, 24)
         if expand_vertical:
-            layout.setContentsMargins(0, 16, 0, 16)
             layout.addWidget(row, 1)
         else:
-            layout.addStretch(1)
-            layout.addWidget(row)
+            layout.addWidget(row, 0, Qt.AlignmentFlag.AlignTop)
             layout.addStretch(1)
 
     def refresh(self) -> None:
@@ -593,7 +592,7 @@ class SetupWizardPage(QWidget):
         self.project_step_surface = _SetupStepSurface(
             self.project_overview_editor,
             object_name="setup_wizard_project_surface",
-            max_width=760,
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
         self.conditions_step_surface = _SetupStepSurface(
@@ -606,6 +605,9 @@ class SetupWizardPage(QWidget):
         self.experiment_step_surface = _SetupStepSurface(
             self._experiment_settings_step_page(),
             object_name="setup_wizard_experiment_surface",
+            expand_vertical=(
+                self._document.project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK
+            ),
             max_width=(
                 880
                 if (
@@ -668,7 +670,8 @@ class SetupWizardPage(QWidget):
         self.image_size_step_surface = _SetupStepSurface(
             self.image_size_settings_card,
             object_name="setup_wizard_image_size_surface",
-            max_width=760,
+            max_width=(760 if is_letter_stream_project(self._document)
+                       else _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH),
             parent=self,
         )
         self.fixation_step_surface = _SetupStepSurface(
@@ -686,6 +689,7 @@ class SetupWizardPage(QWidget):
         self.review_step_surface = _SetupStepSurface(
             self._review_step_page(),
             object_name="setup_wizard_review_surface",
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
         self.step_stack.addWidget(self.project_step_surface)
@@ -708,15 +712,19 @@ class SetupWizardPage(QWidget):
             )
             if card.subtitle_label is not None:
                 card.subtitle_label.hide()
-            card.setProperty("setupFlatSection", "true")
-            card.card_layout.setContentsMargins(0, 8, 0, 8)
+            framed = card in (self.display_settings_card, self.session_settings_card)
+            card.setProperty("setupFlatSection", "false" if framed else "true")
+            if framed:
+                card.card_layout.setContentsMargins(16, 16, 16, 16)
+            else:
+                card.card_layout.setContentsMargins(0, 8, 0, 8)
             refresh_widget_style(card)
 
     def _settings_step_card(
         self, editor: QWidget, *, title: str, subtitle: str, object_name: str
     ) -> SectionCard:
         card = SectionCard(title=title, subtitle=subtitle, object_name=object_name, parent=self)
-        card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
+        card.setMaximumWidth(_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH)
         card.setMinimumWidth(0)
         card.body_layout.addWidget(editor)
         return card
@@ -727,27 +735,31 @@ class SetupWizardPage(QWidget):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
-        refresh_label = QLabel("Display refresh rate", page)
+        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        refresh_group = QWidget(page)
+        refresh_label = QLabel("Display refresh rate", refresh_group)
         self.timing_refresh_hz_combo = QComboBox(page)
         self.timing_refresh_hz_combo.setObjectName("timing_refresh_hz_combo")
         self.timing_refresh_hz_combo.setAccessibleName("Display refresh rate")
         self.timing_refresh_hz_combo.setPlaceholderText("Select display rate")
-        self.timing_refresh_hz_combo.setMaximumWidth(240)
+        self.timing_refresh_hz_combo.setMaximumWidth(200)
         self.timing_refresh_hz_combo.setToolTip(
             "Use the same monitor refresh rate for all conditions. "
             "This also updates Display & Session.",
         )
         refresh_label.setBuddy(self.timing_refresh_hz_combo)
-        refresh_controls = QVBoxLayout()
-        refresh_controls.setSpacing(6)
+        refresh_controls = QVBoxLayout(refresh_group)
+        refresh_controls.setContentsMargins(0, 0, 0, 0)
+        refresh_controls.setSpacing(8)
         refresh_controls.addWidget(refresh_label)
         refresh_controls.addWidget(self.timing_refresh_hz_combo)
-        layout.addLayout(refresh_controls)
+        if ab:
+            layout.addWidget(refresh_group)
         self.timing_refresh_hz_combo.currentIndexChanged.connect(self._apply_timing_refresh_hz)
         timing_controls = self.runtime_settings_editor.take_timing_controls()
-        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         self.condition_timing_table = ConditionTimingTable(
             self._document, page, cadence_controls=None if ab else timing_controls,
+            refresh_controls=None if ab else refresh_group,
         )
         QWidget.setTabOrder(
             self.timing_refresh_hz_combo, self.condition_timing_table.shared_frequency_spin,
@@ -809,7 +821,7 @@ class SetupWizardPage(QWidget):
             parent=page,
         )
         self.review_card.setMinimumWidth(700)
-        self.review_card.setMaximumWidth(_SETUP_STEP_SURFACE_MAX_WIDTH)
+        self.review_card.setMaximumWidth(_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH)
         self.review_card.card_layout.setContentsMargins(14, 10, 14, 10)
         self.review_card.card_layout.setSpacing(6)
         self.review_card.body_layout.setSpacing(6)
@@ -820,6 +832,18 @@ class SetupWizardPage(QWidget):
         self.review_checklist_layout.setContentsMargins(0, 0, 0, 0)
         self.review_checklist_layout.setHorizontalSpacing(8)
         self.review_checklist_layout.setVerticalSpacing(6)
+        self._review_column_layouts: list[QVBoxLayout] = []
+        for column_index in range(2):
+            column = QWidget(self.review_checklist_container)
+            column_layout = QVBoxLayout(column)
+            column_layout.setContentsMargins(0, 0, 0, 0)
+            column_layout.setSpacing(8)
+            column_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+            self._review_column_layouts.append(column_layout)
+            self.review_checklist_layout.addWidget(
+                column, 0, column_index, Qt.AlignmentFlag.AlignTop,
+            )
+            self.review_checklist_layout.setColumnStretch(column_index, 1)
         self._review_summary_widgets: list[_ReviewSummaryWidgets] = []
         self.review_card.body_layout.addWidget(self.review_checklist_container)
 
@@ -1197,11 +1221,9 @@ class SetupWizardPage(QWidget):
             index = len(self._review_summary_widgets)
             widgets = self._create_review_summary_section()
             self._review_summary_widgets.append(widgets)
-            self.review_checklist_layout.addWidget(
-                widgets.section,
-                index // 2,
-                index % 2,
-            )
+            step_key = sections[index][0]
+            column = 0 if step_key in {"project", "experiment", "session"} else 1
+            self._review_column_layouts[column].addWidget(widgets.section)
 
         for widgets, (step_key, section_title, lines) in zip(
             self._review_summary_widgets,

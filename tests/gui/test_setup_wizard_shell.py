@@ -269,6 +269,9 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
+    assert wizard.project_step_surface.content.maximumWidth() == 1040
+    assert wizard.image_size_step_surface.content.maximumWidth() == 1040
+    assert wizard.review_step_surface.content.maximumWidth() == 1040
     assert not hasattr(wizard, "design_step_surface")
     assert not hasattr(wizard, "design_setup_step")
     assert wizard.experiment_step_surface.property("setupStepSurface") == "true"
@@ -362,6 +365,19 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
         QApplication.processEvents()
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
+        surface = wizard.step_stack.currentWidget()
+        assert surface.content.mapTo(surface, QPoint(0, 0)).y() == 24
+        for label in surface.findChildren(QLabel):
+            if not label.isVisible() or not label.text():
+                continue
+            if label.wordWrap():
+                required = label.heightForWidth(label.width())
+                if required >= 0:
+                    assert label.height() >= required, label.objectName()
+            elif not label.text().lstrip().startswith("<"):
+                assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(
+                    label.text()
+                ), label.objectName()
         assert not wizard.step_status_badge.isVisible()
     wizard.open_wizard(step_key="project")
     QApplication.processEvents()
@@ -412,6 +428,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         "Semantic Categories - Cognitive Load",
         "Semantic Categories - No Load",
         "Recognition Memory - Cognitive Load",
+        "Emotion Identification - High Visual Similarity",
+        "Unfamiliar Objects - Low Visual Similarity",
     )]
     for condition_id in condition_ids:
         for role, source in (("base", base), ("oddball", oddball)):
@@ -481,12 +499,25 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert not wizard.runtime_settings_editor.isVisible()
             assert not wizard.runtime_settings_editor.detect_refresh_button.isVisible()
             assert not wizard.session_structure_editor.isVisible()
+            timing_table = wizard.condition_timing_table.table
+            assert timing_table.rowCount() == 5
+            assert timing_table.verticalScrollBar().maximum() == 0
+            assert timing_table.visualItemRect(timing_table.item(4, 0)).bottom() <= (
+                timing_table.viewport().rect().bottom()
+            )
         elif step_key == "session":
             assert wizard.runtime_settings_editor.isVisible()
             assert not wizard.runtime_settings_editor.timing_controls.isVisible()
             assert not wizard.condition_timing_table.isVisible()
             assert wizard.display_settings_card.title_label.isVisible()
             assert wizard.session_settings_card.title_label.isVisible()
+            for card in (wizard.display_settings_card, wizard.session_settings_card):
+                assert card.property("setupFlatSection") != "true"
+                assert card.card_layout.contentsMargins().left() == 16
+                assert card.card_layout.contentsMargins().top() == 16
+                assert card.title_label.font().weight() > (
+                    wizard.runtime_settings_editor.refresh_hz_combo.font().weight()
+                )
             assert (wizard.display_settings_card.geometry().right()
                     < wizard.session_settings_card.geometry().left())
             assert (wizard.display_settings_card.geometry().top()
@@ -509,6 +540,16 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         elif step_key == "image_size":
             assert wizard.image_display_size_editor.configure_presentation_button.isVisible()
             assert wizard.image_display_size_editor.presentation_summary_label.isVisible()
+            assert wizard.image_size_step_surface.content.maximumWidth() == 1040
+            size_editor = wizard.image_display_size_editor
+            assert size_editor.size_card.isVisible()
+            assert size_editor.calibration_card.isVisible()
+            assert size_editor.size_card.geometry().right() < (
+                size_editor.calibration_card.geometry().left()
+            )
+            assert size_editor.size_card.geometry().top() == (
+                size_editor.calibration_card.geometry().top()
+            )
         elif step_key == "fixation":
             assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
             assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()

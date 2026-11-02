@@ -6,15 +6,18 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QFormLayout,
+    QLabel,
     QMessageBox,
     QWidget,
 )
 from tests.gui.helpers import (
     _open_created_project,
     _prepare_compile_ready_project,
+    assert_visible_children_within_parent,
 )
 from tests.unit.test_masking import masking_project
 
@@ -964,3 +967,76 @@ def test_short_condition_clamps_fixation_count_before_launch(
     assert window.document.project.settings.fixation_task.changes_per_sequence == 0
 
 
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("count_mode,show_cross", [("fixed", True), ("randomized", True),
+                                                   ("fixed", False)])
+def test_setup_fixation_and_response_have_aligned_compact_sections(
+    qtbot, controller, tmp_path, qapp, background, count_mode, show_cross,
+):
+    previous_palette = qapp.palette()
+    palette = QPalette(previous_palette)
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    qapp.setPalette(palette)
+    try:
+        _, window = _open_created_project(controller, qtbot, tmp_path, "Compact fixation forms")
+        document = window.document
+        identity = document.create_condition(
+            name="A long condition name for fixation feasibility and automatic count adjustments",
+        )
+        document.update_display_settings(preferred_refresh_hz=60)
+        document.update_condition_timing(durations={identity: 30})
+        document.update_fixation_settings(
+            target_count_mode=count_mode, changes_per_sequence=2, target_count_min=2,
+            target_count_max=3, no_immediate_repeat_count=False,
+            min_gap_ms=2000, target_duration_ms=100, show_cross=show_cross,
+            enabled=show_cross, accuracy_task_enabled=show_cross,
+            participant_tutorial_enabled=show_cross,
+        )
+        wizard = window.setup_wizard_page
+        window.resize(1120, 820)
+        window.show_setup_wizard(step_key="fixation")
+        QApplication.processEvents()
+        page = wizard.fixation_schedule_editor
+        panels = (page.fixation_behavior_panel, page.fixation_timing_panel)
+        assert panels[0].geometry().top() == panels[1].geometry().top()
+        assert panels[0].geometry().right() < panels[1].geometry().left()
+        assert_visible_children_within_parent(wizard.fixation_step_surface)
+        assert page.target_count_min_spin.isVisible()
+        assert page.target_count_max_spin.isVisible()
+        assert page.no_repeat_count_checkbox.isVisible()
+        assert page.target_count_min_spin.isEnabled() == (show_cross and count_mode == "randomized")
+        assert page.changes_per_sequence_spin.isEnabled() == (show_cross and count_mode == "fixed")
+        for panel in panels:
+            heading = next(label for label in panel.findChildren(QLabel)
+                           if label.property("fixationSettingsSectionTitle") == "true")
+            assert heading.alignment() & Qt.AlignmentFlag.AlignLeft
+            assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
+        for control in (page.changes_per_sequence_spin, page.target_count_min_spin,
+                        page.target_count_max_spin, page.target_duration_spin, page.min_gap_spin,
+                        page.pre_stream_fixation_spin):
+            assert control.width() <= 160
+
+        window.show_setup_wizard(step_key="response")
+        QApplication.processEvents()
+        page = wizard.fixation_response_editor
+        panels = (page.fixation_response_panel, page.fixation_appearance_panel, page.preview_panel)
+        assert all(panel is not None and panel.isVisible() for panel in panels)
+        assert len({panel.geometry().top() for panel in panels}) == 1
+        assert all(left.geometry().right() < right.geometry().left()
+                   for left, right in zip(panels, panels[1:], strict=False))
+        assert page.preview_panel.width() < wizard.response_step_surface.width() // 2
+        assert page.preview_widget.show_cross == show_cross
+        assert page.response_key_edit.width() <= 120
+        assert page.cross_size_spin.width() <= 160
+        assert page.response_window_spin.width() <= 160
+        assert_visible_children_within_parent(wizard.response_step_surface)
+        for label in page.findChildren(QLabel):
+            if label.isVisible() and label.text():
+                if label.wordWrap():
+                    assert label.height() >= label.heightForWidth(label.width())
+                else:
+                    assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+    finally:
+        qapp.setPalette(previous_palette)

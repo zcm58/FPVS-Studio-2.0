@@ -131,12 +131,11 @@ def _settings_section(title: str, body: QWidget, *, parent: QWidget) -> QFrame:
     layout.setContentsMargins(10, 8, 10, 8)
     layout.setSpacing(6)
     title_label = QLabel(title, section)
-    title_label.setProperty("sectionCardRole", "subtitle")
+    title_label.setProperty("sectionCardRole", "title")
     title_label.setProperty("fixationSettingsSectionTitle", "true")
-    title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+    title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
     layout.addWidget(title_label)
-    layout.addStretch(1)
-    layout.addWidget(body)
+    layout.addWidget(body, 0, Qt.AlignmentFlag.AlignTop)
     layout.addStretch(1)
     return section
 
@@ -339,8 +338,8 @@ class FixationSettingsEditor(QWidget):
         self._section_mode = section_mode
         card_margin_y = 6 if compact else 10
         card_spacing = 5 if compact else 8
-        form_spacing = 4 if compact else 7
-        section_spacing = 5 if compact else 8
+        form_spacing = 8 if compact else 7
+        section_spacing = 12 if compact else 8
 
         self.fixation_enabled_checkbox = QCheckBox(
             "Enable fixation color changes per condition", self
@@ -562,6 +561,10 @@ class FixationSettingsEditor(QWidget):
         response_key_row_layout.setSpacing(8)
         response_key_row_layout.addWidget(self.response_key_edit, 1)
         response_key_row_layout.addWidget(self.response_key_button)
+        if compact:
+            self.response_key_edit.setMaximumWidth(120)
+            response_key_row.setMaximumWidth(280)
+            response_key_row_layout.addStretch(1)
         response_layout.addRow("Response key", response_key_row)
         response_layout.addRow("Response window (s)", self.response_window_spin)
         response_group_layout.addWidget(self.response_controls_group)
@@ -573,6 +576,19 @@ class FixationSettingsEditor(QWidget):
         appearance_layout.addRow("Change color", self.target_color_combo)
         appearance_layout.addRow("Cross size (px)", self.cross_size_spin)
         appearance_layout.addRow("Line width (px)", self.line_width_spin)
+        for form in (self.fixation_behavior_layout, timing_layout, response_layout,
+                     appearance_layout):
+            form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+            form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        if compact:
+            for control in (self.changes_per_sequence_spin, self.target_count_min_spin,
+                            self.target_count_max_spin, self.target_duration_spin,
+                            self.min_gap_spin, self.pre_stream_fixation_spin,
+                            self.response_window_spin, self.cross_size_spin, self.line_width_spin):
+                control.setMaximumWidth(160)
+            self.target_count_mode_combo.setMaximumWidth(240)
+            self.base_color_combo.setMaximumWidth(160)
+            self.target_color_combo.setMaximumWidth(160)
 
         feasibility_card = QFrame(self.fixation_panel)
         feasibility_card.setObjectName("fixation_feasibility_card")
@@ -635,17 +651,11 @@ class FixationSettingsEditor(QWidget):
                 self.fixation_behavior_panel,
                 self.fixation_timing_panel,
             )
-            if not framed:
-                self.fixation_behavior_panel.setMinimumHeight(210)
-                self.fixation_timing_panel.setMinimumHeight(210)
         elif section_mode == "response":
             visible_panels = (
                 self.fixation_response_panel,
                 self.fixation_appearance_panel,
             )
-            if not framed:
-                self.fixation_response_panel.setMinimumHeight(182)
-                self.fixation_appearance_panel.setMinimumHeight(182)
         else:
             visible_panels = (
                 self.fixation_behavior_panel,
@@ -666,13 +676,17 @@ class FixationSettingsEditor(QWidget):
             settings_grid.setHorizontalSpacing(PAGE_SECTION_GAP)
             settings_grid.setVerticalSpacing(section_spacing)
             for index, panel in enumerate(visible_panels):
-                settings_grid.addWidget(panel, index // 2, index % 2)
+                settings_grid.addWidget(
+                    panel, index // 2, index % 2, Qt.AlignmentFlag.AlignTop,
+                )
             if section_mode == "fixation" and not framed:
                 settings_grid.setColumnStretch(0, 3)
                 settings_grid.setColumnStretch(1, 2)
             elif section_mode == "response" and not framed:
                 settings_grid.setColumnStretch(0, 4)
                 settings_grid.setColumnStretch(1, 3)
+                if compact and show_preview:
+                    settings_grid.setColumnStretch(2, 3)
             else:
                 settings_grid.setColumnStretch(0, 1)
                 settings_grid.setColumnStretch(1, 1)
@@ -711,8 +725,13 @@ class FixationSettingsEditor(QWidget):
                 QSizePolicy.Policy.Expanding,
             )
             if compact:
-                fixation_panel_layout.addWidget(settings_column)
-                fixation_panel_layout.addWidget(self.preview_panel)
+                if section_mode == "response" and self._layout_mode == "grid":
+                    settings_grid.addWidget(
+                        self.preview_panel, 0, 2, Qt.AlignmentFlag.AlignTop,
+                    )
+                else:
+                    fixation_panel_layout.addWidget(self.preview_panel)
+                fixation_panel_layout.insertWidget(0, settings_column)
             else:
                 content_layout = QHBoxLayout()
                 content_layout.setContentsMargins(0, 0, 0, 0)

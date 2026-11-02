@@ -84,9 +84,12 @@ interaction.
   Fixation, Response, and Review. All steps share the frameless
   shell, left-aligned task heading, step count, and stable progress
   stepper. Bottom navigation remains at the window edge with no divider. Forms retain
-  bounded readable widths. All steps must fit without clipping or required scrolling.
-- Project's description is optional, editable and persisted; its refresh preserves
-  pending project-name edits. Idle **Next** stays
+  bounded readable widths. Content is top-aligned at a shared 24 px inset beneath
+  the stepper, with a 24 px bottom inset. All steps must fit without clipping or
+  required scrolling; the page layout map lives in
+  [GUI workflow](GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
+- Project uses two columns for Project details and Experiment setup. Its description
+  is optional, editable and persisted; refresh preserves pending project-name edits. Idle **Next** stays
   enabled on incomplete steps and reports the current blocking requirement in an
   actionable modal when clicked, preserving the step and drafts. Page opening and
   typing do not trigger dialogs. Image import, normalization and display verification
@@ -102,8 +105,8 @@ interaction.
   Instructions use an Edit Instructions dialog with Save/Cancel; empty Save clears
   the instructions and Cancel preserves them. Default and short condition names
   are accepted subject to core's existing nonempty name schema.
-  Conditions uses the available vertical space for its list
-  and word editors; other compact steps retain centered content. Ready Conditions
+  Conditions uses the available vertical space for its list and word editors;
+  its details card retains its natural height above the source area. Ready Conditions
   has aligned navigator/editor tops, with search above the list and no routine hint. See
   [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
@@ -184,8 +187,9 @@ control labels, essential current status and actionable errors visible; put opti
 explanations and technical detail in tooltips instead of subtitles and help paragraphs.
 Preserve participant-authored instructions and information needed for the current decision.
 
-Use one task heading per step. Compact forms are horizontally centered at bounded
-widths; Conditions keeps its wider workspace. Field labels belong close
+Use one task heading per step. Top-aligned content shares a 24 px inset and uses
+bounded workspaces. Project, Review and ordinary image geometry use the same 1040 px
+cap as the wider setup pages. Field labels belong close
 to their controls: Project and Timing use stacked labels, while denser forms align
 labels consistently against the input column. Shared form treatment lives in
 `components.configure_setup_form`; retain the frameless shell and bottom navigation.
@@ -198,11 +202,12 @@ confirmed per-condition overrides, stream-only seconds and total presentation co
 with a compact Display refresh rate selector for resolving durations on the same page.
 It edits the shared display target, synchronized with Display & Session. Display also
 owns the optional Check refresh rate action and background.
-Timing contains the frequency table and cadence controls. Timing uses 1040 px for FPVS and
-880 px for native AB. Display & Session uses a 1040 px two-column workspace: Display
-refresh/background controls on the left, Session participant reuse/order/totals on the
-right. Both use shared section headings; the three reuse choices use compact semibold
-field labels so the column hierarchy remains clear. Timing retains the `experiment` key
+Timing keeps shared refresh/frequency/cadence controls in one toolbar above a table
+that uses the remaining height; native AB retains its dedicated timing surface.
+Display & Session has two soft-framed columns with shared section headings; the three
+reuse choices use compact semibold field labels. Image geometry uses two cards for
+stimulus size and calibration, Response uses three columns for response/appearance/preview,
+and Review uses independent summary columns. Timing retains the `experiment` key
 and timing aliases; display/runtime/session open the combined step. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
 Keep **Edit condition order...** only in Display & Session. It opens the

@@ -857,7 +857,12 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     if modality == StimulusModality.IMAGE:
         assert step.sources_row.isVisible()
         for card in (step.base_source_card, step.oddball_source_card):
+            assert card.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
             _assert_visible_children_within_parent(card)
+        instructions_bottom = step.instructions_button.mapTo(
+            step.condition_details_section, step.instructions_button.rect().bottomLeft(),
+        ).y()
+        assert step.condition_details_section.height() - instructions_bottom <= 24
     else:
         _assert_visible_children_within_parent(step.words_panel)
 
@@ -995,15 +1000,29 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
 
     window.document.update_condition(condition_ids[0], trigger_code=255)
     window.show_setup_wizard(step_key="conditions")
-    window.resize(*window_size)
     window.show()
+    QApplication.processEvents()
+    screen = window.screen()
+    assert screen is not None
+    available = screen.availableGeometry()
+    frame_width = max(0, window.frameGeometry().width() - window.width())
+    frame_height = max(0, window.frameGeometry().height() - window.height())
+    maximum_client = (available.width() - frame_width, available.height() - frame_height)
+    target_size = tuple(min(requested, maximum) for requested, maximum in zip(
+        window_size, maximum_client, strict=True,
+    ))
+    if target_size[0] < 1120 or target_size[1] < 820:
+        pytest.skip("The visible display cannot fit the minimum 1120x820 Setup window.")
+    if window_size in {(1120, 820), (1120, 960)} and target_size != window_size:
+        pytest.skip(f"The visible display cannot fit the fixed acceptance size {window_size}.")
+    window.resize(*target_size)
     for selected_id in (condition_ids[0], condition_ids[-1]):
         step._select_condition(selected_id)
         guide.refresh()
         QApplication.processEvents()
         # The queued wizard refresh can hide the hint and post another layout pass.
         qtbot.waitUntil(lambda: step.condition_search_edit.y() == 0)
-        assert (window.width(), window.height()) == window_size
+        assert (window.width(), window.height()) == target_size
         assert step.condition_list.count() == 6
         assert window.document.get_condition(selected_id).instructions == instructions
         assert step.instructions_button.isVisible()
@@ -1055,10 +1074,14 @@ def test_conditions_six_condition_layout_expands_with_aligned_panels(
         assert abs(navigator_top - details_top) <= 1
         surface = guide.conditions_step_surface
         content_top = step.mapTo(surface, step.rect().topLeft()).y()
-        assert abs(content_top - 16) <= 1
-        assert abs(surface.height() - step.height() - 32) <= 2
-        assert step.condition_list.height() >= 300
-        if modality == StimulusModality.WORD and window_size[1] >= 960:
+        assert abs(content_top - 24) <= 1
+        assert abs(surface.height() - step.height() - 48) <= 2
+        selected_item = step.condition_list.currentItem()
+        assert selected_item is not None
+        selected_rect = step.condition_list.visualItemRect(selected_item)
+        assert selected_rect.height() >= selected_item.sizeHint().height()
+        assert step.condition_list.viewport().rect().contains(selected_rect)
+        if modality == StimulusModality.WORD and target_size[1] >= 960:
             assert step.base_words_edit.height() > 124
             assert step.oddball_words_edit.height() > 124
         instructions_bottom = step.instructions_button.mapTo(

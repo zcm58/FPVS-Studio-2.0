@@ -9,6 +9,9 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
 - Preserve Home as the launch surface and guided Setup for detailed editing. The eight
   steps are Project, Conditions, Timing, Display & Session, Image Size (Character Size
   for native AB), Fixation, Response, Review, fitting `1120x820` without required scroll.
+  All step content shares a top anchor and 24 px vertical insets. Use the current
+  [layout map](../../../docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy) for widths
+  and column groupings rather than introducing per-page positioning rules.
   Timing retains `experiment`/`timing`; `display`/`runtime`/`session` open the combined step.
   Frequency/duration/counts/cadence stay on Timing. The combined step uses Display
   controls on the left and Session controls on the right at 1040 px; both columns fit

@@ -12,6 +12,7 @@ from fpvs_studio.core.attentional_blink_stream import iter_attentional_blink_str
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.attentional_blink_character_size import AttentionalBlinkCharacterSizeEditor
 from fpvs_studio.gui.attentional_blink_stream_designer import AttentionalBlinkStreamDesigner
+from fpvs_studio.gui.components import studio_theme_stylesheet
 from fpvs_studio.gui.condition_setup_step import ConditionSetupStep
 from fpvs_studio.gui.design_setup_step import DesignSetupStep
 from fpvs_studio.gui.document import ProjectDocument
@@ -808,83 +809,85 @@ def test_stream_design_fits_standalone_content_in_both_themes(
 @pytest.mark.parametrize("show_cross", [True, False])
 @pytest.mark.parametrize("repeated", [False, True])
 def test_all_stream_setup_steps_fit_default_window(
-    qtbot, qapp, controller, stream_document, dark, show_cross, repeated,
+    qtbot, controller, stream_document, dark, show_cross, repeated,
 ):
-    previous_palette = qapp.palette()
-    qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
-    try:
-        if repeated:
-            _use_repeated_targets(stream_document)
-        stream_document.update_fixation_settings(show_cross=show_cross)
-        stream_document.save()
-        controller.open_project(stream_document.project_root)
-        window = controller.main_window
-        qtbot.addWidget(window)
-        window.resize(1120, 820)
-        window.show_setup_wizard(step_key="project")
-        window.show()
-        wizard = window.setup_wizard_page
-        for step_key in (
-            "project", "conditions", "experiment", "session", "image_size",
-            "fixation", "response", "review",
+    if repeated:
+        _use_repeated_targets(stream_document)
+    stream_document.update_fixation_settings(show_cross=show_cross)
+    stream_document.save()
+    controller.open_project(stream_document.project_root)
+    window = controller.main_window
+    qtbot.addWidget(window)
+    palette = QPalette(window.palette())
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202124" if dark else "#f4f7fb"))
+    window.setPalette(palette)
+    # This is layout coverage; application-wide palette propagation is tested separately.
+    window.setStyleSheet(studio_theme_stylesheet(palette))
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="project")
+    window.show()
+    wizard = window.setup_wizard_page
+    for step_key in (
+        "project", "conditions", "experiment", "session", "image_size",
+        "fixation", "response", "review",
+    ):
+        wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
+        QApplication.processEvents()
+        assert wizard._current_step_key() == step_key
+        assert (window.width(), window.height()) == (1120, 820), step_key
+        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+        assert wizard.step_count_label.isVisible()
+        assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
+        assert "border-top" not in wizard.styleSheet()
+        for card in (
+            wizard.project_overview_editor.project_overview_card,
+            wizard.display_settings_card, wizard.image_size_settings_card,
+            wizard.session_settings_card, wizard.review_card,
         ):
-            wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
-            QApplication.processEvents()
-            assert wizard._current_step_key() == step_key
-            assert (window.width(), window.height()) == (1120, 820), step_key
-            assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
-            assert wizard.step_count_label.isVisible()
-            assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
-            assert "border-top" not in wizard.styleSheet()
-            for card in (
-                wizard.project_overview_editor.project_overview_card,
-                wizard.display_settings_card, wizard.image_size_settings_card,
-                wizard.session_settings_card, wizard.review_card,
-            ):
-                assert card.property("setupFlatSection") == "true"
-                if card.isVisible():
-                    assert card.title_label.isVisible() == (
-                        card in (wizard.display_settings_card, wizard.session_settings_card)
-                    )
-                    if card.subtitle_label is not None:
-                        assert not card.subtitle_label.isVisible()
-            surface = wizard.step_stack.currentWidget()
-            if step_key == "experiment":
-                assert wizard.native_timing_summary_label.isVisible()
-                assert wizard.native_timing_summary_label.text()
-                assert not wizard.runtime_settings_editor.isVisible()
-            elif step_key == "session":
-                assert wizard.runtime_settings_editor.isVisible()
-                assert not wizard.runtime_settings_editor.timing_controls.isVisible()
-            content = surface.content
-            assert abs(content.mapTo(surface, content.rect().center()).x()
-                       - surface.rect().center().x()) <= 2, step_key
-            assert abs(content.mapTo(surface, content.rect().center()).y()
-                       - surface.rect().center().y()) <= 2, step_key
-            scroll = wizard.shell.page_container.scroll_area
-            assert scroll.verticalScrollBar().maximum() == 0, step_key
-            assert scroll.horizontalScrollBar().maximum() == 0, step_key
-            assert_visible_children_within_parent(wizard.step_stack.currentWidget())
-            if step_key == "image_size":
-                assert wizard.progress_step_labels[3].text() == "Character Size"
-                editor = wizard.image_display_size_editor
-                assert editor.character_height_edit.isVisible()
-                assert not editor.width_degrees_spin.isVisible()
-            if step_key == "review":
-                sections = {
-                    key: lines for key, _title, lines in wizard._review_checklist_sections()
-                }
-                assert "Letter distractors and target digits" in sections["conditions"][0]
-                height = stream_document.project.settings.presentation.defaults.text_height
-                assert sections["image_size"][0] == (
-                    f"Character height: {height.values[0]:g} visual degrees"
+            framed = card in (wizard.display_settings_card, wizard.session_settings_card)
+            assert card.property("setupFlatSection") == ("false" if framed else "true")
+            if card.isVisible():
+                assert card.title_label.isVisible() == (
+                    card in (wizard.display_settings_card, wizard.session_settings_card)
                 )
-                if repeated:
-                    assert sections["experiment"][1] == (
-                        "10 Hz · 9 s bursts · T1 1 Hz · 6 T1 / 5 T2"
-                    )
-                for label in wizard.review_card.findChildren(QLabel):
-                    if label.isVisible() and label.wordWrap():
-                        assert label.height() >= label.heightForWidth(label.width()), label.text()
-    finally:
-        qapp.setPalette(previous_palette)
+                if card.subtitle_label is not None:
+                    assert not card.subtitle_label.isVisible()
+        surface = wizard.step_stack.currentWidget()
+        if step_key == "experiment":
+            assert wizard.native_timing_summary_label.isVisible()
+            assert wizard.native_timing_summary_label.text()
+            assert not wizard.runtime_settings_editor.isVisible()
+        elif step_key == "session":
+            assert wizard.runtime_settings_editor.isVisible()
+            assert not wizard.runtime_settings_editor.timing_controls.isVisible()
+        content = surface.content
+        assert abs(content.mapTo(surface, content.rect().center()).x()
+                   - surface.rect().center().x()) <= 2, step_key
+        assert content.mapTo(surface, content.rect().topLeft()).y() == 24, step_key
+        scroll = wizard.shell.page_container.scroll_area
+        assert scroll.verticalScrollBar().maximum() == 0, step_key
+        assert scroll.horizontalScrollBar().maximum() == 0, step_key
+        assert_visible_children_within_parent(wizard.step_stack.currentWidget())
+        if step_key == "image_size":
+            size_index = wizard._step_index_for_key("image_size")
+            assert wizard.progress_step_labels[size_index].text() == "Character Size"
+            assert surface.content.maximumWidth() == 760
+            editor = wizard.image_display_size_editor
+            assert editor.character_height_edit.isVisible()
+            assert not editor.width_degrees_spin.isVisible()
+        if step_key == "review":
+            sections = {
+                key: lines for key, _title, lines in wizard._review_checklist_sections()
+            }
+            assert "Letter distractors and target digits" in sections["conditions"][0]
+            height = stream_document.project.settings.presentation.defaults.text_height
+            assert sections["image_size"][0] == (
+                f"Character height: {height.values[0]:g} visual degrees"
+            )
+            if repeated:
+                assert sections["experiment"] == (
+                    "10 Hz · 9 s bursts · T1 1 Hz · 6 T1 / 5 T2",
+                )
+            for label in wizard.review_card.findChildren(QLabel):
+                if label.isVisible() and label.wordWrap():
+                    assert label.height() >= label.heightForWidth(label.width()), label.text()

@@ -35,6 +35,7 @@ from fpvs_studio.core.models import (
     ProjectPresentationSettings,
     StimulusPresentationDefaults,
 )
+from fpvs_studio.gui.components import studio_theme_stylesheet
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.runtime_settings_page import ImageSizePreview, ImageSizePreviewDialog
@@ -431,7 +432,13 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     window.resize(1120, 820)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
-    assert guide.display_settings_card.width() == guide.display_settings_card.maximumWidth()
+    assert guide.display_settings_card.width() <= guide.display_settings_card.maximumWidth()
+    assert editor.detect_refresh_button.width() >= editor.detect_refresh_button.sizeHint().width()
+    assert editor.refresh_hz_combo.width() >= (
+        editor.refresh_hz_combo.fontMetrics().horizontalAdvance(
+            editor.refresh_hz_combo.currentText(),
+        ) + 32
+    )
     qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
     _assert_visible_children_within_parent(editor)
     for label in (
@@ -444,6 +451,46 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
             label.text(),
         )
         assert label.contentsRect().height() >= required.height(), label.objectName()
+
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
+    qtbot, controller: StudioController, tmp_path: Path, background,
+):
+    _document, window = _open_created_project(controller, qtbot, tmp_path, "Image size grouping")
+    guide = window.setup_wizard_page
+    palette = guide.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    guide.setPalette(palette)
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="image_size")
+    QApplication.processEvents()
+    editor = guide.image_display_size_editor
+    assert guide.image_size_step_surface.content.maximumWidth() == 1040
+    assert editor.size_card.title_label.text() == "Stimulus size"
+    assert editor.calibration_card.title_label.text() == "Display calibration"
+    assert editor.size_card.geometry().right() < editor.calibration_card.geometry().left()
+    assert editor.size_card.geometry().top() == editor.calibration_card.geometry().top()
+    for form, fields in (
+        (editor.form_layout, (editor.width_degrees_spin, editor.viewing_distance_spin)),
+        (editor.calibration_form_layout, (editor.screen_width_spin,
+         editor.screen_width_px_spin, editor.screen_height_px_spin)),
+    ):
+        for field in fields:
+            label = form.labelForField(field)
+            assert label.isVisible()
+            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+            assert field.width() <= 220
+            assert label.mapTo(editor, label.rect().bottomLeft()).y() < (
+                field.mapTo(editor, field.rect().topLeft()).y()
+            )
+    assert editor.preview_value_label.alignment() & Qt.AlignmentFlag.AlignLeft
+    assert editor.presentation_summary_label.alignment() & Qt.AlignmentFlag.AlignLeft
+    assert editor.use_current_resolution_checkbox.isVisible()
+    for button in (editor.full_screen_preview_button, editor.configure_presentation_button):
+        assert button.width() >= button.sizeHint().width()
+    _assert_visible_children_within_parent(guide.image_size_step_surface)
 
 
 def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
@@ -704,8 +751,9 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert "Timing" in label_text
     assert "Response" not in label_text
     assert "Appearance" not in label_text
-    assert guide.fixation_schedule_editor.fixation_behavior_panel.minimumHeight() == 210
-    assert guide.fixation_schedule_editor.fixation_timing_panel.minimumHeight() == 210
+    assert (guide.fixation_schedule_editor.fixation_behavior_panel.geometry().top()
+            == guide.fixation_schedule_editor.fixation_timing_panel.geometry().top())
+    _assert_visible_children_within_parent(guide.fixation_step_surface)
 
     guide.open_wizard(step_key="response")
     assert guide.step_stack.currentWidget() is guide.response_step_surface
@@ -719,8 +767,9 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert guide.fixation_response_editor.preview_card is None
     assert guide.fixation_response_editor.preview_panel is not None
     assert guide.fixation_response_editor.preview_widget is not None
-    assert guide.fixation_response_editor.preview_panel.maximumHeight() == 220
-    assert guide.fixation_response_editor.preview_widget.maximumHeight() == 170
+    assert guide.fixation_response_editor.preview_widget.height() >= (
+        guide.fixation_response_editor.preview_widget.minimumHeight()
+    )
     assert guide.findChild(QWidget, "fixation_cross_preview_card") is None
     assert guide.fixation_response_editor.preview_panel.property("fixationPreviewPanel") == "true"
     assert (
@@ -745,8 +794,14 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert "Preview" in label_text
     assert "Response and Appearance" not in label_text
     assert "Color-change task, response, and cross appearance." not in label_text
-    assert guide.fixation_response_editor.fixation_response_panel.minimumHeight() == 182
-    assert guide.fixation_response_editor.fixation_appearance_panel.minimumHeight() == 182
+    response_editor = guide.fixation_response_editor
+    panels = (response_editor.fixation_response_panel,
+              response_editor.fixation_appearance_panel, response_editor.preview_panel)
+    origins = [panel.mapTo(response_editor, QPoint(0, 0)) for panel in panels]
+    assert len({origin.y() for origin in origins}) == 1
+    assert origins[0].x() + panels[0].width() < origins[1].x()
+    assert origins[1].x() + panels[1].width() < origins[2].x()
+    _assert_visible_children_within_parent(guide.response_step_surface)
     assert guide.fixation_response_editor.fixation_accuracy_checkbox.parentWidget() is (
         guide.fixation_response_editor.fixation_response_group
     )
@@ -762,7 +817,7 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
         "Response",
         "Fixation Cross Appearance",
     }
-    assert all(label.alignment() & Qt.AlignmentFlag.AlignCenter for label in section_titles)
+    assert all(label.alignment() & Qt.AlignmentFlag.AlignLeft for label in section_titles)
     title_offsets = {
         label.mapTo(label.parentWidget(), QPoint(0, 0)).y() for label in section_titles
     }
@@ -949,94 +1004,96 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
 
 @pytest.mark.parametrize("dark", [False, True])
 def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
-    qtbot, qapp, controller, tmp_path, dark, monkeypatch,
+    qtbot, controller, tmp_path, dark, monkeypatch,
 ):
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QFormLayout
 
     from fpvs_studio.core.enums import ExperimentCategory
 
-    previous = qapp.palette()
-    qapp.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
-    try:
-        document = controller.create_project(
-            parent_dir=tmp_path, project_name="Timing hierarchy",
-            experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-        )
-        window = controller.main_window
-        qtbot.addWidget(window)
-        window.resize(1120, 820)
-        window.show_setup_wizard(step_key="display")
-        guide = window.setup_wizard_page
-        guide.open_wizard(step_key="display", allow_step_jumps=True)
-        window.show()
-        QApplication.processEvents()
-        editor = guide.runtime_settings_editor
-        assert editor.form_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
-        assert editor.timing_summary_label.isHidden()
-        assert guide.display_settings_card.title_label.isVisible()
-        assert guide.display_settings_card.title_label.text() == "Display"
-        assert guide.session_structure_editor.isVisible()
-        assert not guide.display_settings_card.subtitle_label.isVisible()
-        assert not editor.timing_status_label.isVisible()
-        assert editor.timing_is_compatible()
-        assert not any(
-            label.isVisible() and label.text().startswith("To continue:")
-            for label in guide.findChildren(QLabel)
-        )
-        assert "SOAs" in editor.refresh_hz_combo.toolTip()
-        timing_index = guide._step_index_for_key("experiment")
-        assert guide.progress_step_labels[timing_index].text() == "Timing"
-        session = guide.session_structure_editor
-        assert not guide.condition_timing_table.isVisible()
-        for field in (editor.refresh_hz_combo.parentWidget(),
-                      editor.runtime_background_color_combo):
-            label = editor.form_layout.labelForField(field)
-            label_bottom = label.mapTo(editor, label.rect().bottomLeft())
-            field_top = field.mapTo(editor, field.rect().topLeft())
-            assert field_top.y() > label_bottom.y()
-            assert field_top.y() - label_bottom.y() <= 16
-            assert field_top.x() == label_bottom.x()
-        _assert_visible_children_within_parent(guide.display_session_step_surface)
+    document = controller.create_project(
+        parent_dir=tmp_path, project_name="Timing hierarchy",
+        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    window = controller.main_window
+    qtbot.addWidget(window)
+    palette = QPalette(window.palette())
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202124" if dark else "#f4f7fb"))
+    window.setPalette(palette)
+    # Geometry needs one locally themed tree; global palette propagation is covered separately.
+    window.setStyleSheet(studio_theme_stylesheet(palette))
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="display")
+    guide = window.setup_wizard_page
+    guide.open_wizard(step_key="display", allow_step_jumps=True)
+    window.show()
+    QApplication.processEvents()
+    editor = guide.runtime_settings_editor
+    assert editor.form_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+    assert editor.timing_summary_label.isHidden()
+    assert guide.display_settings_card.title_label.isVisible()
+    assert guide.display_settings_card.title_label.text() == "Display"
+    assert guide.session_structure_editor.isVisible()
+    subtitle = guide.display_settings_card.subtitle_label
+    assert subtitle is None or not subtitle.isVisible()
+    assert not editor.timing_status_label.isVisible()
+    assert editor.timing_is_compatible()
+    assert not any(
+        label.isVisible() and label.text().startswith("To continue:")
+        for label in guide.findChildren(QLabel)
+    )
+    assert "SOAs" in editor.refresh_hz_combo.toolTip()
+    timing_index = guide._step_index_for_key("experiment")
+    assert guide.progress_step_labels[timing_index].text() == "Timing"
+    session = guide.session_structure_editor
+    assert not guide.condition_timing_table.isVisible()
+    for field in (editor.refresh_hz_combo.parentWidget(),
+                  editor.runtime_background_color_combo):
+        label = editor.form_layout.labelForField(field)
+        label_bottom = label.mapTo(editor, label.rect().bottomLeft())
+        field_top = field.mapTo(editor, field.rect().topLeft())
+        assert field_top.y() > label_bottom.y()
+        assert field_top.y() - label_bottom.y() <= 16
+        assert field_top.x() == label_bottom.x()
+    _assert_visible_children_within_parent(guide.display_session_step_surface)
 
-        guide.open_wizard(step_key="session", allow_step_jumps=True)
-        QApplication.processEvents()
-        assert guide.step_stack.currentWidget() is guide.display_session_step_surface
-        assert editor.isVisible()
-        assert guide.session_settings_card.title_label.isVisible()
-        assert session.isVisible()
-        assert not session.randomization_editor.isVisible()
-        assert not session.presentation_total_label.isVisible()
-        assert session.block_count_spin.isVisible()
-        editor.runtime_background_color_combo.setFocus()
-        qtbot.keyClick(editor.runtime_background_color_combo, Qt.Key.Key_Tab)
-        assert session.block_count_spin.hasFocus()
-        assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
-        assert session.block_count_spin.width() == 240
-        label = session.session_layout.labelForField(session.block_count_spin)
-        assert label.text() == "Bursts per SOA"
-        assert label.mapTo(session, label.rect().bottomLeft()).y() < (
-            session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
-        )
-        _assert_visible_children_within_parent(guide.display_session_step_surface)
-        guide.open_wizard(step_key="display", allow_step_jumps=True)
-        QApplication.processEvents()
-        before = document.project.model_dump()
-        editor.refresh()
-        assert document.project.model_dump() == before
-        # Unsupported native character timing must still be actionable inline.
-        editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
-        QApplication.processEvents()
-        assert editor.timing_status_label.property("statusState") == "error"
-        assert editor.timing_status_label.isVisible()
-        messages = record_setup_validation_dialogs(monkeypatch)
-        assert guide.setup_wizard_next_button.isEnabled()
-        qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-        assert messages == [("Complete this setup step", editor.timing_blocker())]
-        assert guide.step_stack.currentWidget() is guide.display_session_step_surface
-        _assert_visible_children_within_parent(editor)
-    finally:
-        qapp.setPalette(previous)
+    guide.open_wizard(step_key="session", allow_step_jumps=True)
+    QApplication.processEvents()
+    assert guide.step_stack.currentWidget() is guide.display_session_step_surface
+    assert editor.isVisible()
+    assert guide.session_settings_card.title_label.isVisible()
+    assert session.isVisible()
+    assert not session.randomization_editor.isVisible()
+    assert not session.presentation_total_label.isVisible()
+    assert session.block_count_spin.isVisible()
+    editor.runtime_background_color_combo.setFocus()
+    qtbot.keyClick(editor.runtime_background_color_combo, Qt.Key.Key_Tab)
+    assert session.block_count_spin.hasFocus()
+    assert session.session_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
+    assert session.block_count_spin.width() == 240
+    label = session.session_layout.labelForField(session.block_count_spin)
+    assert label.text() == "Bursts per SOA"
+    assert label.mapTo(session, label.rect().bottomLeft()).y() < (
+        session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
+    )
+    _assert_visible_children_within_parent(guide.display_session_step_surface)
+    guide.open_wizard(step_key="display", allow_step_jumps=True)
+    QApplication.processEvents()
+    before = document.project.model_dump()
+    editor.refresh()
+    assert document.project.model_dump() == before
+    # Unsupported native character timing must still be actionable inline.
+    editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(59.94))
+    QApplication.processEvents()
+    assert editor.timing_status_label.property("statusState") == "error"
+    assert editor.timing_status_label.isVisible()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    assert guide.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert messages == [("Complete this setup step", editor.timing_blocker())]
+    assert guide.step_stack.currentWidget() is guide.display_session_step_surface
+    _assert_visible_children_within_parent(editor)
+
 
 
 def test_character_size_next_explains_invalid_height_on_click(

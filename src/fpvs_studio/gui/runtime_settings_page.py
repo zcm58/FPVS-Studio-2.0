@@ -1099,35 +1099,62 @@ class ImageDisplaySizeEditor(QWidget):
         self.configure_presentation_button.clicked.connect(self._show_presentation_settings)
         mark_secondary_action(self.configure_presentation_button)
 
+        self.size_card = SectionCard(
+            title="Stimulus size", subtitle=None,
+            object_name="image_size_geometry_card", parent=self,
+        )
+        self.calibration_card = SectionCard(
+            title="Display calibration", subtitle=None,
+            object_name="image_size_calibration_card", parent=self,
+        )
+        for card in (self.size_card, self.calibration_card):
+            card.card_layout.setContentsMargins(16, 16, 16, 16)
+            card.body_layout.setSpacing(12)
         self.form_layout = QFormLayout()
         self.form_layout.setContentsMargins(0, 0, 0, 0)
-        self.form_layout.setHorizontalSpacing(12)
-        self.form_layout.setVerticalSpacing(8)
+        self.form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         self.form_layout.addRow("Image width (deg)", self.width_degrees_spin)
         self.form_layout.addRow("Viewing distance (cm)", self.viewing_distance_spin)
-        self.form_layout.addRow("Screen width (cm)", self.screen_width_spin)
-        self.form_layout.addRow("Resolution width (px)", self.screen_width_px_spin)
-        self.form_layout.addRow("Resolution height (px)", self.screen_height_px_spin)
-        configure_setup_form(self.form_layout)
-
-        checkbox_row = QHBoxLayout()
-        checkbox_row.setContentsMargins(0, 0, 0, 0)
-        checkbox_row.addWidget(self.use_current_resolution_checkbox)
-        checkbox_row.addStretch(1)
-
-        button_row = QVBoxLayout()
-        button_row.setContentsMargins(0, 0, 0, 0)
-        button_row.addWidget(self.full_screen_preview_button)
-        button_row.addWidget(self.configure_presentation_button)
-
-        layout = QVBoxLayout(self)
+        configure_setup_form(self.form_layout, stacked=True)
+        self.calibration_form_layout = QFormLayout()
+        self.calibration_form_layout.setContentsMargins(0, 0, 0, 0)
+        self.calibration_form_layout.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow,
+        )
+        self.calibration_form_layout.addRow("Screen width (cm)", self.screen_width_spin)
+        self.calibration_form_layout.addRow("Resolution width (px)", self.screen_width_px_spin)
+        self.calibration_form_layout.addRow("Resolution height (px)", self.screen_height_px_spin)
+        configure_setup_form(self.calibration_form_layout, stacked=True)
+        for control in (self.width_degrees_spin, self.viewing_distance_spin,
+                        self.screen_width_spin, self.screen_width_px_spin,
+                        self.screen_height_px_spin):
+            control.setMaximumWidth(220)
+        self.preview_value_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.preview_value_label.setProperty("setupMetricValue", "true")
+        self.presentation_summary_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+        self.presentation_summary_label.setProperty("setupMetricLabel", "true")
+        self.size_card.body_layout.addLayout(self.form_layout)
+        self.size_card.body_layout.addWidget(self.preview_value_label)
+        self.size_card.body_layout.addWidget(self.presentation_summary_label)
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        actions.addWidget(self.full_screen_preview_button)
+        actions.addWidget(self.configure_presentation_button)
+        self.size_card.body_layout.addLayout(actions)
+        self.calibration_card.body_layout.addLayout(self.calibration_form_layout)
+        self.calibration_card.body_layout.addWidget(self.use_current_resolution_checkbox)
+        QWidget.setTabOrder(self.width_degrees_spin, self.viewing_distance_spin)
+        QWidget.setTabOrder(self.viewing_distance_spin, self.screen_width_spin)
+        QWidget.setTabOrder(self.screen_width_spin, self.screen_width_px_spin)
+        QWidget.setTabOrder(self.screen_width_px_spin, self.screen_height_px_spin)
+        QWidget.setTabOrder(self.screen_height_px_spin, self.use_current_resolution_checkbox)
+        QWidget.setTabOrder(self.use_current_resolution_checkbox, self.full_screen_preview_button)
+        QWidget.setTabOrder(self.full_screen_preview_button, self.configure_presentation_button)
+        layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(8)
-        layout.addLayout(self.form_layout)
-        layout.addLayout(checkbox_row)
-        layout.addWidget(self.preview_value_label)
-        layout.addWidget(self.presentation_summary_label)
-        layout.addLayout(button_row)
+        layout.setSpacing(16)
+        layout.addWidget(self.size_card, 1, Qt.AlignmentFlag.AlignTop)
+        layout.addWidget(self.calibration_card, 1, Qt.AlignmentFlag.AlignTop)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
@@ -1136,6 +1163,7 @@ class ImageDisplaySizeEditor(QWidget):
         display = self._document.project.settings.display
         geometry = self._document.project.settings.presentation.defaults.image_geometry
         masking = is_masking_project(self._document.project)
+        self.size_card.title_label.setText("Viewing geometry" if masking else "Stimulus size")
         self.width_degrees_spin.setVisible(not masking)
         width_label = self.form_layout.labelForField(self.width_degrees_spin)
         if width_label is not None:

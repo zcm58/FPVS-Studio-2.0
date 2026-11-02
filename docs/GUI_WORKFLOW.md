@@ -154,15 +154,24 @@ and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 
 ## Frameless Setup layout and copy
 
-The eight-step wizard uses one task heading, without duplicate card headings. Project
-has a centered 760 px form; Timing uses 1040 px for FPVS or 880 px for
-native AB; Image/Character Size uses 760 px.
-Review remains 880 px, and Conditions retains its wider working area. Content is
-vertically centered between the stepper and bottom navigation. Project and Timing
-stack labels above fields; denser forms align labels beside the input column.
+The eight-step wizard uses one task heading and a shared top anchor: content starts
+24 px below the stepper and retains a 24 px bottom inset. Project, Conditions,
+ordinary Timing, Display & Session, ordinary image geometry, Fixation, Response and
+Review use a workspace capped at 1040 px. Native AB Timing remains 880 px and Character
+Size remains 760 px. Conditions and the ordinary timing table use the available height;
+forms and summary columns stay aligned at the top without required page scrolling.
+
+Project has **Project details** and **Experiment setup** columns. Name, optional
+multiline description and folder sit on the left; category, template actions and
+participant settings sit on the right. Conditions keeps its navigator beside a
+natural-height **This condition** card, followed by left-aligned image source cards or
+expanding word editors. Extra height belongs to the list and word editors, not empty
+space inside the details card.
+
 Timing owns the FPVS frequency, duration and presentation table plus oddball cadence.
-For FPVS and masking, **Shared stimulus frequency** and **Show an oddball every** sit
-beside one another above the condition table, with stacked labels and aligned inputs.
+For FPVS and masking, refresh, **Shared stimulus frequency** and **Show an oddball every**
+share one toolbar above the expanding condition table. Labels sit above aligned fields;
+Discard/Apply remain beside those controls.
 Cadence keeps its existing document binding and persists immediately; changing its
 placement does not change stimulus scheduling or pending frequency drafts. AB retains
 its existing cadence/summary surface outside the hidden FPVS table. Visible acceptance:
@@ -174,10 +183,13 @@ so legacy durations can be resolved before leaving Timing. An unset target stays
 unselected until the user chooses a rate; opening Timing does not save a default.
 Both selectors stay synchronized, preserve timing drafts and share refresh-setting
 errors and verification invalidation. The Timing selector is disabled during a check.
-Display & Session uses a 1040 px workspace with Display on the left and the wider
-Session column on the right, aligned at the top. Both have shared section headings;
-reuse choices use compact semibold field labels. Session owns participant reuse,
-condition order, totals, managed AB/masking repeats and the fixed start key.
+Display & Session has soft-framed Display and Session columns with shared section
+headings and 16 px internal padding. Reuse choices use compact semibold field labels.
+Session owns participant reuse, condition order, totals, managed AB/masking repeats
+and the fixed start key. Image geometry pairs **Stimulus size** (or **Viewing geometry**
+for masking) with **Display calibration** in two cards. Response places response
+controls, cross appearance and preview in three columns. Review uses two independent
+vertical summary columns so a taller summary does not stretch its neighbor.
 Experiment/timing aliases open Timing; display/runtime/session aliases open the
 combined step. Separate Review summaries for Display and Session both link there.
 
@@ -601,19 +613,18 @@ The authoring window is organized around two user-facing modes:
   - the wizard enforces its documented `1120x820` minimum and default size, keeping
     guided steps free of Advanced buttons and vertical scrolling
   - all guided steps use the shared frameless shell, left-aligned task heading,
-    step count, and stable progress/navigation positions; content is vertically centered with
-    bounded form widths, and the bottom navigation has no horizontal divider
+    step count, and stable progress/navigation positions; content is top-aligned with
+    24 px vertical insets and bounded workspace widths. Bottom navigation has no divider
   - all eight setup steps must fit inside the compact `1120x820` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
     only show information needed for the current decision
-  - Project uses a focused frameless form, keeping the project folder path compact
-    and secondary; project name is required before continuing to Conditions, while
-    description remains optional, editable and persisted. Description refresh preserves
-    pending project-name edits. The card uses a single-column form without a redundant readiness
-    subsection, and template actions sit below the full-width image-timing selector so
-    their labels remain visible at the compact setup size
+  - Project uses a frameless two-column workspace: Project details on the left,
+    Experiment setup on the right. The folder path stays compact with full-path access.
+    Name is required before continuing; description remains optional, editable and
+    persisted. Refresh preserves pending name edits. Template actions sit below the
+    selector in the right column and remain complete at the compact setup size
   - Project displays the experiment category read-only. Its image-timing selector
     contains compatible condition-template profiles, defaulting to Continuous Images
     for FPVS Oddball Paradigm or Attentional-Blink for AB, and does not rewrite existing conditions unless the user explicitly applies
@@ -625,7 +636,7 @@ The authoring window is organized around two user-facing modes:
     for the full draft-based presentation editor
   - Display exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), optional `Check refresh rate`, and presentation background
-    (`Black`, `Dark Gray`, or `Neutral Gray`). Timing owns `Oddball every` for image
+    (`Black`, `Dark Gray`, or `Neutral Gray`). Timing owns `Show an oddball every` for image
     and word experiments; rate/frame recaps are available through tooltips. Neutral Gray is
     required when any image condition uses Contrast Modulation. Timing owns
     the shared stimulus presentation frequency and inherited/custom rates for image

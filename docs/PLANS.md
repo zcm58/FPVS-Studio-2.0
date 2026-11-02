@@ -37,6 +37,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Setup visual layout and hierarchy](exec-plans/completed/setup-visual-layout.md):
+  all eight pages visually reviewed in both themes, balanced workspaces and 57 focused
+  visible sizing checks; safe-suite transient Windows access failure recorded.
 - [Drag-and-drop randomized condition blocks](exec-plans/completed/randomized-block-condition-editor.md):
   real/partial blocks, within-block dragging and versioned compatibility; source checks
   and full-run limitations recorded, visible Qt acceptance remains manual.

@@ -59,7 +59,7 @@ class ConditionTimingTable(QWidget):
 
     def __init__(
         self, document: ProjectDocument, parent: QWidget | None = None,
-        *, cadence_controls: QWidget | None = None,
+        *, cadence_controls: QWidget | None = None, refresh_controls: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("condition_timing_table")
@@ -83,7 +83,9 @@ class ConditionTimingTable(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(8)
         shared = QHBoxLayout()
-        shared.setSpacing(8)
+        shared.setSpacing(12)
+        if refresh_controls is not None:
+            shared.addWidget(refresh_controls, 0, Qt.AlignmentFlag.AlignBottom)
         heading = QLabel("Shared stimulus frequency", self)
         heading.setProperty("settingsSectionTitle", "true")
         self.shared_frequency_spin = self._frequency_spin("shared_stimulus_frequency_spin")
@@ -138,7 +140,8 @@ class ConditionTimingTable(QWidget):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         for column in (1, 2, 3, 4, 5, 6):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        layout.addWidget(self.table)
+        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        layout.addWidget(self.table, 1)
         self.error_label = QLabel(self)
         self.error_label.setObjectName("condition_frequency_error")
         self.error_label.setWordWrap(True)
@@ -273,7 +276,7 @@ class ConditionTimingTable(QWidget):
             self.table.setRowHeight(
                 row, max(36, spin.sizeHint().height(), reset.sizeHint().height()),
             )
-        self.table.setFixedHeight(
+        self.table.setMinimumHeight(
             self.table.horizontalHeader().sizeHint().height()
             + sum(self.table.rowHeight(row) for row in range(min(3, len(conditions))))
             + (36 if not conditions else 0) + 2 * self.table.frameWidth(),

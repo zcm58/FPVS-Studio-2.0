@@ -94,7 +94,7 @@ class ProjectOverviewEditor(QWidget):
         self.project_description_edit.setPlaceholderText(
             "Describe the project goal and participant instructions."
         )
-        self.project_description_edit.setFixedHeight(64)
+        self.project_description_edit.setFixedHeight(104)
         self.project_description_edit.setMaximumBlockCount(20)
         self._description_committer = DebouncedTextCommitter(
             self.project_description_edit,
@@ -165,9 +165,9 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_actions_layout = QHBoxLayout(self.condition_profile_actions)
         condition_profile_actions_layout.setContentsMargins(0, 0, 0, 0)
         condition_profile_actions_layout.setSpacing(8)
-        condition_profile_actions_layout.addStretch(1)
         condition_profile_actions_layout.addWidget(self.apply_profile_to_conditions_button)
         condition_profile_actions_layout.addWidget(self.manage_templates_button)
+        condition_profile_actions_layout.addStretch(1)
         condition_profile_layout.addWidget(self.condition_profile_actions)
 
         self.project_overview_card = SectionCard(
@@ -175,29 +175,61 @@ class ProjectOverviewEditor(QWidget):
             object_name="dashboard_project_overview_card",
             parent=self,
         )
-        self.project_overview_card.setMaximumWidth(930)
+        self.project_overview_card.setMaximumWidth(1040)
         self.project_overview_card.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,
         )
         self.project_overview_card.title_label.setVisible(False)
 
+        self.project_details_column = QWidget(self.project_overview_card)
+        self.project_details_column.setObjectName("project_details_column")
+        details_layout = QVBoxLayout(self.project_details_column)
+        details_layout.setContentsMargins(0, 0, 0, 0)
+        details_layout.setSpacing(16)
+        self.project_details_heading = QLabel("Project details", self.project_details_column)
+        self.project_details_heading.setProperty("sectionCardRole", "title")
+        details_layout.addWidget(self.project_details_heading)
         metadata_layout = QFormLayout()
-        metadata_layout.setVerticalSpacing(6)
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
-        metadata_layout.addRow("Experiment Category", self.experiment_category_value)
         metadata_layout.addRow("Project Name", self.project_name_edit)
         metadata_layout.addRow("Description (optional)", self.project_description_edit)
         metadata_layout.addRow("Project Folder", self.project_root_value)
-        metadata_layout.addRow("Experiment Template", condition_profile_group)
-        metadata_layout.addRow(self.participant_tutorial_checkbox)
-        metadata_layout.addRow(self.repeat_participant_sessions_checkbox)
         configure_setup_form(metadata_layout, stacked=True)
+        details_layout.addLayout(metadata_layout)
+        details_layout.addStretch(1)
+
+        self.experiment_setup_column = QWidget(self.project_overview_card)
+        self.experiment_setup_column.setObjectName("experiment_setup_column")
+        setup_layout = QVBoxLayout(self.experiment_setup_column)
+        setup_layout.setContentsMargins(0, 0, 0, 0)
+        setup_layout.setSpacing(16)
+        self.experiment_setup_heading = QLabel("Experiment setup", self.experiment_setup_column)
+        self.experiment_setup_heading.setProperty("sectionCardRole", "title")
+        setup_layout.addWidget(self.experiment_setup_heading)
+        experiment_layout = QFormLayout()
+        experiment_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        experiment_layout.addRow("Experiment Category", self.experiment_category_value)
+        experiment_layout.addRow("Experiment Template", condition_profile_group)
+        configure_setup_form(experiment_layout, stacked=True)
+        setup_layout.addLayout(experiment_layout)
+        setup_layout.addWidget(self.participant_tutorial_checkbox)
+        setup_layout.addWidget(self.repeat_participant_sessions_checkbox)
+        setup_layout.addStretch(1)
 
         form_panel = QWidget(self.project_overview_card)
-        form_layout = QVBoxLayout(form_panel)
+        form_layout = QHBoxLayout(form_panel)
         form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.addLayout(metadata_layout)
+        form_layout.setSpacing(32)
+        form_layout.addWidget(self.project_details_column, 3)
+        form_layout.addWidget(self.experiment_setup_column, 2)
+        QWidget.setTabOrder(self.project_name_edit, self.project_description_edit)
+        QWidget.setTabOrder(self.project_description_edit, self.condition_profile_combo)
+        QWidget.setTabOrder(self.condition_profile_combo, self.apply_profile_to_conditions_button)
+        QWidget.setTabOrder(self.apply_profile_to_conditions_button, self.manage_templates_button)
+        QWidget.setTabOrder(self.manage_templates_button, self.participant_tutorial_checkbox)
+        QWidget.setTabOrder(self.participant_tutorial_checkbox,
+                           self.repeat_participant_sessions_checkbox)
 
         self.project_overview_card.card_layout.setContentsMargins(20, 14, 20, 14)
         self.project_overview_card.card_layout.setSpacing(8)

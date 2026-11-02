@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -93,7 +94,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.participant_tutorial_checkbox is not None
     assert project_editor.participant_tutorial_checkbox.text() == "Enable participant tutorial"
     assert project_editor.participant_tutorial_checkbox.toolTip()
-    assert project_editor.project_overview_card.maximumWidth() == 930
+    assert project_editor.project_overview_card.maximumWidth() == 1040
     assert project_editor.project_overview_card.title_label.text() == "Project Details"
     assert project_editor.project_overview_card.title_label.isVisible() is False
     setup_icon = project_editor.findChild(QLabel, "setup_project_icon")
@@ -177,10 +178,12 @@ def test_setup_project_contrast_profile_applies_required_background(
     )
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_project_details_template_actions_fit_at_setup_default_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    background: str,
 ) -> None:
     _, window = _open_created_project(
         controller,
@@ -196,7 +199,10 @@ def test_project_details_template_actions_fit_at_setup_default_size(
         "readable while all template actions are visible."
     )
 
-    window.resize(1120, 720)
+    palette = guide.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    guide.setPalette(palette)
+    window.resize(1120, 820)
     window.main_stack.setCurrentWidget(guide)
     guide.open_wizard(step_key="project")
     window.show()
@@ -215,7 +221,24 @@ def test_project_details_template_actions_fit_at_setup_default_size(
 
     assert apply_button.isEnabled()
     assert editor.findChild(QWidget, "project_overview_checklist") is None
-    assert editor.project_overview_card.width() <= 930
+    assert editor.project_overview_card.width() <= 1040
+    assert editor.project_details_heading.text() == "Project details"
+    assert editor.experiment_setup_heading.text() == "Experiment setup"
+    assert editor.project_description_edit.height() >= 100
+    assert (editor.project_details_column.geometry().right()
+            < editor.experiment_setup_column.geometry().left())
+    assert (editor.project_details_column.geometry().top()
+            == editor.experiment_setup_column.geometry().top())
+    assert editor.project_name_edit.parentWidget() is editor.project_details_column
+    assert editor.project_description_edit.parentWidget() is editor.project_details_column
+    assert editor.project_root_value.parentWidget() is editor.project_details_column
+    assert editor.experiment_category_value.parentWidget() is editor.experiment_setup_column
+    for heading in (editor.project_details_heading, editor.experiment_setup_heading):
+        assert heading.isVisible()
+        assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
+    editor.project_name_edit.setFocus()
+    qtbot.keyClick(editor.project_name_edit, Qt.Key.Key_Tab)
+    assert editor.project_description_edit.hasFocus()
     for button in (apply_button, manage_button):
         text_width = button.fontMetrics().horizontalAdvance(button.text())
         assert button.width() >= text_width + 24

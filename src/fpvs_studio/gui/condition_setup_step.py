@@ -90,7 +90,6 @@ _SOURCE_CARD_HEIGHT = 160
 _SOURCE_ROW_MIN_WIDTH = (_SOURCE_CARD_MIN_WIDTH * 2) + PAGE_SECTION_GAP
 _SOURCE_HEADER_HEIGHT = 30
 _SOURCE_METRICS_HEIGHT = 56
-_CONDITION_DETAILS_MIN_HEIGHT = 320
 _CONDITION_STEP_MIN_WIDTH = 840
 
 
@@ -152,8 +151,11 @@ def _configure_guided_source_card(card: SetupSourceCard) -> None:
     header = card.title_label.parentWidget()
     if header is not None:
         header.setFixedHeight(_SOURCE_HEADER_HEIGHT)
-    card.title_label.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter)
+    card.title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
     card.metrics.setFixedHeight(_SOURCE_METRICS_HEIGHT)
+    metrics_layout = card.metrics.layout()
+    if isinstance(metrics_layout, QGridLayout):
+        metrics_layout.setColumnStretch(0, 1)
 
 
 def _configure_detail_field_widths(reference: QWidget, *fields: QWidget) -> None:
@@ -587,7 +589,9 @@ class ConditionSetupStep(QWidget):
         self.condition_details_section = QFrame(self)
         self.condition_details_section.setObjectName("setup_conditions_details_section")
         self.condition_details_section.setProperty("conditionDetailsSection", "true")
-        self.condition_details_section.setMinimumHeight(_CONDITION_DETAILS_MIN_HEIGHT)
+        self.condition_details_section.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum,
+        )
         details_section_layout = QVBoxLayout(self.condition_details_section)
         details_section_layout.setContentsMargins(10, 4, 10, 4)
         details_section_layout.setSpacing(4)
@@ -625,7 +629,6 @@ class ConditionSetupStep(QWidget):
         form.addRow(self.presentation_mode_label, mode_row)
         form.addRow(self.instructions_label, self.instructions_button)
         details_section_layout.addLayout(form)
-        details_section_layout.addStretch(1)
         self.ab_stream_summary = QLabel(self)
         self.ab_stream_summary.setObjectName("setup_ab_stream_summary")
         self.ab_stream_summary.setWordWrap(True)
@@ -661,8 +664,8 @@ class ConditionSetupStep(QWidget):
             show_variants=False,
             show_folder=False,
             show_details=True,
-            center_title=True,
-            center_content=True,
+            center_title=False,
+            center_content=False,
             parent=self,
         )
         self.base_source_card.status_badge.setVisible(False)
@@ -688,8 +691,8 @@ class ConditionSetupStep(QWidget):
             show_variants=False,
             show_folder=False,
             show_details=True,
-            center_title=True,
-            center_content=True,
+            center_title=False,
+            center_content=False,
             parent=self,
         )
         self.oddball_source_card.status_badge.setVisible(False)
@@ -763,10 +766,11 @@ class ConditionSetupStep(QWidget):
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(8)
 
-        detail_layout.addWidget(self.condition_details_section, 2)
+        detail_layout.addWidget(self.condition_details_section)
         detail_layout.addWidget(sources_row)
         sources_row.hide()
         detail_layout.addWidget(self.words_panel, 1)
+        detail_layout.addStretch(0)
 
         workspace = QWidget(self)
         workspace.setObjectName("setup_conditions_workspace")

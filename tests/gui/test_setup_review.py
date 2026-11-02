@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import (
+    QPoint,
     Qt,
 )
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -201,6 +204,58 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     assert window.document.dirty is False
     assert window.main_stack.currentWidget() is window.home_page
     assert window.statusBar().currentMessage() == "Project saved."
+
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_review_uses_independent_natural_height_columns_at_setup_minimum(
+    qtbot, controller: StudioController, tmp_path: Path, background,
+):
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Review grouping")
+    document.update_project_name(
+        "Recognition and semantic category responses under matched visual complexity "
+        "with controlled emotional salience"
+    )
+    for name in ("Semantic categories", "Unfamiliar objects", "Emotional faces"):
+        document.create_condition(name=name)
+    guide = window.setup_wizard_page
+    palette = guide.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    guide.setPalette(palette)
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="review", allow_step_jumps=True)
+    QApplication.processEvents()
+    assert guide.review_step_surface.content.maximumWidth() == 1040
+    assert guide.review_step_surface.content.mapTo(
+        guide.review_step_surface, QPoint(0, 0),
+    ).y() == 24
+    columns = guide._review_column_layouts
+    assert len(columns) == 2
+    sections = {widgets.section: str(widgets.edit_button.property("reviewStepKey"))
+                for widgets in guide._review_summary_widgets}
+    expected = ({"project", "experiment", "session"},
+                {"conditions", "display", "image_size", "response"})
+    for column, keys in zip(columns, expected, strict=True):
+        cards = [column.itemAt(index).widget() for index in range(column.count())]
+        cards = [card for card in cards if card is not None and card.isVisible()]
+        assert {sections[card] for card in cards} == keys
+        for upper, lower in zip(cards, cards[1:], strict=False):
+            assert upper.geometry().bottom() < lower.geometry().top()
+        for card in cards:
+            required = card.layout().heightForWidth(card.width())
+            if required >= 0:
+                assert abs(card.height() - required) <= 2
+    left, right = (column.parentWidget() for column in columns)
+    assert left.geometry().top() == right.geometry().top()
+    assert left.geometry().right() < right.geometry().left()
+    assert_visible_children_within_parent(guide.review_step_surface)
+    for label in guide.review_card.findChildren(QLabel):
+        if label.isVisible() and label.text():
+            if label.wordWrap():
+                assert label.height() >= label.heightForWidth(label.width()), label.text()
+            else:
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+    assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
 
 
 def test_setup_review_reports_effective_tutorial_and_response_state(

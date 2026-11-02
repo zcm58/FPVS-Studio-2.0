@@ -365,7 +365,11 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
         assert not wizard.flush_pending_edits()
         assert table.error_label.isVisible()
     if state in {"invalid", "duration_invalid", "count_invalid"}:
+        # Display choices can repair timing drafts; opening that step preserves them.
         wizard.open_wizard(step_key="session", allow_step_jumps=True)
+        assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+        assert wizard.has_pending_edits()
+        wizard._go_back()
         assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
         assert wizard.has_pending_edits()
     QApplication.processEvents()
@@ -451,8 +455,9 @@ def test_timing_frequency_changes_refresh_readonly_design_without_creating_a_dra
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_three_populated_timing_rows_fit_on_first_themed_show(
-    qtbot, tmp_path, background,
+@pytest.mark.parametrize("row_count", [3, 5])
+def test_populated_timing_rows_fit_on_first_themed_show(
+    qtbot, tmp_path, background, row_count,
 ):
     document, first, second = _document(tmp_path)
     document.update_condition(
@@ -464,6 +469,10 @@ def test_three_populated_timing_rows_fit_on_first_themed_show(
     document.create_condition(
         name="Unfamiliar natural objects with carefully matched stimulus characteristics",
     )
+    for index in range(3, row_count):
+        document.create_condition(
+            name=f"Additional condition {index + 1} with matched image characteristics",
+        )
     document.update_condition_frequencies(overrides={first: 4})
     wizard = SetupWizardPage(
         document, load_condition_template_profiles=lambda: [],
@@ -482,7 +491,7 @@ def test_three_populated_timing_rows_fit_on_first_themed_show(
     QApplication.processEvents()
     table = timing.table
     assert wizard.size().toTuple() == (1120, 820)
-    assert table.rowCount() == 3
+    assert table.rowCount() == row_count
     assert table.verticalScrollBar().maximum() == 0
     assert table.horizontalScrollBar().maximum() == 0
     for row, condition in enumerate(document.ordered_conditions()):
