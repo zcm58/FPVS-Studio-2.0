@@ -183,6 +183,7 @@ class ProjectDocument(
         project_name: str,
         condition_template_profile: ConditionTemplateProfile | None = None,
         experiment_category: ExperimentCategory = ExperimentCategory.FPVS_ODDBALL,
+        randomized_blocks: bool = False,
     ) -> ProjectDocument:
         """Scaffold a new project and open it as a live document."""
 
@@ -193,11 +194,15 @@ class ProjectDocument(
             experiment_category=experiment_category,
         )
         manifest = create_empty_manifest(scaffold.project.meta.project_id)
-        return cls(
+        document = cls(
             project_root=scaffold.project_root,
             project=scaffold.project,
             manifest=manifest,
         )
+        if randomized_blocks and supports_independent_randomization(document.project):
+            document.update_session_settings(condition_ordering="randomized_blocks")
+            document.save()
+        return document
 
     @classmethod
     def open_existing(cls, project_location: Path) -> ProjectDocument:

@@ -37,6 +37,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Drag-and-drop randomized condition blocks](exec-plans/completed/randomized-block-condition-editor.md):
+  real/partial blocks, within-block dragging and versioned compatibility; source checks
+  and full-run limitations recorded, visible Qt acceptance remains manual.
 - [One pseudorandom condition-order editor](exec-plans/completed/single-condition-order-editor.md):
   sole Display & Session entry, clearer arrangement controls and retained atomic
   order repair; verification results and a transient Windows access failure recorded.

@@ -16,6 +16,8 @@ POOLED_ORDERING_POLICY: Final = "pooled_no_adjacent"
 POOLED_ORDERING_ALGORITHM_VERSION: Final = 1
 SAVED_ORDERING_POLICY: Final = "saved_no_adjacent"
 SAVED_ORDERING_ALGORITHM_VERSION: Final = 1
+RANDOMIZED_BLOCKS_ORDERING_POLICY: Final = "randomized_blocks"
+SAVED_RANDOMIZED_BLOCKS_ORDERING_POLICY: Final = "saved_randomized_blocks"
 
 
 def uses_pooled_condition_order(
@@ -44,18 +46,22 @@ def condition_ordering_identity(project: ProjectFile) -> dict[str, object] | Non
     saved = active_saved_condition_order(project)
     if saved is not None:
         return {
-            "policy": SAVED_ORDERING_POLICY,
+            "policy": (SAVED_RANDOMIZED_BLOCKS_ORDERING_POLICY
+                       if project.settings.session.condition_ordering == "randomized_blocks"
+                       else SAVED_ORDERING_POLICY),
             "algorithm_version": SAVED_ORDERING_ALGORITHM_VERSION,
             "condition_order": saved,
         }
     return {
-        "policy": POOLED_ORDERING_POLICY,
+        "policy": (RANDOMIZED_BLOCKS_ORDERING_POLICY
+                   if project.settings.session.condition_ordering == "randomized_blocks"
+                   else POOLED_ORDERING_POLICY),
         "algorithm_version": POOLED_ORDERING_ALGORITHM_VERSION,
     }
 
 
 def validate_saved_condition_order(
-    order: Sequence[str], counts: Mapping[str, int],
+    order: Sequence[str], counts: Mapping[str, int], *, randomized_blocks: bool = False,
 ) -> list[str]:
     """Validate an exact authored arrangement without repairing any occurrences."""
 
@@ -74,6 +80,8 @@ def validate_saved_condition_order(
             "Saved condition order does not match the total presentations. "
             "Open Condition order to generate an order matching the current counts."
         )
+    if randomized_blocks:
+        condition_order_blocks(order, counts)
     if len(counts) == 1:
         return list(order)
     for index, (left, right) in enumerate(zip(order, order[1:], strict=False), 1):
@@ -97,11 +105,16 @@ def active_saved_condition_order(
         return None
     if not uses_pooled_condition_order(project):
         raise ValueError("Saved condition order is unavailable for native AB or masking groups.")
-    order = validate_saved_condition_order(saved, condition_presentation_counts(project))
+    randomized_blocks = project.settings.session.condition_ordering == "randomized_blocks"
+    order = validate_saved_condition_order(
+        saved, condition_presentation_counts(project), randomized_blocks=randomized_blocks,
+    )
     if conditions is None:
         return order
     counts = condition_presentation_counts(project, conditions)
-    return validate_saved_condition_order([item for item in order if item in counts], counts)
+    return validate_saved_condition_order(
+        [item for item in order if item in counts], counts, randomized_blocks=randomized_blocks,
+    )
 
 
 def preview_condition_order(
@@ -135,6 +148,10 @@ def preview_condition_order(
                 if condition_order_seed is None else condition_order_seed)
         if type(seed) is not int or not 0 <= seed < 2**31:
             raise ValueError("Condition-order seed must be an integer from 0 to 2147483647.")
+        if draft.settings.session.condition_ordering == "randomized_blocks":
+            return [item for block in randomized_condition_blocks(
+                counts, seed=seed, cancelled=cancelled,
+            ) for item in block]
         return constrained_condition_order(counts, rng=random.Random(seed))
 
 
@@ -219,6 +236,78 @@ def validate_condition_presentation_counts(
     if not uses_pooled_condition_order(project, selected):
         return
     _validate_pool(counts, {condition.condition_id: condition.name for condition in selected})
+    if project.settings.session.condition_ordering == "randomized_blocks":
+        _validate_block_counts(counts)
+
+
+
+def _validate_block_counts(counts: Mapping[str, int]) -> None:
+    """Partial final rounds must not create consecutive singleton blocks."""
+    _validate_pool(counts)
+    if len(counts) < 2:
+        return
+    largest, second_largest = sorted(counts.values(), reverse=True)[:2]
+    if largest > second_largest + 1:
+        raise ValueError(
+            "These presentation counts create consecutive single-condition blocks. "
+            "Reduce the largest count or increase another condition's count "
+            "to avoid adjacent repeats between blocks."
+        )
+
+
+def condition_order_blocks(order: Sequence[str], counts: Mapping[str, int]) -> list[list[str]]:
+    """Split an exact list into rounds containing every still-required condition once."""
+    validated = validate_saved_condition_order(order, counts)
+    _validate_block_counts(counts)
+    blocks: list[list[str]] = []
+    offset = 0
+    for round_index in range(max(counts.values(), default=0)):
+        check_compilation_cancelled(round_index)
+        members = {key for key, count in counts.items() if count > round_index}
+        block = validated[offset:offset + len(members)]
+        if len(block) != len(members) or set(block) != members:
+            raise ValueError(
+                f"Block {round_index + 1} must contain each condition that still needs "
+                "a presentation exactly once. Move presentations within their own block "
+                "or generate a new block order."
+            )
+        blocks.append(block)
+        offset += len(members)
+    return blocks
+
+
+def randomized_condition_blocks(
+    counts: Mapping[str, int], *, seed: int, cancelled: Callable[[], bool] | None = None,
+) -> list[list[str]]:
+    """Seed each round while avoiding repeats at boundaries, including partial rounds."""
+    _validate_block_counts(counts)
+    if type(seed) is not int or not 0 <= seed < 2**31:
+        raise ValueError("Condition-order seed must be an integer from 0 to 2147483647.")
+    rng = random.Random(seed)
+    identities = sorted(counts)
+    blocks: list[list[str]] = []
+    next_first: str | None = None
+    # Backwards construction protects a forced singleton tail before randomizing
+    # earlier rounds; forward greedy shuffles can otherwise trap a feasible design.
+    for round_index in range(max(counts.values(), default=0) - 1, -1, -1):
+        if cancelled is not None and cancelled():
+            raise InterruptedError("Condition-order generation cancelled.")
+        check_compilation_cancelled(round_index)
+        block = [key for key in identities if counts[key] > round_index]
+        if len(counts) > 1 and next_first is not None:
+            endings = [key for key in block if key != next_first]
+            if not endings:
+                raise ValueError("The remaining blocks cannot avoid adjacent repeats.")
+            last = rng.choice(endings)
+            block.remove(last)
+            rng.shuffle(block)
+            block.append(last)
+        else:
+            rng.shuffle(block)
+        next_first = block[0]
+        blocks.append(block)
+    blocks.reverse()
+    return blocks
 
 
 def constrained_condition_order(counts: Mapping[str, int], *, rng: random.Random) -> list[str]:

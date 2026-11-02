@@ -17,6 +17,10 @@ step (step 4). GUI retains timing drafts across that transition; core still owns
 validation and compilation, including exact shared-refresh compatibility for mixed
 image presentation rates. See [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
 
+Core owns randomized block membership and occurrence identity. New GUI projects opt
+in; legacy pooled projects change only on explicit Save. See the
+[block contract](docs/SESSION_PLAN.md#explicit-randomized-condition-blocks).
+
 ## Package Map
 
 | Owner | Responsibility |

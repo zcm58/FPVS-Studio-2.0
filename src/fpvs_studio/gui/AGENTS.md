@@ -14,7 +14,10 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   controls on the left and Session controls on the right at 1040 px; both columns fit
   the 1120x820 window with shared section headings and compact field labels.
   Display & Session has the sole condition-order editor entry. Timing defers order-only
-  conflicts there while retaining drafts for atomic order/timing save.
+  conflicts there while retaining drafts for atomic order/timing save. Drag condition
+  presentations only within fixed block headers; Alt+Up/Down supports keyboard moves.
+  New ordinary GUI projects opt into blocks; existing pooled designs change only on
+  explicit editor Save. Keep AB/masking group workflows and occurrence timing intact.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
   offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
   reviewed bundle import.

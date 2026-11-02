@@ -905,6 +905,7 @@ class StudioController(QObject):
                 project_name=project_name,
                 condition_template_profile=condition_profile,
                 experiment_category=experiment_category,
+                randomized_blocks=True,
             )
         except Exception as error:
             _show_error(self.main_window or self.welcome_window, "Create Project Error", error)

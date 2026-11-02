@@ -18,7 +18,10 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import ExperimentCategory, InterConditionMode
 from fpvs_studio.core.masking import condition_masking
 from fpvs_studio.core.randomization import supports_independent_randomization
-from fpvs_studio.core.session_ordering import session_presentation_count
+from fpvs_studio.core.session_ordering import (
+    condition_presentation_counts,
+    session_presentation_count,
+)
 from fpvs_studio.gui.components import NonHomePageShell, SectionCard, configure_setup_form
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.randomization_editor import RandomizationEditor
@@ -169,16 +172,29 @@ class SessionStructureEditor(QWidget):
         )
         self.seed_help_label.setText(
             "All bursts shuffled together" if ab else "Variant groups shuffled" if masking else
+            "Randomized blocks" if session.condition_ordering == "randomized_blocks" else
             "Pooled shuffle · no adjacent same condition"
         )
         self.seed_help_label.setToolTip(
             "A new burst order is generated for each launch." if ab else
             "Masking keeps its existing variant groups and catch presentations." if masking else
+            "Each block contains each remaining condition once." if
+            session.condition_ordering == "randomized_blocks" else
             "All requested presentations are pooled. The same condition cannot appear twice "
             "in a row. Edit each condition's total presentations in the table above.",
         )
         total = session_presentation_count(project)
-        self.presentation_total_label.setText(f"{total} total")
+        if session.condition_ordering == "randomized_blocks" and not (ab or masking):
+            blocks = max(condition_presentation_counts(project).values(), default=0)
+            block_label = "block" if blocks == 1 else "blocks"
+            self.presentation_total_label.setText(f"{blocks} {block_label} · {total} total")
+            self.presentation_total_label.setToolTip(
+                "Each condition appears once in each block until its requested presentations "
+                "are complete. Later blocks may be partial."
+            )
+        else:
+            self.presentation_total_label.setText(f"{total} total")
+            self.presentation_total_label.setToolTip("")
         with QSignalBlocker(self.block_count_spin):
             self.block_count_spin.setValue(session.block_count)
         with QSignalBlocker(self.inter_condition_mode_combo):

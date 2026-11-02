@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 
 from fpvs_studio.core.attentional_blink_presets import (
@@ -617,6 +617,7 @@ class DocumentConditionMixin:
         saved_condition_order: Sequence[str] | None = None,
         order_seeds: RandomizationSeeds | None = None,
         clear_saved_condition_order: bool = False,
+        condition_ordering: Literal["randomized_blocks"] | None = None,
         persist: bool = False,
     ) -> None:
         """Apply timing and total presentations together without partial changes."""
@@ -628,6 +629,7 @@ class DocumentConditionMixin:
                 presentation_counts=presentation_counts,
                 saved_condition_order=saved_condition_order, order_seeds=order_seeds,
                 clear_saved_condition_order=clear_saved_condition_order,
+                condition_ordering=condition_ordering,
                 refresh_hz=self._project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:

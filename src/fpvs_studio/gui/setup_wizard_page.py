@@ -1406,6 +1406,9 @@ class SetupWizardPage(QWidget):
             if letter_stream and session.randomize_across_blocks else
             f"{session.block_count} group repeats · {presentation_total} presentations"
             if masking_project or letter_stream else
+            (f"{max(condition_presentation_counts(project).values(), default=0)} blocks · "
+             f"{presentation_total} presentations")
+            if session.condition_ordering == "randomized_blocks" and not masking_project else
             f"{presentation_total} presentations · shuffled without adjacent repeats"
         )
         seed_summary: tuple[str, ...] = ()
@@ -1420,11 +1423,18 @@ class SetupWizardPage(QWidget):
                                       ("fixation", "Fixation cross color change timing"))
             )
             if session.saved_condition_order is not None:
+                block_prefix = (
+                    f"{max(condition_presentation_counts(project).values(), default=0)} blocks · "
+                    if session.condition_ordering == "randomized_blocks" else ""
+                )
                 if reuse_modes.condition_order == "fixed":
-                    session_count_summary = f"{presentation_total} presentations · saved order"
+                    session_count_summary = (
+                        f"{block_prefix}{presentation_total} presentations · saved order"
+                    )
                 else:
                     session_count_summary = (
-                        f"{presentation_total} presentations · new order (saved order inactive)"
+                        f"{block_prefix}{presentation_total} presentations · "
+                        "new order (saved order inactive)"
                     )
         return (
             ("project", "Project", (project.meta.name, f"Participant tutorial: {tutorial}")),

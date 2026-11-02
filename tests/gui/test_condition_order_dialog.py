@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import json
+from collections import Counter
 from threading import Event
 
 import pytest
-from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QObject, QPointF, Qt, Signal
+from PySide6.QtGui import QColor, QFontMetrics, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox
 from tests.gui.helpers import assert_visible_children_within_parent, record_setup_validation_dialogs
 from tests.gui.test_condition_timing_table import _document
 
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.randomization import RandomizationSeeds, configured_randomization_seeds
 from fpvs_studio.gui.condition_order_dialog import ConditionOrderDialog
 from fpvs_studio.gui.condition_timing_table import ConditionTimingTable
@@ -55,13 +58,62 @@ def preview_jobs(monkeypatch):
     return jobs
 
 
+
+def _condition_rows(dialog):
+    return [
+        row for row in range(dialog.order_list.count())
+        if dialog.order_list.item(row).data(Qt.ItemDataRole.UserRole) is not None
+    ]
+
+
+def _select_condition(dialog, index):
+    row = _condition_rows(dialog)[index]
+    dialog.order_list.setCurrentRow(row)
+    dialog.order_list.setFocus()
+    return row
+
+
+
+class _DropEvent:
+    def __init__(self, source):
+        self._source = source
+        self.accepted = False
+        self.ignored = False
+        self.action = None
+
+    def source(self):
+        return self._source
+
+    def position(self):
+        return QPointF(0, 0)
+
+    def setDropAction(self, action):
+        self.action = action
+
+    def accept(self):
+        self.accepted = True
+
+    def ignore(self):
+        self.ignored = True
+
+
+def _drop_condition(dialog, monkeypatch, source_index, insertion_row, *, external=False):
+    listing = dialog.order_list
+    listing._drag_source_row = _condition_rows(dialog)[source_index]
+    listing._drag_revision = listing._revision
+    monkeypatch.setattr(listing, "_drop_row", lambda _point: insertion_row)
+    event = _DropEvent(object() if external else listing)
+    listing.dropEvent(event)
+    return event
+
+
 def _open_dialog(qtbot, document, *, table=None):
     if table is None:
         table = ConditionTimingTable(document)
         qtbot.addWidget(table)
 
     def save(order, seeds):
-        if not table.apply_condition_order(order, seeds):
+        if not table.apply_condition_order(order, seeds, condition_ordering="randomized_blocks"):
             raise ValueError(table.error_label.text() or "Changes were not saved.")
 
     dialog = ConditionOrderDialog(
@@ -73,6 +125,30 @@ def _open_dialog(qtbot, document, *, table=None):
     dialog.show()
     QApplication.processEvents()
     return dialog, table
+
+
+
+@pytest.mark.parametrize("category,randomized_blocks,expected", [
+    (ExperimentCategory.FPVS_ODDBALL, True, "randomized_blocks"),
+    (ExperimentCategory.FPVS_ODDBALL, False, None),
+    (ExperimentCategory.ATTENTIONAL_BLINK, True, None),
+])
+def test_project_factory_explicitly_opts_eligible_projects_into_blocks(
+    qtbot, tmp_path, category, randomized_blocks, expected,
+):
+    document = ProjectDocument.create_new(
+        parent_dir=tmp_path, project_name="Factory ordering policy",
+        experiment_category=category, randomized_blocks=randomized_blocks,
+    )
+    assert document.project.settings.session.condition_ordering == expected
+    payload = json.loads(document.project_file_path.read_text(encoding="utf-8"))
+    if expected is None:
+        assert "condition_ordering" not in payload["settings"]["session"]
+    else:
+        assert payload["settings"]["session"]["condition_ordering"] == expected
+        assert payload["schema_version"] == "1.17.0"
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.session.condition_ordering == expected
 
 
 def test_preview_needs_no_assets_or_display_and_save_persists_exact_pending_counts(
@@ -127,16 +203,187 @@ def test_manual_move_saves_chosen_list_and_renumbers_occurrences(qtbot, tmp_path
     )
     dialog, _table = _open_dialog(qtbot, document)
     assert not preview_jobs
-    dialog.order_list.setCurrentRow(5)
-    dialog.move_up_button.click()
+    _select_condition(dialog, 5)
+    qtbot.keyClick(dialog.order_list, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
     expected = [first, second, third, first, third, second]
     assert dialog._order == expected
-    assert "presentation 2" in dialog.order_list.item(4).text()
-    assert "presentation 2" in dialog.order_list.item(5).text()
+    assert "presentation 2" in dialog.order_list.item(_condition_rows(dialog)[4]).text()
+    assert "presentation 2" in dialog.order_list.item(_condition_rows(dialog)[5]).text()
     dialog.save_button.click()
     assert document.project.settings.session.saved_condition_order == expected
     reopened = ProjectDocument.open_existing(document.project_root)
     assert reopened.project.settings.session.saved_condition_order == expected
+
+
+
+@pytest.mark.parametrize("block_count,partial", [(1, False), (2, False), (3, False),
+                                                (2, True), (3, True)])
+def test_order_editor_renders_real_non_draggable_block_headers(
+    qtbot, tmp_path, preview_jobs, block_count, partial,
+):
+    document, first, second = _document(tmp_path)
+    third = document.create_condition(name="Third condition")
+    counts = {first: block_count, second: block_count,
+              third: block_count - 1 if partial else block_count}
+    document.update_condition_timing(presentation_counts=counts)
+    before = document.project.model_copy(deep=True)
+    dialog, _table = _open_dialog(qtbot, document)
+    preview_jobs[-1].complete()
+    headers = [row for row in range(dialog.order_list.count())
+               if dialog.order_list.item(row).data(Qt.ItemDataRole.UserRole) is None]
+    assert len(headers) == block_count
+    assert Counter(dialog._order) == Counter(counts)
+    assert dialog.order_list.count() == sum(counts.values()) + block_count
+    for block_index, header_row in enumerate(headers):
+        header = dialog.order_list.item(header_row)
+        expected = {condition_id for condition_id, count in counts.items()
+                    if count > block_index}
+        suffix = " (partial)" if len(expected) < len(counts) else ""
+        assert header.text() == f"Block {block_index + 1}{suffix}"
+        assert not header.flags() & Qt.ItemFlag.ItemIsDragEnabled
+        assert not header.flags() & Qt.ItemFlag.ItemIsSelectable
+        stop = headers[block_index + 1] if block_index + 1 < len(headers) else (
+            dialog.order_list.count()
+        )
+        items = [dialog.order_list.item(row) for row in range(header_row + 1, stop)]
+        assert {item.data(Qt.ItemDataRole.UserRole) for item in items} == expected
+        assert all(item.data(Qt.ItemDataRole.UserRole + 1) == block_index for item in items)
+        assert all(item.flags() & Qt.ItemFlag.ItemIsDragEnabled for item in items)
+    assert document.project == before
+    dialog.reject()
+    assert document.project == before
+
+
+def test_keyboard_moves_cannot_cross_block_boundaries(qtbot, tmp_path, preview_jobs):
+    document, first, second = _document(tmp_path)
+    third = document.create_condition(name="Third condition")
+    source_order = [first, second, third, first, second, third]
+    document.update_condition_timing(
+        saved_condition_order=source_order,
+        order_seeds=configured_randomization_seeds(document.project),
+    )
+    dialog, _table = _open_dialog(qtbot, document)
+    for selected, key in ((0, Qt.Key.Key_Up), (2, Qt.Key.Key_Down),
+                          (3, Qt.Key.Key_Up), (5, Qt.Key.Key_Down)):
+        _select_condition(dialog, selected)
+        qtbot.keyClick(dialog.order_list, key, Qt.KeyboardModifier.AltModifier)
+        assert dialog._order == source_order
+        assert dialog.save_button.isEnabled()
+    _select_condition(dialog, 1)
+    qtbot.keyClick(dialog.order_list, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
+    assert dialog._order == [second, first, third, first, second, third]
+    assert Counter(dialog._order) == Counter(source_order)
+    assert dialog.save_button.isEnabled()
+
+
+
+def test_drag_reorders_only_the_condition_inside_its_own_block_and_saves(
+    qtbot, monkeypatch, tmp_path, preview_jobs,
+):
+    document, first, second = _document(tmp_path)
+    third = document.create_condition(name="Third condition")
+    order = [first, second, third, first, second, third]
+    document.update_condition_timing(
+        saved_condition_order=order, order_seeds=configured_randomization_seeds(document.project),
+    )
+    before = document.project.model_copy(deep=True)
+    dialog, _table = _open_dialog(qtbot, document)
+    event = _drop_condition(dialog, monkeypatch, 1, _condition_rows(dialog)[0])
+    assert event.accepted
+    assert event.action == Qt.DropAction.MoveAction
+    expected = [second, first, third, first, second, third]
+    assert dialog._order == expected
+    assert Counter(dialog._order) == Counter(order)
+    assert document.project == before
+    assert dialog.save_button.isEnabled()
+    assert [dialog.order_list.item(row).data(Qt.ItemDataRole.UserRole)
+            for row in _condition_rows(dialog)] == expected
+    assert all("presentation 1" in dialog.order_list.item(row).text()
+               for row in _condition_rows(dialog)[:3])
+    dialog.save_button.click()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.session.saved_condition_order == expected
+    assert reopened.project.settings.session.condition_ordering == "randomized_blocks"
+
+
+@pytest.mark.parametrize("reason", ["cross_block", "header", "external", "revision"])
+def test_drag_rejects_cross_block_headers_external_and_stale_payloads(
+    qtbot, monkeypatch, tmp_path, preview_jobs, reason,
+):
+    document, first, second = _document(tmp_path)
+    third = document.create_condition(name="Third condition")
+    order = [first, second, third, first, second, third]
+    document.update_condition_timing(
+        saved_condition_order=order, order_seeds=configured_randomization_seeds(document.project),
+    )
+    dialog, _table = _open_dialog(qtbot, document)
+    listing = dialog.order_list
+    rows = _condition_rows(dialog)
+    listing._drag_source_row = 0 if reason == "header" else rows[1]
+    listing._drag_revision = listing._revision - (reason == "revision")
+    insertion_row = rows[3] if reason == "cross_block" else rows[0]
+    monkeypatch.setattr(listing, "_drop_row", lambda _point: insertion_row)
+    event = _DropEvent(object() if reason == "external" else listing)
+    listing.dropEvent(event)
+    assert event.ignored
+    assert not event.accepted
+    assert dialog._order == order
+    assert Counter(dialog._order) == Counter(order)
+
+
+@pytest.mark.parametrize("state", ["busy", "stale", "dismissed"])
+def test_busy_stale_and_dismissed_dialog_reject_reorder(
+    qtbot, monkeypatch, tmp_path, preview_jobs, state,
+):
+    document, first, second = _document(tmp_path)
+    third = document.create_condition(name="Third condition")
+    order = [first, second, third, first, second, third]
+    document.update_condition_timing(
+        saved_condition_order=order, order_seeds=configured_randomization_seeds(document.project),
+    )
+    dialog, _table = _open_dialog(qtbot, document)
+    if state == "busy":
+        dialog.generate_button.click()
+    elif state == "stale":
+        document.update_condition(first, name="Changed while dragging")
+    else:
+        dialog.reject()
+    assert not dialog._reorder_enabled()
+    before = document.project.model_copy(deep=True)
+    event = _drop_condition(dialog, monkeypatch, 1, _condition_rows(dialog)[0])
+    assert event.ignored
+    assert not event.accepted
+    _select_condition(dialog, 1)
+    dialog._move_selected(-1)
+    assert dialog._order == order
+    assert document.project == before
+
+
+def test_legacy_pooled_order_becomes_block_draft_until_explicit_save(
+    qtbot, tmp_path, preview_jobs,
+):
+    document, first, second = _document(tmp_path)
+    third = document.create_condition(name="Third condition")
+    document.project.settings.session.condition_ordering = None
+    legacy = [first, second, first, third, second, third]
+    document.update_condition_timing(
+        saved_condition_order=legacy, order_seeds=configured_randomization_seeds(document.project),
+    )
+    before = document.project.model_copy(deep=True)
+    dialog, _table = _open_dialog(qtbot, document)
+    assert not preview_jobs
+    assert dialog._order != legacy
+    assert Counter(dialog._order) == Counter(legacy)
+    assert document.project == before
+    assert document.project.settings.session.condition_ordering is None
+    dialog.reject()
+    assert document.project == before
+    dialog, _table = _open_dialog(qtbot, document)
+    expected = list(dialog._order)
+    dialog.save_button.click()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.session.saved_condition_order == expected
+    assert reopened.project.settings.session.condition_ordering == "randomized_blocks"
 
 
 def test_invalid_manual_adjacency_stays_editable_without_project_mutation(
@@ -149,14 +396,14 @@ def test_invalid_manual_adjacency_stays_editable_without_project_mutation(
     )
     before = document.project.model_copy(deep=True)
     dialog, _table = _open_dialog(qtbot, document)
-    dialog.order_list.setCurrentRow(1)
-    dialog.move_down_button.click()
+    _select_condition(dialog, 2)
+    qtbot.keyClick(dialog.order_list, Qt.Key.Key_Down, Qt.KeyboardModifier.AltModifier)
     assert not dialog.save_button.isEnabled()
     assert "adjacent" in dialog.error_label.text().lower()
     dialog.save()
     assert document.project == before
     assert dialog.result() != int(dialog.DialogCode.Accepted)
-    dialog.move_up_button.click()
+    qtbot.keyClick(dialog.order_list, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
     assert dialog.save_button.isEnabled()
     assert dialog._order == order
 
@@ -485,11 +732,20 @@ def test_order_editor_plain_list_and_long_names_fit_documented_sizes(
     assert_visible_children_within_parent(dialog)
     assert dialog.windowTitle() == "Pseudorandom Condition Order Editor"
     assert dialog.instruction_label.text() == (
-        "Select a condition, then use Move up or Move down to arrange the order."
+        "Drag conditions within each randomized block. "
+        "Alt+Up/Down also moves the selected condition."
     )
+    for row in range(dialog.order_list.count()):
+        item = dialog.order_list.item(row)
+        if item.data(Qt.ItemDataRole.UserRole) is None:
+            assert item.font().bold()
+            assert item.sizeHint().height() >= QFontMetrics(item.font()).height()
     assert dialog.generate_button.text() == "Generate new order"
     assert dialog.save_button.text() == "Save order"
-    assert dialog.effect_label.text() == "Every participant receives this saved condition order."
+    assert dialog.effect_label.text() == (
+        "Saving switches this project to randomized blocks and uses this order "
+        "for every participant."
+    )
     if state == "valid":
         item = next(dialog.order_list.item(row) for row in range(dialog.order_list.count())
                     if dialog.order_list.item(row).data(Qt.ItemDataRole.UserRole) == first)
@@ -500,8 +756,9 @@ def test_order_editor_plain_list_and_long_names_fit_documented_sizes(
             assert label.height() >= label.heightForWidth(label.width()) if label.wordWrap() else (
                 label.width() >= label.fontMetrics().horizontalAdvance(label.text())
             )
-    for button in (dialog.generate_button, dialog.move_up_button, dialog.move_down_button,
-                   dialog.save_button, dialog.cancel_button):
+    assert not hasattr(dialog, "move_up_button")
+    assert not hasattr(dialog, "move_down_button")
+    for button in (dialog.generate_button, dialog.save_button, dialog.cancel_button):
         assert button.width() >= button.sizeHint().width()
 
 

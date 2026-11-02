@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from math import floor, isclose, isfinite
+from typing import Literal
 
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.frame_validation import FRAME_TOLERANCE, frames_per_stimulus
@@ -112,6 +113,7 @@ def propose_condition_timing(
     saved_condition_order: Sequence[str] | None = None,
     order_seeds: RandomizationSeeds | None = None,
     clear_saved_condition_order: bool = False,
+    condition_ordering: Literal["randomized_blocks"] | None = None,
     refresh_hz: float | None = None,
 ) -> ProjectFile:
     """Return one validated draft, preserving seconds without partial source edits."""
@@ -124,6 +126,10 @@ def propose_condition_timing(
     )
 
     draft = project.model_copy(deep=True)
+    if condition_ordering is not None:
+        draft.settings.session = type(draft.settings.session).model_validate({
+            **draft.settings.session.model_dump(), "condition_ordering": condition_ordering,
+        })
     if saved_condition_order is not None:
         from fpvs_studio.core.randomization import (
             configured_randomization_seeds,
@@ -192,7 +198,7 @@ def propose_condition_timing(
         })
     draft.conditions = [by_id[condition.condition_id] for condition in draft.conditions]
     draft = ProjectFile.model_validate(draft.model_dump())
-    if presentation_counts is not None:
+    if presentation_counts is not None or condition_ordering is not None:
         from fpvs_studio.core.session_ordering import validate_condition_presentation_counts
 
         validate_condition_presentation_counts(draft)

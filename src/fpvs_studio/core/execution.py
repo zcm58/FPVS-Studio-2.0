@@ -542,7 +542,9 @@ class SessionExecutionSummary(FPVSBaseModel):
     randomization_modes: RandomizationModes | None = None
     randomization_seeds: RandomizationSeeds | None = None
     randomization_algorithm_version: RandomizationAlgorithmVersion | None = None
-    ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
+    ordering_policy: Literal[
+        "pooled_no_adjacent", "saved_no_adjacent", "randomized_blocks", "saved_randomized_blocks",
+    ] | None = None
     started_at: datetime | None = None
     finished_at: datetime | None = None
     total_condition_count: int = Field(default=0, ge=0)
@@ -572,9 +574,10 @@ class SessionExecutionSummary(FPVSBaseModel):
     @model_validator(mode="after")
     def validate_randomization_provenance(self) -> SessionExecutionSummary:
         if self.ordering_policy is not None:
-            if self.schema_version != "1.4.0":
+            block_policy = self.ordering_policy in {"randomized_blocks", "saved_randomized_blocks"}
+            if self.schema_version != ("1.5.0" if block_policy else "1.4.0"):
                 raise ValueError("Session ordering policy requires result schema 1.4.0.")
-            if self.ordering_policy == "saved_no_adjacent" and (
+            if self.ordering_policy in {"saved_no_adjacent", "saved_randomized_blocks"} and (
                 (self.randomization_modes.condition_order if self.randomization_modes is not None
                  else self.randomization_mode) != "fixed" or self.randomization_seeds is None
             ):
@@ -586,7 +589,7 @@ class SessionExecutionSummary(FPVSBaseModel):
         values = (self.randomization_mode, self.randomization_seeds,
                   self.randomization_algorithm_version)
         if self.randomization_modes is not None or any(value is not None for value in values):
-            if self.schema_version not in {"1.3.0", "1.4.0"} or any(
+            if self.schema_version not in {"1.3.0", "1.4.0", "1.5.0"} or any(
                 value is None for value in values
             ):
                 raise ValueError("Session randomization provenance requires result schema 1.3.0.")

@@ -408,7 +408,9 @@ class RuntimeWorker:
         ) -> SessionExecutionSummary:
             return SessionExecutionSummary(
                 schema_version=(
-                    "1.4.0" if session_plan.ordering_policy is not None else
+                    "1.5.0" if session_plan.ordering_policy in {
+                        "randomized_blocks", "saved_randomized_blocks",
+                    } else "1.4.0" if session_plan.ordering_policy is not None else
                     "1.3.0" if session_plan.randomization_seeds is not None else "1.2.0"
                 ),
                 project_id=session_plan.project_id,
@@ -1213,6 +1215,8 @@ class RuntimeWorker:
         entry: SessionEntry,
         session_plan: SessionPlan,
     ) -> bool:
+        if session_plan.ordering_policy in {"randomized_blocks", "saved_randomized_blocks"}:
+            return False
         if entry.block_index >= session_plan.block_count - 1:
             return False
         block = session_plan.blocks[entry.block_index]

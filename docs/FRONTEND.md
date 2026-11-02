@@ -206,8 +206,8 @@ field labels so the column hierarchy remains clear. Timing retains the `experime
 and timing aliases; display/runtime/session open the combined step. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
 Keep **Edit condition order...** only in Display & Session. It opens the
-**Pseudorandom Condition Order Editor**, where selecting a presentation and using
-Move up/Move down sets the saved order. Timing defers saved-order conflicts to Session
+**Pseudorandom Condition Order Editor**, where dragging conditions within fixed block
+headers sets the saved order; Alt+Up/Down provides keyboard moves. Timing defers saved-order conflicts to Session
 so this sole entry stays reachable; Save order still commits staged timing/counts atomically.
 Keep Next's blocking guidance in its click-triggered dialog, without a duplicate
 footer hint. Participant-authored instructions

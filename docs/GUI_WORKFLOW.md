@@ -1734,11 +1734,23 @@ scrolling. Registered Qt coverage remains opt-in.
 ### Choose and save condition order
 
 **Edit condition order...** in Display & Session is Setup's sole entry to the
-**Pseudorandom Condition Order Editor**. One short instruction explains selecting a
-presentation and using Move up/Move down. **Generate new order** creates another
-candidate; **Save order** uses the exact displayed arrangement for every participant.
+**Pseudorandom Condition Order Editor**. Drag conditions within a block to arrange
+them; Alt+Up/Down provides keyboard moves. Block headers are fixed and cannot be selected
+or moved. **Generate new order** creates another candidate; **Save order** uses the
+exact displayed block arrangement for every participant.
 Repeated occurrences show chronological presentation numbers; long names remain
-available by tooltip. The modal fits 700x520 minimum / 780x620 default in both themes.
+available by tooltip. Each block contains each condition with presentations remaining
+once, and later blocks are labeled partial when totals differ. Cross-block/external
+drops are rejected; generation, stale setup and dismissal guard all reorder paths.
+The modal fits 700x520 minimum / 780x620 default in both themes.
+
+New ordinary Studio GUI projects explicitly use randomized blocks. Existing projects
+retain their pooled design until an editor block order is saved. Opening the editor
+only creates a round-grouped draft; its Save consequence text makes conversion clear.
+Saved counts must allow the existing no-adjacent rule across boundaries. Both generated
+and saved block designs compile into actual SessionBlocks, without extra block-break
+screens; per-condition occurrence seeds retain fixation/image timing. See
+[SessionPlan](SESSION_PLAN.md#explicit-randomized-condition-blocks) for schema and legacy contracts.
 
 Timing checks count feasibility separately from saved-order validity and has no order
 editor shortcut. Order-only conflicts stay on Display & Session, including persisted

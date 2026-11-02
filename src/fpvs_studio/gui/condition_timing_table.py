@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
@@ -315,7 +317,12 @@ class ConditionTimingTable(QWidget):
         except ValueError:
             return ""
         try:
-            validate_saved_condition_order(saved, condition_presentation_counts(draft))
+            validate_saved_condition_order(
+                saved, condition_presentation_counts(draft),
+                randomized_blocks=(
+                    project.settings.session.condition_ordering == "randomized_blocks"
+                ),
+            )
         except ValueError:
             return (
                 "The saved condition order no longer fits these conditions "
@@ -506,10 +513,15 @@ class ConditionTimingTable(QWidget):
 
         return (id(self._document.project), tuple(sorted(self._presentation_counts.items())))
 
-    def apply_condition_order(self, order: list[str], seeds: RandomizationSeeds) -> bool:
+    def apply_condition_order(
+        self, order: list[str], seeds: RandomizationSeeds,
+        *, condition_ordering: Literal["randomized_blocks"] | None = None,
+    ) -> bool:
         """Validate and commit an exact order with all current timing/count drafts."""
 
-        return self._apply_edits(saved_condition_order=order, order_seeds=seeds)
+        return self._apply_edits(
+            saved_condition_order=order, order_seeds=seeds, condition_ordering=condition_ordering,
+        )
 
     def clear_saved_order(self) -> bool:
         return self._apply_edits(clear_saved_condition_order=True)
@@ -518,6 +530,7 @@ class ConditionTimingTable(QWidget):
         self, *, saved_condition_order: list[str] | None = None,
         order_seeds: RandomizationSeeds | None = None,
         clear_saved_condition_order: bool = False,
+        condition_ordering: Literal["randomized_blocks"] | None = None,
     ) -> bool:
         if (not self.has_pending_edits() and saved_condition_order is None
                 and not clear_saved_condition_order):
@@ -533,6 +546,7 @@ class ConditionTimingTable(QWidget):
                 presentation_counts=presentation_counts,
                 saved_condition_order=saved_condition_order, order_seeds=order_seeds,
                 clear_saved_condition_order=clear_saved_condition_order,
+                condition_ordering=condition_ordering,
                 refresh_hz=self._document.project.settings.display.preferred_refresh_hz,
             )
         except ValueError as error:
@@ -560,6 +574,7 @@ class ConditionTimingTable(QWidget):
                 presentation_counts=presentation_counts,
                 saved_condition_order=saved_condition_order, order_seeds=order_seeds,
                 clear_saved_condition_order=clear_saved_condition_order,
+                condition_ordering=condition_ordering,
                 persist=saved_condition_order is not None,
             )
         except (ValueError, OSError) as error:

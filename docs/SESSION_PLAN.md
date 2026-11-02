@@ -1,14 +1,15 @@
 # SessionPlan Contract
 
 `SessionPlan` is the compiled multi-condition session contract for FPVS Studio.
-New ordinary FPVS sessions use schema `1.7.0` with independent randomization
+Explicit randomized-block FPVS sessions use schema `1.10.0`. Ordinary projects
+without that opt-in retain schema `1.7.0` with independent randomization
 provenance and pooled non-adjacent presentation ordering. Schema `1.6.0` retains
 the preceding pooled-order-only contract. Historical `1.2.0` sessions remain readable; masking sessions use `1.3.0` with an
 explicit authored task flow and variant-group ordering. See [Masking](MASKING.md)
 for its `RunSpec`/project versions and first/last stream-group task scopes.
 The original embedded `RunSpec` retains its
-independent `1.1.0` timed-presentation contract. Editable `ProjectFile` uses schema
-`1.3.0`. Schema `1.0.0`, `1.1.0`, and `1.2.0` projects are migrated in memory before
+independent `1.1.0` timed-presentation contract. Legacy editable projects without
+newer features retain ProjectFile schema `1.3.0`; explicit block designs use `1.17.0`. Schema `1.0.0`, `1.1.0`, and `1.2.0` projects are migrated in memory before
 compilation and are not rewritten merely by loading or launching them. That one-time
 project migration enables fixation color changes, accuracy scoring, and the participant
 tutorial; once saved as `1.3.0`, later explicit user opt-outs remain authoritative.
@@ -157,9 +158,10 @@ Top-level session fields:
 
 The current v1 policy is:
 
-- ordinary FPVS sessions contain exact per-condition multiplicities in one pooled
-  order, separating equal conditions when the selected pool has multiple conditions;
-  per-condition occurrence indices are chronological within that order
+- explicit randomized-block FPVS sessions present every eligible condition once per
+  block; legacy ordinary sessions retain exact multiplicities in one pooled order.
+  Both separate equal conditions for multi-condition selections, and condition
+  occurrence indices remain chronological
 - sessions opting into randomization across blocks shuffle the complete balanced
   repeated pool; this removes three-condition block boundaries from AB burst order
 - current Studio GUI/runtime behavior does not honor legacy fixed-order settings
@@ -279,18 +281,64 @@ reuse their resolved snapshot. Concrete compiled schedules remain authoritative 
 recovery. Native AB, specialized masking and pre/post-task randomness retain their prior
 contracts and are outside these three controls.
 
+## Explicit randomized condition blocks
+
+`SessionSettings.condition_ordering="randomized_blocks"` selects the explicit block
+experiment design in Project `1.17.0` and config `1.15.0`. Absence preserves the legacy
+pooled design and is omitted during serialization. Existing `block_count` remains the
+fallback total for conditions without an authored `presentation_count`; it is never
+multiplied into explicit totals. Native AB rejects this ordinary-FPVS setting. Masking
+retains its specialized grouping: an existing ordinary block setting remains dormant
+after a masking modifier is assigned, survives interchange, and becomes applicable
+again only to an ordinary selection. Existing saved ordinary arrangements and explicit
+independent-randomization controls retain their masking restrictions.
+
+Block k contains each selected condition whose presentation total is at least k,
+exactly once. Unequal totals therefore produce smaller later blocks. Compilation
+records real `SessionBlock`s and occurrence indices; a new condition-order seed changes
+the block permutations, while Pseudorandom reuses the configured seed. Global
+no-adjacent ordering also applies at block boundaries. With multiple conditions, totals
+must satisfy `largest <= second-largest + 1`; two or more trailing singleton blocks
+would otherwise repeat the same condition. A single-condition project keeps all
+requested presentations. Feasibility errors require an explicit count correction.
+
+Automatic block order uses policy `randomized_blocks`; an active saved arrangement
+uses `saved_randomized_blocks` and must obey both the same block membership and
+no-adjacent rules. Both compile as SessionPlan `1.10.0`, including plans carrying
+simple post-question context, and execute as result schema `1.5.0`. Config completed
+snapshots retain actual policy and block orders separately from current editable
+settings. Clearing a saved arrangement keeps the explicit block design. The atomic
+`propose_condition_timing`/document binding can opt into the design alongside pending
+count edits and a saved order. Fingerprints distinguish this design from the legacy
+pool even when one generated flattened order happens to match.
+
+Per-condition/presentation stimulus, fixation count and fixation-onset seed namespaces
+are unchanged (randomization algorithm version 1). Reordering block positions therefore
+does not reroll corresponding occurrences. Exact recovery copies an original RunSpec
+and its original presentation index into a one-entry retry plan; generic contract and
+runtime validation permit that partial plan instead of demanding complete original
+blocks. Runtime does not add block-break screens for these ordinary block policies;
+existing participant condition gates and tasks remain authoritative.
+
+Registered safe coverage is in `tests/unit/test_block_ordering_contracts.py` for project
+and config roundtrips, legacy omission, fingerprints, atomic design edits, completed
+snapshots, exact recovery, runtime result/export policies and full/compact execution
+without extra break screens.
+
 ## Saved condition arrangements
 
 `SessionSettings.saved_condition_order` optionally retains an exact list of condition
 IDs, including repeated presentations. When condition order is fixed, core validates known
 IDs, exact configured multiplicities and no adjacent duplicate conditions in pools with
-two or more conditions, then compiles
-that list as SessionPlan 1.8 with `ordering_policy="saved_no_adjacent"`. RunSpec remains
+two or more conditions. For the legacy pooled design, that list compiles as SessionPlan
+1.8 with `ordering_policy="saved_no_adjacent"`; explicit block designs instead use
+SessionPlan 1.10 with `saved_randomized_blocks`, as described above. RunSpec remains
 single-condition with the existing independent seed provenance. Chronological within-
 condition presentation indices are recomputed in the chosen global order, preserving
 stimulus/fixation namespaces across moves.
 
-New condition-order mode ignores a retained list and compiles seeded pooled ordering.
+New condition-order mode ignores a retained list and compiles the explicitly selected
+block design or legacy pooled ordering.
 A retained list may become a stale authoring draft after condition/count edits; project validation and
 compilation block an active invalid list without repairing it. Explicit order Save and
 combined count/timing/order proposals validate atomically. Saving an arrangement fixes

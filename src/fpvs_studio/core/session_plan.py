@@ -142,7 +142,9 @@ class SessionPlan(FPVSBaseModel):
     blocks: list[SessionBlock] = Field(default_factory=list)
     total_runs: int = Field(ge=0)
     authored_task_flow: bool | None = None
-    ordering_policy: Literal["pooled_no_adjacent", "saved_no_adjacent"] | None = None
+    ordering_policy: Literal[
+        "pooled_no_adjacent", "saved_no_adjacent", "randomized_blocks", "saved_randomized_blocks",
+    ] | None = None
     randomization_mode: Literal["fixed", "new"] | None = None
     randomization_modes: RandomizationModes | None = None
     randomization_seeds: RandomizationSeeds | None = None
@@ -174,7 +176,7 @@ class SessionPlan(FPVSBaseModel):
         entries = [entry for block in self.blocks for entry in block.entries]
         has_questions = any(task.post_question_context is not None
                             for entry in entries for task in [*entry.pre_tasks, *entry.post_tasks])
-        if has_questions and self.schema_version != "1.9.0":
+        if has_questions and self.schema_version not in {"1.9.0", "1.10.0"}:
             raise ValueError("Post-question context requires SessionPlan schema 1.9.0.")
         if self.schema_version == "1.9.0" and not has_questions:
             raise ValueError("SessionPlan schema 1.9.0 requires post-question context.")
@@ -184,12 +186,14 @@ class SessionPlan(FPVSBaseModel):
             or self.randomization_algorithm_version is not None
             or any(entry.run_spec.randomization is not None for entry in entries)
         )
-        if (self.schema_version == "1.8.0" or self.ordering_policy == "saved_no_adjacent") and (
+        if (self.schema_version == "1.8.0" or self.ordering_policy in {
+            "saved_no_adjacent", "saved_randomized_blocks",
+        }) and (
             (self.randomization_modes.condition_order if self.randomization_modes is not None
                  else self.randomization_mode) != "fixed"
         ):
             raise ValueError("Saved condition ordering requires fixed randomization mode.")
-        if self.schema_version in {"1.7.0", "1.8.0"} or (
+        if self.schema_version in {"1.7.0", "1.8.0", "1.10.0"} or (
             self.schema_version == "1.9.0" and has_randomization
         ):
             if (self.randomization_mode is None or self.randomization_seeds is None
@@ -213,7 +217,14 @@ class SessionPlan(FPVSBaseModel):
         elif has_randomization:
             raise ValueError("Independent randomization requires SessionPlan schema 1.7.0.")
         has_presentations = any(entry.condition_presentation_index is not None for entry in entries)
-        if self.schema_version in {"1.6.0", "1.7.0", "1.8.0"} or (
+        block_policy = self.ordering_policy in {"randomized_blocks", "saved_randomized_blocks"}
+        if block_policy or self.schema_version == "1.10.0":
+            if (self.schema_version != "1.10.0" or not block_policy
+                    or any(entry.condition_presentation_index is None for entry in entries)):
+                raise ValueError(
+                    "Randomized blocks require SessionPlan schema 1.10.0 and occurrences."
+                )
+        elif self.schema_version in {"1.6.0", "1.7.0", "1.8.0"} or (
             self.schema_version == "1.9.0" and self.ordering_policy is not None
         ):
             expected_policy = ("saved_no_adjacent" if self.schema_version == "1.8.0"
@@ -229,18 +240,20 @@ class SessionPlan(FPVSBaseModel):
         elif self.ordering_policy is not None or has_presentations:
             raise ValueError("Presentation ordering metadata requires SessionPlan schema 1.6.0.")
         if self.authored_task_flow is not None and self.schema_version not in {
-            "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
+            "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0", "1.10.0",
         }:
             raise ValueError("Authored task session flow requires SessionPlan schema 1.3.0.")
         if any(entry.run_spec.scene_stream is not None
                and entry.run_spec.scene_stream.is_catch_trial
                for block in self.blocks for entry in block.entries):
-            if self.schema_version not in {"1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0"}:
+            if self.schema_version not in {
+                "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0", "1.10.0",
+            }:
                 raise ValueError("Catch trials require SessionPlan schema 1.4.0.")
         if any(task_requires_text_alignment_schema(task)
                for block in self.blocks for entry in block.entries
                for task in [*entry.pre_tasks, *entry.post_tasks]):
-            if self.schema_version not in {"1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0"}:
+            if self.schema_version not in {"1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0", "1.10.0"}:
                 raise ValueError("Task text alignment requires SessionPlan schema 1.5.0.")
         if self.block_count != len(self.blocks):
             raise ValueError("block_count must match the number of blocks.")

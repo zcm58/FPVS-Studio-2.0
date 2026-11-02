@@ -659,6 +659,7 @@ class SessionSettings(FPVSBaseModel):
     stimulus_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
     fixation_seed: StrictInt | None = Field(default=None, ge=0, lt=2**31)
     saved_condition_order: list[StrictStr] | None = Field(default=None, min_length=1)
+    condition_ordering: Literal["randomized_blocks"] | None = None
     randomize_conditions_per_block: bool = True
     randomize_across_blocks: bool = False
     inter_condition_mode: InterConditionMode = InterConditionMode.MANUAL_CONTINUE
@@ -673,7 +674,7 @@ class SessionSettings(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         for name in (
             "randomization_mode", "randomization_modes", "stimulus_seed", "fixation_seed",
-            "saved_condition_order",
+            "saved_condition_order", "condition_ordering",
         ):
             if getattr(self, name) is None:
                 payload.pop(name, None)
@@ -1086,6 +1087,9 @@ class ProjectFile(FPVSBaseModel):
 
     @model_validator(mode="after")
     def validate_unique_ids(self) -> ProjectFile:
+        has_block_ordering = self.settings.session.condition_ordering is not None
+        if has_block_ordering and self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+            raise ValueError("Randomized condition blocks are unavailable for Attentional-Blink.")
         has_simple_questions = any(task.simple_post_questions for task in self.task_modules)
         if has_simple_questions:
             self.schema_version = ProjectSchemaVersion.V1_16
@@ -1100,13 +1104,14 @@ class ProjectFile(FPVSBaseModel):
         if has_saved_order:
             if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
                 raise ValueError("Saved condition order is unavailable for Attentional-Blink.")
-            if self.schema_version != ProjectSchemaVersion.V1_16:
+            if self.schema_version not in {ProjectSchemaVersion.V1_16, ProjectSchemaVersion.V1_17}:
                 self.schema_version = ProjectSchemaVersion.V1_15
         has_randomization = self.settings.session.randomization_mode is not None
         if has_randomization:
             if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
                 raise ValueError("Independent randomization is unavailable for Attentional-Blink.")
-            if self.schema_version not in {ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16}:
+            if self.schema_version not in {ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                                           ProjectSchemaVersion.V1_17}:
                 self.schema_version = ProjectSchemaVersion.V1_14
         has_presentations = self.settings.condition_defaults.presentation_count is not None or any(
             condition.presentation_count is not None for condition in self.conditions
@@ -1118,6 +1123,7 @@ class ProjectFile(FPVSBaseModel):
                 )
             if self.schema_version not in {
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 self.schema_version = ProjectSchemaVersion.V1_13
         has_duration = self.settings.condition_defaults.stream_duration_seconds is not None or any(
@@ -1131,11 +1137,13 @@ class ProjectFile(FPVSBaseModel):
             if has_duration and self.schema_version not in {
                 ProjectSchemaVersion.V1_13, ProjectSchemaVersion.V1_14,
                 ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 self.schema_version = ProjectSchemaVersion.V1_12
             elif self.schema_version not in {
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 self.schema_version = ProjectSchemaVersion.V1_11
         if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
@@ -1147,6 +1155,7 @@ class ProjectFile(FPVSBaseModel):
                    ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                    ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15,
                    ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
                }:
             raise ValueError("Letter-stream projects require project schema 1.5.0.")
         if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)) and (
@@ -1155,6 +1164,7 @@ class ProjectFile(FPVSBaseModel):
                 ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }
         ):
             raise ValueError("Condition modifiers and image memory require project schema 1.6.0.")
@@ -1173,6 +1183,10 @@ class ProjectFile(FPVSBaseModel):
 
             if any(condition_masking(self, condition) is not None for condition in self.conditions):
                 raise ValueError("Independent randomization is unavailable for masking groups.")
+        if has_block_ordering:
+            # An ordinary design can remain dormant after a masking modifier is assigned.
+            # Compilation selects masking grouping without discarding the authored design.
+            self.schema_version = ProjectSchemaVersion.V1_17
         if has_saved_order:
             from fpvs_studio.core.masking import condition_masking
 
@@ -1198,6 +1212,7 @@ class ProjectFile(FPVSBaseModel):
                 ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 raise ValueError("Masking and native task scenes require project schema 1.7.0.")
         if any(modifier.masking is not None and modifier.masking.catch_trial is not None
@@ -1207,6 +1222,7 @@ class ProjectFile(FPVSBaseModel):
                 ProjectSchemaVersion.V1_11,
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 raise ValueError("Masking catch trials require project schema 1.8.0.")
         if any(condition.masking_catch for condition in self.conditions):
@@ -1214,6 +1230,7 @@ class ProjectFile(FPVSBaseModel):
                 ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 raise ValueError("Explicit masking catch conditions require project schema 1.9.0.")
         if any(task_requires_text_alignment_schema(task) for task in self.task_modules):
@@ -1221,6 +1238,7 @@ class ProjectFile(FPVSBaseModel):
                 ProjectSchemaVersion.V1_9, ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 raise ValueError("Task text alignment requires project schema 1.9.0.")
         if any(modifier.masking is not None and modifier.masking.event_triggers is not None
@@ -1229,6 +1247,7 @@ class ProjectFile(FPVSBaseModel):
                 ProjectSchemaVersion.V1_10, ProjectSchemaVersion.V1_11,
                 ProjectSchemaVersion.V1_12, ProjectSchemaVersion.V1_13,
                 ProjectSchemaVersion.V1_14, ProjectSchemaVersion.V1_15, ProjectSchemaVersion.V1_16,
+                ProjectSchemaVersion.V1_17,
             }:
                 raise ValueError("Masking event triggers require project schema 1.10.0.")
         return self

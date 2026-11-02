@@ -314,7 +314,7 @@ def test_session_structure_uses_space_start_without_timed_break_controls(
     assert page.randomization_editor.condition_order_button.isVisible()
     assert len(page.randomization_editor.mode_combos) == 3
     assert all(combo.isVisible() for combo in page.randomization_editor.mode_combos.values())
-    assert page.seed_help_label.text() == "Pooled shuffle · no adjacent same condition"
+    assert page.seed_help_label.text() == "Randomized blocks"
     assert not page.block_count_spin.isVisible()
     assert page.presentation_total_label.isVisible()
     assert not page.inter_condition_mode_combo.isVisible()

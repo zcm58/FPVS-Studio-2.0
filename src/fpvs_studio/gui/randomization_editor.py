@@ -123,11 +123,14 @@ class RandomizationEditor(QWidget):
 
         def save_order(order: list[str], seeds: RandomizationSeeds) -> None:
             if table is not None:
-                if not table.apply_condition_order(order, seeds):
+                if not table.apply_condition_order(
+                    order, seeds, condition_ordering="randomized_blocks",
+                ):
                     raise ValueError(table.error_label.text() or "Changes were not saved.")
             else:
                 self._document.update_condition_timing(
                     saved_condition_order=order, order_seeds=seeds, persist=True,
+                    condition_ordering="randomized_blocks",
                 )
 
         dialog = ConditionOrderDialog(

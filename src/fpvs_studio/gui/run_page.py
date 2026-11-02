@@ -1175,7 +1175,9 @@ class RunPage(QWidget):
         ]
         if session_plan.ordering_policy is not None:
             lines.insert(2, "Condition Order: " + (
-                "Saved arrangement" if session_plan.ordering_policy == "saved_no_adjacent"
+                "Saved arrangement" if session_plan.ordering_policy in {
+                    "saved_no_adjacent", "saved_randomized_blocks",
+                }
                 else "Generated from the condition-order seed"
             ))
         lines.append("")

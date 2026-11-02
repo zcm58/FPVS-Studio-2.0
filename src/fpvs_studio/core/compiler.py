@@ -99,10 +99,14 @@ from fpvs_studio.core.run_spec import (
 )
 from fpvs_studio.core.session_ordering import (
     POOLED_ORDERING_POLICY,
+    RANDOMIZED_BLOCKS_ORDERING_POLICY,
     SAVED_ORDERING_POLICY,
+    SAVED_RANDOMIZED_BLOCKS_ORDERING_POLICY,
     active_saved_condition_order,
+    condition_order_blocks,
     condition_presentation_counts,
     constrained_condition_order,
+    randomized_condition_blocks,
     uses_pooled_condition_order,
     validate_condition_presentation_counts,
 )
@@ -493,6 +497,8 @@ def _compile_session_plan(
     except ValueError as exc:
         raise CompileError(str(exc)) from exc
     pooled_ordering = uses_pooled_condition_order(project, selected_conditions)
+    blocked_ordering = (pooled_ordering
+                        and project.settings.session.condition_ordering == "randomized_blocks")
     saved_order = None
     if pooled_ordering:
         try:
@@ -597,7 +603,20 @@ def _compile_session_plan(
         condition.condition_id for group in group_conditions for condition, _, _ in group
     )
     pooled_trials: list[tuple[Condition, bool, Condition | None]] = []
-    if pooled_ordering:
+    blocked_trials: list[list[tuple[Condition, bool, Condition | None]]] = []
+    if blocked_ordering:
+        by_id = {condition.condition_id: condition for condition in selected_conditions}
+        try:
+            block_orders = (condition_order_blocks(saved_order, presentation_counts)
+                            if saved_order is not None else randomized_condition_blocks(
+                                presentation_counts, seed=random_seed,
+                            ))
+        except ValueError as exc:
+            raise CompileError(str(exc)) from exc
+        blocked_trials = [[(by_id[identity], False, None) for identity in block]
+                          for block in block_orders]
+        compiled_block_count = len(blocked_trials)
+    elif pooled_ordering:
         by_id = {condition.condition_id: condition for condition in selected_conditions}
         condition_order = (saved_order if saved_order is not None else
                            constrained_condition_order(presentation_counts, rng=session_rng))
@@ -610,6 +629,8 @@ def _compile_session_plan(
         check_compilation_cancelled()
         if masking_groups:
             block_trials = group_conditions[block_index]
+        elif blocked_ordering:
+            block_trials = blocked_trials[block_index]
         elif pooled_ordering:
             block_trials = pooled_trials
         else:
@@ -768,6 +789,7 @@ def _compile_session_plan(
 
     return SessionPlan(
         schema_version=(
+            "1.10.0" if blocked_ordering else
             "1.9.0" if any(task.post_question_context is not None
                            for block in blocks for entry in block.entries
                            for task in [*entry.pre_tasks, *entry.post_tasks]) else
@@ -780,8 +802,13 @@ def _compile_session_plan(
             else "1.3.0" if masking_groups else SchemaVersion.V1_2.value
         ),
         authored_task_flow=True if masking_groups else None,
-        ordering_policy=(SAVED_ORDERING_POLICY if saved_order is not None else
-                         POOLED_ORDERING_POLICY if pooled_ordering else None),
+        ordering_policy=(
+            SAVED_RANDOMIZED_BLOCKS_ORDERING_POLICY
+            if blocked_ordering and saved_order is not None else
+            RANDOMIZED_BLOCKS_ORDERING_POLICY if blocked_ordering else
+            SAVED_ORDERING_POLICY if saved_order is not None else
+            POOLED_ORDERING_POLICY if pooled_ordering else None
+        ),
         randomization_mode=(
             effective_randomization_mode(project) if seed_snapshot is not None else None
         ),
