@@ -44,7 +44,7 @@ class RandomizationEditor(QWidget):
         for domain, title in (
             ("stimulus", "Image / word display order"),
             ("condition_order", "Condition order"),
-            ("fixation", "Fixation color-change timing"),
+            ("fixation", "Fixation cross color change timing"),
         ):
             group = QVBoxLayout()
             group.setSpacing(6)
@@ -193,9 +193,9 @@ class RandomizationEditor(QWidget):
                         "condition presentation." if fixed else
                         "Image / word order is randomized separately for each participant.")
             elif domain == "fixation":
-                text = ("Every participant receives the same fixation color-change times for each "
-                        "condition presentation." if fixed else
-                        "Fixation color-change times are randomized separately "
+                text = ("Every participant receives the same fixation cross color change times "
+                        "for each condition presentation." if fixed else
+                        "Fixation cross color change times are randomized separately "
                         "for each participant.")
             else:
                 text = ("Every participant receives the same condition order." if fixed else

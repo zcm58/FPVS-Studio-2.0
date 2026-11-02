@@ -1681,7 +1681,7 @@ count drafts, and masking/AB managed states.
 ### Participant reuse choices and launch snapshots
 
 Session has three independent choices: **Image / word display order**, **Condition
-order**, and **Fixation color-change timing**. Each offers **Randomized — new for each
+order**, and **Fixation cross color change timing**. Each offers **Randomized — new for each
 participant** or **Pseudorandom — same for every participant**. Each uses a compact semibold
 field heading above its dropdown under the Session column heading; optional explanation stays in the tooltip and
 accessible description. Condition-order actions sit in that section, with a concise
@@ -1690,6 +1690,22 @@ launch seed values are not shown. Pseudorandom
 reuses a stored random pattern for corresponding condition presentations while inputs
 stay unchanged; different image pools, condition durations and repeat numbers retain
 independently valid schedules. Both choices preserve existing balancing/timing rules.
+
+Fixation's **Number of color changes** control chooses **Same number per condition**
+or **Vary within a range**. It controls counts, not participant timing reuse. Both count
+choices obey Session's fixation timing policy: Pseudorandom reuses counts and onset times
+for corresponding presentations with unchanged settings; Randomized resolves fresh
+participant patterns. Changing counts, duration or gap does not change that policy or
+its stored random patterns. The count control's tooltip points back to Display & Session;
+there is no second participant-reuse selector on Fixation. Minimum gap protects the
+start and end of each condition as well as the interval between changes; 2000 ms
+reserves the first two seconds. Seeded schedules retain these bounds.
+
+Visible acceptance: in both themes at 1120x820, select each Session fixation policy,
+visit Fixation and change between the two count choices, then return to Session.
+Confirm its selection survives, all field labels fit, and save/reopen preserves both
+choices. Registered coverage: `test_randomization_controls.py`; safe count/onset policy
+coverage: `tests/unit/test_randomization.py`. Visible Qt execution remains opt-in.
 
 The document resolves one launch snapshot after participant/visit confirmation, keeping
 configured roots for pseudorandom categories and refreshing randomized categories.

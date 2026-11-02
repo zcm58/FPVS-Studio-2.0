@@ -79,6 +79,77 @@ def test_legacy_choices_do_not_rewrite_source_and_can_be_changed_independently(q
     assert configured_randomization_seeds(reopened.project) == expected
 
 
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("reuse_mode", ["fixed", "new"])
+@pytest.mark.parametrize("count_mode", ["fixed", "randomized"])
+def test_fixation_count_choices_preserve_participant_timing_policy(
+    qtbot, tmp_path, background, reuse_mode, count_mode,
+):
+    document, _first, _second = _document(tmp_path)
+    document.update_randomization_settings(modes={"fixation": reuse_mode})
+    document.update_fixation_settings(
+        target_count_mode=count_mode, changes_per_sequence=2,
+        target_count_min=2, target_count_max=3, no_immediate_repeat_count=False,
+    )
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    palette = wizard.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    wizard.setPalette(palette)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
+    QApplication.processEvents()
+    randomization = wizard.session_structure_editor.randomization_editor
+    heading = randomization.heading_labels["fixation"]
+    assert heading.text() == "Fixation cross color change timing"
+    assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
+    assert randomization.mode_combos["fixation"].accessibleName() == heading.text()
+    session_before = document.project.settings.session.model_copy(deep=True)
+    seeds_before = configured_randomization_seeds(document.project)
+
+    wizard.open_wizard(step_key="fixation", allow_step_jumps=True)
+    QApplication.processEvents()
+    editor = wizard.fixation_schedule_editor
+    combo = editor.target_count_mode_combo
+    label = editor.fixation_behavior_layout.labelForField(combo)
+    assert label.text() == "Number of color changes"
+    assert combo.itemText(combo.findData("fixed")) == "Same number per condition"
+    assert combo.itemText(combo.findData("randomized")) == "Vary within a range"
+    assert "Display & Session" in combo.toolTip()
+    assert combo.accessibleDescription() == combo.toolTip()
+    assert "2000 ms" in editor.min_gap_spin.toolTip()
+    assert "before the first change" in editor.min_gap_spin.toolTip()
+    assert combo.currentData() == count_mode
+    assert combo.isEnabled()
+    other_count_mode = "randomized" if count_mode == "fixed" else "fixed"
+    combo.setCurrentIndex(combo.findData(other_count_mode))
+    editor.target_duration_spin.setValue(editor.target_duration_spin.value() + 10)
+    QApplication.processEvents()
+    assert document.project.settings.fixation_task.target_count_mode == other_count_mode
+    assert document.project.settings.session == session_before
+    assert configured_randomization_seeds(document.project) == seeds_before
+    assert editor.changes_per_sequence_spin.isEnabled() == (other_count_mode == "fixed")
+    assert editor.target_count_min_spin.isEnabled() == (other_count_mode == "randomized")
+    assert_visible_children_within_parent(wizard.fixation_step_surface)
+    assert combo.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText()) + 32
+    assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
+    QApplication.processEvents()
+    assert randomization.mode_combos["fixation"].currentData() == reuse_mode
+    assert_visible_children_within_parent(wizard.display_session_step_surface)
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.fixation_task.target_count_mode == other_count_mode
+    assert reopened.project.settings.session == session_before
+    assert configured_randomization_seeds(reopened.project) == seeds_before
+
+
 def test_failed_policy_edit_retains_draft_and_can_be_retried(qtbot, monkeypatch, tmp_path):
     document, _first, _second = _document(tmp_path)
     original = document.project.model_copy(deep=True)
@@ -521,7 +592,8 @@ def test_plain_language_choices_fit_session_and_review(
         QApplication.processEvents()
         assert_visible_children_within_parent(wizard.review_step_surface)
         text = " ".join(label.text() for label in wizard.review_card.findChildren(QLabel))
-        for title in ("Image / word order:", "Condition order:", "Fixation timing:"):
+        for title in ("Image / word order:", "Condition order:",
+                      "Fixation cross color change timing:"):
             assert title in text
         assert "seed" not in text.lower()
 

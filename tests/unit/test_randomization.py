@@ -58,10 +58,16 @@ def _schedules(plan):
 
 
 @pytest.mark.parametrize("choices", list(product(("fixed", "new"), repeat=3)))
+@pytest.mark.parametrize("count_mode", ["fixed", "randomized"])
 def test_independent_participant_policies_preserve_only_selected_domains(
-    fixed_project, multi_condition_project_root, choices,
+    fixed_project, multi_condition_project_root, choices, count_mode,
 ):
     project = fixed_project
+    project.settings.fixation_task.target_count_mode = count_mode
+    project.settings.fixation_task.target_count_min = 2
+    project.settings.fixation_task.target_count_max = 5
+    project.settings.fixation_task.no_immediate_repeat_count = False
+    project.settings.fixation_task.min_gap_ms = 2000
     modes = RandomizationModes(condition_order=choices[0], stimulus=choices[1], fixation=choices[2])
     project.settings.session = SessionSettings.model_validate({
         **project.settings.session.model_dump(),
@@ -100,6 +106,15 @@ def test_independent_participant_policies_preserve_only_selected_domains(
         assert plan.randomization_modes == modes
         assert SessionPlan.model_validate_json(plan.model_dump_json()) == plan
         assert all(entry.run_spec.randomization.modes == modes for entry in plan.ordered_entries())
+        for entry in plan.ordered_entries():
+            events = entry.run_spec.fixation_events
+            assert events[0].start_frame >= 120
+            assert (events[-1].start_frame + events[-1].duration_frames
+                    <= entry.run_spec.display.total_frames - 120)
+            assert all(
+                right.start_frame - (left.start_frame + left.duration_frames) >= 120
+                for left, right in zip(events, events[1:], strict=False)
+            )
 
 
 def test_mixed_protocol_identity_ignores_only_fresh_roots(

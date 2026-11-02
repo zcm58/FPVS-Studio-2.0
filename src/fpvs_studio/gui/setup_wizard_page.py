@@ -1401,7 +1401,7 @@ class SetupWizardPage(QWidget):
                                "new for each participant")
                 for domain, label in (("stimulus", "Image / word order"),
                                       ("condition_order", "Condition order"),
-                                      ("fixation", "Fixation timing"))
+                                      ("fixation", "Fixation cross color change timing"))
             )
             if session.saved_condition_order is not None:
                 if reuse_modes.condition_order == "fixed":

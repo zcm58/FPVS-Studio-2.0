@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import ExperimentCategory
+from fpvs_studio.core.randomization import supports_independent_randomization
 from fpvs_studio.core.validation import ConditionFixationGuidance
 from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import (
@@ -367,8 +368,17 @@ class FixationSettingsEditor(QWidget):
 
         self.target_count_mode_combo = QComboBox(self)
         self.target_count_mode_combo.setObjectName("target_count_mode_combo")
-        self.target_count_mode_combo.addItem("Fixed per condition", userData="fixed")
-        self.target_count_mode_combo.addItem("Randomized per condition run", userData="randomized")
+        self.target_count_mode_combo.addItem("Same number per condition", userData="fixed")
+        self.target_count_mode_combo.addItem("Vary within a range", userData="randomized")
+        self.target_count_mode_combo.setAccessibleName("Number of color changes")
+        count_tooltip = "Choose a set count or a range for each condition presentation."
+        if supports_independent_randomization(document.project):
+            count_tooltip += (
+                " The choice in Display & Session controls whether counts and exact "
+                "change times repeat across participants."
+            )
+        self.target_count_mode_combo.setToolTip(count_tooltip)
+        self.target_count_mode_combo.setAccessibleDescription(count_tooltip)
         self.target_count_mode_combo.currentIndexChanged.connect(
             self._on_fixation_controls_changed
         )
@@ -403,6 +413,12 @@ class FixationSettingsEditor(QWidget):
         self.min_gap_spin = QSpinBox(self)
         self.min_gap_spin.setObjectName("min_gap_spin")
         self.min_gap_spin.setRange(0, 10000)
+        self.min_gap_spin.setToolTip(
+            "Time without a color change before the first change, between changes, "
+            "and after the last change. For example, 2000 ms prevents changes "
+            "during the first two seconds of each condition."
+        )
+        self.min_gap_spin.setAccessibleDescription(self.min_gap_spin.toolTip())
         self.min_gap_spin.valueChanged.connect(self._apply_fixation_settings)
 
         self.pre_stream_fixation_spin = FiniteDoubleSpinBox(minimum=0.0, parent=self)
@@ -501,7 +517,9 @@ class FixationSettingsEditor(QWidget):
         self.fixation_behavior_group = QWidget(self.fixation_panel)
         self.fixation_behavior_layout = QFormLayout(self.fixation_behavior_group)
         self.fixation_behavior_layout.setVerticalSpacing(form_spacing)
-        self.fixation_behavior_layout.addRow("Color change schedule", self.target_count_mode_combo)
+        self.fixation_behavior_layout.addRow(
+            "Number of color changes", self.target_count_mode_combo,
+        )
         self.fixation_behavior_layout.addRow(
             "Changes per condition", self.changes_per_sequence_spin
         )
