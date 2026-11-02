@@ -1107,6 +1107,7 @@ def test_comparison_keeps_cohort_rules_separate_from_current_notice(state, messa
 
 
 def _document_launch_methods(namespace):
+    namespace.setdefault("sys", SimpleNamespace(platform="win32"))
     repository = Path(__file__).resolve().parents[2]
     methods = []
     for relative, names in (

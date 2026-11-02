@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable
 from pathlib import Path
 
@@ -229,12 +230,16 @@ class AppSettingsDialog(QDialog):
                 self,
             )
             self.experiment_test_mode_checkbox.setObjectName("experiment_test_mode_checkbox")
+            refresh_policy = (
+                "verifies the local display" if sys.platform == "darwin"
+                else "bypasses connected-display refresh verification"
+            )
             self.experiment_test_mode_checkbox.setToolTip(
                 "Uses logged null-trigger output, skips the Sophia Mode recording check, "
-                "bypasses connected-display refresh verification, and replaces participant "
+                f"{refresh_policy}, and replaces participant "
                 "collection with an explicit test-launch acknowledgement. Fullscreen "
                 "presentation remains enabled, along with compiled timing validation and "
-                "runtime timing QC. Available on Windows and Linux, including installed builds."
+                "runtime timing QC."
             )
             self.experiment_test_mode_checkbox.setChecked(experiment_test_mode_enabled)
             self.experiment_test_mode_checkbox.toggled.connect(
@@ -249,8 +254,8 @@ class AppSettingsDialog(QDialog):
                 pilot.setObjectName("attentional_blink_pilot_mode_checkbox")
                 pilot.setToolTip(
                     "Collects full participant demographics and saves T1/T2 accuracy without "
-                    "EEG hardware. Skips Sophia Mode, display refresh and graphics-memory "
-                    "checks; fullscreen playback and timing records remain enabled. "
+                    "EEG hardware. Skips Sophia Mode and graphics-memory checks; "
+                    f"{refresh_policy}. Fullscreen playback and timing records remain enabled. "
                     "Takes precedence over Test Mode for attentional-blink studies only."
                 )
                 pilot.setChecked(attentional_blink_pilot_mode_enabled)

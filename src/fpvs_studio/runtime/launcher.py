@@ -5,6 +5,8 @@ options, not compilation of project state or engine rendering internals."""
 
 from __future__ import annotations
 
+import sys
+import threading
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -93,7 +95,38 @@ class LaunchSettings:
         return options
 
 
+def _validate_macos_source_launch(
+    settings: LaunchSettings, *, require_main_thread: bool = False,
+) -> None:
+    """Keep initial macOS source execution explicit, verified and hardware-free."""
+    if sys.platform != "darwin":
+        return
+    if getattr(sys, "frozen", False):
+        raise LaunchSettingsError(
+            "Packaged macOS execution is unsupported; use the source environment."
+        )
+    if settings.experiment_test_mode is not True and settings.pilot_mode is not True:
+        raise LaunchSettingsError(
+            "macOS source execution requires Experiment Test Mode or Pilot mode."
+        )
+    if settings.serial_enabled is not False:
+        raise LaunchSettingsError(
+            "macOS source execution requires external trigger output disabled."
+        )
+    if settings.fullscreen is not True:
+        raise LaunchSettingsError("macOS source execution requires fullscreen presentation.")
+    if settings.verify_refresh_rate is not True:
+        raise LaunchSettingsError("macOS source execution requires refresh-rate verification.")
+    if settings.display_index is not None and (
+        type(settings.display_index) is not int or settings.display_index != 0
+    ):
+        raise LaunchSettingsError("macOS source execution supports only the primary display.")
+    if require_main_thread and threading.current_thread() is not threading.main_thread():
+        raise LaunchSettingsError("macOS presentation must run on the process main thread.")
+
+
 def _validate_launch_settings(settings: LaunchSettings) -> None:
+    _validate_macos_source_launch(settings)
     if not isinstance(settings.pilot_mode, bool):
         raise LaunchSettingsError("pilot_mode must be a boolean.")
     if not isinstance(settings.experiment_test_mode, bool):
@@ -227,6 +260,7 @@ def launch_run(
     """Launch one compiled RunSpec into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
+    _validate_macos_source_launch(settings, require_main_thread=True)
     _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)
     if settings.export_mode != EXPORT_MODE_FULL:
@@ -265,6 +299,7 @@ def launch_session(
     """Launch an ordered session plan into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
+    _validate_macos_source_launch(settings, require_main_thread=True)
     _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)
     runtime_options = settings.as_runtime_options()

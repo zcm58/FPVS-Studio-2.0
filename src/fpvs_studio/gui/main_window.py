@@ -681,7 +681,7 @@ class StudioMainWindow(QMainWindow):
         self.setup_action.triggered.connect(self._open_setup_from_palette)
         self.find_action_action = QAction("Find Action...", self)
         self.find_action_action.setObjectName("find_action_action")
-        self.find_action_action.setShortcut(QKeySequence("Ctrl+F"))
+        self.find_action_action.setShortcut(QKeySequence.StandardKey.Find)
         self.find_action_action.triggered.connect(self.show_action_palette)
         self.addAction(self.find_action_action)
 
@@ -1847,8 +1847,11 @@ class StudioMainWindow(QMainWindow):
         )
         dirty = self.document.dirty or pending
         text = "Unsaved changes" if dirty else "Saved"
+        save_shortcut = self.save_project_action.shortcut().toString(
+            QKeySequence.SequenceFormat.NativeText,
+        )
         self._set_save_feedback("warning" if dirty else "ready", text,
-            "Save your project with File > Save or Ctrl+S."
+            f"Save your project with File > Save or {save_shortcut}."
             if dirty else "All current project changes are saved."
         )
 

@@ -23,6 +23,8 @@ class NativeDisplayMode:
     mode_reference: str | None = None
     variable_refresh_enabled: bool = False
     variable_refresh_label: str | None = None
+    pixel_width: int | None = None
+    pixel_height: int | None = None
 
     def __post_init__(self) -> None:
         if not isfinite(self.refresh_hz) or self.refresh_hz <= 0:
@@ -81,6 +83,11 @@ def query_primary_native_display_mode() -> NativeDisplayMode:
                 "Dynamic Refresh Rate" if windows_mode.dynamic_refresh_enabled else None
             ),
         )
+
+    if sys.platform == "darwin":
+        from fpvs_studio.runtime.macos_display import query_primary_macos_display_mode
+
+        return query_primary_macos_display_mode()
 
     if sys.platform.startswith("linux"):
         from fpvs_studio.runtime.linux_display import query_primary_linux_display_mode

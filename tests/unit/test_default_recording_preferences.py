@@ -327,3 +327,15 @@ def test_root_cancel_never_opens_hardware_picker():
 
     controller.ensure_default_recording_configured.assert_not_called()
     controller._app.quit.assert_called_once()
+
+
+def test_mac_authoring_skips_hardware_picker_and_preserves_preferences(monkeypatch):
+    import sys
+
+    settings = _Settings({_KEY: "stored Windows selection"})
+    controller = _controller(settings)
+    monkeypatch.setattr(sys, "platform", "darwin")
+    assert controller.ensure_default_recording_configured() is True
+    assert settings.values == {_KEY: "stored Windows selection"}
+    assert settings.mutations == []
+    controller._app.quit.assert_not_called()

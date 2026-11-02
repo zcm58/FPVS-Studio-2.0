@@ -163,11 +163,68 @@ class SecretServiceCredentialStore:
             ) from None
 
 
+
+class MacOSKeychainCredentialStore:
+    """Use only the macOS Keychain backend; never automatic or file-backed stores."""
+
+    def __init__(self, target: str) -> None:
+        self.target = target
+
+    @staticmethod
+    def _backend() -> Any:
+        try:
+            backend = importlib.import_module("keyring.backends.macOS").Keyring()
+            if backend.priority <= 0:
+                raise RuntimeError("unavailable")
+            return backend
+        except Exception:
+            raise LibraryError(
+                "Library access requires an unlocked macOS Keychain. "
+                "Install macOS keyring support and allow Keychain access when prompted."
+            ) from None
+
+    def load(self) -> DeviceCredential | None:
+        backend = self._backend()
+        try:
+            value = backend.get_password(self.target, "device")
+        except Exception:
+            raise LibraryError("Could not read Library access from macOS Keychain.") from None
+        return _decode(value) if value is not None else None
+
+    def save(self, credential: DeviceCredential) -> None:
+        value = credential.model_dump_json()
+        if len(value.encode("utf-8")) > MAX_CREDENTIAL_BYTES:
+            raise LibraryError("Library access metadata exceeds secure storage limits.")
+        backend = self._backend()
+        try:
+            backend.set_password(self.target, "device", value)
+        except Exception:
+            raise LibraryError("Could not save Library access in macOS Keychain.") from None
+
+    def delete(self) -> None:
+        backend = self._backend()
+        try:
+            if backend.get_password(self.target, "device") is not None:
+                backend.delete_password(self.target, "device")
+        except Exception:
+            raise LibraryError("Could not remove Library access from macOS Keychain.") from None
+
+
+def credential_store_for_target(target: str) -> CredentialStore:
+    """Select a concrete protected OS store without consulting keyring configuration."""
+    if sys.platform == "win32":
+        return WindowsCredentialStore(target)
+    if sys.platform == "darwin":
+        return MacOSKeychainCredentialStore(target)
+    if sys.platform.startswith("linux"):
+        return SecretServiceCredentialStore(target)
+    raise LibraryError(
+        "Secure access requires Windows Credential Manager, macOS Keychain "
+        "or a Linux desktop Secret Service keyring."
+    )
+
+
 def credential_store(service_url: str) -> CredentialStore:
     identity = hashlib.sha256(service_url.encode("utf-8")).hexdigest()
     target = f"FPVS-Studio/Experiment-Library/{identity}"
-    if sys.platform == "win32":
-        return WindowsCredentialStore(target)
-    if sys.platform.startswith("linux"):
-        return SecretServiceCredentialStore(target)
-    raise LibraryError("Secure Library access is supported on Windows and Linux desktops.")
+    return credential_store_for_target(target)

@@ -665,6 +665,14 @@ class DisplaySettingsEditor(QWidget):
         self._clear_refresh_verification()
 
         def _measure() -> DisplayRefreshVerification:
+            import sys
+
+            if sys.platform == "darwin":
+                from fpvs_studio.runtime.macos_session_process import (
+                    verify_macos_primary_display_refresh,
+                )
+
+                return verify_macos_primary_display_refresh()
             engine = create_engine(EngineName.PSYCHOPY)
             return verify_primary_display_refresh(
                 engine, runtime_options={"fullscreen": True, "display_index": None}

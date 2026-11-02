@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIntValidator, QShowEvent
@@ -29,7 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.execution import PARTICIPANT_SEX_VALUES, ParticipantMetadata
-from fpvs_studio.core.models import normalize_manual_removed_electrodes
+from fpvs_studio.core.models import DisplaySettings, normalize_manual_removed_electrodes
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
@@ -852,6 +854,19 @@ class RunPage(QWidget):
         try:
             self._document.validate_recording_launch()
             refresh_hz = self.current_refresh_hz()
+            local_display = None
+            if sys.platform == "darwin":
+                from fpvs_studio.gui.local_test_display_dialog import LocalTestDisplayDialog
+                from fpvs_studio.runtime.display_mode import query_primary_native_display_mode
+
+                dialog = LocalTestDisplayDialog(
+                    self._document.project.settings.display,
+                    query_primary_native_display_mode(), self,
+                )
+                if dialog.exec() != QDialog.DialogCode.Accepted:
+                    return
+                local_display = dialog.local_display()
+                refresh_hz = dialog.refresh_hz
             validation = self._document.validation_report(refresh_hz=refresh_hz)
             if not validation.is_valid:
                 raise DocumentError(format_validation_report(validation))
@@ -863,7 +878,9 @@ class RunPage(QWidget):
         if participant_details is None:
             return
         if self._document.experiment_test_mode_enabled:
-            self._launch_participant_session(participant_details, refresh_hz, None)
+            self._launch_participant_session(
+                participant_details, refresh_hz, None, local_display=local_display,
+            )
             return
         participant_number = participant_details.participant_number
         check = ParticipantSessionCheckTask(
@@ -883,7 +900,9 @@ class RunPage(QWidget):
         )
         check.finished.connect(self._on_participant_session_check_finished)
         check.confirmed.connect(
-            lambda number: self._launch_participant_session(participant_details, refresh_hz, number)
+            lambda number: self._launch_participant_session(
+                participant_details, refresh_hz, number, local_display=local_display,
+            )
         )
         check.start()
 
@@ -894,6 +913,7 @@ class RunPage(QWidget):
     def _launch_participant_session(
         self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
         participant_session_number: int | None,
+        *, local_display: DisplaySettings | None = None,
     ) -> None:
         try:
             self._document.validate_recording_launch()
@@ -915,10 +935,14 @@ class RunPage(QWidget):
             resolved_seeds = self._document.prepare_participant_randomization(
                 participant_number, participant_session_number,
             )
+            compile_options: dict[str, Any] = (
+                {} if local_display is None else {"local_display": local_display}
+            )
             session_plan = self._document.compile_session(
                 refresh_hz=refresh_hz,
                 condition_ids=participant_details.selected_condition_ids,
                 resolved_seeds=resolved_seeds,
+                **compile_options,
             )
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)

@@ -24,6 +24,7 @@ below are a catalog, not a required reading list.
 - Condition modifiers, memory workflows, and local presets: `CONDITION_MODIFIERS.md`
 - Simple questions and readable response CSV: `POST_CONDITION_QUESTIONS.md`
 - Packaging developer builds: `PACKAGING.md`
+- Experimental Mac source setup and qualification: [Mac support](MACOS_SUPPORT.md)
 - Execution planning: `PLANS.md`, `exec-plans/README.md`, and
   `exec-plans/plan-review-workflow.md`
 - Quality, reliability, and security: `QUALITY_SCORE.md`, `RELIABILITY.md`, and

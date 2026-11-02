@@ -179,6 +179,10 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         qtbot.keyClicks(description, "A new study description.")
         assert badge.text() == "Unsaved changes"
         assert badge.isVisible()
+        native_save = QKeySequence(QKeySequence.StandardKey.Save).toString(
+            QKeySequence.SequenceFormat.NativeText,
+        )
+        assert badge.toolTip() == f"Save your project with File > Save or {native_save}."
         QApplication.processEvents()
         assert badge.width() >= badge.sizeHint().width()
         assert badge.geometry().right() < window.menuBar().width()

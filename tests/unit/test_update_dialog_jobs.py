@@ -147,6 +147,7 @@ def update_flow(tmp_path):
         "__name__": __name__, "dataclass": dataclass, "QDialog": _DialogBase,
         "DownloadedInstaller": DownloadedInstaller, "UpdatePhase": UpdatePhase,
         "_PROGRESS_MAXIMUM": 1000, "_LOGGER": logging.getLogger(__name__),
+        "sys": SimpleNamespace(platform="win32"),
     }
     exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
     jobs, events = [], []

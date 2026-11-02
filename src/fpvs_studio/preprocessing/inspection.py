@@ -15,7 +15,9 @@ from PIL import Image, ImageFile
 
 from fpvs_studio.core.models import ImageResolution, StimulusSet
 from fpvs_studio.core.paths import filesystem_path
+from fpvs_studio.core.portable_paths import validate_portable_path_inventory
 from fpvs_studio.preprocessing.models import InspectionFileRecord, StimulusSetInspectionSummary
+from fpvs_studio.preprocessing.source_files import source_image_directory_files
 
 SUPPORTED_SOURCE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 _STIMULUS_FORMATS = {
@@ -140,11 +142,15 @@ def inspect_source_directory(
     if not source_dir.is_dir():
         raise ImageInspectionError(f"Source path is not a directory: {source_dir}")
 
-    files = sorted(path for path in source_dir.iterdir() if path.is_file())
+    files = source_image_directory_files(source_dir)
     unsupported_files = [
         path.name for path in files if path.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES
     ]
     supported_files = [path for path in files if path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES]
+    try:
+        validate_portable_path_inventory(path.name for path in supported_files)
+    except ValueError as error:
+        raise ImageInspectionError(str(error)) from error
 
     if strict and unsupported_files:
         raise ImageInspectionError(

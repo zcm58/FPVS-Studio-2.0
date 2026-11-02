@@ -1,0 +1,275 @@
+name: macOS source
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - .agents/verification.toml
+      - .agents/scripts/verify.py
+      - scripts/macos-source.sh
+      - .github/workflows/macos-source.yml
+  pull_request:
+    paths:
+      - src/**
+      - tests/**
+      - pyproject.toml
+      - .agents/verification.toml
+      - .agents/scripts/verify.py
+      - scripts/macos-source.sh
+      - .github/workflows/macos-source.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-source-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-source:
+    name: Create Windows transfer fixture
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install authoring and test dependencies
+        run: python -m pip install --editable '.[dev]'
+      - name: Create and relocate a synthetic portable project
+        run: >-
+          python tests/integration/macos_bundle_handoff.py create
+          --work-root "$RUNNER_TEMP/windows-handoff-work"
+          --output "$RUNNER_TEMP/windows-handoff-source"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-handoff-source
+          path: ${{ runner.temp }}/windows-handoff-source
+          retention-days: 14
+
+  source:
+    needs: windows-source
+    name: Python 3.10 / ${{ matrix.cpu }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            cpu: arm64
+            python-architecture: arm64
+          - runner: macos-15-intel
+            cpu: x86_64
+            python-architecture: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up native Python 3.10
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          architecture: ${{ matrix.python-architecture }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Record host and interpreter
+        env:
+          EXPECTED_CPU: ${{ matrix.cpu }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/macos-source-evidence"
+          sw_vers | tee "$RUNNER_TEMP/macos-source-evidence/host.txt"
+          python -c 'import os, platform, sys; print(sys.version); print(platform.machine()); assert platform.machine() == os.environ["EXPECTED_CPU"]' | tee -a "$RUNNER_TEMP/macos-source-evidence/host.txt"
+
+      - name: Install complete source dependencies
+        run: bash scripts/macos-source.sh setup
+
+      - name: Record resolved dependency versions
+        if: always()
+        run: |
+          if [ -x .venv3.10/bin/python ]; then
+            .venv3.10/bin/python -m pip freeze > "$RUNNER_TEMP/macos-source-evidence/dependencies.txt"
+          fi
+
+      - name: Import authoring source without creating an application or windows
+        run: .venv3.10/bin/python -c 'import fpvs_studio.gui.application; import fpvs_studio.gui.main_window'
+
+      - name: Download the Windows-authored fixture
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-handoff-source
+          path: ${{ runner.temp }}/windows-handoff-input
+
+      - name: Import, compare and re-export the Windows project on macOS
+        run: >-
+          .venv3.10/bin/python tests/integration/macos_bundle_handoff.py roundtrip
+          --input "$RUNNER_TEMP/windows-handoff-input/project.fpvsbundle"
+          --baseline "$RUNNER_TEMP/windows-handoff-input/baseline.json"
+          --work-root "$RUNNER_TEMP/macos-handoff-work"
+          --output "$RUNNER_TEMP/macos-handoff-output"
+
+      - name: Upload the Mac-exported fixture
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-handoff-${{ matrix.cpu }}
+          path: ${{ runner.temp }}/macos-handoff-output
+          retention-days: 14
+
+      - name: Create a native Mac-origin transfer fixture
+        run: >-
+          .venv3.10/bin/python tests/integration/macos_bundle_handoff.py create
+          --work-root "$RUNNER_TEMP/macos-origin-work"
+          --output "$RUNNER_TEMP/macos-origin-output"
+
+      - name: Upload the Mac-origin fixture
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-origin-${{ matrix.cpu }}
+          path: ${{ runner.temp }}/macos-origin-output
+          retention-days: 14
+
+      - name: Verify source, portable contracts and native adapters
+        env:
+          FPVS_MACOS_NATIVE_CHECKS: "1"
+          PYTEST_ADDOPTS: --junitxml=${{ runner.temp }}/macos-source-evidence/tests.xml
+        run: bash scripts/macos-source.sh verify
+
+      - name: Upload source validation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-source-${{ matrix.cpu }}
+          path: ${{ runner.temp }}/macos-source-evidence
+          retention-days: 14
+
+
+  windows-return:
+    name: Verify both Mac exports on Windows
+    needs: source
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install authoring and test dependencies
+        run: python -m pip install --editable '.[dev]'
+      - name: Download both native Mac exports
+        uses: actions/download-artifact@v8
+        with:
+          pattern: macos-handoff-*
+          path: ${{ runner.temp }}/macos-returns
+      - name: Import and compare each Mac export on Windows
+        run: |
+          for cpu in arm64 x86_64; do
+            python tests/integration/macos_bundle_handoff.py roundtrip \
+              --input "$RUNNER_TEMP/macos-returns/macos-handoff-$cpu/project.fpvsbundle" \
+              --baseline "$RUNNER_TEMP/macos-returns/macos-handoff-$cpu/baseline.json" \
+              --work-root "$RUNNER_TEMP/windows-return-work-$cpu" \
+              --output "$RUNNER_TEMP/windows-return-$cpu"
+          done
+      - name: Download both Mac-origin fixtures
+        uses: actions/download-artifact@v8
+        with:
+          pattern: macos-origin-*
+          path: ${{ runner.temp }}/macos-origins
+      - name: Import and re-export each Mac-origin fixture on Windows
+        run: |
+          for cpu in arm64 x86_64; do
+            python tests/integration/macos_bundle_handoff.py roundtrip \
+              --input "$RUNNER_TEMP/macos-origins/macos-origin-$cpu/project.fpvsbundle" \
+              --baseline "$RUNNER_TEMP/macos-origins/macos-origin-$cpu/baseline.json" \
+              --work-root "$RUNNER_TEMP/windows-origin-work-$cpu" \
+              --output "$RUNNER_TEMP/windows-origin-return-$cpu"
+          done
+      - name: Upload the Windows re-export for Apple Silicon
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-origin-return-arm64
+          path: ${{ runner.temp }}/windows-origin-return-arm64
+          retention-days: 14
+      - name: Upload the Windows re-export for Intel
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-origin-return-x86_64
+          path: ${{ runner.temp }}/windows-origin-return-x86_64
+          retention-days: 14
+      - name: Upload cross-platform handoff evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-return-evidence
+          path: ${{ runner.temp }}/windows-return-*/evidence.json
+          retention-days: 14
+
+
+  macos-origin-return:
+    name: Verify Mac-origin return / ${{ matrix.cpu }}
+    needs: windows-return
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            cpu: arm64
+            python-architecture: arm64
+          - runner: macos-15-intel
+            cpu: x86_64
+            python-architecture: x64
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          architecture: ${{ matrix.python-architecture }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install authoring and test dependencies
+        run: python -m pip install --editable '.[dev]'
+      - name: Download the Windows-reexported Mac-origin fixture
+        uses: actions/download-artifact@v8
+        with:
+          name: windows-origin-return-${{ matrix.cpu }}
+          path: ${{ runner.temp }}/windows-origin-input
+      - name: Import and compare the returned project on its native Mac architecture
+        env:
+          EXPECTED_CPU: ${{ matrix.cpu }}
+        run: |
+          python -c 'import os, platform; assert platform.machine() == os.environ["EXPECTED_CPU"]'
+          python tests/integration/macos_bundle_handoff.py roundtrip \
+            --input "$RUNNER_TEMP/windows-origin-input/project.fpvsbundle" \
+            --baseline "$RUNNER_TEMP/windows-origin-input/baseline.json" \
+            --work-root "$RUNNER_TEMP/macos-origin-final-work" \
+            --output "$RUNNER_TEMP/macos-origin-final"
+      - name: Upload Mac-origin return evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: macos-origin-return-${{ matrix.cpu }}
+          path: ${{ runner.temp }}/macos-origin-final/evidence.json
+          retention-days: 14

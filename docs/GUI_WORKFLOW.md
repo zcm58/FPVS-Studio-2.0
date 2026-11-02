@@ -342,6 +342,7 @@ project folders discovered beneath that root. Discovery excludes the reserved
 `.fpvs-studio` app-metadata subtree, including templates, staging files, and backups.
 Recent projects outside the configured root are not included. The dialog can open a
 project, rename its display name, or move a project folder to the Windows Recycle Bin
+(native Trash on Mac; failed Trash never substitutes permanent deletion)
 after an explicit Yes/No confirmation. **Rename...** pre-fills the selected name and
 saves only name/update-time metadata. Folder names, experiment IDs, stimuli and run
 records stay in place. The currently open project's title updates immediately, while
@@ -384,8 +385,14 @@ The Settings dialog can reopen the root-folder setup guide, manage condition tem
 and choose whether launched sessions write full `runs/` folders or compact summary logs
 only. It also exposes the default-on Sophia Mode launch gate used before runtime
 launch, plus a separate option to hide the Home ticker without disabling the launch
-confirmation. Source-tree Windows and Linux runs additionally expose Experiment Test
-Mode for explicit no-hardware verification launches; packaged builds hide it.
+confirmation. Windows/Linux and macOS source expose Experiment Test Mode for explicit
+no-hardware launches. Mac authoring skips first-run EEG setup; launch requires Test
+or AB Pilot mode and preserves authored recording settings. Before launching, a local
+display dialog confirms viewing distance/physical width and native backing resolution/
+refresh. Compilation uses a transient copy; saved lab calibration is unchanged.
+Mac playback and refresh probes use a child process's main thread, retain refresh
+verification and defer teardown until completion. Mac update UI instructs users to
+pull changes from the remote repository and rerun the source setup helper.
 
 ## Main Window
 
@@ -1141,6 +1148,11 @@ tolerance; unsupported measurements are shown for review without writing an inva
 refresh target. Closing or pressing Escape cannot bypass the two explicit open actions.
 It leaves the imported project available under the configured Studio root without
 opening it, so the user can reopen it later through `Open Existing Project`.
+Bundles use the same format on Mac and Windows. Transfer validation rejects ambiguous
+case/Unicode aliases, unsupported filename components and link/special-file payloads.
+Canonical-equivalent filesystem spellings are exported using authored reference
+spelling. Finder metadata is ignored only when recognized by its file signature during
+external image intake; ordinary authored `._` images and word bytes remain unchanged.
 `Import > Project Config...` creates a new
 Studio project shell under the configured FPVS Studio Root Folder from a `.fpvsconfig`
 setup handoff; it does not merge into the current project or carry the FPVS base and

@@ -483,7 +483,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         python = resolve_repo_python()
-        powershell = resolve_powershell()
+        scope = scopes[args.scope]
+        requires_audits = bool(scope.checks) or args.tier == "precommit" or (
+            args.tier == "full" and scope.name == "repo"
+        )
+        powershell = resolve_powershell() if requires_audits else ""
         commands = build_commands(
             scopes[args.scope],
             tier=args.tier,

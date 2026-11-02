@@ -121,6 +121,17 @@ launch. Native queries are read-only and do not alter display settings. This che
 independent of the Setup Wizard's one-click detection, so Home and Run cannot bypass
 it, and verification does not modify the compiled frame schedule.
 
+macOS source queries the default display through CoreGraphics and matches its ID
+to AppKit's fixed refresh intervals. Unknown or variable intervals (Adaptive Sync/
+ProMotion) fail explicitly; a zero CoreGraphics rate is usable only with a proven
+fixed native interval. The fullscreen engine still verifies delivery. Local Test/Pilot
+compiles a deep project copy using confirmed local physical calibration and backing
+pixels, then runs the existing runtime on a child process's main thread. Retina
+framebuffer size must match that calibration before resource upload. Mac launch guards
+reject production, trigger output, windowed/unverified playback and non-primary displays
+before creating engines or acquisition services. Test/Pilot does not qualify EEG or
+physical timing; native GUI acceptance is tracked in [Mac support](MACOS_SUPPORT.md).
+
 Preflight validates the compiled stimulus payload before playback. Routine participant
 launches require image events to reference existing project-relative files, while full
 image decoding is reserved for preprocessing/manual deep preflight and engine stimulus
@@ -1138,7 +1149,7 @@ In the current v1 runtime:
   strict post-settle warmup QC, a 240-frame timing warmup, and production graphics-memory
   verification
 
-Source-tree Windows and Linux runs can enable the app-level Experiment Test Mode. The
+Windows/Linux runs and macOS source can enable the app-level Experiment Test Mode. The
 GUI supplies reserved participant ID `0`, omits participant metadata and manual-electrode
 updates, and skips the Sophia/BioSemi recording gate. After the ordinary full-project
 launch validation succeeds, the test confirmation defaults to all conditions and may
@@ -1150,7 +1161,7 @@ ordinary `SessionPlan` records only the compiled entries. Production launches co
 to compile all conditions. The document launch adapter keeps the authored trigger
 settings unchanged while creating `LaunchSettings` with `serial_enabled=false`,
 `experiment_test_mode=true`,
-`verify_refresh_rate=false`, and
+`verify_refresh_rate=false` on Windows/Linux (`true` on Mac), and
 `verify_graphics_memory=false`. Fullscreen playback, compilation, asset preflight,
 condition/task flow, frame timing, timing warmup/QC, and normal test exports remain
 active, but the result does not claim graphics-hardware qualification. The preference

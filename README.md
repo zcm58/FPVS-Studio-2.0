@@ -13,6 +13,9 @@ to other data formats.
 
 ## Installation Instructions
 
+For experimental **macOS source-only authoring and local tests**, see the
+[Mac source guide](docs/MACOS_SUPPORT.md). EEG acquisition remains on Windows.
+
 Public user documentation is available at
 https://zcm58.github.io/FPVS-Studio-2.0/.
 

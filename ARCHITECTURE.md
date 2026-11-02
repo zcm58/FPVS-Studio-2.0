@@ -7,18 +7,18 @@ behavior being changed. Source package guides add local rules.
 ## Application Shape
 
 The PySide6 GUI edits projects and requests engine-neutral compilation. Runtime
-coordinates sessions in a separate process; the PsychoPy engine renders compiled
-stimuli with lazy imports. Local experiment test mode is available in source and
-installed builds on Windows and Linux. Test/Pilot explicitly selects null triggers;
-normal launches retain hardware and display preflight.
+coordinates sessions; the PsychoPy engine renders compiled stimuli with lazy imports.
+Windows/Linux use the presentation worker; macOS source uses a child process's main
+thread for Cocoa playback and refresh probes. Test/Pilot explicitly selects null
+triggers; normal Windows/Linux launches retain hardware and display preflight.
+Mac tests retain refresh verification and transient calibration; EEG is excluded.
 
 Guided Setup keeps Timing (step 3) separate from a two-column Display & Session
 step (step 4). GUI retains timing drafts across that transition; core still owns
 validation and compilation, including exact shared-refresh compatibility for mixed
 image presentation rates. See [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
 
-Core owns randomized block membership and occurrence identity. New GUI projects opt
-in; legacy pooled projects change only on explicit Save. See the
+Core owns randomized block membership and occurrence identity; see the
 [block contract](docs/SESSION_PLAN.md#explicit-randomized-condition-blocks).
 
 ## Package Map
@@ -75,6 +75,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Runtime recording and evidence | `runtime/recording.py`, `runtime/acquisition_evidence.py` |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
+| Mac source services and test process | `runtime/macos_display.py`, `runtime/macos_session_process.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 
 ## Dependency Rules
 
@@ -121,8 +122,7 @@ history only. Use `docs/index.md` for the full document map.
 
 ## Verification and Documentation Freshness
 
-The task index owns verification tiers and scope routing. Update this map and nearest
-guide when ownership, dependency boundaries or contract flow changes. Keep behavior
-in canonical contracts instead of appending feature histories here. Module length is
-evidence, not a refactor rule; measured debt belongs in
-`docs/exec-plans/tech-debt-tracker.md`. Version metadata lives in `pyproject.toml`.
+The task index owns verification routes. GitHub adds macOS source and cross-OS bundle
+checks alongside documentation publishing. Update this map and nearest guide when
+ownership or boundaries change; keep behavior in canonical contracts. Measured debt
+belongs in `docs/exec-plans/tech-debt-tracker.md`; versions live in `pyproject.toml`.

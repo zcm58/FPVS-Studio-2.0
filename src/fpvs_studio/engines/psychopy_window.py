@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Mapping
 from importlib import import_module
 from typing import Any
@@ -52,6 +53,8 @@ def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, obje
         "color": "black",
         "units": "pix",
     }
+    if sys.platform == "darwin":
+        window_kwargs.update({"useRetina": True, "winType": "pyglet"})
     if fullscreen:
         fullscreen_size = _detect_fullscreen_size_px(selected_display_index)
         if fullscreen_size is not None:
@@ -70,6 +73,23 @@ def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, obje
         else:
             window_kwargs["size"] = [1280, 720]
     return window_kwargs
+
+
+def validate_macos_framebuffer(window: Any, run_spec: RunSpec) -> None:
+    """Reject a Retina backing-size mismatch before uploading condition resources."""
+
+    if sys.platform != "darwin":
+        return
+    try:
+        size = tuple(int(value) for value in window.frameBufferSize)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise RuntimeError("PsychoPy could not confirm the Mac display's backing pixels.") from exc
+    expected = (run_spec.display.screen_width_px, run_spec.display.screen_height_px)
+    if size != expected:
+        raise RuntimeError(
+            f"Mac presentation uses {size} backing pixels; the local test was calibrated "
+            f"for {expected}. Check the primary display and restart the local test."
+        )
 
 
 def build_refresh_probe_window_kwargs(

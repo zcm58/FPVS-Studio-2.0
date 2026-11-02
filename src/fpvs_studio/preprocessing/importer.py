@@ -25,6 +25,7 @@ from fpvs_studio.core.paths import (
     stimulus_variant_dirname,
     to_project_relative_posix,
 )
+from fpvs_studio.core.portable_paths import validate_portable_path_inventory
 from fpvs_studio.preprocessing.controls import (
     generate_phase_scrambled_png,
     generate_rot180_png,
@@ -52,6 +53,7 @@ from fpvs_studio.preprocessing.models import (
     StimulusSetInspectionSummary,
     StimulusSetManifest,
 )
+from fpvs_studio.preprocessing.source_files import source_image_directory_files
 
 PHASE_SCRAMBLE_POLICY = "fft-amplitude-preserved-noise-phase-v1"
 
@@ -96,7 +98,13 @@ def import_stimulus_source_directory(
         raise FileExistsError(f"Stimulus source destination already exists: {destination_dir}")
     if not source_dir.is_dir():
         raise ImageInspectionError(f"Source directory does not exist: {source_dir}")
-    source_files = sorted(item for item in source_dir.iterdir() if item.is_file())
+    source_files = source_image_directory_files(source_dir)
+    try:
+        validate_portable_path_inventory(
+            item.name for item in source_files if item.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
+        )
+    except ValueError as error:
+        raise ImageInspectionError(str(error)) from error
     unsupported = [
         item.name for item in source_files if item.suffix.lower() not in SUPPORTED_SOURCE_SUFFIXES
     ]

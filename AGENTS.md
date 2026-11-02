@@ -1,6 +1,6 @@
 # AGENTS.md
 
-FPVS Studio is a Windows-focused PySide6 authoring application for FPVS experiments.
+FPVS Studio is a PySide6 authoring application with Windows acquisition and experimental macOS source support.
 PsychoPy presentation stays behind runtime and engine boundaries.
 
 ## Efficient Working Route
@@ -68,7 +68,8 @@ The driver selects `.venv3.10`, then `.venv`, then compatible current Python.
 audits, mypy and safe non-Qt tests. Run precommit for shared behavior changes.
 `full` includes Qt and requires the visible-environment approval above. Use `-List`
 to inspect steps and `-CheckConfig` after harness changes. GitHub runs documentation
-publishing, not the repository's local tests or code-quality checks.
+publishing plus the macOS source/install/adapter and cross-OS bundle lane. Local
+precommit remains required; CI does not qualify physical display timing or EEG.
 
 ## Documentation Freshness
 

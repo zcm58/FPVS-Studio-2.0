@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -77,7 +78,9 @@ class ManageProjectsDialog(QDialog):
 
         self.project_card = SectionCard(
             title="Manage Projects",
-            subtitle="Open, rename, or move a project to the Recycle Bin.",
+            subtitle=("Open, rename, or move a project to the Trash."
+                      if sys.platform == "darwin"
+                      else "Open, rename, or move a project to the Recycle Bin."),
             object_name="manage_projects_card",
             parent=self,
         )
@@ -176,7 +179,9 @@ class ManageProjectsDialog(QDialog):
         self.copy_path_button.clicked.connect(self._copy_selected_path)
         action_row.addWidget(self.copy_path_button)
 
-        self.delete_button = QPushButton("Move to Recycle Bin", self)
+        self.delete_button = QPushButton(
+            "Move to Trash" if sys.platform == "darwin" else "Move to Recycle Bin", self,
+        )
         self.delete_button.setObjectName("manage_projects_delete_button")
         mark_destructive_action(self.delete_button)
         self.delete_button.clicked.connect(self._request_delete)

@@ -1,0 +1,306 @@
+"""Fake-only coverage for macOS main-thread presentation and protected request transport."""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.enums import RunMode
+from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
+from fpvs_studio.runtime import launcher
+from fpvs_studio.runtime import macos_session_process as process
+from fpvs_studio.runtime.display_mode import NativeDisplayMode
+from fpvs_studio.runtime.display_refresh import (
+    DisplayRefreshVerification,
+    DisplayRefreshVerificationError,
+)
+from fpvs_studio.runtime.preflight import PreflightError
+
+
+def _settings(**updates):
+    return replace(launcher.LaunchSettings(
+        experiment_test_mode=True, serial_enabled=False, verify_refresh_rate=True,
+    ), **updates)
+
+
+def _summary(plan):
+    return SessionExecutionSummary(
+        project_id=plan.project_id, session_id=plan.session_id, engine_name="psychopy",
+        run_mode=RunMode.SESSION, participant_number="001", participant_session_number=2,
+        participant_metadata=ParticipantMetadata(age=25), total_condition_count=plan.total_runs,
+    )
+
+
+def _fake_process(monkeypatch, callback=None):
+    calls = []
+    monkeypatch.setattr(process.sys, "platform", "darwin")
+    monkeypatch.setattr(process.sys, "frozen", False, raising=False)
+
+    def run(command, **options):
+        assert command[:3] == [process.sys.executable, "-m", process._CHILD_MODULE]
+        assert len(command) == 4
+        assert all(options[key] == process.subprocess.DEVNULL
+                   for key in ("stdin", "stdout", "stderr"))
+        assert options["check"] is False
+        assert not options.get("shell", False)
+        path = Path(command[3])
+        calls.append((path, json.loads(path.read_bytes()), options))
+        assert path.name == "request.json"
+        if os.name == "posix":
+            assert path.stat().st_mode & 0o077 == 0
+            assert path.parent.stat().st_mode & 0o077 == 0
+        return SimpleNamespace(returncode=process.main([str(path)]) if callback is None
+                               else callback(path))
+
+    monkeypatch.setattr(process.subprocess, "run", run)
+    return calls
+
+
+@pytest.mark.parametrize("entrypoint", [launcher.launch_run, launcher.launch_session])
+@pytest.mark.parametrize("updates,match", [
+    ({"experiment_test_mode": False}, "Test Mode or Pilot"),
+    ({"serial_enabled": True}, "trigger output disabled"),
+    ({"verify_refresh_rate": False}, "refresh-rate verification"),
+    ({"fullscreen": False}, "fullscreen"),
+    ({"display_index": 1}, "primary display"),
+    ({"display_index": False}, "primary display"),
+])
+def test_mac_blocked_launch_never_probes_recorders_or_constructs_engine(
+    monkeypatch, tmp_path, entrypoint, updates, match,
+):
+    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Hardware or engine must not be accessed")
+
+    monkeypatch.setattr(launcher, "_check_recorder_before_launch", forbidden)
+    monkeypatch.setattr(launcher, "create_engine", forbidden)
+    with pytest.raises(launcher.LaunchSettingsError, match=match):
+        entrypoint(tmp_path, object(), participant_number="001",
+                   launch_settings=_settings(**updates))
+
+
+@pytest.mark.parametrize("entrypoint", [launcher.launch_run, launcher.launch_session])
+def test_mac_direct_launch_requires_process_main_thread(monkeypatch, tmp_path, entrypoint):
+    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher.threading, "current_thread", lambda: object())
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Hardware or engine must not be accessed")
+
+    monkeypatch.setattr(launcher, "_check_recorder_before_launch", forbidden)
+    monkeypatch.setattr(launcher, "create_engine", forbidden)
+    with pytest.raises(launcher.LaunchSettingsError, match="main thread"):
+        entrypoint(tmp_path, object(), participant_number="001", launch_settings=_settings())
+
+
+def test_mac_frozen_guard_precedes_recording_checks(monkeypatch):
+    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    monkeypatch.setattr(launcher.sys, "frozen", True, raising=False)
+    with pytest.raises(launcher.LaunchSettingsError, match="source environment"):
+        launcher._validate_launch_settings(_settings())
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_other_platform_launch_policy_remains_unchanged(monkeypatch, platform):
+    monkeypatch.setattr(launcher.sys, "platform", platform)
+    launcher._validate_launch_settings(launcher.LaunchSettings(
+        fullscreen=False, verify_refresh_rate=False, display_index=1,
+    ))
+
+
+@pytest.mark.parametrize("pilot", [False, True])
+def test_private_child_main_thread_roundtrip_preserves_neutral_session(
+    monkeypatch, sample_project, sample_project_root, pilot,
+):
+    plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
+    seen = []
+
+    def launch(root, selected, **options):
+        seen.append((root, selected, options))
+        assert process.threading.current_thread() is process.threading.main_thread()
+        assert options["launch_settings"].windowed_size_px == (1280, 720)
+        return _summary(selected)
+
+    monkeypatch.setattr(launcher, "launch_session", launch)
+    calls = _fake_process(monkeypatch)
+    result = process.launch_macos_test_session(
+        sample_project_root, plan, participant_number="001", participant_session_number=2,
+        participant_metadata={"age": 25},
+        launch_settings=_settings(pilot_mode=pilot, experiment_test_mode=not pilot),
+    )
+    assert result == _summary(plan)
+    assert seen[0][0] == sample_project_root.resolve()
+    assert seen[0][1] == plan
+    assert seen[0][2]["participant_metadata"].age == 25
+    request_path, payload, options = calls[0]
+    assert payload["operation"] == "session"
+    assert "participant_metadata" in payload
+    assert str(Path(process.__file__).resolve().parents[2]) in options["env"]["PYTHONPATH"]
+    assert not request_path.parent.exists()
+
+
+@pytest.mark.parametrize("error", [RuntimeError("private participant details"),
+                                   ModuleNotFoundError("secret dependency path")])
+def test_child_failure_returns_bounded_redacted_error_and_cleans_request(
+    monkeypatch, sample_project, sample_project_root, error, caplog,
+):
+    plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
+
+    def fail(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(launcher, "launch_session", fail)
+    calls = _fake_process(monkeypatch)
+    with pytest.raises(process.MacOSSessionProcessError) as failure:
+        process.launch_macos_test_session(sample_project_root, plan, participant_number="001",
+                                          launch_settings=_settings())
+    assert "private" not in str(failure.value)
+    assert "secret" not in str(failure.value)
+    assert failure.value.child_traceback
+    assert any("test_macos_session_process.py" in frame for frame in failure.value.child_traceback)
+    assert "private participant details" not in caplog.text
+    assert "secret dependency path" not in caplog.text
+    assert "stack locations" in caplog.text
+    assert not calls[0][0].parent.exists()
+
+
+def test_transport_failure_is_explicit_and_does_not_run_parent_engine(
+    monkeypatch, sample_project, sample_project_root,
+):
+    plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
+    calls = _fake_process(monkeypatch, lambda _path: 9)
+    with pytest.raises(process.MacOSSessionProcessError, match="did not return"):
+        process.launch_macos_test_session(sample_project_root, plan, participant_number="001",
+                                          launch_settings=_settings())
+    assert not calls[0][0].parent.exists()
+
+
+def test_mismatched_child_identity_is_rejected(monkeypatch, sample_project, sample_project_root):
+    plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
+    monkeypatch.setattr(launcher, "launch_session",
+                        lambda *_args, **_kwargs: _summary(plan).model_copy(
+                            update={"participant_number": "999"},
+                        ))
+    _fake_process(monkeypatch)
+    with pytest.raises(process.MacOSSessionProcessError, match="mismatched"):
+        process.launch_macos_test_session(sample_project_root, plan, participant_number="001",
+                                          launch_settings=_settings())
+
+
+def test_refresh_proxy_measures_only_primary_fullscreen_in_child_main_thread(monkeypatch):
+    from fpvs_studio.engines import registry
+    from fpvs_studio.runtime import display_refresh
+
+    seen = []
+    verification = DisplayRefreshVerification(
+        NativeDisplayMode("macOS", "Primary", 60.0, "CoreGraphics", True), 60.0, 60.0,
+    )
+    engine = object()
+    monkeypatch.setattr(registry, "create_engine", lambda _name: engine)
+
+    def verify(selected, *, runtime_options):
+        assert selected is engine
+        assert process.threading.current_thread() is process.threading.main_thread()
+        seen.append(runtime_options)
+        return verification
+
+    monkeypatch.setattr(display_refresh, "verify_primary_display_refresh", verify)
+    calls = _fake_process(monkeypatch)
+    assert process.verify_macos_primary_display_refresh() == verification
+    assert seen == [{"fullscreen": True, "display_index": None}]
+    assert calls[0][1] == {"version": 1, "operation": "refresh"}
+    assert not calls[0][0].parent.exists()
+
+
+def test_refresh_proxy_rejects_invalid_measurement(monkeypatch):
+    def respond(path):
+        verification = DisplayRefreshVerification(
+            NativeDisplayMode("macOS", "Primary", 60.0, "CoreGraphics", True), 144.0, 60.0,
+        )
+        process._private_file(path.parent / "response.json", write=process._Response(
+            verification=verification,
+        ).model_dump_json().encode())
+        return 0
+
+    _fake_process(monkeypatch, respond)
+    with pytest.raises(process.MacOSSessionProcessError, match="invalid result"):
+        process.verify_macos_primary_display_refresh()
+
+
+def test_child_rejects_unknown_opcode_without_loading_engine(monkeypatch, tmp_path):
+    monkeypatch.setattr(process.sys, "platform", "darwin")
+    private = tmp_path / "request-area"
+    private.mkdir(mode=0o700)
+    request = private / "request.json"
+    process._private_file(request, write=b'{"version":1,"operation":"execute-any-module"}')
+    assert process.main([str(request)]) == 1
+    response = process._Response.model_validate_json(
+        process._private_file(private / "response.json"),
+    )
+    assert response.error == "invalid_request"
+
+
+@pytest.mark.parametrize("platform,frozen", [("win32", False), ("darwin", True)])
+def test_process_boundary_rejects_unsupported_host_before_spawning(monkeypatch, platform, frozen):
+    monkeypatch.setattr(process.sys, "platform", platform)
+    monkeypatch.setattr(process.sys, "frozen", frozen, raising=False)
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("No child process should be started")
+
+    monkeypatch.setattr(process.subprocess, "run", forbidden)
+    with pytest.raises(process.MacOSSessionProcessError, match="macOS source"):
+        process.verify_macos_primary_display_refresh()
+
+
+def test_private_transport_is_bounded_and_exclusive(monkeypatch, tmp_path):
+    path = tmp_path / "payload.json"
+    monkeypatch.setattr(process, "MAX_PAYLOAD_BYTES", 4)
+    with pytest.raises(process.MacOSSessionProcessError, match="limit"):
+        process._private_file(path, write=b"12345")
+    process._private_file(path, write=b"1234")
+    assert process._private_file(path) == b"1234"
+    with pytest.raises(FileExistsError):
+        process._private_file(path, write=b"1234")
+
+
+@pytest.mark.parametrize("error", [
+    DisplayRefreshVerificationError(
+        "Choose a fixed refresh rate in macOS System Settings > Displays.",
+    ),
+    PreflightError("The compiled session expects 120 Hz. Recheck the display refresh rate."),
+    PreflightError("A required stimulus image is missing. Re-import the condition folder."),
+])
+def test_allowlisted_display_and_asset_failures_remain_actionable(
+    monkeypatch, sample_project, sample_project_root, error,
+):
+    plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
+
+    def fail(*_args, **_kwargs):
+        raise error
+
+    monkeypatch.setattr(launcher, "launch_session", fail)
+    _fake_process(monkeypatch)
+    with pytest.raises(process.MacOSSessionProcessError) as failure:
+        process.launch_macos_test_session(sample_project_root, plan, participant_number="001",
+                                          launch_settings=_settings())
+    assert str(failure.value) == str(error)
+    assert failure.value.child_traceback
+
+
+def test_display_guidance_is_bounded_without_echoing_arbitrary_failure_payloads():
+    typed = process._launch_failure(DisplayRefreshVerificationError("Check fixed refresh. " * 200))
+    assert len(typed.guidance) == 1000
+    generic = process._launch_failure(RuntimeError("private participant details"))
+    assert generic.guidance == ""
+    framebuffer = process._launch_failure(
+        RuntimeError("Mac presentation uses (1440, 900) backing pixels"),
+    )
+    assert "local calibration" in framebuffer.guidance

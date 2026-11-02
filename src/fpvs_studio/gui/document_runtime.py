@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
@@ -14,7 +15,12 @@ from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.data_sharing import protocol_fingerprint
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata
-from fpvs_studio.core.models import ProjectFile, ProjectRecordingSettings, ProjectValidationReport
+from fpvs_studio.core.models import (
+    DisplaySettings,
+    ProjectFile,
+    ProjectRecordingSettings,
+    ProjectValidationReport,
+)
 from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.randomization import RandomizationSeeds
 from fpvs_studio.core.session_plan import SessionPlan
@@ -156,6 +162,14 @@ class DocumentRuntimeMixin:
         visit or opens participant presentation. Validation status is informational.
         """
 
+        if sys.platform == "darwin" and (
+            getattr(sys, "frozen", False) or not self.local_testing_enabled
+        ):
+            raise DocumentError(
+                "macOS source supports local tests only. Enable Experiment Test Mode "
+                "in Settings (or Pilot Study Mode for Attentional Blink). "
+                "Run EEG acquisition on the Windows lab PC."
+            )
         try:
             return validate_recording_configuration(self.recording_launch_options())
         except ValueError as exc:
@@ -177,16 +191,26 @@ class DocumentRuntimeMixin:
         refresh_hz: float,
         condition_ids: Sequence[str] | None = None,
         resolved_seeds: RandomizationSeeds | None = None,
+        local_display: DisplaySettings | None = None,
     ) -> SessionPlan:
         """Compile the current project into a session plan."""
 
         self.ensure_unused_session_seed_for_launch()
-        report = self.validation_report(refresh_hz=refresh_hz)
+        project = self._project
+        if local_display is not None:
+            if not self.local_testing_enabled:
+                raise DocumentError("Local display calibration requires Test or Pilot mode.")
+            project = self._project.model_copy(deep=True)
+            project.settings.display = local_display.model_copy(deep=True)
+        report = (
+            self.validation_report(refresh_hz=refresh_hz)
+            if local_display is None else validate_project(project, refresh_hz=refresh_hz)
+        )
         if not report.is_valid:
             raise DocumentError(format_validation_report(report))
         try:
             session_plan = compile_session_plan(
-                self._project,
+                project,
                 refresh_hz=refresh_hz,
                 project_root=self._project_root,
                 condition_ids=(list(condition_ids) if condition_ids is not None else None),
@@ -337,7 +361,9 @@ class DocumentRuntimeMixin:
                     serial_pulse_width_ms=trigger_settings.pulse_width_ms,
                     serial_reset_code=trigger_settings.reset_code,
                     serial_reset_delay_ms=trigger_settings.reset_delay_ms,
-                    verify_refresh_rate=not self.local_testing_enabled,
+                    verify_refresh_rate=(
+                        sys.platform == "darwin" or not self.local_testing_enabled
+                    ),
                     verify_graphics_memory=not self.local_testing_enabled,
                     pilot_mode=self.attentional_blink_pilot_mode_enabled,
                     completion_screen_seconds=0.5,
@@ -358,7 +384,12 @@ class DocumentRuntimeMixin:
                 launch_kwargs["participant_metadata"] = participant_metadata
             if participant_session_number is not None:
                 launch_kwargs["participant_session_number"] = participant_session_number
-            summary = _document_dependency("launch_session")(
+            launch = _document_dependency("launch_session")
+            if sys.platform == "darwin":
+                from fpvs_studio.runtime.macos_session_process import launch_macos_test_session
+
+                launch = launch_macos_test_session
+            summary = launch(
                 self._project_root,
                 session_plan,
                 **launch_kwargs,

@@ -192,7 +192,10 @@ def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int
 def experiment_test_mode_available() -> bool:
     """Return whether local experiment testing is supported on this host."""
 
-    return sys.platform.startswith("linux") or sys.platform.startswith("win")
+    return (
+        sys.platform.startswith(("linux", "win"))
+        or (sys.platform == "darwin" and not getattr(sys, "frozen", False))
+    )
 
 
 class StudioController(QObject):
@@ -281,6 +284,8 @@ class StudioController(QObject):
         self._data_sharing().startup(self._fpvs_root_dir, tuple(self.load_recent_project_roots()))
 
     def _schedule_startup_update_check(self) -> None:
+        if sys.platform == "darwin":
+            return  # Source updates use Git and the macOS environment helper.
         if not self.startup_update_checks_enabled or self._startup_update_check_started:
             return
         self._startup_update_check_started = True
@@ -311,6 +316,8 @@ class StudioController(QObject):
     def start_update_cache_housekeeping(self) -> None:
         """Schedule offline, app-cache-only startup work before root-folder onboarding."""
 
+        if sys.platform == "darwin":
+            return
         if self._startup_cache_cleanup_started or self._update_lifecycle.is_shutting_down:
             return
         self._startup_cache_cleanup_started = True
@@ -544,6 +551,10 @@ class StudioController(QObject):
     def ensure_default_recording_configured(self) -> bool:
         """Require an explicit hardware choice after Root Folder setup."""
 
+        import sys
+
+        if sys.platform == "darwin":
+            return True  # Authoring needs no EEG; explicit Test/Pilot is launch-only.
         error_message = ""
         try:
             if self.load_default_recording_configuration() is not None:
@@ -648,7 +659,7 @@ class StudioController(QObject):
         enabled = bool(enabled)
         if enabled and not experiment_test_mode_available():
             raise ValueError(
-                "Experiment test mode is available only on Windows and Linux."
+                "Experiment test mode requires a supported source installation."
             )
         self._settings.setValue(_EXPERIMENT_TEST_MODE_KEY, enabled)
         self._settings.remove(_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
@@ -668,7 +679,7 @@ class StudioController(QObject):
 
         enabled = bool(enabled)
         if enabled and not experiment_test_mode_available():
-            raise ValueError("Pilot study mode is available only on Windows and Linux.")
+            raise ValueError("Pilot study mode requires a supported source installation.")
         self._settings.setValue(_AB_PILOT_MODE_KEY, enabled)
         self._settings.sync()
         if self.main_window is not None:
@@ -1790,13 +1801,14 @@ class StudioController(QObject):
             _show_error(parent, "Delete Project Error", error)
             return False
 
+        trash_name = "Trash" if sys.platform == "darwin" else "Recycle Bin"
         answer = QMessageBox.question(
             parent,
-            "Move Project to Recycle Bin",
-            f'Are you sure you want to move this project to the Recycle Bin?\n\n'
+            f"Move Project to {trash_name}",
+            f'Are you sure you want to move this project to the {trash_name}?\n\n'
             f'"{project_name}"\n\n'
             f"Folder:\n{project_root}\n\n"
-            "You can restore it from the Windows Recycle Bin until the Recycle Bin is emptied.",
+            f"You can restore it from the {trash_name} until it is emptied.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -1805,11 +1817,12 @@ class StudioController(QObject):
 
         try:
             _move_project_tree_to_recycle_bin(project_root)
-            if project_root.exists() and not project_json_path(project_root).exists():
+            if (os.name == "nt" and project_root.exists()
+                    and not project_json_path(project_root).exists()):
                 _remove_project_tree(project_root)
             if project_root.exists():
                 raise OSError(
-                    "Windows did not fully remove this project folder: "
+                    "The system did not fully move this project folder: "
                     f"{project_root}"
                 )
         except Exception as error:
@@ -1858,8 +1871,13 @@ class _SHFILEOPSTRUCTW(ctypes.Structure):
 
 
 def _move_project_tree_to_recycle_bin(project_root: Path) -> None:
-    """Move a project tree to the Windows Recycle Bin."""
+    """Move a project tree to the native Recycle Bin/Trash on Windows/macOS."""
 
+    if sys.platform == "darwin":
+        from fpvs_studio.gui.native_files import move_to_macos_trash
+
+        move_to_macos_trash(project_root)
+        return
     if os.name != "nt":
         _remove_project_tree(project_root)
         return

@@ -427,6 +427,7 @@ def test_checked_in_verification_config_is_valid() -> None:
         "engine",
         "gui",
         "library",
+        "macos",
         "packaging",
         "preprocessing",
         "project-io",
@@ -442,6 +443,19 @@ def test_checked_in_verification_config_is_valid() -> None:
     assert "tests/unit/test_library_credentials.py" in scopes["library"].tests
     assert "tests/unit/test_library_publish.py" in scopes["library"].tests
     assert "tests/unit/test_library_publish.py" in scopes["project-io"].tests
+    assert scopes["macos"].checks == ()
+    assert {
+        "tests/unit/test_attentional_blink_compiler.py",
+        "tests/unit/test_compiler_fixation.py",
+        "tests/unit/test_condition_tasks.py",
+        "tests/unit/test_preprocessing_import.py",
+        "tests/unit/test_template_library.py",
+        "tests/unit/test_library_client.py",
+        "tests/unit/test_data_sharing_service.py",
+        "tests/unit/test_support_reports.py",
+        "tests/unit/test_runtime_attentional_blink_report.py",
+    } <= set(scopes["macos"].tests)
+    assert "tests/unit/test_runtime_launcher.py" not in scopes["macos"].tests
     assert scopes["engine"].full_tests == (
         "tests/integration/test_psychopy_engine.py",
     )
@@ -455,3 +469,27 @@ def test_list_without_scope_reports_available_routes(capsys) -> None:
     assert "Available verification scopes:" in output
     assert "- repo" in output
     assert "- gui" in output
+
+
+def test_macos_focused_route_does_not_require_powershell_or_qt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[list[str]] = []
+    monkeypatch.setattr(verify, "resolve_repo_python", lambda: Path("python"))
+    monkeypatch.setattr(verify, "changed_files", lambda: ())
+    monkeypatch.setattr(
+        verify, "resolve_powershell", lambda: pytest.fail("macos focused requires no PowerShell")
+    )
+
+    def _record(commands: list[list[str]], *, list_only: bool) -> int:
+        assert list_only is False
+        observed.extend(commands)
+        return 0
+
+    monkeypatch.setattr(verify, "run_commands", _record)
+
+    assert verify.main(["--scope", "macos", "--tier", "focused"]) == 0
+    command = next(command for command in observed if "pytest" in command)
+    assert "--allow-qt-tests" not in command
+    assert "tests/integration/test_macos_native.py" in command
+    assert not any("powershell" in part or "pwsh" in part for row in observed for part in row)

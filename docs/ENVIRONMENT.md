@@ -12,6 +12,13 @@ This is enforced in:
 
 ## Recommended Local Setup
 
+For experimental macOS source setup, use `bash scripts/macos-source.sh setup`, then
+`bash scripts/macos-source.sh run` from the checkout. This creates `.venv3.10`,
+installs the GUI/engine/dev extras and checks dependency consistency. Python 3.10
+must already be installed; `FPVS_PYTHON` can select its executable. See
+[Mac support and acceptance](MACOS_SUPPORT.md) for the CI matrix, test-only scope,
+local calibration and portable Windows handoff. No Developer ID is needed for source.
+
 PowerShell:
 
 ```powershell
@@ -99,10 +106,13 @@ That means:
 - Settings > Recording exposes project BioSemi/TriggerBox serial ports; other serial
   parameters remain backend fields
 
-Source-tree runs on Windows and Linux expose an app-level `Experiment Test Mode`. It
-uses the same fullscreen compiled session and timing QC while explicitly disabling
-serial output, the Sophia/BioSemi gate, connected-display refresh verification, and
-participant collection. Packaged builds do not expose or honor this development mode.
+Windows/Linux expose app-level `Experiment Test Mode` using the same fullscreen
+compiled session and timing QC with explicit null output and no participant collection.
+Their local-test policy skips connected-display verification. macOS source exposes
+Test/Pilot only, retains native plus PsychoPy refresh verification, and uses a child
+process's main thread. Its calibration dialog applies to one test without saving lab
+display/EEG settings. macOS first-run authoring requires no EEG choice; acquisition
+launches are blocked. Source updates use Git and the setup helper, not a Windows installer.
 
 ## Test Performance
 
@@ -143,7 +153,9 @@ Use the safe GUI route for non-Qt checks:
 
 Do not set `QT_QPA_PLATFORM=offscreen`. Registered Qt execution is available through
 the optional `full` tier with `FPVS_ALLOW_QT_TESTS=1`, but run it only after explicit
-user approval in a safe visible GUI environment. GitHub does not run repository tests.
+user approval in a safe visible GUI environment. GitHub's macOS source workflow runs
+clean installs, safe non-Qt checks, opt-in native adapters and cross-OS bundle handoffs.
+It uploads exact host/dependency/test evidence; it never qualifies a physical display.
 The repo-wide `full` tier also requires the `dev` and `engine` extras shown in the local
 setup commands above.
 

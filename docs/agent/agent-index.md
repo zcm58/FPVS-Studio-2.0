@@ -14,6 +14,7 @@ use document headings or `rg -n '^#{1,3} ' <document>` to choose the contract se
 | Scope | Use for | Governing guide | One focused contract |
 | --- | --- | --- | --- |
 | `repo` | Harness, shared configuration, cross-layer ownership | `AGENTS.md` | `ARCHITECTURE.md` |
+| `macos` | Source install, native adapters, safe local tests and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
 | `docs` | Guidance, contracts and plans | `AGENTS.md` | Edited document; `docs/exec-plans/README.md` for plan work |
 | `gui` | PySide6 widgets, controllers, workers and eight-step authoring | `src/fpvs_studio/gui/AGENTS.md` | Relevant `docs/GUI_WORKFLOW.md` section; `docs/FRONTEND.md` for design |
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |
@@ -50,7 +51,9 @@ The driver selects `.venv3.10`, `.venv`, then compatible current Python. Add `-L
 to inspect steps; use `-CheckConfig` after harness edits. Non-Qt tiers support
 `-Workers 4` (default one); Qt stays serial. See
 [test performance](../ENVIRONMENT.md#test-performance) for isolation and `-Durations`.
-GitHub runs documentation publishing separately, not these local quality gates.
+GitHub runs documentation publishing and the macOS source lane, including clean
+dependency installs and cross-OS bundle checks. It does not replace local precommit,
+visible GUI acceptance or physical display qualification.
 
 ## Skill Routing
 

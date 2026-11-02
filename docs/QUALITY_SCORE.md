@@ -40,5 +40,6 @@ residual risk.
 
 PowerShell wrappers remain available for developer-specific workflows and release
 builds. Do not duplicate their individual commands in agent guidance; route ordinary
-work through the driver. GitHub does not repeat these repository checks; its independent
-documentation build and publishing workflow remains automated.
+work through the driver. GitHub runs documentation publishing and a scoped macOS
+source lane for clean dependency installs, safe adapter/contract tests and cross-OS
+bundle handoffs. Local precommit and approved visible GUI checks remain separate.

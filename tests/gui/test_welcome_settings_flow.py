@@ -1512,7 +1512,8 @@ def test_experiment_test_mode_availability_in_source_and_installed_builds(
     monkeypatch.setattr(
         controller_module, "sys", SimpleNamespace(platform=platform, frozen=frozen)
     )
-    assert controller_module.experiment_test_mode_available() is (platform != "darwin")
+    expected = platform != "darwin" or not frozen
+    assert controller_module.experiment_test_mode_available() is expected
 
 
 def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
@@ -1541,7 +1542,7 @@ def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
     assert "bypasses connected-display refresh verification" in checkbox.toolTip()
     assert "replaces participant collection" in checkbox.toolTip()
     assert "runtime timing QC" in checkbox.toolTip()
-    assert "including installed builds" in checkbox.toolTip()
+    assert "Fullscreen presentation remains enabled" in checkbox.toolTip()
     assert checkbox.isChecked() is False
     assert checkbox.width() >= checkbox.fontMetrics().horizontalAdvance(checkbox.text())
     assert_visible_children_within_parent(dialog)
@@ -1730,7 +1731,7 @@ def test_experiment_test_mode_migrates_legacy_preference_and_is_ignored_when_una
     try:
         controller.set_experiment_test_mode_enabled(True)
     except ValueError as error:
-        assert "only on Windows and Linux" in str(error)
+        assert "requires a supported source installation" in str(error)
     else:
         raise AssertionError("Unavailable experiment test mode was enabled")
 

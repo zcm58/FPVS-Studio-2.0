@@ -34,6 +34,8 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   after valid Apply. Widget code never compiles timing, scores responses or sequences
   participant flow. Opening GUI alone must not create a PsychoPy window.
 - `update_lifecycle.py` owns background/progress work and the presentation thread.
+  macOS source playback/refresh use `runtime/macos_session_process.py` so native
+  rendering runs on the child main thread; GUI workers wait without touching widgets.
   Retain workers until `thread_completion.py` confirms native cleanup; never wait on
   workers from GUI callbacks or parent them to disposable dialogs. Close/quit must
   cancel or defer teardown until cleanup completes. Workers never touch widgets.

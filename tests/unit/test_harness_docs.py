@@ -62,8 +62,12 @@ def test_repo_guidance_references_existing_harness_files() -> None:
     assert missing_paths == []
 
 
-def test_quality_verification_is_local_only() -> None:
+def test_general_quality_stays_local_with_a_scoped_macos_source_lane() -> None:
     assert not (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").exists()
+    macos_lane = _read_repo_file(".github/workflows/macos-source.yml")
+    assert "scripts/macos-source.sh verify" in macos_lane
+    assert "--tier full" not in macos_lane
+    assert "FPVS_ALLOW_QT_TESTS" not in macos_lane
 
     current_contracts = [
         "AGENTS.md",

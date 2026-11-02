@@ -155,3 +155,118 @@ def test_linux_adapter_roundtrip_uses_only_os_backend(monkeypatch):
 def test_invalid_stored_credentials_are_rejected(raw):
     with pytest.raises(LibraryError, match="invalid"):
         credentials._decode(raw)
+
+
+def test_macos_selects_only_explicit_keychain_backend(monkeypatch):
+    requested = []
+    backend = SimpleNamespace(priority=5)
+
+    def load(name):
+        requested.append(name)
+        return SimpleNamespace(Keyring=lambda: backend)
+
+    monkeypatch.setattr(credentials.importlib, "import_module", load)
+    assert credentials.MacOSKeychainCredentialStore._backend() is backend
+    assert requested == ["keyring.backends.macOS"]
+
+
+@pytest.mark.parametrize("failure", ["missing", "disabled"])
+def test_macos_unavailable_keychain_fails_closed_without_private_diagnostics(monkeypatch, failure):
+    def load(_name):
+        if failure == "missing":
+            raise ImportError("private backend details " + "t" * 43)
+        return SimpleNamespace(Keyring=lambda: SimpleNamespace(priority=0))
+
+    monkeypatch.setattr(credentials.importlib, "import_module", load)
+    with pytest.raises(LibraryError, match="macOS Keychain") as error:
+        credentials.MacOSKeychainCredentialStore._backend()
+    assert "private" not in str(error.value)
+    assert "t" * 43 not in str(error.value)
+
+
+def test_macos_keychain_roundtrip_and_missing_delete_use_only_native_backend(monkeypatch):
+    values = {}
+    deletes = []
+
+    class Backend:
+        def get_password(self, target, username):
+            return values.get((target, username))
+
+        def set_password(self, target, username, value):
+            values[target, username] = value
+
+        def delete_password(self, target, username):
+            deletes.append((target, username))
+            del values[target, username]
+
+    monkeypatch.setattr(credentials.MacOSKeychainCredentialStore, "_backend", staticmethod(Backend))
+    store = credentials.MacOSKeychainCredentialStore("synthetic-keychain-target")
+    assert store.load() is None
+    store.delete()
+    assert not deletes
+    store.save(credential())
+    assert store.load() == credential()
+    assert list(values) == [("synthetic-keychain-target", "device")]
+    store.delete()
+    assert store.load() is None
+    assert deletes == [("synthetic-keychain-target", "device")]
+
+
+@pytest.mark.parametrize("operation", ["load", "save", "delete"])
+def test_macos_denied_or_locked_operations_are_explicit_and_redacted(monkeypatch, operation):
+    secret = "t" * 43
+
+    def fail(*_args):
+        raise RuntimeError("Denied private keychain value " + secret)
+
+    backend = SimpleNamespace(get_password=fail, set_password=fail, delete_password=fail)
+    monkeypatch.setattr(credentials.MacOSKeychainCredentialStore, "_backend",
+                        staticmethod(lambda: backend))
+    store = credentials.MacOSKeychainCredentialStore("synthetic")
+    with pytest.raises(LibraryError, match="macOS Keychain") as error:
+        if operation == "save":
+            store.save(credential())
+        else:
+            getattr(store, operation)()
+    assert secret not in str(error.value)
+    assert "private" not in str(error.value)
+    assert error.value.__cause__ is None
+
+
+def test_macos_rejects_oversized_metadata_before_backend_access(monkeypatch):
+    def forbidden():
+        raise AssertionError("Native backend must not be touched")
+
+    monkeypatch.setattr(
+        credentials.MacOSKeychainCredentialStore, "_backend", staticmethod(forbidden),
+    )
+    monkeypatch.setattr(credentials, "MAX_CREDENTIAL_BYTES", 1)
+    with pytest.raises(LibraryError, match="storage limits"):
+        credentials.MacOSKeychainCredentialStore("synthetic").save(credential())
+
+
+def test_macos_library_and_results_have_separate_targets_and_shared_dispatch(monkeypatch, tmp_path):
+    from fpvs_studio.data_sharing.credentials import sharing_credential_store
+
+    monkeypatch.setattr(credentials.sys, "platform", "darwin")
+    library = credentials.credential_store("https://one.example")
+    another_origin = credentials.credential_store("https://two.example")
+    results = sharing_credential_store("https://one.example", tmp_path, "a" * 64)
+    moved = sharing_credential_store("https://one.example", tmp_path / "copy", "a" * 64)
+    changed_protocol = sharing_credential_store("https://one.example", tmp_path, "b" * 64)
+    stores = (library, another_origin, results, moved, changed_protocol)
+    assert all(isinstance(store, credentials.MacOSKeychainCredentialStore) for store in stores)
+    assert len({store.target for store in stores}) == 5
+    assert library.target.startswith("FPVS-Studio/Experiment-Library/")
+    assert results.target.startswith("FPVS-Studio/Data-Sharing/")
+    assert str(tmp_path) not in results.target
+
+
+def test_unsupported_results_credential_platform_keeps_error_contract(monkeypatch, tmp_path):
+    from fpvs_studio.data_sharing.credentials import sharing_credential_store
+    from fpvs_studio.data_sharing.errors import DataSharingError
+
+    monkeypatch.setattr(credentials.sys, "platform", "freebsd")
+    with pytest.raises(DataSharingError) as error:
+        sharing_credential_store("https://example.test", tmp_path, "a" * 64)
+    assert error.value.code == "credential_store"

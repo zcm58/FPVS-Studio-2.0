@@ -243,7 +243,7 @@ def test_file_menu_palette_is_nonblocking_lazy_and_dispatches_existing_settings(
     requested = []
     monkeypatch.setattr(window, "_on_request_settings", lambda: requested.append(True))
     assert window._setup_wizard_page is None
-    assert window.find_action_action.shortcut() == QKeySequence("Ctrl+F")
+    assert window.find_action_action.shortcut() == QKeySequence(QKeySequence.StandardKey.Find)
     assert window.file_menu.actions().count(window.find_action_action) == 1
     assert window.find_action_action not in window.view_menu.actions()
     assert window.findChild(QAbstractButton, "find_action_button") is None

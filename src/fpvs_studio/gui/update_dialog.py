@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import sys
 from collections.abc import Callable
 from threading import Event
 
@@ -122,6 +123,9 @@ class UpdateDialog(QDialog):
 
         self._build_ui()
         self._set_idle_state()
+        if sys.platform == "darwin":
+            self._show_source_updates()
+            return
         if initial_result is not None:
             self.show_update_result(initial_result)
         elif auto_check:
@@ -206,6 +210,9 @@ class UpdateDialog(QDialog):
 
     @Slot()
     def start_update_check(self) -> None:
+        if sys.platform == "darwin":
+            self._show_source_updates()
+            return
         if (
             self._disposed.is_set()
             or self._job is not None
@@ -238,6 +245,8 @@ class UpdateDialog(QDialog):
 
     @Slot()
     def start_download(self) -> None:
+        if sys.platform == "darwin":
+            return
         if (
             self._disposed.is_set()
             or self._job is not None
@@ -494,6 +503,21 @@ class UpdateDialog(QDialog):
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
         self._set_close_button_text("Close")
+
+    def _show_source_updates(self) -> None:
+        self.title_label.setText("macOS source updates")
+        self.status_label.setText("Update your source checkout with Studio closed.")
+        self.latest_version_label.hide()
+        self.notes_heading_label.setText("Source environment")
+        self.notes_label.setText(
+            "Pull changes from the remote Git repository, then run "
+            "bash scripts/macos-source.sh setup "
+            "to update this checkout's dependencies. Use the same Studio version "
+            "on your Mac and Windows lab PC when transferring projects."
+        )
+        self.release_notes_button.hide()
+        self.check_button.hide()
+        self.download_button.hide()
 
     def _set_busy_state(self, status_text: str) -> None:
         self.status_label.setText(status_text)

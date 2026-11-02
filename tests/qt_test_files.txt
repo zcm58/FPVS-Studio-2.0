@@ -31,6 +31,7 @@ tests/gui/test_library_access_dialog.py
 tests/gui/test_library_dialog.py
 tests/gui/test_library_publisher_dialog.py
 tests/gui/test_library_submission_dialog.py
+tests/gui/test_macos_source.py
 tests/gui/test_manage_projects_rename.py
 tests/gui/test_manage_projects_responsiveness.py
 tests/gui/test_masking_conditions.py

@@ -368,3 +368,69 @@ tests = [
 full_tests = []
 include = ["packaging/**", "scripts/build_*.ps1", "scripts/build_installer_inventory.py", "scripts/build_patch.py", "scripts/check_patch_installer_lifecycle.py", "scripts/refresh_legacy_installer_inventory.py", "scripts/check_installer_compile.py", "scripts/check_installer_tree.py", "scripts/smoke_packaged_app.ps1", "src/fpvs_studio/app/**", "src/fpvs_studio/__init__.py", "tests/unit/test_app_main.py", "tests/unit/test_package_metadata.py", "tests/unit/test_*installer_inventory.py", "tests/unit/test_patch_packaging.py", "pyproject.toml"]
 manual_smoke = ["Build and launch the packaged application when packaging inputs or startup wiring changes."]
+
+
+[scopes.macos]
+checks = []
+tests = [
+  "tests/unit/test_macos_display.py",
+  "tests/unit/test_macos_source_tooling.py",
+  "tests/unit/test_macos_bundle_handoff.py",
+  "tests/unit/test_macos_document_runtime.py",
+  "tests/unit/test_macos_retina.py",
+  "tests/unit/test_macos_session_process.py",
+  "tests/unit/test_runtime_display_refresh.py",
+  "tests/unit/test_library_credentials.py",
+  "tests/unit/test_native_files.py",
+  "tests/unit/test_bundle_portability.py",
+  "tests/unit/test_project_bundle.py",
+  "tests/unit/test_masking_media_portability.py",
+  "tests/unit/test_randomization_integrations.py",
+  "tests/unit/test_saved_order_integrations.py",
+  "tests/unit/test_experiment_categories.py",
+  "tests/unit/test_compiler.py",
+  "tests/unit/test_compiler_preparation.py",
+  "tests/unit/test_attentional_blink_compiler.py",
+  "tests/unit/test_attentional_blink_stream_core.py",
+  "tests/unit/test_compiler_fixation.py",
+  "tests/unit/test_condition_modifiers.py",
+  "tests/unit/test_condition_tasks.py",
+  "tests/unit/test_cognitive_load_presets.py",
+  "tests/unit/test_backward_counting.py",
+  "tests/unit/test_masking.py",
+  "tests/unit/test_project_config.py",
+  "tests/unit/test_template_library.py",
+  "tests/unit/test_preprocessing_import.py",
+  "tests/unit/test_preprocessing_assets.py",
+  "tests/unit/test_preprocessing_normalization.py",
+  "tests/unit/test_library_client.py",
+  "tests/unit/test_library_project_updates.py",
+  "tests/unit/test_library_submissions.py",
+  "tests/unit/test_data_sharing_client.py",
+  "tests/unit/test_data_sharing_models.py",
+  "tests/unit/test_data_sharing_service.py",
+  "tests/unit/test_data_sharing_wire.py",
+  "tests/unit/test_support_client.py",
+  "tests/unit/test_support_reports.py",
+  "tests/unit/test_runtime_attentional_blink_report.py",
+  "tests/unit/test_runtime_fixation_report.py",
+  "tests/integration/test_macos_native.py",
+]
+full_tests = ["tests/gui", "tests/integration/test_psychopy_engine.py"]
+include = [
+  "src/fpvs_studio/runtime/macos_display.py",
+  "src/fpvs_studio/runtime/display_mode.py",
+  "src/fpvs_studio/gui/native_files.py",
+  "src/fpvs_studio/library/credentials.py",
+  "src/fpvs_studio/data_sharing/credentials.py",
+  "tests/unit/test_macos*.py",
+  "tests/unit/test_native_files.py",
+  "tests/unit/test_bundle_portability.py",
+  "tests/integration/test_macos_native.py",
+  "tests/integration/macos_bundle_handoff.py",
+  ".agents/scripts/verify.py",
+]
+manual_smoke = [
+  "On an approved physical Mac, launch Studio and exercise all eight Setup steps in both themes at 1120x820.",
+  "Check Retina calibration and fixed-rate PsychoPy playback on the connected display; hosted CI does not qualify presentation timing or EEG hardware.",
+]

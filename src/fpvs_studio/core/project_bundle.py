@@ -60,8 +60,13 @@ from fpvs_studio.core.paths import (
     stimulus_original_images_root,
     stimulus_variant_dirname,
     task_assets_root,
-    to_project_relative_posix,
     validate_project_id,
+)
+from fpvs_studio.core.portable_paths import (
+    portable_path_key,
+    portable_path_spelling,
+    validate_portable_path_inventory,
+    validate_portable_relative_path,
 )
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import (
@@ -82,6 +87,7 @@ from fpvs_studio.preprocessing.inspection import (
 )
 from fpvs_studio.preprocessing.manifest import write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
+from fpvs_studio.preprocessing.source_files import is_finder_metadata_file
 
 PROJECT_BUNDLE_SUFFIX = ".fpvsbundle"
 BUNDLE_MANIFEST_FILENAME = "fpvs_bundle.json"
@@ -214,7 +220,9 @@ def export_project_bundle(
     _check_cancelled(cancel_event)
     project = _load_project_for_bundle(project_root)
     manifest = _load_manifest_for_bundle(project_root)
-    relative_paths = _collect_bundle_file_paths(project_root)
+    relative_paths = _bundle_export_paths(
+        project, manifest, _collect_bundle_file_paths(project_root),
+    )
     if library_safe:
         _validate_library_inventory(project, manifest, set(relative_paths))
     payload_overrides: dict[str, bytes] = {}
@@ -235,6 +243,7 @@ def export_project_bundle(
         manifest=manifest,
         refresh_hz=validation_refresh_hz,
         cancel_event=cancel_event,
+        payload_paths=relative_paths,
     )
     _notify_export_progress(progress_callback, "stimuli")
     bundle_manifest = ProjectBundleManifest(
@@ -411,6 +420,9 @@ def import_project_bundle(
         )
         project = _load_project_for_bundle(staged_project_root)
         manifest = _load_manifest_for_bundle(staged_project_root)
+        _validate_bundle_references(
+            project, manifest, [record.path for record in bundle_manifest.files],
+        )
         _notify_import_progress(progress_callback, "base")
         _check_cancelled(cancel_event)
         _validate_condition_role_source_dirs(
@@ -437,6 +449,7 @@ def import_project_bundle(
             manifest=manifest,
             refresh_hz=bundle_manifest.validation.refresh_hz,
             cancel_event=cancel_event,
+            payload_paths=[record.path for record in bundle_manifest.files],
         )
         _notify_import_progress(progress_callback, "project")
         _check_cancelled(cancel_event)
@@ -610,14 +623,17 @@ def _read_bundle_manifest_from_archive(
 def _validated_archive_file_paths(archive: zipfile.ZipFile) -> set[str]:
     _validate_archive_member_count(archive)
     paths: set[str] = set()
+    directories: set[str] = set()
     for info in archive.infolist():
         normalized = _validate_archive_member_name(info.filename)
         _validate_archive_file_type(info)
         if info.is_dir():
+            directories.add(normalized)
             continue
         if normalized in paths:
             raise ProjectBundleError(f"Project bundle contains duplicate file: {normalized}")
         paths.add(normalized)
+    _validate_portable_bundle_paths(paths, directory_paths=directories)
     return paths
 
 
@@ -664,18 +680,7 @@ def _validate_bundle_manifest_resource_limits(
     record_paths = [record.path for record in records]
     if len(record_paths) != len(set(record_paths)):
         raise ProjectBundleError("Project bundle manifest contains duplicate payload paths.")
-    windows_paths: dict[str, str] = {}
-    for path in record_paths:
-        prefix = PurePosixPath()
-        for part in PurePosixPath(path).parts:
-            prefix /= part
-            spelling = prefix.as_posix()
-            previous = windows_paths.setdefault(spelling.lower(), spelling)
-            if previous != spelling:
-                raise ProjectBundleError(
-                    "Project bundle paths differ only by case and conflict on Windows: "
-                    f"{previous}, {spelling}. Rename these files or folders before exporting."
-                )
+    _validate_portable_bundle_paths(record_paths)
     if BUNDLE_MANIFEST_FILENAME in record_paths:
         raise ProjectBundleError(
             "Project bundle manifest may not list fpvs_bundle.json as a payload file."
@@ -742,6 +747,10 @@ def _validate_archive_member_name(name: str) -> str:
     ):
         raise ProjectBundleError(f"Project bundle contains unsafe member path: {name}")
     normalized = path.as_posix()
+    try:
+        validate_portable_relative_path(normalized)
+    except ValueError as error:
+        raise ProjectBundleError(str(error)) from error
     if normalized == BUNDLE_MANIFEST_FILENAME:
         return normalized
     validate_project_relative_path(normalized)
@@ -850,6 +859,7 @@ def _validate_library_archive(
         manifest = StimulusManifest.model_validate_json(
             read_contract(f"{STIMULI_DIRNAME}/{MANIFEST_FILENAME}"),
         )
+        _validate_bundle_references(project, manifest, list(records))
         _validate_library_inventory(project, manifest, set(records))
     except ProjectBundleError:
         raise
@@ -870,6 +880,7 @@ def validate_project_bundle(
         _validate_bundle_source(
             root, project=_load_project_for_bundle(root), manifest=_load_manifest_for_bundle(root),
             refresh_hz=manifest.validation.refresh_hz, cancel_event=cancel_event,
+            payload_paths=[record.path for record in manifest.files],
         )
         return manifest
 
@@ -885,7 +896,7 @@ def _extract_verified_record(
     destination_path.parent.mkdir(parents=True, exist_ok=True)
     digest = hashlib.sha256()
     size = 0
-    with archive.open(record.path, mode="r") as source, destination_path.open("wb") as target:
+    with archive.open(record.path, mode="r") as source, destination_path.open("xb") as target:
         for chunk in iter(lambda: source.read(65536), b""):
             _check_cancelled(cancel_event)
             size += len(chunk)
@@ -949,6 +960,7 @@ def _validate_bundle_source(
     manifest: StimulusManifest,
     refresh_hz: float,
     cancel_event: Event | None = None,
+    payload_paths: list[str] | None = None,
 ) -> None:
     _check_cancelled(cancel_event)
     _validate_bundle_compilation_budget(project, refresh_hz=refresh_hz)
@@ -962,11 +974,25 @@ def _validate_bundle_source(
         raise ProjectBundleError(
             "Stimulus manifest project_id does not match project.json project_id."
         )
+    _validate_bundle_references(
+        project, manifest,
+        payload_paths if payload_paths is not None else _bundle_export_paths(
+            project, manifest, _collect_bundle_file_paths(project_root),
+        ),
+    )
     for stimulus_set in project.stimulus_sets:
         _check_cancelled(cancel_event)
         if stimulus_set.source_dir is None:
             continue
         source_dir = _resolve_existing_relative_dir(project_root, stimulus_set.source_dir)
+        for path in filesystem_path(source_dir).iterdir():
+            if (path.is_file() and path.suffix.lower() in SUPPORTED_SOURCE_SUFFIXES
+                    and is_finder_metadata_file(path)):
+                raise ProjectBundleError(
+                    "Stimulus folder contains Finder metadata: "
+                    f"{stimulus_set.source_dir}/{path.name}. "
+                    "Reimport the source folder to omit metadata before exporting."
+                )
         if not any(path.is_file() for path in filesystem_path(source_dir).iterdir()):
             raise ProjectBundleError(
                 f"Stimulus set '{stimulus_set.name}' does not contain any files."
@@ -1056,12 +1082,134 @@ def _collect_bundle_file_paths(project_root: Path) -> list[str]:
     if not stimuli_root.is_dir():
         raise ProjectBundleError("Project bundle export requires a stimuli folder.")
 
-    paths = [to_project_relative_posix(project_root, project_file)]
-    for path in sorted(stimuli_root.rglob("*"), key=lambda item: item.as_posix().lower()):
-        if path.is_file():
-            relative_path = to_project_relative_posix(project_root, path)
-            paths.append(_validate_archive_member_name(relative_path))
+    project_root = filesystem_path(project_root)
+    _reject_bundle_source_link(project_file, PROJECT_FILENAME)
+    _reject_bundle_source_link(stimuli_root, STIMULI_DIRNAME)
+    paths = [PROJECT_FILENAME]
+    pending_directories = [stimuli_root]
+    while pending_directories:
+        directory = pending_directories.pop()
+        for path in sorted(directory.iterdir(), key=lambda item: item.name.lower()):
+            relative_path = path.relative_to(project_root).as_posix()
+            _reject_bundle_source_link(path, relative_path)
+            if path.is_dir():
+                pending_directories.append(path)
+            elif not is_finder_metadata_file(path):
+                paths.append(_validate_archive_member_name(relative_path))
+    _validate_portable_bundle_paths(paths)
     return sorted(set(paths), key=str.lower)
+
+
+def _validate_portable_bundle_paths(
+    paths: list[str] | set[str], *, directory_paths: set[str] | None = None,
+) -> None:
+    try:
+        validate_portable_path_inventory(paths, directory_paths=directory_paths or ())
+    except ValueError as error:
+        raise ProjectBundleError(str(error)) from error
+
+
+def _reject_bundle_source_link(path: Path, relative_path: str) -> None:
+    metadata = path.lstat()
+    if (
+        stat.S_ISLNK(metadata.st_mode)
+        or getattr(metadata, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    ):
+        raise ProjectBundleError(
+            f"Project bundle cannot include linked files or folders: {relative_path}. "
+            "Copy the actual files into the project before exporting."
+        )
+    if not (stat.S_ISREG(metadata.st_mode) or stat.S_ISDIR(metadata.st_mode)):
+        raise ProjectBundleError(f"Project bundle cannot include special files: {relative_path}")
+
+
+def _bundle_references(
+    project: ProjectFile, manifest: StimulusManifest,
+) -> list[tuple[str, bool]]:
+    references = [(entry.source_dir, True) for entry in project.stimulus_sets
+                  if entry.source_dir is not None]
+    references.extend((entry.source_dir, True) for entry in manifest.sets)
+    references.extend(
+        (path, False) for entry in manifest.sets for asset in entry.assets
+        for path in (
+            asset.source.relative_path, *(item.relative_path for item in asset.derivatives),
+        )
+    )
+    references.extend((path, False) for _owner, path in owned_image_references(
+        project.task_modules, project.condition_modifiers,
+    ))
+    return references
+
+
+def _bundle_export_paths(
+    project: ProjectFile, manifest: StimulusManifest, paths: list[str],
+) -> list[str]:
+    """Keep authored spelling if a source filesystem presents decomposed Unicode.
+
+    Only canonical Unicode equivalence is allowed here. Case is never repaired,
+    source files are untouched, and references that disagree with each other fail.
+    """
+
+    spellings: dict[str, str] = {}
+    try:
+        for reference, _is_directory in _bundle_references(project, manifest):
+            validate_portable_relative_path(reference)
+            prefix = PurePosixPath()
+            for part in PurePosixPath(reference).parts:
+                prefix /= part
+                spelling = prefix.as_posix()
+                previous = spellings.setdefault(portable_path_spelling(spelling), spelling)
+                if previous != spelling:
+                    raise ProjectBundleError(
+                        "Project references use inconsistent Unicode spelling: "
+                        f"{previous!r}, {spelling!r}. Update the references to use one spelling."
+                    )
+    except ValueError as error:
+        raise ProjectBundleError(str(error)) from error
+    exported: list[str] = []
+    for path in paths:
+        original_prefix = PurePosixPath()
+        exported_prefix = PurePosixPath()
+        for part in PurePosixPath(path).parts:
+            original_prefix /= part
+            authored = spellings.get(portable_path_spelling(original_prefix.as_posix()))
+            exported_prefix = PurePosixPath(authored) if authored else exported_prefix / part
+        exported.append(exported_prefix.as_posix())
+    _validate_portable_bundle_paths(exported)
+    return sorted(exported, key=str.lower)
+
+
+def _validate_bundle_references(
+    project: ProjectFile, manifest: StimulusManifest, paths: list[str],
+) -> None:
+    """Require references to match archive spelling even on insensitive hosts."""
+
+    files = set(paths)
+    directories = {
+        parent.as_posix()
+        for path in paths for parent in PurePosixPath(path).parents if parent.parts
+    }
+    aliases = {portable_path_key(path): path for path in files | directories}
+    try:
+        for path, is_directory in _bundle_references(project, manifest):
+            validate_portable_relative_path(path)
+            if path in (directories if is_directory else files):
+                continue
+            alias = aliases.get(portable_path_key(path))
+            if alias is not None:
+                difference = (
+                    "Unicode spelling"
+                    if portable_path_spelling(path) == portable_path_spelling(alias)
+                    else "capitalization"
+                )
+                raise ProjectBundleError(
+                    f"Project reference {difference} does not match its payload: {path!r}; "
+                    f"stored as {alias!r}. Update the project reference to match before exporting."
+                )
+            kind = "folder" if is_directory else "file"
+            raise ProjectBundleError(f"Required project {kind} is missing from bundle: {path}")
+    except ValueError as error:
+        raise ProjectBundleError(str(error)) from error
 
 
 def _write_bundle_archive(

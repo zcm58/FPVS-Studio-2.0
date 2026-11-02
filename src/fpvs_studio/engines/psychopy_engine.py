@@ -76,6 +76,7 @@ from fpvs_studio.engines.psychopy_window import (
     build_refresh_probe_window_kwargs,
     build_window_kwargs,
     create_fixation_stim,
+    validate_macos_framebuffer,
 )
 from fpvs_studio.engines.windows_graphics_budget import (
     WindowsGraphicsBudgetObserver,
@@ -344,6 +345,7 @@ class PsychoPyEngine(PresentationEngine):
         resources: PreparedConditionResources | None = None
         try:
             self._drain_graphics_deletions()
+            validate_macos_framebuffer(window, run_spec)
             if run_spec.scene_stream is not None:
                 window.colorSpace = "rgb"
                 window.color = run_spec.scene_stream.background_rgb
