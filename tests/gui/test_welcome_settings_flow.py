@@ -1539,7 +1539,11 @@ def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
     assert checkbox is not None
     assert checkbox.text() == "Enable experiment test mode"
     assert "logged null-trigger output" in checkbox.toolTip()
-    assert "bypasses connected-display refresh verification" in checkbox.toolTip()
+    refresh_policy = (
+        "verifies the local display" if controller_module.sys.platform == "darwin"
+        else "bypasses connected-display refresh verification"
+    )
+    assert refresh_policy in checkbox.toolTip()
     assert "replaces participant collection" in checkbox.toolTip()
     assert "runtime timing QC" in checkbox.toolTip()
     assert "Fullscreen presentation remains enabled" in checkbox.toolTip()

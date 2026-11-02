@@ -47,6 +47,24 @@ def test_resolve_repo_python_prefers_venv310_then_venv(tmp_path: Path) -> None:
     assert verify.resolve_repo_python(tmp_path) == preferred_python.resolve()
 
 
+
+def test_resolve_repo_python_keeps_posix_virtual_environment_symlink(tmp_path: Path) -> None:
+    base_python = tmp_path / "base-python"
+    base_python.touch()
+    venv_python = tmp_path / ".venv3.10" / "bin" / "python"
+    venv_python.parent.mkdir(parents=True)
+    try:
+        venv_python.symlink_to(base_python)
+    except OSError:
+        pytest.skip("Creating symlinks requires Windows permission")
+
+    selected = verify.resolve_repo_python(tmp_path)
+
+    assert selected == venv_python.absolute()
+    assert selected != base_python
+    assert selected.is_symlink()
+
+
 def test_validate_config_rejects_qt_test_only_from_local_bundle(tmp_path: Path) -> None:
     qt_test = tmp_path / "tests" / "gui" / "test_window.py"
     qt_test.parent.mkdir(parents=True)

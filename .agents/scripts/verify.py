@@ -44,14 +44,16 @@ def resolve_repo_python(repo_root: Path = REPO_ROOT) -> Path:
         for suffix in (Path("Scripts/python.exe"), Path("bin/python")):
             candidate = repo_root / environment / suffix
             if candidate.is_file():
-                return candidate.resolve()
+                # POSIX venv executables are symlinks; resolving them selects the
+                # base interpreter and loses the environment's installed packages.
+                return candidate.absolute()
     if sys.version_info[:2] != SUPPORTED_PYTHON:
         version = ".".join(map(str, sys.version_info[:2]))
         raise RuntimeError(
             "FPVS Studio verification requires Python 3.10; "
             f"found {version} at {sys.executable}. Create .venv3.10 or .venv."
         )
-    return Path(sys.executable).resolve()
+    return Path(sys.executable).absolute()
 
 
 def resolve_powershell() -> str:

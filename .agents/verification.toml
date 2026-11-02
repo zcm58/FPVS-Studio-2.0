@@ -373,6 +373,7 @@ manual_smoke = ["Build and launch the packaged application when packaging inputs
 [scopes.macos]
 checks = []
 tests = [
+  "tests/unit/test_verification_driver.py",
   "tests/unit/test_macos_display.py",
   "tests/unit/test_macos_source_tooling.py",
   "tests/unit/test_macos_bundle_handoff.py",
