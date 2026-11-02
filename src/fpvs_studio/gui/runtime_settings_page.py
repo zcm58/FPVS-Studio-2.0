@@ -423,7 +423,7 @@ class DisplaySettingsEditor(QWidget):
         self.timing_controls.setVisible(self._editable and not stream)
         cadence_label = self.timing_form_layout.labelForField(self.oddball_every_n_spin)
         if isinstance(cadence_label, QLabel):
-            cadence_label.setText("Target pair every" if ab else "Oddball every")
+            cadence_label.setText("Target pair every" if ab else "Show an oddball every")
         summary_label = self.summary_layout.labelForField(self.summary_value_labels["oddball"])
         if isinstance(summary_label, QLabel):
             summary_label.setText(

@@ -13,7 +13,7 @@ from PySide6.QtCore import (
     Qt,
     Signal,
 )
-from PySide6.QtGui import QPaintEvent
+from PySide6.QtGui import QColor, QPaintEvent, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -182,9 +182,10 @@ def test_setup_wizard_combines_display_and_session_in_two_columns(
     assert session.randomization_editor.mode_combos["stimulus"].hasFocus()
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("modality", [StimulusModality.IMAGE, StimulusModality.WORD])
 def test_oddball_cadence_is_directly_editable_and_survives_reopen(
-    qtbot, controller: StudioController, tmp_path: Path, modality,
+    qtbot, controller: StudioController, tmp_path: Path, modality, background,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Oddball cadence")
     document = window.document
@@ -193,16 +194,36 @@ def test_oddball_cadence_is_directly_editable_and_survives_reopen(
         document.set_condition_stimulus_modality(condition_id, modality=modality)
         document.update_condition_words(condition_id, role="base", words=["house", "tree"])
         document.update_condition_words(condition_id, role="oddball", words=["fear", "anger"])
+    wizard = window.setup_wizard_page
+    palette = wizard.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    wizard.setPalette(palette)
     window.show_setup_wizard(step_key="experiment")
-    editor = window.setup_wizard_page.runtime_settings_editor
+    editor = wizard.runtime_settings_editor
     for width, height in ((1120, 820), (1180, 860)):
         window.resize(width, height)
         QApplication.processEvents()
         assert editor.oddball_every_n_spin.isVisible()
         assert editor.oddball_every_n_spin.isEnabled()
         label = editor.timing_form_layout.labelForField(editor.oddball_every_n_spin)
-        assert label.text() == "Oddball every"
+        assert label.text() == "Show an oddball every"
         assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(label.text())
+        table = window.setup_wizard_page.condition_timing_table
+        frequency = table.shared_frequency_spin
+        cadence = editor.oddball_every_n_spin
+        frequency_rect = frequency.mapTo(table, frequency.rect().topLeft())
+        cadence_rect = cadence.mapTo(table, cadence.rect().topLeft())
+        assert frequency_rect.x() + frequency.width() < cadence_rect.x()
+        assert frequency_rect.y() + frequency.height() == cadence_rect.y() + cadence.height()
+        assert cadence_rect.y() + cadence.height() < table.table.geometry().top()
+        assert cadence.width() >= cadence.fontMetrics().horizontalAdvance(
+            f"{cadence.maximum()}{cadence.suffix()}",
+        ) + 40
+        frequency.setFocus()
+        qtbot.keyClick(frequency, Qt.Key.Key_Tab)
+        assert cadence.hasFocus()
+        qtbot.keyClick(cadence, Qt.Key.Key_Tab)
+        assert table.condition_order_button.hasFocus()
         _assert_visible_children_within_parent(window.setup_wizard_page.experiment_step_surface)
         _assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
     editor.oddball_every_n_spin.setValue(4)

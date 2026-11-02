@@ -161,6 +161,14 @@ Review remains 880 px, and Conditions retains its wider working area. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
 Timing owns the FPVS frequency, duration and presentation table plus oddball cadence.
+For FPVS and masking, **Shared stimulus frequency** and **Show an oddball every** sit
+beside one another above the condition table, with stacked labels and aligned inputs.
+Cadence keeps its existing document binding and persists immediately; changing its
+placement does not change stimulus scheduling or pending frequency drafts. AB retains
+its existing cadence/summary surface outside the hidden FPVS table. Visible acceptance:
+at 1120x820 in both themes, check 5 and 1000 stimuli, Tab from frequency to cadence to
+condition order, then change cadence and save/reopen. Registered coverage is in
+`tests/gui/test_setup_experiment_display.py`; visible Qt checks remain opt-in.
 Its **Display refresh rate** selector edits the same target as Display & Session,
 so legacy durations can be resolved before leaving Timing. An unset target stays
 unselected until the user chooses a rate; opening Timing does not save a default.

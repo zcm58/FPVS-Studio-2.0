@@ -741,10 +741,23 @@ class SetupWizardPage(QWidget):
         refresh_controls.addWidget(self.timing_refresh_hz_combo)
         layout.addLayout(refresh_controls)
         self.timing_refresh_hz_combo.currentIndexChanged.connect(self._apply_timing_refresh_hz)
-        self.condition_timing_table = ConditionTimingTable(self._document, page)
+        timing_controls = self.runtime_settings_editor.take_timing_controls()
+        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        self.condition_timing_table = ConditionTimingTable(
+            self._document, page, cadence_controls=None if ab else timing_controls,
+        )
         QWidget.setTabOrder(
             self.timing_refresh_hz_combo, self.condition_timing_table.shared_frequency_spin,
         )
+        if not ab:
+            QWidget.setTabOrder(
+                self.condition_timing_table.shared_frequency_spin,
+                self.runtime_settings_editor.oddball_every_n_spin,
+            )
+            QWidget.setTabOrder(
+                self.runtime_settings_editor.oddball_every_n_spin,
+                self.condition_timing_table.condition_order_button,
+            )
         self.session_structure_editor.randomization_editor.set_timing_table(
             self.condition_timing_table,
         )
@@ -758,7 +771,8 @@ class SetupWizardPage(QWidget):
         self.native_timing_summary_label.setWordWrap(True)
         self.native_timing_summary_label.hide()
         layout.addWidget(self.native_timing_summary_label)
-        layout.addWidget(self.runtime_settings_editor.take_timing_controls())
+        if ab:
+            layout.addWidget(timing_controls)
         return page
 
     def _apply_timing_refresh_hz(self) -> None:

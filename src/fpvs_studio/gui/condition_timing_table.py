@@ -50,7 +50,10 @@ class ConditionTimingTable(QWidget):
     draft_changed = Signal()
     order_edit_requested = Signal()
 
-    def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, document: ProjectDocument, parent: QWidget | None = None,
+        *, cadence_controls: QWidget | None = None,
+    ) -> None:
         super().__init__(parent)
         self.setObjectName("condition_timing_table")
         self._document = document
@@ -76,7 +79,6 @@ class ConditionTimingTable(QWidget):
         shared.setSpacing(8)
         heading = QLabel("Shared stimulus frequency", self)
         heading.setProperty("settingsSectionTitle", "true")
-        shared.addWidget(heading)
         self.shared_frequency_spin = self._frequency_spin("shared_stimulus_frequency_spin")
         self.shared_frequency_spin.setValue(self._shared_hz)
         self._display_shared_hz = self.shared_frequency_spin.value()
@@ -86,7 +88,18 @@ class ConditionTimingTable(QWidget):
             "Inherited conditions use this value; custom frequencies stay unchanged. "
             "Frequency changes preserve each condition's stream duration.",
         )
-        shared.addWidget(self.shared_frequency_spin)
+        heading.setBuddy(self.shared_frequency_spin)
+        if cadence_controls is None:
+            shared.addWidget(heading)
+            shared.addWidget(self.shared_frequency_spin)
+        else:
+            frequency_controls = QVBoxLayout()
+            frequency_controls.setSpacing(8)
+            frequency_controls.addWidget(heading)
+            frequency_controls.addWidget(self.shared_frequency_spin)
+            shared.addLayout(frequency_controls)
+            cadence_controls.setMaximumWidth(240)
+            shared.addWidget(cadence_controls, 0, Qt.AlignmentFlag.AlignBottom)
         shared.addStretch(1)
         self.condition_order_button = QPushButton("Condition order...", self)
         self.condition_order_button.setObjectName("timing_condition_order_button")
@@ -95,7 +108,7 @@ class ConditionTimingTable(QWidget):
         )
         mark_secondary_action(self.condition_order_button)
         self.condition_order_button.clicked.connect(self.order_edit_requested)
-        shared.addWidget(self.condition_order_button)
+        shared.addWidget(self.condition_order_button, 0, Qt.AlignmentFlag.AlignBottom)
         self.apply_button = QPushButton("Apply timing", self)
         self.apply_button.setObjectName("apply_condition_frequencies_button")
         self.apply_button.setToolTip(
@@ -107,8 +120,8 @@ class ConditionTimingTable(QWidget):
         self.discard_button.setObjectName("discard_condition_frequencies_button")
         mark_secondary_action(self.discard_button)
         self.discard_button.clicked.connect(self.discard_pending_edits)
-        shared.addWidget(self.discard_button)
-        shared.addWidget(self.apply_button)
+        shared.addWidget(self.discard_button, 0, Qt.AlignmentFlag.AlignBottom)
+        shared.addWidget(self.apply_button, 0, Qt.AlignmentFlag.AlignBottom)
         layout.addLayout(shared)
         self.table = QTableWidget(0, 7, self)
         self.table.setObjectName("condition_frequency_table")
