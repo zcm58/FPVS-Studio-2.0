@@ -79,8 +79,8 @@ interaction.
   with `Ctrl+F`. Conditions has a name/trigger filter that retains the selected
   editor context. Interaction and sizing contracts live in
   [GUI workflow](GUI_WORKFLOW.md#action-discovery-and-condition-search).
-- Setup Wizard enforces `1120x820` as its minimum and default size. Its nine steps are
-  Project, Conditions, Timing, Display, Session, Image Size (Character Size for native AB),
+- Setup Wizard enforces `1120x820` as its minimum and default size. Its eight steps are
+  Project, Conditions, Timing, Display & Session, Image Size (Character Size for native AB),
   Fixation, Response, and Review. All steps share the frameless
   shell, left-aligned task heading, step count, and stable progress
   stepper. Bottom navigation remains at the window edge with no divider. Forms retain
@@ -118,7 +118,7 @@ interaction.
   controls are shown only while it is expanded, with the full CSV path in the folder
   button's tooltip. Question assignment stays in the parent modifier dialog, optional
   help uses tooltips, and a valid preview clears any stale validation error. Assignments and
-  detached Apply/Cancel behavior are preserved within the nine-step wizard;
+  detached Apply/Cancel behavior are preserved within the eight-step wizard;
   task media is staged until Apply and stored beneath the active project's
   `stimuli/task-assets/<task-id>/`. Before answers use ordinary task exports; the
   readable root CSV remains after-only. See `CONDITION_MODIFIERS.md` and
@@ -169,7 +169,7 @@ interaction.
 - Add or update registered pytest-qt no-clipping coverage at the documented
   minimum/default size, with realistic long content and relevant dynamic states.
 - Setup Wizard layout changes must update compact no-clipping coverage in
-  `tests/gui/test_setup_wizard_shell.py` for all nine steps at `1120x820` and affected
+  `tests/gui/test_setup_wizard_shell.py` for all eight steps at `1120x820` and affected
   Conditions/dialog coverage. Retained AB-editor tests remain separate from Setup.
 - Do not run Qt unless the user approves a safe visible environment. Use the optional
   `full` tier with explicit opt-in, and do not use offscreen execution.
@@ -197,9 +197,11 @@ the participant-instructions dialog. Timing owns ordinary FPVS shared frequency 
 confirmed per-condition overrides, stream-only seconds and total presentation counts,
 while Display owns refresh selection, the optional Check refresh rate action and background.
 Timing contains the frequency table and cadence controls. Timing uses 1040 px for FPVS and
-880 px for native AB. Display uses 760 px for refresh/background, and Session uses
-760 px for participant reuse choices, condition order, totals and AB/masking repeats/start key. Timing retains the `experiment` key
-and timing aliases; display/runtime open Display and `session` opens Session. Show a concise verification
+880 px for native AB. Display & Session uses a 1040 px two-column workspace: Display
+refresh/background controls on the left, Session participant reuse/order/totals on the
+right. Both use shared section headings; the three reuse choices use compact semibold
+field labels so the column hierarchy remains clear. Timing retains the `experiment` key
+and timing aliases; display/runtime/session open the combined step. Show a concise verification
 result and current errors inline; technical monitor observations remain in tooltips.
 Keep **Condition order...** beside Timing's table commands so staged presentation
 counts and a mismatched saved order can be repaired atomically; Session retains the

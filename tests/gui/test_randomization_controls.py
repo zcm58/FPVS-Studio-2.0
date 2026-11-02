@@ -428,7 +428,9 @@ def test_recovery_preserves_frozen_seeds_or_builds_explicit_current_setup_replac
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-@pytest.mark.parametrize("state", ["fixed", "new", "mixed", "invalid", "saved", "inactive"])
+@pytest.mark.parametrize(
+    "state", ["fixed", "new", "mixed", "invalid", "saved", "inactive", "combined_errors"],
+)
 def test_plain_language_choices_fit_session_and_review(
     qtbot, monkeypatch, tmp_path, background, state,
 ):
@@ -451,7 +453,7 @@ def test_plain_language_choices_fit_session_and_review(
         document.update_condition_timing(saved_condition_order=[first, second, first, second])
         if state == "inactive":
             document.update_randomization_settings(mode="new")
-    elif state == "invalid":
+    elif state in {"invalid", "combined_errors"}:
         document.update_randomization_settings(mode="new")
         document.project.settings.session.randomization_mode = None
         document.project.settings.session.stimulus_seed = None
@@ -470,29 +472,39 @@ def test_plain_language_choices_fit_session_and_review(
     wizard.show()
     wizard.open_wizard(step_key="session", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
+    if state == "combined_errors":
+        wizard.runtime_settings_editor._on_refresh_detection_failed(RuntimeError(
+            "The display's configured refresh rate could not be confirmed because stable "
+            "fullscreen frame delivery was unavailable on the selected monitor."
+        ))
     QApplication.processEvents()
     assert wizard.size().toTuple() == (1120, 820)
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert editor.isVisible()
     assert not wizard.condition_timing_table.isVisible()
-    assert not wizard.runtime_settings_editor.isVisible()
-    assert not wizard.session_settings_card.title_label.isVisible()
+    assert wizard.runtime_settings_editor.isVisible()
+    assert wizard.display_settings_card.title_label.isVisible()
+    assert wizard.session_settings_card.title_label.isVisible()
+    assert (wizard.display_settings_card.geometry().right()
+            < wizard.session_settings_card.geometry().left())
     assert wizard.session_structure_editor.presentation_total_label.text() == "4 total"
-    assert_visible_children_within_parent(wizard.session_step_surface)
+    assert_visible_children_within_parent(wizard.display_session_step_surface)
     for domain, combo in editor.mode_combos.items():
         assert combo.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText()) + 32
         assert combo.accessibleName()
         heading = editor.heading_labels[domain]
-        assert heading.font().bold()
-        assert heading.fontMetrics().height() > combo.fontMetrics().height()
+        assert heading.font().weight() > combo.font().weight()
+        assert (wizard.session_settings_card.title_label.fontMetrics().height()
+                > heading.fontMetrics().height())
         assert heading.geometry().bottom() < combo.geometry().top()
         assert combo.toolTip() == combo.accessibleDescription()
     assert editor.saved_order_status_label.isVisible() == (state in {"saved", "inactive"})
-    if state not in {"saved", "inactive", "invalid"}:
+    if state not in {"saved", "inactive", "invalid", "combined_errors"}:
         assert [label for label in editor.findChildren(QLabel) if label.isVisible()] == list(
             editor.heading_labels.values()
         )
-    for label in editor.findChildren(QLabel):
+    for label in [*editor.findChildren(QLabel),
+                  *wizard.runtime_settings_editor.findChildren(QLabel)]:
         if label.isVisible() and label.text():
             assert label.height() >= label.heightForWidth(label.width()) if label.wordWrap() else (
                 label.width() >= label.fontMetrics().horizontalAdvance(label.text())
@@ -502,7 +514,9 @@ def test_plain_language_choices_fit_session_and_review(
         if button.isVisible():
             assert button.width() >= button.sizeHint().width()
     assert not editor.findChildren(QLineEdit)
-    if state != "invalid":
+    refresh_button = wizard.runtime_settings_editor.detect_refresh_button
+    assert refresh_button.width() >= refresh_button.sizeHint().width()
+    if state not in {"invalid", "combined_errors"}:
         wizard.open_wizard(step_key="review", allow_step_jumps=True)
         QApplication.processEvents()
         assert_visible_children_within_parent(wizard.review_step_surface)
@@ -544,7 +558,7 @@ def test_failed_choice_draft_blocks_navigation_until_retry(
     else:
         {"back": wizard._go_back, "home": wizard._return_home}[action]()
     QApplication.processEvents()
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert editor.error_label.isVisible()
     assert combo.currentData() == "fixed"
     assert wizard.has_pending_edits()

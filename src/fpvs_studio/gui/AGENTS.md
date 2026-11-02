@@ -6,12 +6,13 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
 
 ## Workflow and Ownership
 
-- Preserve Home as the launch surface and guided Setup for detailed editing. The nine
-  steps are Project, Conditions, Timing, Display, Session, Image Size (Character Size
+- Preserve Home as the launch surface and guided Setup for detailed editing. The eight
+  steps are Project, Conditions, Timing, Display & Session, Image Size (Character Size
   for native AB), Fixation, Response, Review, fitting `1120x820` without required scroll.
-  Timing retains `experiment`/`timing`; `display`/`runtime` open Display; `session` opens Session.
-  Frequency/duration/counts/cadence stay on Timing; refresh/background on Display;
-  participant reuse choices/order/totals on Session.
+  Timing retains `experiment`/`timing`; `display`/`runtime`/`session` open the combined step.
+  Frequency/duration/counts/cadence stay on Timing. The combined step uses Display
+  controls on the left and Session controls on the right at 1040 px; both columns fit
+  the 1120x820 window with shared section headings and compact field labels.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
   offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
   reviewed bundle import.

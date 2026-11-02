@@ -592,7 +592,7 @@ def test_single_condition_repeats_apply_and_advance_to_session(
     assert not table.error_label.isVisible()
     assert wizard._step_valid(wizard._step_index_for_key("experiment"))
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert not messages
     assert effective_condition_presentation_count(
         document.project, document.get_condition(first),
@@ -625,7 +625,7 @@ def test_next_reports_invalid_duration_draft_once_and_preserves_it(
     assert wizard.setup_wizard_next_button.isEnabled()
     assert messages == []
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert table.has_pending_edits()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
@@ -657,7 +657,7 @@ def test_timing_draft_survives_display_navigation_and_applies_at_the_selected_ra
     table.shared_frequency_spin.setValue(120)
     original_frequency = document.project.settings.protocol.base_hz
     wizard._go_next()
-    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert table.has_pending_edits()
     assert document.project.settings.protocol.base_hz == original_frequency
     wizard._go_back()
@@ -668,8 +668,8 @@ def test_timing_draft_survives_display_navigation_and_applies_at_the_selected_ra
     editor = wizard.runtime_settings_editor
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(240.0))
     wizard._go_next()
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
-    assert wizard.step_count_label.text() == "Step 5 of 9"
+    assert wizard.step_stack.currentWidget() is wizard.image_size_step_surface
+    assert wizard.step_count_label.text() == "Step 5 of 8"
     assert document.project.settings.protocol.base_hz == 120
     assert document.project.settings.display.preferred_refresh_hz == 240
     assert not table.has_pending_edits()
@@ -694,18 +694,18 @@ def test_display_step_checks_every_image_rate_against_its_refresh_target(
     wizard.show()
     wizard.open_wizard(step_key="timing", allow_step_jumps=True)
     wizard._go_next()
-    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     editor = wizard.runtime_settings_editor
     assert not editor.timing_is_compatible()
     assert incompatible.name in editor.timing_status_label.text()
     messages = record_setup_validation_dialogs(monkeypatch)
     wizard._go_next()
-    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert messages == [("Complete this setup step", editor.timing_blocker())]
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(120.0))
     assert editor.timing_is_compatible()
     wizard._go_next()
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.image_size_step_surface
     assert not editor.refresh_is_verified()
 
 
@@ -752,7 +752,7 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     assert table.presentation_count_spins[catch_id].value() == 1
     assert table.duration_spins["color-1"].value() == duration_draft
     assert editor.presentation_total_label.text() == "13 total"
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert editor.isVisible()
     assert not table.isVisible()
-    assert_visible_children_within_parent(wizard.session_step_surface)
+    assert_visible_children_within_parent(wizard.display_session_step_surface)

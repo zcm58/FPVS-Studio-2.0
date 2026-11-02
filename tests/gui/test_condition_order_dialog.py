@@ -321,7 +321,7 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     messages = record_setup_validation_dialogs(monkeypatch)
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
     assert "current counts" in table.error_label.text()
@@ -355,9 +355,9 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.image_size_step_surface
 
 
 def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
@@ -418,7 +418,7 @@ def test_wizard_timing_order_action_repairs_persisted_structural_mismatch(
     assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
 
 
 @pytest.mark.parametrize("seconds", [0, 20])
@@ -534,7 +534,7 @@ def test_order_actions_and_independent_choices_fit_wizard(
     assert editor.clear_saved_order_button.hasFocus()
     qtbot.keyClick(editor.clear_saved_order_button, Qt.Key.Key_Tab)
     assert editor.mode_combos["fixation"].hasFocus()
-    assert_visible_children_within_parent(wizard.session_step_surface)
+    assert_visible_children_within_parent(wizard.display_session_step_surface)
     editor.clear_saved_order_button.click()
     assert document.project.settings.session.saved_condition_order is None
     assert not editor.saved_order_status_label.isVisible()

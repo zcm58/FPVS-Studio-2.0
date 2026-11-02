@@ -38,16 +38,16 @@ def wizard_steps():
     return ast.literal_eval(declaration.value)
 
 
-def test_setup_has_separate_timing_and_display_before_session(wizard_steps):
+def test_setup_has_combined_display_and_session_after_timing(wizard_steps):
     assert wizard_steps == (
         ("project", "Project"), ("conditions", "Conditions"), ("experiment", "Timing"),
-        ("display", "Display"), ("session", "Session"), ("image_size", "Image Size"),
+        ("session", "Display & Session"), ("image_size", "Image Size"),
         ("fixation", "Fixation"), ("response", "Response"), ("review", "Review"),
     )
 
 
 @pytest.mark.parametrize("alias,index", [("experiment", 2), ("timing", 2), ("display", 3),
-                                        ("runtime", 3), ("session", 4)])
+                                        ("runtime", 3), ("session", 3), ("display_session", 3)])
 def test_setup_shortcuts_open_the_matching_timing_or_display_step(wizard_steps, alias, index):
     wizard = SimpleNamespace(_active_step_index=0, _step_jump_enabled=False, refresh=Mock(),
                              flush_pending_edits=Mock(return_value=True))

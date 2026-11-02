@@ -154,17 +154,19 @@ and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 
 ## Frameless Setup layout and copy
 
-The nine-step wizard uses one task heading, without duplicate card headings. Project
+The eight-step wizard uses one task heading, without duplicate card headings. Project
 has a centered 760 px form; Timing uses 1040 px for FPVS or 880 px for
-native AB; Display, Session and Size are 760 px.
+native AB; Image/Character Size uses 760 px.
 Review remains 880 px, and Conditions retains its wider working area. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
 Timing owns the FPVS frequency, duration and presentation table plus oddball cadence.
-The separate Display step uses a 760 px form. Session owns participant reuse choices,
-condition order and session totals, with managed AB/masking repeats and the fixed start key. Session shortcuts and
-Review links open Session; experiment/timing aliases open Timing, while display/runtime
-aliases open Display. Review has separate Timing and Display summaries and edit links.
+Display & Session uses a 1040 px workspace with Display on the left and the wider
+Session column on the right, aligned at the top. Both have shared section headings;
+reuse choices use compact semibold field labels. Session owns participant reuse,
+condition order, totals, managed AB/masking repeats and the fixed start key.
+Experiment/timing aliases open Timing; display/runtime/session aliases open the
+combined step. Separate Review summaries for Display and Session both link there.
 
 Display keeps refresh, optional **Check refresh rate**, and background controls. Setup
 can continue without running this check or after a failed check; there is no mandatory
@@ -179,9 +181,9 @@ Review summarizes the native AB character height and digit/letter stream, withou
 image-geometry wording.
 See [Frontend](FRONTEND.md#setup-text-hierarchy) for the descriptive-text policy.
 
-Timing is step 3, Display step 4 and Session step 5. Next from Timing keeps
-staged timing edits until Display is accepted, so a new frequency can be paired
-with its required refresh rate. Back from Display preserves those drafts. Display
+Timing is step 3 and Display & Session is step 4. Next from Timing keeps
+staged timing edits until the combined step is accepted, so a new frequency can be paired
+with its required refresh rate. Back from the combined step preserves those drafts. Its
 Next confirms the selected refresh target and applies the pending timing through
 the existing validation/confirmation path; invalid drafts return to Timing.
 Native AB retains its existing condition-owned timing, summarized on Timing.
@@ -378,7 +380,7 @@ Registered coverage: `test_hidden_page_refresh.py`, `test_manage_projects_respon
 Run GUI focused and repo precommit checks without Qt. In an approved visible session:
 
 1. Edit several Setup fields, then return Home and revisit Run; confirm current names,
-   summaries and readiness. Check all nine Setup steps at `1120x820`.
+   summaries and readiness. Check all eight Setup steps at `1120x820`.
 2. Verify saved AB settings survive guided Setup without opening its retained editor.
    Separate AB-editor tests cover rate/SOA drafts, character pools, errors and preview.
 3. Open Manage Projects at `860x520` in both themes with many projects. Check loading,
@@ -423,7 +425,7 @@ recall tracking; Session uses the same persisted burst count.
 Character Size edits native text height. Timing validates exact
 frame compatibility. The post-condition questionnaire button reuses the condition
 task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
-This editor source remains outside the current nine-step guided Setup. Setup has
+This editor source remains outside the current eight-step guided Setup. Setup has
 no Design section and preserves saved AB settings; an AB authoring replacement is
 deferred. The details and editor acceptance cases below describe the retained editor.
 
@@ -522,7 +524,7 @@ Visible acceptance must cover both categories and themes, realistic long names/p
 folder-picker cancellation, replacement and per-condition source isolation, import
 failure/retry and busy navigation. AB and standalone checks also cover invalid/sub-frame
 timing, draft switching, apply/discard, pending workers and preview stop/close.
-The nine-step wizard must fit
+The eight-step wizard must fit
 `1120x820`. The optional standalone designer retains `1040x760` minimum and
 `1400x920` default dimensions bounded by available screen space.
 
@@ -563,7 +565,7 @@ The authoring window is organized around two user-facing modes:
     workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Timing, Display, Session, Image Size
+  - ordered steps: Project, Conditions, Timing, Display & Session, Image Size
     (Character Size for native AB), Fixation, Response, Review
   - idle `Next` remains enabled on incomplete steps. Clicking it shows a modal with
     the current blocking requirement and its corrective action, including image/word
@@ -582,7 +584,7 @@ The authoring window is organized around two user-facing modes:
   - all guided steps use the shared frameless shell, left-aligned task heading,
     step count, and stable progress/navigation positions; content is vertically centered with
     bounded form widths, and the bottom navigation has no horizontal divider
-  - all nine setup steps must fit inside the compact `1120x820` setup window
+  - all eight setup steps must fit inside the compact `1120x820` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -600,7 +602,7 @@ The authoring window is organized around two user-facing modes:
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition; it is
     enabled by default for new projects and by the one-time migration of older projects
-  - Timing, Display and Session are separate frameless steps; Image Size retains `Configure Presentation...`
+  - Timing and the two-column Display & Session are separate frameless steps; Image Size retains `Configure Presentation...`
     for the full draft-based presentation editor
   - Display exposes an approved monitor-refresh dropdown (`59.94`, `60`,
     `120`, `144`, or `240 Hz`), optional `Check refresh rate`, and presentation background
@@ -815,9 +817,8 @@ The authoring window is organized around two user-facing modes:
 
 Detailed Conditions remains available internally for existing document bindings, but it
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
-Timing, Display, Session, Image Size, Fixation, and Response are separate guided setup pages.
-Timing retains `experiment`/`timing`; `display`/`runtime` open Display, and `session`
-opens the separate Session page.
+Timing, Display & Session, Image Size, Fixation, and Response are separate guided setup pages.
+Timing retains `experiment`/`timing`; `display`/`runtime`/`session` all open the combined step.
 The Run / Runtime page remains a launch, readiness, and session-preview surface,
 not a display-engine configuration step.
 Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
@@ -1253,7 +1254,7 @@ preprocessing services but must not silently mutate the active project.
   state. The main window assembles the wizard before attaching it to the styled
   workflow stack, which takes ownership. The shared setup-theme helper skips unchanged
   stylesheets so parenting and palette events do not repeatedly restyle the entire
-  wizard. Theme changes, all nine pages, and existing navigation gates remain active.
+  wizard. Theme changes, all eight pages, and existing navigation gates remain active.
 - Main-window styles use the palette observer in `gui/components.py` and pass their
   fresh palette to an existing Setup page after handling `ApplicationPaletteChange`
   in `event()`; Qt does not route that application event through `changeEvent()`.
@@ -1584,13 +1585,13 @@ Fixation displays the effective smallest count limit, identifies the limiting co
 and explains count adjustments caused by changed durations; full per-condition limits
 remain accessible in the tooltip.
 
-For visible acceptance on Windows, walk all nine steps at `1120x820` in both themes,
+For visible acceptance on Windows, walk all eight steps at `1120x820` in both themes,
 then repeat at the normal expanded size and available 125/150% scaling. Include long
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect
 default and one-character names, both image-folder pickers, import failure/retry,
 and instruction Save/Cancel/clear at both dialog sizes. Confirm saved AB settings are
-unchanged through all nine steps. Inspect
+unchanged through all eight steps. Inspect
 Settings, Presentation, and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
@@ -1670,8 +1671,8 @@ count drafts, and masking/AB managed states.
 
 Session has three independent choices: **Image / word display order**, **Condition
 order**, and **Fixation color-change timing**. Each offers **Randomized — new for each
-participant** or **Pseudorandom — same for every participant**. Each uses the shared
-section-title style above its dropdown; optional explanation stays in the tooltip and
+participant** or **Pseudorandom — same for every participant**. Each uses a compact semibold
+field heading above its dropdown under the Session column heading; optional explanation stays in the tooltip and
 accessible description. Condition-order actions sit in that section, with a concise
 status shown only for a saved arrangement (in use or inactive). Numeric seeds and
 launch seed values are not shown. Pseudorandom

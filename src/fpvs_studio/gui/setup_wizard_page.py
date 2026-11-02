@@ -88,8 +88,7 @@ _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
     ("conditions", "Conditions"),
     ("experiment", "Timing"),
-    ("display", "Display"),
-    ("session", "Session"),
+    ("session", "Display & Session"),
     ("image_size", "Image Size"),
     ("fixation", "Fixation"),
     ("response", "Response"),
@@ -619,13 +618,7 @@ class SetupWizardPage(QWidget):
             subtitle="",
             object_name="setup_wizard_display_settings_card",
         )
-        self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
-        self.display_step_surface = _SetupStepSurface(
-            self.display_settings_card,
-            object_name="setup_wizard_display_surface",
-            max_width=760,
-            parent=self,
-        )
+        self.runtime_settings_editor.refresh_hz_combo.setMinimumWidth(120)
         self.session_settings_card = self._settings_step_card(
             self.session_structure_editor,
             title="Session",
@@ -638,10 +631,24 @@ class SetupWizardPage(QWidget):
         session_layout.setSpacing(16)
         self.session_structure_editor.block_count_spin.setFixedWidth(240)
         self.session_structure_editor.seed_help_label.setMinimumHeight(30)
-        self.session_step_surface = _SetupStepSurface(
-            self.session_settings_card,
-            object_name="setup_wizard_session_surface",
-            max_width=760,
+        for heading in self.session_structure_editor.randomization_editor.heading_labels.values():
+            heading.setProperty("sectionCardRole", None)
+            heading.setProperty("setupMetricValue", "true")
+        display_session_page = QWidget(self)
+        display_session_page.setObjectName("setup_wizard_display_session_page")
+        columns = QHBoxLayout(display_session_page)
+        columns.setContentsMargins(0, 0, 0, 0)
+        columns.setSpacing(PAGE_SECTION_GAP * 2)
+        columns.addWidget(self.display_settings_card, 2, Qt.AlignmentFlag.AlignTop)
+        columns.addWidget(self.session_settings_card, 3, Qt.AlignmentFlag.AlignTop)
+        QWidget.setTabOrder(
+            self.runtime_settings_editor.runtime_background_color_combo,
+            self.session_structure_editor.block_count_spin,
+        )
+        self.display_session_step_surface = _SetupStepSurface(
+            display_session_page,
+            object_name="setup_wizard_display_session_surface",
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
         self.image_size_settings_card = self._settings_step_card(
@@ -680,8 +687,7 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.project_step_surface)
         self.step_stack.addWidget(self.conditions_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
-        self.step_stack.addWidget(self.display_step_surface)
-        self.step_stack.addWidget(self.session_step_surface)
+        self.step_stack.addWidget(self.display_session_step_surface)
         self.step_stack.addWidget(self.image_size_step_surface)
         self.step_stack.addWidget(self.fixation_step_surface)
         self.step_stack.addWidget(self.response_step_surface)
@@ -693,7 +699,9 @@ class SetupWizardPage(QWidget):
             self.session_settings_card,
             self.review_card,
         ):
-            card.title_label.hide()
+            card.title_label.setVisible(
+                card in (self.display_settings_card, self.session_settings_card)
+            )
             if card.subtitle_label is not None:
                 card.subtitle_label.hide()
             card.setProperty("setupFlatSection", "true")
@@ -763,7 +771,7 @@ class SetupWizardPage(QWidget):
         return page
 
     def _go_back(self) -> None:
-        if not self.flush_pending_edits(defer_timing=self._current_step_key() == "display"):
+        if not self.flush_pending_edits(defer_timing=self._current_step_key() == "session"):
             return
         if self._active_step_index > 0:
             self._select_step(self._active_step_index - 1)
@@ -772,7 +780,7 @@ class SetupWizardPage(QWidget):
     def _go_next(self) -> None:
         if self._next_navigation_busy():
             return
-        if (self._current_step_key() == "display"
+        if (self._current_step_key() == "session"
                 and self._document.project.settings.display.preferred_refresh_hz is None):
             self._document.update_display_settings(
                 preferred_refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
@@ -1033,8 +1041,7 @@ class SetupWizardPage(QWidget):
             "project": "Set up your experiment",
             "conditions": "Configure your conditions",
             "experiment": "Set your timing",
-            "display": "Configure your display",
-            "session": "Arrange your session",
+            "session": "Configure display and session",
             "image_size": "Calibrate your display" if is_masking_project(self._document.project)
             else "Set your character size" if is_letter_stream_project(self._document)
             else "Set your image size",
@@ -1509,13 +1516,13 @@ class SetupWizardPage(QWidget):
             return not self._condition_setup_blocker()
         if step_key == "experiment":
             return not self.condition_timing_table.presentation_count_blocker()
-        if step_key == "display":
+        if step_key == "session":
             return self.runtime_settings_editor.timing_is_compatible()
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
             return not self.image_display_size_editor.validation_message()
-        if step_key in {"session", "image_size", "fixation"}:
+        if step_key in {"image_size", "fixation"}:
             return True
         if step_key == "response":
             return True
@@ -1532,7 +1539,7 @@ class SetupWizardPage(QWidget):
         if step_key == "experiment":
             return (self.condition_timing_table.presentation_count_blocker()
                     or self.runtime_settings_editor.timing_blocker())
-        if step_key == "display":
+        if step_key == "session":
             return self.runtime_settings_editor.timing_blocker()
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
@@ -1592,8 +1599,15 @@ class SetupWizardPage(QWidget):
                 else editor.project_root_value
             )
             target.setFocus(Qt.FocusReason.OtherFocusReason)
-        elif self._current_step_key() == "display":
-            self.runtime_settings_editor.refresh_hz_combo.setFocus(Qt.FocusReason.OtherFocusReason)
+        elif self._current_step_key() == "session":
+            randomization = self.session_structure_editor.randomization_editor
+            if randomization.error_label.isVisible():
+                focus_control = (randomization.reset_patterns_button
+                                 if randomization.reset_patterns_button.isVisible()
+                                 else randomization.mode_combos["stimulus"])
+            else:
+                focus_control = self.runtime_settings_editor.refresh_hz_combo
+            focus_control.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _project_details_ready(self) -> bool:
         return bool(
@@ -1623,7 +1637,9 @@ class SetupWizardPage(QWidget):
 
     def _step_index_for_key(self, step_key: str) -> int:
         aliases = {
-            "runtime": "display",
+            "display": "session",
+            "runtime": "session",
+            "display_session": "session",
             "timing": "experiment",
             "geometry": "image_size",
             "design": "conditions",

@@ -141,7 +141,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert len(dashboard.progress_steps.step_items) == 9
+    assert len(dashboard.progress_steps.step_items) == 8
     step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
     assert "Project" in step_metadata_text
     assert "Conditions" in step_metadata_text
@@ -377,12 +377,9 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     QApplication.processEvents()
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.display_step_surface
+    assert guide.step_stack.currentWidget() is guide.display_session_step_surface
     assert guide.runtime_settings_editor.isVisible()
-    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.session_step_surface
     assert guide.session_structure_editor.isVisible()
-    assert not guide.runtime_settings_editor.isVisible()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.image_size_step_surface
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
@@ -400,9 +397,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.image_size_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.session_step_surface
-    qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.display_step_surface
+    assert guide.step_stack.currentWidget() is guide.display_session_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)

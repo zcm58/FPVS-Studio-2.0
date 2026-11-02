@@ -45,7 +45,7 @@ PsychoPy presentation stays behind runtime and engine boundaries.
   no extra approval checkpoint. Preserve the quiet scientific-tool character.
 - Reuse `gui/components.py`. No clipping is the default: verify each changed surface
   at its minimum/default size with realistic longest content and relevant states.
-  Setup's nine steps must fit `1120x820` without required scrolling or truncation.
+  Setup's eight steps must fit `1120x820` without required scrolling or truncation.
   Intentional elision requires an accessible full value and coverage.
 - Add/update registered pytest-qt coverage for changed GUI behavior. Do not run Qt
   locally by default. Use non-Qt checks and document a visible manual smoke path.

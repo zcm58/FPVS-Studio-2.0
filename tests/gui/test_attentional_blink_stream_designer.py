@@ -825,14 +825,14 @@ def test_all_stream_setup_steps_fit_default_window(
         window.show()
         wizard = window.setup_wizard_page
         for step_key in (
-            "project", "conditions", "experiment", "display", "session", "image_size",
+            "project", "conditions", "experiment", "session", "image_size",
             "fixation", "response", "review",
         ):
             wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
             QApplication.processEvents()
             assert wizard._current_step_key() == step_key
             assert (window.width(), window.height()) == (1120, 820), step_key
-            assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 9"
+            assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
             assert wizard.step_count_label.isVisible()
             assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
             assert "border-top" not in wizard.styleSheet()
@@ -843,7 +843,9 @@ def test_all_stream_setup_steps_fit_default_window(
             ):
                 assert card.property("setupFlatSection") == "true"
                 if card.isVisible():
-                    assert not card.title_label.isVisible()
+                    assert card.title_label.isVisible() == (
+                        card in (wizard.display_settings_card, wizard.session_settings_card)
+                    )
                     if card.subtitle_label is not None:
                         assert not card.subtitle_label.isVisible()
             surface = wizard.step_stack.currentWidget()
@@ -851,7 +853,7 @@ def test_all_stream_setup_steps_fit_default_window(
                 assert wizard.native_timing_summary_label.isVisible()
                 assert wizard.native_timing_summary_label.text()
                 assert not wizard.runtime_settings_editor.isVisible()
-            elif step_key == "display":
+            elif step_key == "session":
                 assert wizard.runtime_settings_editor.isVisible()
                 assert not wizard.runtime_settings_editor.timing_controls.isVisible()
             content = surface.content

@@ -12,8 +12,8 @@ stimuli with lazy imports. Local experiment test mode is available in source and
 installed builds on Windows and Linux. Test/Pilot explicitly selects null triggers;
 normal launches retain hardware and display preflight.
 
-Guided Setup has separate Timing (step 3) and Display (step 4) surfaces before
-Session (step 5). GUI retains timing drafts across that transition; core still owns
+Guided Setup keeps Timing (step 3) separate from a two-column Display & Session
+step (step 4). GUI retains timing drafts across that transition; core still owns
 validation and compilation, including exact shared-refresh compatibility for mixed
 image presentation rates. See [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
 
