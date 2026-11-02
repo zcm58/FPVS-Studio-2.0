@@ -7,9 +7,10 @@ from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
 
-from PySide6.QtCore import QEvent, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QResizeEvent
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFrame,
     QGridLayout,
@@ -723,7 +724,27 @@ class SetupWizardPage(QWidget):
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
+        refresh_label = QLabel("Display refresh rate", page)
+        self.timing_refresh_hz_combo = QComboBox(page)
+        self.timing_refresh_hz_combo.setObjectName("timing_refresh_hz_combo")
+        self.timing_refresh_hz_combo.setAccessibleName("Display refresh rate")
+        self.timing_refresh_hz_combo.setPlaceholderText("Select display rate")
+        self.timing_refresh_hz_combo.setMaximumWidth(240)
+        self.timing_refresh_hz_combo.setToolTip(
+            "Use the same monitor refresh rate for all conditions. "
+            "This also updates Display & Session.",
+        )
+        refresh_label.setBuddy(self.timing_refresh_hz_combo)
+        refresh_controls = QVBoxLayout()
+        refresh_controls.setSpacing(6)
+        refresh_controls.addWidget(refresh_label)
+        refresh_controls.addWidget(self.timing_refresh_hz_combo)
+        layout.addLayout(refresh_controls)
+        self.timing_refresh_hz_combo.currentIndexChanged.connect(self._apply_timing_refresh_hz)
         self.condition_timing_table = ConditionTimingTable(self._document, page)
+        QWidget.setTabOrder(
+            self.timing_refresh_hz_combo, self.condition_timing_table.shared_frequency_spin,
+        )
         self.session_structure_editor.randomization_editor.set_timing_table(
             self.condition_timing_table,
         )
@@ -739,6 +760,27 @@ class SetupWizardPage(QWidget):
         layout.addWidget(self.native_timing_summary_label)
         layout.addWidget(self.runtime_settings_editor.take_timing_controls())
         return page
+
+    def _apply_timing_refresh_hz(self) -> None:
+        refresh_hz = self.timing_refresh_hz_combo.currentData()
+        if refresh_hz is not None:
+            self.runtime_settings_editor.select_refresh_hz(float(refresh_hz))
+            self._sync_timing_refresh_hz()
+
+    def _sync_timing_refresh_hz(self) -> None:
+        display_combo = self.runtime_settings_editor.refresh_hz_combo
+        with QSignalBlocker(self.timing_refresh_hz_combo):
+            self.timing_refresh_hz_combo.clear()
+            for index in range(display_combo.count()):
+                self.timing_refresh_hz_combo.addItem(
+                    display_combo.itemText(index), display_combo.itemData(index),
+                )
+            self.timing_refresh_hz_combo.setCurrentIndex(self.timing_refresh_hz_combo.findData(
+                self._document.project.settings.display.preferred_refresh_hz,
+            ))
+        self.timing_refresh_hz_combo.setEnabled(
+            not self.runtime_settings_editor.is_verifying_display(),
+        )
 
     def _review_step_page(self) -> QWidget:
         page = QWidget(self)
@@ -1029,6 +1071,7 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.setCurrentIndex(0)
         self.content_stack.setCurrentWidget(self.guided_panel)
         self._refresh_current_editor_page()
+        self._sync_timing_refresh_hz()
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         self.native_timing_summary_label.setVisible(ab)
         if ab and step_key == "experiment":

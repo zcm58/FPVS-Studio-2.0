@@ -32,6 +32,110 @@ def _document(tmp_path):
     return document, first, second
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("initial_refresh", [None, 60.0, 75.0])
+def test_timing_can_select_shared_display_rate_and_resolve_legacy_durations(
+    qtbot, monkeypatch, tmp_path, qapp, background, initial_refresh,
+):
+    previous_palette = qapp.palette()
+    palette = QPalette(previous_palette)
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    qapp.setPalette(palette)
+    try:
+        document, first, _second = _document(tmp_path)
+        document.update_display_settings(preferred_refresh_hz=initial_refresh)
+        wizard = SetupWizardPage(
+            document, load_condition_template_profiles=lambda: [],
+            manage_condition_templates=lambda: [],
+        )
+        qtbot.addWidget(wizard)
+        wizard.resize(1120, 820)
+        wizard.show()
+        wizard.open_wizard(step_key="timing", allow_step_jumps=True)
+        QApplication.processEvents()
+        combo = wizard.timing_refresh_hz_combo
+        table = wizard.condition_timing_table
+        display = wizard.runtime_settings_editor
+        assert combo.isVisible()
+        assert combo.currentData() == initial_refresh
+        assert document.project.settings.display.preferred_refresh_hz == initial_refresh
+        assert not display.isVisible()
+        if initial_refresh is None:
+            assert combo.currentIndex() == -1
+            assert combo.placeholderText() == "Select display rate"
+            assert not table.duration_spins[first].isEnabled()
+            assert table.total_stimulation_labels[first].text() == "Unresolved"
+        elif initial_refresh == 75.0:
+            assert "not approved" in combo.currentText()
+
+        # Choosing the default must persist even when Display already shows 60 Hz.
+        combo.setCurrentIndex(combo.findData(60.0))
+        QApplication.processEvents()
+        assert document.project.settings.display.preferred_refresh_hz == 60.0
+        assert display.refresh_hz_combo.currentData() == 60.0
+        assert table.duration_spins[first].isEnabled()
+        assert table.total_stimulation_labels[first].text() != "Unresolved"
+        assert combo.count() == display.refresh_hz_combo.count() == 5
+        combo.setFocus()
+        qtbot.keyClick(combo, Qt.Key.Key_Tab)
+        assert table.shared_frequency_spin.hasFocus()
+
+        table.presentation_count_spins[first].setValue(3)
+        table.shared_frequency_spin.setValue(5.0)
+        display._refresh_measurement_error = "Previous check failed"
+        combo.setCurrentIndex(combo.findData(120.0))
+        QApplication.processEvents()
+        assert document.project.settings.display.preferred_refresh_hz == 120.0
+        assert table.has_pending_edits()
+        assert table.presentation_count_spins[first].value() == 3
+        assert table.shared_frequency_spin.value() == 5.0
+        assert display._refresh_measurement_error is None
+        assert_visible_children_within_parent(wizard.experiment_step_surface)
+        assert combo.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText()) + 32
+        for label in wizard.experiment_step_surface.findChildren(QLabel):
+            if label.isVisible() and label.text() and not label.wordWrap():
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+        wizard._go_next()
+        assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+        assert display.refresh_hz_combo.currentData() == 120.0
+        display.refresh_hz_combo.setCurrentIndex(display.refresh_hz_combo.findData(240.0))
+        wizard._go_back()
+        QApplication.processEvents()
+        assert combo.currentData() == 240.0
+        assert table.has_pending_edits()
+        assert table.presentation_count_spins[first].value() == 3
+        assert table.shared_frequency_spin.value() == 5.0
+        assert not display.refresh_is_verified()
+        document.save()
+        reopened = ProjectDocument.open_existing(document.project_root)
+        assert reopened.project.settings.display.preferred_refresh_hz == 240.0
+
+        monkeypatch.setattr(display, "is_verifying_display", lambda: True)
+        wizard.refresh()
+        assert not combo.isEnabled()
+        monkeypatch.setattr(display, "is_verifying_display", lambda: False)
+        wizard.refresh()
+        errors = []
+        monkeypatch.setattr(
+            "fpvs_studio.gui.runtime_settings_page._show_error_dialog",
+            lambda _parent, title, error: errors.append((title, str(error))),
+        )
+
+        def fail_save(**_updates):
+            raise DocumentError("The display setting could not be saved.")
+
+        monkeypatch.setattr(document, "update_display_settings", fail_save)
+        combo.setCurrentIndex(combo.findData(144.0))
+        QApplication.processEvents()
+        assert errors == [("Refresh Setting Error", "The display setting could not be saved.")]
+        assert combo.currentData() == display.refresh_hz_combo.currentData() == 240.0
+        assert document.project.settings.display.preferred_refresh_hz == 240.0
+        assert table.has_pending_edits()
+    finally:
+        qapp.setPalette(previous_palette)
+
+
 @pytest.mark.parametrize("answer", [QMessageBox.StandardButton.Yes, QMessageBox.StandardButton.No])
 @pytest.mark.parametrize("condition_index", [0, 1])
 def test_frequency_override_requires_exact_warning_and_preserves_other_conditions(

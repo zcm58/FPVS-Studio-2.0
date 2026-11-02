@@ -195,7 +195,9 @@ action, or resolve a current error. Avoid repeating the page title, control labe
 completed state or another step's settings. Conditions owns source selection and
 the participant-instructions dialog. Timing owns ordinary FPVS shared frequency and
 confirmed per-condition overrides, stream-only seconds and total presentation counts,
-while Display owns refresh selection, the optional Check refresh rate action and background.
+with a compact Display refresh rate selector for resolving durations on the same page.
+It edits the shared display target, synchronized with Display & Session. Display also
+owns the optional Check refresh rate action and background.
 Timing contains the frequency table and cadence controls. Timing uses 1040 px for FPVS and
 880 px for native AB. Display & Session uses a 1040 px two-column workspace: Display
 refresh/background controls on the left, Session participant reuse/order/totals on the

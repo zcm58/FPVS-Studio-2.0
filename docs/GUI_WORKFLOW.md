@@ -161,6 +161,11 @@ Review remains 880 px, and Conditions retains its wider working area. Content is
 vertically centered between the stepper and bottom navigation. Project and Timing
 stack labels above fields; denser forms align labels beside the input column.
 Timing owns the FPVS frequency, duration and presentation table plus oddball cadence.
+Its **Display refresh rate** selector edits the same target as Display & Session,
+so legacy durations can be resolved before leaving Timing. An unset target stays
+unselected until the user chooses a rate; opening Timing does not save a default.
+Both selectors stay synchronized, preserve timing drafts and share refresh-setting
+errors and verification invalidation. The Timing selector is disabled during a check.
 Display & Session uses a 1040 px workspace with Display on the left and the wider
 Session column on the right, aligned at the top. Both have shared section headings;
 reuse choices use compact semibold field labels. Session owns participant reuse,
@@ -187,6 +192,12 @@ with its required refresh rate. Back from the combined step preserves those draf
 Next confirms the selected refresh target and applies the pending timing through
 the existing validation/confirmation path; invalid drafts return to Timing.
 Native AB retains its existing condition-owned timing, summarized on Timing.
+For visible acceptance at 1120x820 in both themes, open Timing with an unset refresh,
+choose 60 Hz and confirm duration fields and totals resolve. Stage timing/count edits,
+change refresh on either page, and navigate Back/Next; selections must agree and drafts
+must survive. Check unsupported saved rates, failed saves and refresh-check busy states.
+Registered coverage is in `tests/gui/test_condition_timing_table.py`; visible Qt
+acceptance requires the repository's approved environment and is not implied by safe checks.
 Mixed image presentation frequencies must all fit the selected refresh using whole
 frames; Setup and compilation identify incompatible conditions without changing
 authored frequencies. The canonical rule is in [Run timing](RUNSPEC.md#timing-model).

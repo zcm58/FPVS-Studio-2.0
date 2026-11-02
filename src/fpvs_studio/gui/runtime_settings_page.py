@@ -641,6 +641,11 @@ class DisplaySettingsEditor(QWidget):
             self._background_refresh_guard = False
         return "#000000"
 
+    def select_refresh_hz(self, refresh_hz: float) -> None:
+        """Apply the shared display target from another authoring surface."""
+        self._sync_refresh_combo(refresh_hz)
+        self._apply_refresh_hz()
+
     def _apply_refresh_hz(self) -> None:
         self._clear_refresh_verification()
         try:
