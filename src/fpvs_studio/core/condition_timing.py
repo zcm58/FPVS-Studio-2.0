@@ -120,6 +120,7 @@ def propose_condition_timing(
         condition_fixation_guidance,
         validate_condition_repeat_cycle_consistency,
         validate_display_refresh,
+        validate_mixed_image_refresh_rates,
     )
 
     draft = project.model_copy(deep=True)
@@ -210,6 +211,9 @@ def propose_condition_timing(
         raise ValueError("Edit Attentional-Blink timing in the letter-stream designer.")
     if refresh_hz is None:
         raise ValueError("Select a monitor refresh rate before changing presentation timing.")
+    mixed_rate_issues = validate_mixed_image_refresh_rates(draft, refresh_hz=refresh_hz)
+    if mixed_rate_issues:
+        raise ValueError(" ".join(issue.message for issue in mixed_rate_issues))
     if draft.settings.protocol.base_hz != project.settings.protocol.base_hz:
         shared_report = validate_display_refresh(
             refresh_hz, base_hz=draft.settings.protocol.base_hz,

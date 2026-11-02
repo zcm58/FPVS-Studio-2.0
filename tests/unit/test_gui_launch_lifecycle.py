@@ -29,6 +29,71 @@ def _bind_methods(instance, filename, owner, names, **namespace):
         setattr(instance, name, MethodType(namespace[name], instance))
 
 
+@pytest.fixture
+def wizard_steps():
+    source = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/setup_wizard_page.py"
+    parsed = ast.parse(source.read_text(encoding="utf-8"))
+    declaration = next(node for node in parsed.body if isinstance(node, ast.AnnAssign)
+                       and isinstance(node.target, ast.Name) and node.target.id == "_WIZARD_STEPS")
+    return ast.literal_eval(declaration.value)
+
+
+def test_setup_has_separate_timing_and_display_before_session(wizard_steps):
+    assert wizard_steps == (
+        ("project", "Project"), ("conditions", "Conditions"), ("experiment", "Timing"),
+        ("display", "Display"), ("session", "Session"), ("image_size", "Image Size"),
+        ("fixation", "Fixation"), ("response", "Response"), ("review", "Review"),
+    )
+
+
+@pytest.mark.parametrize("alias,index", [("experiment", 2), ("timing", 2), ("display", 3),
+                                        ("runtime", 3), ("session", 4)])
+def test_setup_shortcuts_open_the_matching_timing_or_display_step(wizard_steps, alias, index):
+    wizard = SimpleNamespace(_active_step_index=0, _step_jump_enabled=False, refresh=Mock(),
+                             flush_pending_edits=Mock(return_value=True))
+    wizard._select_step = lambda selected: setattr(wizard, "_active_step_index", selected)
+    _bind_methods(
+        wizard, "setup_wizard_page.py", "SetupWizardPage", ["_step_index_for_key", "open_wizard"],
+        _WIZARD_STEPS=wizard_steps,
+    )
+    wizard.open_wizard(step_key=alias)
+    assert wizard._active_step_index == index
+    wizard.flush_pending_edits.assert_called_once_with(defer_timing=index == 3)
+
+
+@pytest.mark.parametrize("start_index,deferred", [(2, True), (3, False)])
+def test_next_keeps_timing_drafts_until_display_choices_are_accepted(
+    wizard_steps, start_index, deferred,
+):
+    wizard = SimpleNamespace(
+        _active_step_index=start_index, _next_navigation_busy=lambda: False,
+        _document=SimpleNamespace(project=SimpleNamespace(settings=SimpleNamespace(
+            display=SimpleNamespace(preferred_refresh_hz=60.0),
+        ))),
+        flush_pending_edits=Mock(return_value=True), _current_step_valid=lambda: True,
+        refresh=Mock(),
+    )
+    wizard._select_step = lambda selected: setattr(wizard, "_active_step_index", selected)
+    _bind_methods(
+        wizard, "setup_wizard_page.py", "SetupWizardPage",
+        ["_go_next", "_current_step_key", "_advance_to_next_step"], _WIZARD_STEPS=wizard_steps,
+    )
+    wizard._go_next()
+    assert wizard._active_step_index == start_index + 1
+    wizard.flush_pending_edits.assert_called_once_with(defer_timing=deferred)
+
+
+def test_display_check_worker_blocks_navigation_from_every_setup_step(wizard_steps):
+    wizard = SimpleNamespace(
+        _condition_image_task_active=lambda: False,
+        runtime_settings_editor=SimpleNamespace(is_verifying_display=lambda: True),
+    )
+    _bind_methods(wizard, "setup_wizard_page.py", "SetupWizardPage", ["_next_navigation_busy"])
+    for index in range(len(wizard_steps)):
+        wizard._active_step_index = index
+        assert wizard._next_navigation_busy()
+
+
 @pytest.mark.parametrize("check_state", ["unchecked", "checked", "failed"])
 @pytest.mark.parametrize("compatible", [True, False])
 def test_optional_refresh_check_does_not_gate_timing_readiness(check_state, compatible):

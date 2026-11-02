@@ -35,7 +35,8 @@ project services. It must import without Qt, PsychoPy or hardware dependencies.
   frequency/duration, occurrence order and independent seed domains. Preserve seeded
   realization and occurrence identity; use frames, never sleep-based scheduling.
 - Core owns approved refresh targets and ratio arithmetic. Native AB requires an exact
-  frame grid; ordinary FPVS reports requested/realized rates. `blank_50` needs even
+  frame grid; mixed image frequencies must all fit the selected refresh exactly.
+  Uniform ordinary FPVS rates retain requested/realized reporting. `blank_50` needs even
   frames; sinusoidal mode is image-only with neutral gray and a frame-derived envelope.
 - Normal event codes are integers 1–255; zero is manual reset. Keep `escape` reserved
   for abort. The oddball marker defaults to `55`; nonstandard codes require explicit

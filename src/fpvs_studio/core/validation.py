@@ -826,6 +826,38 @@ def _validate_attentional_blink_stream_condition(
     return errors
 
 
+def validate_mixed_image_refresh_rates(
+    project: ProjectFile, *, refresh_hz: float,
+) -> list[ValidationIssue]:
+    """Require mixed image presentation frequencies to share an exact display frame grid."""
+    sets = {item.set_id: item for item in project.stimulus_sets}
+    image_conditions = [
+        condition for condition in project.conditions
+        if (source := sets.get(condition.base_stimulus_set_id)) is not None
+        and source.modality == StimulusModality.IMAGE
+    ]
+    if len({effective_condition_base_hz(project, item) for item in image_conditions}) < 2:
+        return []
+    issues: list[ValidationIssue] = []
+    for condition in image_conditions:
+        rate = effective_condition_base_hz(project, condition)
+        report = validate_display_refresh(
+            refresh_hz, base_hz=rate, duty_cycle_mode=condition.duty_cycle_mode,
+            oddball_every_n=project.settings.protocol.oddball_every_n,
+        )
+        if not report.compatible or not report.timing_is_exact:
+            issues.append(ValidationIssue(
+                location=f"conditions.{condition.condition_id}.base_hz",
+                message=(
+                    f"{condition.name}: {rate:g} Hz does not fit the {refresh_hz:g} Hz display. "
+                    "All image presentation rates in a mixed-rate project must use whole "
+                    "display frames. Choose a compatible monitor refresh rate or change "
+                    "this condition's frequency."
+                ),
+            ))
+    return issues
+
+
 def validate_project(
     project: ProjectFile, *, refresh_hz: float | None = None
 ) -> ProjectValidationReport:
@@ -873,6 +905,7 @@ def validate_project(
                     )
 
     if refresh_hz is not None:
+        issues.extend(validate_mixed_image_refresh_rates(project, refresh_hz=refresh_hz))
         protocol = project.settings.protocol
         protocol_report = validate_display_refresh(
             refresh_hz,

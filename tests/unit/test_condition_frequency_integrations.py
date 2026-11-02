@@ -7,6 +7,7 @@ import json
 import pytest
 
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
+from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.compiler_conditions import validate_selected_condition
 from fpvs_studio.core.compiler_limits import CompilationLimits, validate_compilation_workload
 from fpvs_studio.core.compiler_masking import compile_masking_run
@@ -29,7 +30,57 @@ from fpvs_studio.core.project_config import (
     write_project_config,
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
+from fpvs_studio.core.validation import validate_mixed_image_refresh_rates, validate_project
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
+
+
+@pytest.mark.parametrize("refresh_hz,rates,compatible", [
+    (60, (6, 7.5, 10), True), (120, (6, 7.5), True), (144, (6, 12), True),
+    (60, (6, 7), False), (144, (6, 7.5), False), (59.94, (6, 3), False),
+])
+def test_all_mixed_image_rates_must_fit_one_exact_display_grid(
+    multi_condition_project, refresh_hz, rates, compatible,
+):
+    project = multi_condition_project
+    project.settings.protocol.base_hz = rates[0]
+    for condition, rate in zip(project.conditions, rates, strict=False):
+        condition.base_hz = rate
+    issues = validate_mixed_image_refresh_rates(project, refresh_hz=refresh_hz)
+    assert (not issues) is compatible
+    if not compatible:
+        assert all("whole display frames" in issue.message for issue in issues)
+        report = validate_project(project, refresh_hz=refresh_hz)
+        assert all(issue in report.issues for issue in issues)
+
+
+@pytest.mark.parametrize("scope", ["run", "session", "selected_subset"])
+def test_compilation_cannot_bypass_an_incompatible_mixed_image_rate(
+    multi_condition_project, multi_condition_project_root, scope,
+):
+    project = multi_condition_project
+    project.conditions[-1].base_hz = 7
+    with pytest.raises(CompileError, match="whole display frames"):
+        if scope == "run":
+            compile_run_spec(project, condition_id=project.conditions[0].condition_id,
+                             refresh_hz=60, project_root=multi_condition_project_root)
+        else:
+            compile_session_plan(project, refresh_hz=60, project_root=multi_condition_project_root,
+                                 condition_ids=([project.conditions[0].condition_id]
+                                                if scope == "selected_subset" else None))
+
+
+def test_mixed_rates_compile_without_changing_the_requested_frequencies(
+    multi_condition_project, multi_condition_project_root,
+):
+    project = multi_condition_project
+    project.conditions[1].base_hz = 7.5
+    project.settings.fixation_task.enabled = False
+    project.settings.fixation_task.accuracy_task_enabled = False
+    plan = compile_session_plan(project, refresh_hz=60, project_root=multi_condition_project_root)
+    for entry in plan.ordered_entries():
+        expected = 7.5 if entry.condition_id == project.conditions[1].condition_id else 6
+        assert entry.run_spec.condition.base_hz == expected
+        assert entry.run_spec.display.frames_per_stimulus == 60 / expected
 
 
 def test_config_roundtrip_retains_shared_rate_and_explicit_override(

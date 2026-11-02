@@ -12,6 +12,11 @@ stimuli with lazy imports. Local experiment test mode is available in source and
 installed builds on Windows and Linux. Test/Pilot explicitly selects null triggers;
 normal launches retain hardware and display preflight.
 
+Guided Setup has separate Timing (step 3) and Display (step 4) surfaces before
+Session (step 5). GUI retains timing drafts across that transition; core still owns
+validation and compilation, including exact shared-refresh compatibility for mixed
+image presentation rates. See [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
+
 ## Package Map
 
 | Owner | Responsibility |
@@ -55,6 +60,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Editable state and migrations | `core/models.py`, `core/migrations.py` |
 | Run/session/result schemas | `core/run_spec.py`, `core/session_plan.py`, `core/execution.py` |
 | Effective frequency/duration and ordering | `core/condition_timing.py`, `core/session_ordering.py` |
+| Common display frame grid for mixed image rates | `core/validation.py`; shared by authoring, readiness and compilation |
 | Independent participant reuse policies and randomization domains | `core/randomization.py`; [contract](docs/SESSION_PLAN.md#independent-randomization) |
 | Task definitions and condition modifiers | `core/task_models.py`, `core/condition_modifiers.py` |
 | Optional single-target fixation onset window | `core/compiler_fixation.py`; compiled frame events remain the runtime contract |

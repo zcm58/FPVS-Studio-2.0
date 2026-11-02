@@ -165,6 +165,14 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     assert guide.step_stack.currentWidget() is guide.session_step_surface
     assert guide.session_structure_editor.isVisible()
     assert not guide.runtime_settings_editor.isVisible()
+    for key, surface in (("experiment", guide.experiment_step_surface),
+                         ("display", guide.display_step_surface)):
+        guide.open_wizard(step_key="review", allow_step_jumps=True)
+        edit = next(item.edit_button for item in guide._review_summary_widgets
+                    if item.edit_button.property("reviewStepKey") == key)
+        qtbot.mouseClick(edit, Qt.MouseButton.LeftButton)
+        assert guide.step_stack.currentWidget() is surface
+        assert guide.runtime_settings_editor.isVisible() == (key == "display")
     window.document.update_condition_timing(presentation_counts={
         condition.condition_id: 3 for condition in window.document.ordered_conditions()
     })

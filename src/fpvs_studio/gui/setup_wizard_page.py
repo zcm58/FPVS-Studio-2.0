@@ -87,7 +87,8 @@ from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
     ("conditions", "Conditions"),
-    ("experiment", "Timing & Display"),
+    ("experiment", "Timing"),
+    ("display", "Display"),
     ("session", "Session"),
     ("image_size", "Image Size"),
     ("fixation", "Fixation"),
@@ -534,7 +535,13 @@ class SetupWizardPage(QWidget):
         step_key: str | None = None,
         allow_step_jumps: bool | None = None,
     ) -> None:
-        if not self.flush_pending_edits():
+        if step_key is not None:
+            target_index = self._step_index_for_key(step_key)
+        else:
+            target_index = self._active_step_index
+        if not self.flush_pending_edits(
+            defer_timing=target_index == self._step_index_for_key("display"),
+        ):
             return
         if allow_step_jumps is not None:
             self._step_jump_enabled = allow_step_jumps
@@ -550,14 +557,14 @@ class SetupWizardPage(QWidget):
             or self.session_structure_editor.randomization_editor.has_pending_edits()
         )
 
-    def flush_pending_edits(self) -> bool:
-        if self._condition_image_task_active():
+    def flush_pending_edits(self, *, defer_timing: bool = False) -> bool:
+        if self._next_navigation_busy():
             return False
         if not self.session_structure_editor.randomization_editor.apply_pending_edits():
             self._active_step_index = self._step_index_for_key("session")
             self.refresh()
             return False
-        if not self.condition_timing_table.apply_pending_edits():
+        if not defer_timing and not self.condition_timing_table.apply_pending_edits():
             self._active_step_index = self._step_index_for_key("experiment")
             self.refresh()
             return False
@@ -604,6 +611,19 @@ class SetupWizardPage(QWidget):
                 )
                 else _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH
             ),
+            parent=self,
+        )
+        self.display_settings_card = self._settings_step_card(
+            self.runtime_settings_editor,
+            title="Display",
+            subtitle="",
+            object_name="setup_wizard_display_settings_card",
+        )
+        self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
+        self.display_step_surface = _SetupStepSurface(
+            self.display_settings_card,
+            object_name="setup_wizard_display_surface",
+            max_width=760,
             parent=self,
         )
         self.session_settings_card = self._settings_step_card(
@@ -660,6 +680,7 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.project_step_surface)
         self.step_stack.addWidget(self.conditions_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
+        self.step_stack.addWidget(self.display_step_surface)
         self.step_stack.addWidget(self.session_step_surface)
         self.step_stack.addWidget(self.image_size_step_surface)
         self.step_stack.addWidget(self.fixation_step_surface)
@@ -667,12 +688,12 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.review_step_surface)
         for card in (
             self.project_overview_editor.project_overview_card,
-            self.experiment_settings_card,
+            self.display_settings_card,
             self.image_size_settings_card,
             self.session_settings_card,
             self.review_card,
         ):
-            card.title_label.setVisible(card is self.experiment_settings_card)
+            card.title_label.hide()
             if card.subtitle_label is not None:
                 card.subtitle_label.hide()
             card.setProperty("setupFlatSection", "true")
@@ -702,18 +723,13 @@ class SetupWizardPage(QWidget):
             self.session_structure_editor.randomization_editor.condition_order_button.click,
         )
         layout.addWidget(self.condition_timing_table)
-        self.experiment_settings_card = self._settings_step_card(
-            self.runtime_settings_editor,
-            title="Display",
-            subtitle="Set the refresh rate and experiment background.",
-            object_name="setup_wizard_experiment_settings_card",
-        )
-        self.runtime_settings_editor.refresh_hz_combo.setFixedWidth(240)
-        # Measure wrapped status text at the card's capped width.
-        display_row = QHBoxLayout()
-        display_row.addWidget(self.experiment_settings_card, 10000)
-        display_row.addStretch(1)
-        layout.addLayout(display_row)
+        self.native_timing_summary_label = QLabel(page)
+        self.native_timing_summary_label.setObjectName("native_ab_timing_summary")
+        self.native_timing_summary_label.setProperty("setupMetricValue", "true")
+        self.native_timing_summary_label.setWordWrap(True)
+        self.native_timing_summary_label.hide()
+        layout.addWidget(self.native_timing_summary_label)
+        layout.addWidget(self.runtime_settings_editor.take_timing_controls())
         return page
 
     def _review_step_page(self) -> QWidget:
@@ -747,7 +763,7 @@ class SetupWizardPage(QWidget):
         return page
 
     def _go_back(self) -> None:
-        if not self.flush_pending_edits():
+        if not self.flush_pending_edits(defer_timing=self._current_step_key() == "display"):
             return
         if self._active_step_index > 0:
             self._select_step(self._active_step_index - 1)
@@ -756,10 +772,15 @@ class SetupWizardPage(QWidget):
     def _go_next(self) -> None:
         if self._next_navigation_busy():
             return
+        if (self._current_step_key() == "display"
+                and self._document.project.settings.display.preferred_refresh_hz is None):
+            self._document.update_display_settings(
+                preferred_refresh_hz=self.runtime_settings_editor.current_refresh_hz(),
+            )
         if self._current_step_key() == "project" and not self._project_details_ready():
             self._show_step_blocker(self._project_details_blocker())
             return
-        if not self.flush_pending_edits():
+        if not self.flush_pending_edits(defer_timing=self._current_step_key() == "experiment"):
             error_label = (
                 self.session_structure_editor.randomization_editor.error_label
                 if self._current_step_key() == "session"
@@ -790,7 +811,9 @@ class SetupWizardPage(QWidget):
     def _go_to_step_from_progress(self, step_index: int) -> None:
         if not self._step_jump_enabled or self._condition_image_task_active():
             return
-        if not self.flush_pending_edits():
+        if not self.flush_pending_edits(
+            defer_timing=step_index == self._step_index_for_key("display"),
+        ):
             return
         self._select_step(max(0, min(step_index, len(_WIZARD_STEPS) - 1)))
         self.refresh()
@@ -804,10 +827,8 @@ class SetupWizardPage(QWidget):
         )
 
     def _next_navigation_busy(self) -> bool:
-        return self._condition_image_task_active() or (
-            self._current_step_key() == "experiment"
-            and self.runtime_settings_editor.is_verifying_display()
-        )
+        return (self._condition_image_task_active()
+                or self.runtime_settings_editor.is_verifying_display())
 
     def _active_condition_image_task_hint(self) -> str:
         if self._active_image_readiness_task is not None or self._image_prescan_pending_advance:
@@ -946,7 +967,7 @@ class SetupWizardPage(QWidget):
         self.refresh()
 
     def _return_home(self) -> None:
-        if self._condition_image_task_active():
+        if self._next_navigation_busy():
             return
         if not self.condition_timing_table.apply_pending_edits():
             self._active_step_index = self._step_index_for_key("experiment")
@@ -1000,12 +1021,19 @@ class SetupWizardPage(QWidget):
         self.advanced_stack.setCurrentIndex(0)
         self.content_stack.setCurrentWidget(self.guided_panel)
         self._refresh_current_editor_page()
+        ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+        self.native_timing_summary_label.setVisible(ab)
+        if ab and step_key == "experiment":
+            timing_lines = next(lines for key, _title, lines in self._review_checklist_sections()
+                                if key == "experiment")
+            self.native_timing_summary_label.setText("\n".join(timing_lines))
 
         self._refresh_progress_steps()
         page_titles = {
             "project": "Set up your experiment",
             "conditions": "Configure your conditions",
-            "experiment": "Set your timing and display",
+            "experiment": "Set your timing",
+            "display": "Configure your display",
             "session": "Arrange your session",
             "image_size": "Calibrate your display" if is_masking_project(self._document.project)
             else "Set your character size" if is_letter_stream_project(self._document)
@@ -1026,26 +1054,26 @@ class SetupWizardPage(QWidget):
         if step_key == "review":
             self._refresh_review_summary()
 
-        condition_image_task_active = self._condition_image_task_active()
+        navigation_busy = self._next_navigation_busy()
         self.step_title_label.setVisible(False)
         self.step_status_badge.setVisible(False)
         self.step_status_label.setText(self._step_status_text(self._active_step_index))
         self.step_status_label.setVisible(False)
         self.setup_wizard_back_button.setEnabled(
-            self._active_step_index > 0 and not condition_image_task_active
+            self._active_step_index > 0 and not navigation_busy
         )
         self.setup_wizard_next_button.setEnabled(not self._next_navigation_busy())
         self.setup_wizard_next_button.setText("Next")
         self.setup_wizard_next_button.setVisible(step_key != "review")
-        self.setup_wizard_return_home_button.setEnabled(not condition_image_task_active)
+        self.setup_wizard_return_home_button.setEnabled(not navigation_busy)
         self.setup_wizard_return_home_button.setVisible(step_key != "review")
         self.review_save_button.setVisible(step_key == "review")
         self.review_return_home_button.setVisible(step_key == "review")
-        self.review_save_button.setEnabled(not condition_image_task_active)
-        self.review_return_home_button.setEnabled(not condition_image_task_active)
+        self.review_save_button.setEnabled(not navigation_busy)
+        self.review_return_home_button.setEnabled(not navigation_busy)
         hint_text = (
             self._active_condition_image_task_hint()
-            if condition_image_task_active
+            if self._condition_image_task_active()
             else ""
         )
         self.setup_wizard_next_hint_label.setText(hint_text)
@@ -1354,10 +1382,23 @@ class SetupWizardPage(QWidget):
             (
                 "experiment",
                 "Timing",
+                (cadence_summary,),
+            ),
+            (
+                "display",
+                "Display",
                 (
                     f"Monitor: {refresh_hz:g} Hz{refresh_check}",
-                    cadence_summary,
                     self._display_background_label(str(display.background_color)),
+                ),
+            ),
+            (
+                "session",
+                "Session",
+                (
+                    session_count_summary,
+                    *seed_summary,
+                    *self._review_timing_estimate_lines(),
                 ),
             ),
             (
@@ -1368,15 +1409,6 @@ class SetupWizardPage(QWidget):
                     size_summary,
                     f"Viewing distance: {display.viewing_distance_cm:g} cm · "
                     f"{display.screen_width_px} × {display.screen_height_px} px",
-                ),
-            ),
-            (
-                "session",
-                "Session",
-                (
-                    session_count_summary,
-                    *seed_summary,
-                    *self._review_timing_estimate_lines(),
                 ),
             ),
             (
@@ -1476,8 +1508,9 @@ class SetupWizardPage(QWidget):
         if step_key == "conditions":
             return not self._condition_setup_blocker()
         if step_key == "experiment":
-            return (self.runtime_settings_editor.timing_is_compatible()
-                    and not self.condition_timing_table.presentation_count_blocker())
+            return not self.condition_timing_table.presentation_count_blocker()
+        if step_key == "display":
+            return self.runtime_settings_editor.timing_is_compatible()
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
@@ -1499,6 +1532,8 @@ class SetupWizardPage(QWidget):
         if step_key == "experiment":
             return (self.condition_timing_table.presentation_count_blocker()
                     or self.runtime_settings_editor.timing_blocker())
+        if step_key == "display":
+            return self.runtime_settings_editor.timing_blocker()
         if step_key == "image_size" and isinstance(
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
@@ -1557,6 +1592,8 @@ class SetupWizardPage(QWidget):
                 else editor.project_root_value
             )
             target.setFocus(Qt.FocusReason.OtherFocusReason)
+        elif self._current_step_key() == "display":
+            self.runtime_settings_editor.refresh_hz_combo.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _project_details_ready(self) -> bool:
         return bool(
@@ -1580,14 +1617,13 @@ class SetupWizardPage(QWidget):
     def _refresh_progress_steps(self) -> None:
         current = self._active_step_index
         self.progress_steps.set_navigation_enabled(
-            self._step_jump_enabled and not self._condition_image_task_active()
+            self._step_jump_enabled and not self._next_navigation_busy()
         )
         self.progress_steps.set_active_index(current)
 
     def _step_index_for_key(self, step_key: str) -> int:
         aliases = {
-            "display": "experiment",
-            "runtime": "experiment",
+            "runtime": "display",
             "timing": "experiment",
             "geometry": "image_size",
             "design": "conditions",

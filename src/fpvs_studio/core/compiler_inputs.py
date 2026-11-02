@@ -25,7 +25,10 @@ from fpvs_studio.core.models import (
 )
 from fpvs_studio.core.run_spec import ConditionPresentationSpec, StimulusRole
 from fpvs_studio.core.template_library import get_template
-from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
+from fpvs_studio.core.validation import (
+    validate_condition_repeat_cycle_consistency,
+    validate_mixed_image_refresh_rates,
+)
 from fpvs_studio.preprocessing.models import StimulusManifest
 
 
@@ -44,6 +47,9 @@ class CompilationInputs:
         self, project: ProjectFile, *, refresh_hz: float,
         project_root: Path | None, manifest: StimulusManifest | None,
     ) -> None:
+        mixed_rate_issues = validate_mixed_image_refresh_rates(project, refresh_hz=refresh_hz)
+        if mixed_rate_issues:
+            raise CompileError(" ".join(issue.message for issue in mixed_rate_issues))
         # Native AB retains its condition-specific burst validation and diagnostics.
         if project.experiment_category != ExperimentCategory.ATTENTIONAL_BLINK:
             issues = validate_condition_repeat_cycle_consistency(project, refresh_hz=refresh_hz)

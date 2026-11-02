@@ -76,6 +76,15 @@ such as 59.94 Hz / 6 Hz compile to the nearest whole-frame cadence and produce a
 display warning with realized base and oddball rates. Runtime timing QC reports actual
 dropped or late flips separately from this protocol approximation.
 
+Projects with multiple distinct image presentation frequencies require every image
+condition's effective rate to fit the same selected display refresh using whole frames.
+For example, 6 Hz and 7.5 Hz both fit 60 Hz; 6 Hz and 7 Hz do not. Inherited rates count
+alongside explicit overrides, and `blank_50` still requires even frame counts. Core
+checks this in authoring proposals, project validation and compilation, including
+single-run/subset compilation from a mixed-rate project. Uniform image rates and
+word-only projects retain the approximation policy above. Incompatible mixed image
+rates are rejected with condition-specific guidance, without adjusting authored rates.
+
 Authored monitor refresh rates are limited to the core-owned approved list: 59.94, 60,
 120, 144, and 240 Hz. Connected-display measurement is machine-specific runtime state
 and is not persisted in `RunSpec`; runtime preflight compares an engine measurement to

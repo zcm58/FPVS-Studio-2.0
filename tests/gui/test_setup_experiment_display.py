@@ -96,7 +96,7 @@ def _refresh_verification(
     )
 
 
-def test_setup_wizard_separates_timing_session_and_image_size(
+def test_setup_wizard_separates_timing_display_session_and_image_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -106,6 +106,15 @@ def test_setup_wizard_separates_timing_session_and_image_size(
     window.show_setup_wizard(step_key="experiment")
     editor = guide.runtime_settings_editor
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    assert guide.step_count_label.text() == "Step 3 of 9"
+    assert not editor.isVisible()
+    assert editor.timing_controls.isVisible()
+    assert not editor.detect_refresh_button.isVisible()
+    guide.open_wizard(step_key="display")
+    assert guide.step_stack.currentWidget() is guide.display_step_surface
+    assert guide.step_count_label.text() == "Step 4 of 9"
+    assert editor.isVisible()
+    assert not editor.timing_controls.isVisible()
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
     assert editor.card is None
     assert editor.detect_refresh_button.text() == "Check refresh rate"
@@ -121,7 +130,8 @@ def test_setup_wizard_separates_timing_session_and_image_size(
     assert "Approximate timing" in editor.timing_status_label.text()
 
     pages = (
-        ("experiment", guide.experiment_step_surface, editor),
+        ("experiment", guide.experiment_step_surface, guide.condition_timing_table),
+        ("display", guide.display_step_surface, editor),
         ("session", guide.session_step_surface, guide.session_structure_editor),
         ("image_size", guide.image_size_step_surface, guide.image_display_size_editor),
     )
@@ -151,6 +161,7 @@ def test_setup_wizard_separates_timing_session_and_image_size(
 
     guide.open_wizard(step_key="session")
     assert guide.step_stack.currentWidget() is guide.session_step_surface
+    assert guide.step_count_label.text() == "Step 5 of 9"
     assert not guide.session_settings_card.title_label.isVisible()
     session = guide.session_structure_editor
     assert session.block_count_spin.value() == 2
@@ -182,7 +193,7 @@ def test_oddball_cadence_is_directly_editable_and_survives_reopen(
         QApplication.processEvents()
         assert editor.oddball_every_n_spin.isVisible()
         assert editor.oddball_every_n_spin.isEnabled()
-        label = editor.form_layout.labelForField(editor.oddball_every_n_spin)
+        label = editor.timing_form_layout.labelForField(editor.oddball_every_n_spin)
         assert label.text() == "Oddball every"
         assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(label.text())
         _assert_visible_children_within_parent(window.setup_wizard_page.experiment_step_surface)
@@ -210,7 +221,7 @@ def test_contrast_modulation_background_guidance_fits_setup_minimum(
     )
 
     window.resize(1120, 720)
-    window.show_setup_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="display")
     editor = guide.runtime_settings_editor
     neutral_gray_index = editor.runtime_background_color_combo.findData("#808080")
     assert neutral_gray_index >= 0
@@ -305,7 +316,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Configurable FPVS Timing")
     guide = window.setup_wizard_page
-    window.show_setup_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="display")
     editor = guide.runtime_settings_editor
 
     editor.base_hz_spin.setValue(6.0)
@@ -322,7 +333,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.session_step_surface
     assert messages == []
-    guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+    guide.open_wizard(step_key="display", allow_step_jumps=True)
 
     editor.detect_refresh_button.click()
     QApplication.processEvents()
@@ -367,7 +378,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert messages == []
     assert guide.step_stack.currentWidget() is guide.session_step_surface
-    guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+    guide.open_wizard(step_key="display", allow_step_jumps=True)
 
     windows_mode.update({"numerator": 60_000, "denominator": 1_001})
     measured_refresh["value"] = 59.998
@@ -389,7 +400,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     window.resize(1120, 820)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
-    assert guide.experiment_settings_card.width() == guide.experiment_settings_card.maximumWidth()
+    assert guide.display_settings_card.width() == guide.display_settings_card.maximumWidth()
     qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
     _assert_visible_children_within_parent(editor)
     for label in (
@@ -412,7 +423,7 @@ def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Invalid FPVS Timing")
     guide = window.setup_wizard_page
-    window.show_setup_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="display")
     editor = guide.runtime_settings_editor
 
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(60.0))
@@ -425,7 +436,7 @@ def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
     assert guide.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert messages == [("Complete this setup step", editor.timing_blocker())]
-    assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+    assert guide.step_stack.currentWidget() is guide.display_step_surface
 
 
 def test_setup_wizard_refresh_detection_failure_is_actionable(
@@ -459,7 +470,7 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Detection Error")
     guide = window.setup_wizard_page
-    window.show_setup_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="display")
     editor = guide.runtime_settings_editor
 
     editor.detect_refresh_button.click()
@@ -474,7 +485,7 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert messages == []
     assert guide.step_stack.currentWidget() is guide.session_step_surface
-    guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+    guide.open_wizard(step_key="display", allow_step_jumps=True)
     window.resize(1120, 820)
     QApplication.processEvents()
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
@@ -507,7 +518,7 @@ def test_setup_wizard_refresh_detection_busy_state_disables_controls(
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Detection Busy")
     guide = window.setup_wizard_page
-    window.show_setup_wizard(step_key="experiment")
+    window.show_setup_wizard(step_key="display")
     editor = guide.runtime_settings_editor
 
     editor.detect_refresh_button.click()
@@ -518,6 +529,11 @@ def test_setup_wizard_refresh_detection_busy_state_disables_controls(
     assert editor.refresh_hz_combo.isEnabled() is False
     assert "Checking display timing" in editor.timing_status_label.text()
     assert guide.setup_wizard_next_button.isEnabled() is False
+    assert not guide.setup_wizard_back_button.isEnabled()
+    assert not guide.setup_wizard_return_home_button.isEnabled()
+    assert not guide.flush_pending_edits()
+    guide._go_back()
+    assert guide.step_stack.currentWidget() is guide.display_step_surface
 
     _DeferredProgressTask.active.succeeded.emit(_refresh_verification(60, 1, 60.0, 60.0))
     _DeferredProgressTask.active.finished.emit()
@@ -526,6 +542,7 @@ def test_setup_wizard_refresh_detection_busy_state_disables_controls(
     assert editor.refresh_is_verified() is True
     assert editor.detect_refresh_button.isEnabled()
     assert editor.refresh_hz_combo.isEnabled()
+    assert guide.setup_wizard_back_button.isEnabled()
 
 
 def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
@@ -918,18 +935,18 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         window = controller.main_window
         qtbot.addWidget(window)
         window.resize(1120, 820)
-        window.show_setup_wizard(step_key="experiment")
+        window.show_setup_wizard(step_key="display")
         guide = window.setup_wizard_page
-        guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+        guide.open_wizard(step_key="display", allow_step_jumps=True)
         window.show()
         QApplication.processEvents()
         editor = guide.runtime_settings_editor
         assert editor.form_layout.rowWrapPolicy() == QFormLayout.RowWrapPolicy.WrapAllRows
         assert editor.timing_summary_label.isHidden()
-        assert guide.experiment_settings_card.title_label.isVisible()
-        assert guide.experiment_settings_card.title_label.text() == "Display"
+        assert not guide.display_settings_card.title_label.isVisible()
+        assert guide.display_settings_card.title_label.text() == "Display"
         assert not guide.session_structure_editor.isVisible()
-        assert not guide.experiment_settings_card.subtitle_label.isVisible()
+        assert not guide.display_settings_card.subtitle_label.isVisible()
         assert not editor.timing_status_label.isVisible()
         assert editor.timing_is_compatible()
         assert not any(
@@ -938,7 +955,7 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         )
         assert "SOAs" in editor.refresh_hz_combo.toolTip()
         timing_index = guide._step_index_for_key("experiment")
-        assert guide.progress_step_labels[timing_index].text() == "Timing & Display"
+        assert guide.progress_step_labels[timing_index].text() == "Timing"
         session = guide.session_structure_editor
         assert not guide.condition_timing_table.isVisible()
         for field in (editor.refresh_hz_combo.parentWidget(),
@@ -949,7 +966,7 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
             assert field_top.y() > label_bottom.y()
             assert field_top.y() - label_bottom.y() <= 16
             assert field_top.x() == label_bottom.x()
-        _assert_visible_children_within_parent(guide.experiment_step_surface)
+        _assert_visible_children_within_parent(guide.display_step_surface)
 
         guide.open_wizard(step_key="session", allow_step_jumps=True)
         QApplication.processEvents()
@@ -968,7 +985,7 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
             session.block_count_spin.mapTo(session, session.block_count_spin.rect().topLeft()).y()
         )
         _assert_visible_children_within_parent(guide.session_step_surface)
-        guide.open_wizard(step_key="experiment", allow_step_jumps=True)
+        guide.open_wizard(step_key="display", allow_step_jumps=True)
         QApplication.processEvents()
         before = document.project.model_dump()
         editor.refresh()
@@ -982,7 +999,7 @@ def test_timing_labels_are_grouped_and_design_recap_is_not_visible(
         assert guide.setup_wizard_next_button.isEnabled()
         qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
         assert messages == [("Complete this setup step", editor.timing_blocker())]
-        assert guide.step_stack.currentWidget() is guide.experiment_step_surface
+        assert guide.step_stack.currentWidget() is guide.display_step_surface
         _assert_visible_children_within_parent(editor)
     finally:
         qapp.setPalette(previous)

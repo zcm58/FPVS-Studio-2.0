@@ -321,6 +321,8 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     messages = record_setup_validation_dialogs(monkeypatch)
     assert wizard.setup_wizard_next_button.isEnabled()
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
     assert "current counts" in table.error_label.text()
     assert table.pending_presentation_counts() == {first: 3}
@@ -352,6 +354,8 @@ def test_wizard_timing_order_action_repairs_staged_counts_before_advancing(
     assert reopened.get_condition(first).presentation_count == 3
     assert reopened.project.settings.session.saved_condition_order == dialogs[0]._order
     assert wizard.setup_wizard_next_button.isEnabled()
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.session_step_surface
 

@@ -281,9 +281,9 @@ def test_shared_fields_keep_keyboard_editing_and_selection(qtbot) -> None:
     assert_visible_children_within_parent(dialog)
 
 
-def test_eight_setup_steps_show_complete_labels_at_compact_width(qtbot) -> None:
+def test_nine_setup_steps_show_complete_labels_at_compact_width(qtbot) -> None:
     titles = [
-        "Project", "Conditions", "Timing", "Image Size", "Session",
+        "Project", "Conditions", "Timing", "Display", "Session", "Image Size",
         "Fixation", "Response", "Review",
     ]
     stepper = SetupProgressStepper(titles)

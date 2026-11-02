@@ -44,6 +44,7 @@ from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
     approved_monitor_refresh_rate,
     validate_display_refresh,
+    validate_mixed_image_refresh_rates,
 )
 from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.gui.components import (
@@ -222,8 +223,16 @@ class DisplaySettingsEditor(QWidget):
         self.runtime_background_color_combo.setMinimumWidth(240)
         self.form_layout.addRow("Monitor refresh rate", refresh_controls)
         self.form_layout.addRow(self.refresh_verification_notice)
-        self.form_layout.addRow("Base rate", self.base_hz_spin)
-        self.form_layout.addRow("Oddball every", self.oddball_every_n_spin)
+        self.timing_controls = QWidget(self.form_container)
+        self.timing_controls.setObjectName(
+            _prefixed_object_name(object_name_prefix, "timing_controls")
+        )
+        self.timing_form_layout = QFormLayout(self.timing_controls)
+        self.timing_form_layout.setContentsMargins(0, 0, 0, 0)
+        self.timing_form_layout.addRow("Base rate", self.base_hz_spin)
+        self.timing_form_layout.addRow("Oddball every", self.oddball_every_n_spin)
+        configure_setup_form(self.timing_form_layout, stacked=True)
+        self.form_layout.addRow(self.timing_controls)
         self.form_layout.addRow("Background", self.runtime_background_color_combo)
         self.form_layout.addRow(self.contrast_background_note_label)
         self.timing_summary_label.hide()
@@ -286,6 +295,11 @@ class DisplaySettingsEditor(QWidget):
         refresh_hz = self.refresh_hz_combo.currentData()
         return float(refresh_hz) if isinstance(refresh_hz, (int, float)) else 60.0
 
+    def take_timing_controls(self) -> QWidget:
+        """Move cadence controls into Setup's Timing step, retaining document bindings."""
+        self.form_layout.takeRow(self.timing_controls)
+        return self.timing_controls
+
     def _target_cadence_slots(self) -> int | None:
         protocol = self._document.project.settings.protocol
         cadences = {
@@ -331,6 +345,13 @@ class DisplaySettingsEditor(QWidget):
         ]
         report = next((report for report in reports if not report.compatible),
                       next((report for report in reports if report.warnings), reports[0]))
+        mixed_rate_issues = validate_mixed_image_refresh_rates(
+            self._document.project, refresh_hz=self.current_refresh_hz(),
+        )
+        if mixed_rate_issues:
+            return report.model_copy(update={
+                "compatible": False, "errors": [issue.message for issue in mixed_rate_issues],
+            })
         for condition in self._document.project.conditions:
             settings = condition.attentional_blink
             if (condition.stream_duration_seconds is not None
@@ -395,11 +416,12 @@ class DisplaySettingsEditor(QWidget):
             and condition.attentional_blink.target_count > 1
             for condition in self._document.project.conditions
         )
-        _set_form_row_visible(self.form_layout, self.base_hz_spin, False)
+        _set_form_row_visible(self.timing_form_layout, self.base_hz_spin, False)
         _set_form_row_visible(
-            self.form_layout, self.oddball_every_n_spin, not stream,
+            self.timing_form_layout, self.oddball_every_n_spin, not stream,
         )
-        cadence_label = self.form_layout.labelForField(self.oddball_every_n_spin)
+        self.timing_controls.setVisible(self._editable and not stream)
+        cadence_label = self.timing_form_layout.labelForField(self.oddball_every_n_spin)
         if isinstance(cadence_label, QLabel):
             cadence_label.setText("Target pair every" if ab else "Oddball every")
         summary_label = self.summary_layout.labelForField(self.summary_value_labels["oddball"])

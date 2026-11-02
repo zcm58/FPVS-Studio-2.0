@@ -1,4 +1,4 @@
-"""Registered timing drafts, confirmation and compact Timing & Display checks."""
+"""Registered timing drafts, confirmation and compact Timing checks."""
 
 from __future__ import annotations
 
@@ -269,7 +269,8 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
     assert wizard.experiment_step_surface.content.maximumWidth() == 1040
     assert table.isVisible()
     assert not wizard.runtime_settings_editor.base_hz_spin.isVisible()
-    assert table.geometry().bottom() < wizard.experiment_settings_card.geometry().top()
+    assert not wizard.runtime_settings_editor.isVisible()
+    assert wizard.runtime_settings_editor.timing_controls.isVisible()
     assert_visible_children_within_parent(wizard.experiment_step_surface)
     for label in table.findChildren(QLabel):
         if label.isVisible() and label.text():
@@ -411,7 +412,7 @@ def test_authored_seconds_disable_legacy_count_editing_and_update_stimulation_to
     wizard.conditions_page.refresh()
     assert not wizard.conditions_page.sequence_count_spin.isEnabled()
     assert not wizard.conditions_page.oddball_cycles_spin.isEnabled()
-    assert "Timing & Display" in wizard.conditions_page.sequence_count_spin.toolTip()
+    assert "Timing" in wizard.conditions_page.sequence_count_spin.toolTip()
     assert wizard._review_timing_estimate_lines()[0] == "Stimulation total: 100 seconds"
 
 
@@ -624,6 +625,9 @@ def test_next_reports_invalid_duration_draft_once_and_preserves_it(
     assert wizard.setup_wizard_next_button.isEnabled()
     assert messages == []
     qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
+    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert table.has_pending_edits()
+    qtbot.mouseClick(wizard.setup_wizard_next_button, Qt.MouseButton.LeftButton)
     assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
     assert document.project == before
     assert table.duration_spins[first].value() == pytest.approx(10.1)
@@ -639,6 +643,70 @@ def test_new_condition_uses_template_total_presentations_for_image_and_word(qtbo
     assert document.get_condition(condition_id).presentation_count == 3
     document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
     assert document.get_condition(condition_id).presentation_count == 3
+
+
+def test_timing_draft_survives_display_navigation_and_applies_at_the_selected_rate(qtbot, tmp_path):
+    document, _first, _second = _document(tmp_path)
+    wizard = SetupWizardPage(document, load_condition_template_profiles=lambda: [],
+                             manage_condition_templates=lambda: [])
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="timing", allow_step_jumps=True)
+    table = wizard.condition_timing_table
+    table.shared_frequency_spin.setValue(120)
+    original_frequency = document.project.settings.protocol.base_hz
+    wizard._go_next()
+    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert table.has_pending_edits()
+    assert document.project.settings.protocol.base_hz == original_frequency
+    wizard._go_back()
+    assert wizard.step_stack.currentWidget() is wizard.experiment_step_surface
+    assert table.shared_frequency_spin.value() == 120
+    assert table.has_pending_edits()
+    wizard._go_next()
+    editor = wizard.runtime_settings_editor
+    editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(240.0))
+    wizard._go_next()
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert wizard.step_count_label.text() == "Step 5 of 9"
+    assert document.project.settings.protocol.base_hz == 120
+    assert document.project.settings.display.preferred_refresh_hz == 240
+    assert not table.has_pending_edits()
+    assert not editor.refresh_is_verified()
+    document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.project.settings.protocol.base_hz == 120
+    assert reopened.project.settings.display.preferred_refresh_hz == 240
+
+
+def test_display_step_checks_every_image_rate_against_its_refresh_target(
+    qtbot, monkeypatch, multi_condition_project_root,
+):
+    document = ProjectDocument.open_existing(multi_condition_project_root)
+    incompatible = document.project.conditions[-1]
+    incompatible.base_hz = 7.5
+    document.update_display_settings(preferred_refresh_hz=144)
+    wizard = SetupWizardPage(document, load_condition_template_profiles=lambda: [],
+                             manage_condition_templates=lambda: [])
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="timing", allow_step_jumps=True)
+    wizard._go_next()
+    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    editor = wizard.runtime_settings_editor
+    assert not editor.timing_is_compatible()
+    assert incompatible.name in editor.timing_status_label.text()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    wizard._go_next()
+    assert wizard.step_stack.currentWidget() is wizard.display_step_surface
+    assert messages == [("Complete this setup step", editor.timing_blocker())]
+    editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(120.0))
+    assert editor.timing_is_compatible()
+    wizard._go_next()
+    assert wizard.step_stack.currentWidget() is wizard.session_step_surface
+    assert not editor.refresh_is_verified()
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])

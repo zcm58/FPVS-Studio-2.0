@@ -175,14 +175,21 @@ def test_reset_to_shared_preserves_valid_duration_and_rejects_incompatible_durat
     assert custom.model_dump(mode="json") == original
 
 
-def test_requested_rate_with_same_frame_quantization_retains_counts(timing_project):
+def test_fractional_image_override_is_rejected_in_a_mixed_rate_project(timing_project):
     condition_id = timing_project.conditions[0].condition_id
+    before = timing_project.model_dump()
+    with pytest.raises(ValueError, match="whole display frames"):
+        propose_condition_frequencies(timing_project, overrides={condition_id: 6.01}, refresh_hz=60)
+    assert timing_project.model_dump() == before
+
+
+def test_uniform_requested_rate_with_same_frame_quantization_retains_counts(timing_project):
     draft = propose_condition_frequencies(
-        timing_project, overrides={condition_id: 6.01}, refresh_hz=60,
+        timing_project, shared_base_hz=6.01, refresh_hz=60,
     )
     assert draft.conditions[0].oddball_cycle_repeats_per_sequence == 144
     report = validate_project(draft, refresh_hz=60)
-    assert any(issue.location == f"conditions.{condition_id}.base_hz"
+    assert any(issue.location == "settings.protocol.base_hz"
                and "Approximate frame timing" in issue.message for issue in report.issues)
 
 
@@ -190,9 +197,8 @@ def test_requested_rate_with_same_frame_quantization_retains_counts(timing_proje
 def test_preserved_stream_frames_follow_the_selected_refresh_not_nominal_hz(
     timing_project, refresh_hz,
 ):
-    condition_id = timing_project.conditions[0].condition_id
     draft = propose_condition_frequencies(
-        timing_project, overrides={condition_id: 3}, refresh_hz=refresh_hz,
+        timing_project, shared_base_hz=3, refresh_hz=refresh_hz,
     )
     assert {row.total_frames for row in condition_fixation_guidance(
         draft, refresh_hz=refresh_hz,

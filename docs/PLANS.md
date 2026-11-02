@@ -37,6 +37,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Separate Timing and Display](exec-plans/completed/separate-timing-display-steps.md):
+  nine-step Setup and exact shared-refresh compatibility for mixed image rates;
+  source checks recorded, visible Qt acceptance remains manual.
 - [Plain-language randomization](exec-plans/completed/plain-language-randomization.md):
   independent participant reuse choices and seed-free Session/Review; source checks
   passed, visible Qt acceptance remains manual.
