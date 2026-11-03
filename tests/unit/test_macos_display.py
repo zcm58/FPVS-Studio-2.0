@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.runtime import display_mode as display_mode_module
 from fpvs_studio.runtime import macos_display
@@ -203,7 +204,7 @@ def test_appkit_missing_dependency_has_install_guidance(monkeypatch: pytest.Monk
 def test_macos_fixed_rate_preserves_native_precision_and_retina_reference(
     monkeypatch: pytest.MonkeyPatch, refresh_hz: float
 ) -> None:
-    monkeypatch.setattr(macos_display.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, macos_display, "darwin")
     monkeypatch.setattr(macos_display, "_query_core_graphics_mode", lambda: _mode(refresh_hz))
     display_ids: list[int] = []
 
@@ -229,7 +230,7 @@ def test_macos_fixed_rate_preserves_native_precision_and_retina_reference(
 def test_zero_core_graphics_rate_requires_a_fixed_positive_native_interval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(macos_display.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, macos_display, "darwin")
     monkeypatch.setattr(macos_display, "_query_core_graphics_mode", lambda: _mode(0.0))
     monkeypatch.setattr(macos_display, "_query_refresh_intervals", lambda _id: (1 / 120, 1 / 120))
 
@@ -240,7 +241,7 @@ def test_zero_core_graphics_rate_requires_a_fixed_positive_native_interval(
 def test_adaptive_sync_and_promotion_are_rejected_even_with_a_nominal_rate(
     monkeypatch: pytest.MonkeyPatch, refresh_hz: float
 ) -> None:
-    monkeypatch.setattr(macos_display.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, macos_display, "darwin")
     monkeypatch.setattr(macos_display, "_query_core_graphics_mode", lambda: _mode(refresh_hz))
     monkeypatch.setattr(macos_display, "_query_refresh_intervals", lambda _id: (1 / 120, 1 / 48))
 
@@ -250,7 +251,7 @@ def test_adaptive_sync_and_promotion_are_rejected_even_with_a_nominal_rate(
 
 
 def test_native_interval_must_produce_a_finite_rate(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(macos_display.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, macos_display, "darwin")
     monkeypatch.setattr(macos_display, "_query_core_graphics_mode", lambda: _mode(0.0))
     monkeypatch.setattr(macos_display, "_query_refresh_intervals", lambda _id: (5e-324, 5e-324))
 
@@ -261,7 +262,7 @@ def test_native_interval_must_produce_a_finite_rate(monkeypatch: pytest.MonkeyPa
 def test_disagreeing_native_rates_fail_without_rounding_5994_to_60(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(macos_display.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, macos_display, "darwin")
     monkeypatch.setattr(macos_display, "_query_core_graphics_mode", lambda: _mode(60_000 / 1001))
     monkeypatch.setattr(macos_display, "_query_refresh_intervals", lambda _id: (1 / 60, 1 / 60))
 
@@ -272,7 +273,7 @@ def test_disagreeing_native_rates_fail_without_rounding_5994_to_60(
 def test_macos_adapter_is_guarded_before_loading_native_frameworks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(macos_display.sys, "platform", "win32")
+    set_module_platform(monkeypatch, macos_display, "win32")
     monkeypatch.setattr(
         macos_display, "_query_core_graphics_mode", lambda: pytest.fail("loaded native framework")
     )
@@ -283,14 +284,14 @@ def test_macos_adapter_is_guarded_before_loading_native_frameworks(
 
 def test_platform_selector_lazily_dispatches_to_macos(monkeypatch: pytest.MonkeyPatch) -> None:
     expected = NativeDisplayMode("macOS", "Display 42", 60.0, "CoreGraphics/AppKit", False)
-    monkeypatch.setattr(display_mode_module.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, display_mode_module, "darwin")
     monkeypatch.setattr(macos_display, "query_primary_macos_display_mode", lambda: expected)
 
     assert display_mode_module.query_primary_native_display_mode() is expected
 
 
 def test_platform_selector_preserves_macos_detection_error(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(display_mode_module.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, display_mode_module, "darwin")
 
     def _query() -> NativeDisplayMode:
         raise DisplayModeError("No fixed native rate")

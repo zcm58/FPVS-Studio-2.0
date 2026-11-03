@@ -8,6 +8,7 @@ tests = [
   "tests/unit/test_import_boundaries.py",
   "tests/unit/test_qt_test_registry.py",
   "tests/unit/test_verification_driver.py",
+  "tests/unit/test_platform_adapters.py",
 ]
 full_tests = []
 include = [
@@ -18,6 +19,8 @@ include = [
   "tests/__init__.py",
   "tests/qt_test_registry.py",
   "tests/qt_test_files.txt",
+  "tests/platform_adapters.py",
+  "tests/unit/test_platform_adapters.py",
   "tests/unit/test_harness_docs.py",
   "tests/unit/test_import_boundaries.py",
   "tests/unit/test_qt_test_registry.py",
@@ -374,6 +377,7 @@ manual_smoke = ["Build and launch the packaged application when packaging inputs
 checks = []
 tests = [
   "tests/unit/test_verification_driver.py",
+  "tests/unit/test_platform_adapters.py",
   "tests/unit/test_macos_display.py",
   "tests/unit/test_macos_source_tooling.py",
   "tests/unit/test_macos_bundle_handoff.py",
@@ -420,11 +424,18 @@ tests = [
 full_tests = ["tests/gui", "tests/integration/test_psychopy_engine.py"]
 include = [
   "src/fpvs_studio/runtime/macos_display.py",
+  "src/fpvs_studio/runtime/macos_session_process.py",
+  "src/fpvs_studio/gui/document_runtime.py",
+  "src/fpvs_studio/gui/local_test_display_dialog.py",
+  "src/fpvs_studio/gui/run_page.py",
+  "src/fpvs_studio/engines/psychopy_window.py",
   "src/fpvs_studio/runtime/display_mode.py",
   "src/fpvs_studio/gui/native_files.py",
   "src/fpvs_studio/library/credentials.py",
   "src/fpvs_studio/data_sharing/credentials.py",
   "tests/unit/test_macos*.py",
+  "tests/platform_adapters.py",
+  "tests/unit/test_platform_adapters.py",
   "tests/unit/test_native_files.py",
   "tests/unit/test_bundle_portability.py",
   "tests/integration/test_macos_native.py",

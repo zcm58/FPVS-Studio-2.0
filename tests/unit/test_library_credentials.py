@@ -7,6 +7,7 @@ import json
 from types import SimpleNamespace
 
 import pytest
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.library import credentials
 from fpvs_studio.library.errors import LibraryError
@@ -97,7 +98,7 @@ def test_windows_write_failure_stays_explicit(monkeypatch):
 
 
 def test_service_origins_have_separate_credential_targets(monkeypatch):
-    monkeypatch.setattr(credentials.sys, "platform", "win32")
+    set_module_platform(monkeypatch, credentials, "win32")
     first = credentials.credential_store("https://one.example")
     second = credentials.credential_store("https://two.example")
     assert first.target != second.target
@@ -248,7 +249,7 @@ def test_macos_rejects_oversized_metadata_before_backend_access(monkeypatch):
 def test_macos_library_and_results_have_separate_targets_and_shared_dispatch(monkeypatch, tmp_path):
     from fpvs_studio.data_sharing.credentials import sharing_credential_store
 
-    monkeypatch.setattr(credentials.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, credentials, "darwin")
     library = credentials.credential_store("https://one.example")
     another_origin = credentials.credential_store("https://two.example")
     results = sharing_credential_store("https://one.example", tmp_path, "a" * 64)
@@ -266,7 +267,7 @@ def test_unsupported_results_credential_platform_keeps_error_contract(monkeypatc
     from fpvs_studio.data_sharing.credentials import sharing_credential_store
     from fpvs_studio.data_sharing.errors import DataSharingError
 
-    monkeypatch.setattr(credentials.sys, "platform", "freebsd")
+    set_module_platform(monkeypatch, credentials, "freebsd")
     with pytest.raises(DataSharingError) as error:
         sharing_credential_store("https://example.test", tmp_path, "a" * 64)
     assert error.value.code == "credential_store"

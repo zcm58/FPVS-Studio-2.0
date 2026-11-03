@@ -7,6 +7,7 @@ import subprocess
 from typing import cast
 
 import pytest
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime import display_mode as display_mode_module
@@ -143,7 +144,7 @@ def test_windows_query_falls_back_when_virtual_refresh_flag_is_unsupported(
 def test_native_selector_preserves_windows_exact_rational_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(display_mode_module.sys, "platform", "win32")
+    set_module_platform(monkeypatch, display_mode_module, "win32")
     monkeypatch.setattr(
         windows_display_module,
         "query_primary_windows_display_mode",

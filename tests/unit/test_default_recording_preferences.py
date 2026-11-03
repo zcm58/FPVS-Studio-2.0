@@ -10,6 +10,7 @@ from types import MethodType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from tests.platform_adapters import platform_sys
 
 from fpvs_studio.core.models import ProjectRecordingSettings
 
@@ -73,6 +74,7 @@ def _bind_controller(controller, **namespace):
         ast.ImportFrom(module="__future__", names=[ast.alias(name="annotations")], level=0),
         *methods,
     ], type_ignores=[])
+    namespace.setdefault("sys", platform_sys("win32"))
     namespace.update({
         "_DEFAULT_RECORDING_CONFIGURATION_KEY": _KEY,
         "ProjectRecordingSettings": ProjectRecordingSettings,
@@ -329,12 +331,9 @@ def test_root_cancel_never_opens_hardware_picker():
     controller._app.quit.assert_called_once()
 
 
-def test_mac_authoring_skips_hardware_picker_and_preserves_preferences(monkeypatch):
-    import sys
-
+def test_mac_authoring_skips_hardware_picker_and_preserves_preferences():
     settings = _Settings({_KEY: "stored Windows selection"})
-    controller = _controller(settings)
-    monkeypatch.setattr(sys, "platform", "darwin")
+    controller = _controller(settings, sys=platform_sys("darwin"))
     assert controller.ensure_default_recording_configured() is True
     assert settings.values == {_KEY: "stored Windows selection"}
     assert settings.mutations == []

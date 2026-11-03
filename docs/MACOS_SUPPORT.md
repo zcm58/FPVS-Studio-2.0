@@ -62,11 +62,45 @@ bash scripts/macos-source.sh verify
 bash scripts/macos-source.sh run
 ```
 
-`setup` creates/reuses `.venv3.10`, installs the declared `dev,engine` extras and runs
+`setup` reuses `.venv3.10` or an existing `.venv`, creating `.venv3.10` if neither
+exists, installs the declared `dev,engine` extras and runs
 `pip check`. Set `FPVS_PYTHON=/absolute/path/to/python3.10` if Python is not available
 as `python3.10`. Dependency resolution must succeed without ignoring requirements or
 mixing Intel and Apple Silicon environments. A clean install on an untested target
 remains unqualified if wheels or compatible dependency versions are unavailable.
+
+For PyCharm, select the installed environment's `bin/python` as the project and Run
+configuration interpreter. A base interpreter such as `.python3.10-standalone/bin/python`
+does not acquire the virtual environment's dependencies. To refresh an existing `.venv`
+instead of creating the helper's `.venv3.10`, run:
+
+```bash
+.venv/bin/python -m pip install --editable '.[dev,engine]'
+.venv/bin/python -m pip check
+.venv/bin/python .agents/scripts/verify.py --scope macos --tier focused
+.venv/bin/python -m fpvs_studio.app
+```
+
+Mac dependencies currently select PySide6 6.11.3 and the engine's PyQt6 6.11 line.
+The PySide selection is a compatibility mitigation following an observed PySide6
+6.12.0 native wrapper/event-filter crash during Library bundle review; the original
+crash has not been deterministically reproduced or established as an upstream bug.
+The PyQt constraint avoids invalid syntax in 6.12.0's published type stubs.
+Windows and Linux keep their previous dependency ranges and shared application code.
+The hosted 6.12.0 matrix recorded below predates these constraints; it is historical
+evidence, not qualification of the newly selected dependency set.
+
+In a Studio environment previously using 6.12.0, `pip check` may also identify its
+orphaned `PySide6_Pdf` and `PySide6_WebEngine` split packages. Remove those 6.12-only
+packages, then reinstall the selected complete Qt family to restore overlapping files:
+
+```bash
+.venv/bin/python -m pip uninstall PySide6_Pdf PySide6_WebEngine
+.venv/bin/python -m pip install --force-reinstall 'PySide6==6.11.3'
+.venv/bin/python -m pip check
+```
+
+Use `.venv3.10/bin/python` in these commands if that is the environment being refreshed.
 
 For source updates, close Studio, preserve any local source edits, update to the
 chosen revision (for example, `git pull --ff-only` on an unmodified tracking branch),
@@ -143,8 +177,17 @@ and `roundtrip`; each output holds `project.fpvsbundle`, unchanged `baseline.jso
 and host-specific `evidence.json`. Successful local reuse on one OS is not a cross-OS
 pass; retain the actual CI artifact chain for that claim.
 
-`bash scripts/macos-source.sh verify` runs the safe `macos` focused scope. Native
-checks require `FPVS_MACOS_NATIVE_CHECKS=1`; CI enables it explicitly. Those checks
+`bash scripts/macos-source.sh verify` runs the safe `macos` focused scope.
+The helper prefers `.venv3.10` and reuses `.venv` if present instead of creating
+another environment. Tests select the primary Windows or secondary Mac contract at
+module-owned seams without changing the process-wide host. Repo verification checks
+all source types for Windows, then the Mac adapter owners for Darwin; the Mac focused
+route includes the latter pass. Full repo precommit also requires PowerShell (`pwsh`)
+for the existing audits; see [test verification](ENVIRONMENT.md#test-performance).
+The source workflow runs Windows repo precommit before starting the secondary Mac
+jobs, so Mac source changes also retain a native Windows regression gate.
+
+Native checks require `FPVS_MACOS_NATIVE_CHECKS=1`; CI enables it explicitly. Those checks
 import native bindings and PsychoPy without opening a window, probe available display
 information, and use unique synthetic Keychain/Trash items with cleanup. The hosted-only
 Keychain check creates an unlocked temporary store and restores the runner's previous

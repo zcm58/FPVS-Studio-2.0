@@ -122,7 +122,8 @@ history only. Use `docs/index.md` for the full document map.
 
 ## Verification and Documentation Freshness
 
-The task index owns verification routes. GitHub adds macOS source and cross-OS bundle
+The task index owns verification routes. Types target all-source Windows first,
+then secondary Mac adapters. GitHub adds macOS source and cross-OS bundle
 checks alongside documentation publishing. Update this map and nearest guide when
 ownership or boundaries change; keep behavior in canonical contracts. Measured debt
 belongs in `docs/exec-plans/tech-debt-tracker.md`; versions live in `pyproject.toml`.

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
     StubEngine,
@@ -44,6 +45,7 @@ from fpvs_studio.triggers.base import TriggerBackend
 
 @pytest.fixture(autouse=True)
 def _stable_native_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    windows_runtime(monkeypatch)
     monkeypatch.setattr(
         "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
         lambda: NativeDisplayMode(

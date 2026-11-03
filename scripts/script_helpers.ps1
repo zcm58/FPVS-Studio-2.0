@@ -64,9 +64,14 @@ function Resolve-RepoPython {
         [string]$RepoRoot
     )
 
+    # Windows PowerShell 5 and PowerShell 7 both expose OSVersion.Platform.
+    $pythonSuffix = "bin/python"
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        $pythonSuffix = "Scripts\python.exe"
+    }
     $candidatePaths = @(
-        (Join-Path $RepoRoot ".venv3.10\Scripts\python.exe"),
-        (Join-Path $RepoRoot ".venv\Scripts\python.exe")
+        (Join-Path (Join-Path $RepoRoot ".venv3.10") $pythonSuffix),
+        (Join-Path (Join-Path $RepoRoot ".venv") $pythonSuffix)
     )
 
     foreach ($candidatePath in $candidatePaths) {

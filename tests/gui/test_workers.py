@@ -367,12 +367,13 @@ def test_native_process_shutdown_drains_worker_threads(kind, shutdown) -> None:
     assert "shutdown complete" in result.stdout
 
 
-@pytest.mark.parametrize("kind", ["background", "presentation", "online"])
+@pytest.mark.parametrize("kind", ["background", "presentation", "online", "reported_online"])
 def test_native_worker_reuse_and_fast_online_jobs_survive_collection(kind) -> None:
     script = textwrap.dedent('''\
         import gc
         from PySide6.QtCore import QTimer, qInstallMessageHandler
         from PySide6.QtWidgets import QApplication, QWidget
+        from fpvs_studio.gui.error_dialogs import install_error_reporting
         from fpvs_studio.gui.update_lifecycle import update_lifecycle
         from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
         qInstallMessageHandler(lambda kind, context, message: print(message, flush=True))
@@ -382,6 +383,8 @@ def test_native_worker_reuse_and_fast_online_jobs_survive_collection(kind) -> No
         window.show()
         lifecycle = update_lifecycle(app)
         kind = KIND
+        if kind == "reported_online":
+            install_error_reporting(app)
         count = 0
         def finished(*_args):
             global count
@@ -392,7 +395,7 @@ def test_native_worker_reuse_and_fast_online_jobs_survive_collection(kind) -> No
             else:
                 QTimer.singleShot(0, start)
         def start():
-            if kind == "online":
+            if kind in ("online", "reported_online"):
                 task = lifecycle.start_task(lambda _progress, _cancel: "synthetic response")
             elif kind == "background":
                 task = BackgroundTask(parent_widget=window, callback=lambda: "synthetic result")
@@ -400,7 +403,7 @@ def test_native_worker_reuse_and_fast_online_jobs_survive_collection(kind) -> No
                 task = ProgressTask(parent_widget=window, label="Synthetic presentation",
                     callback=lambda: "synthetic result", persistent_thread=True)
             task.finished.connect(finished)
-            if kind != "online":
+            if kind not in ("online", "reported_online"):
                 task.start()
         QTimer.singleShot(0, start)
         app.exec()

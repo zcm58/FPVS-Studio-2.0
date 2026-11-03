@@ -37,12 +37,13 @@ class LocalTestDisplayDialog(QDialog):
         self.resize(600, 380)
         self._display = display.model_copy(deep=True)
         self._mode = mode
-        self.refresh_hz = nearest_approved_monitor_refresh_rate(mode.hz)
-        if self.refresh_hz is None or not mode.pixel_width or not mode.pixel_height:
+        refresh_hz = nearest_approved_monitor_refresh_rate(mode.hz)
+        if refresh_hz is None or not mode.pixel_width or not mode.pixel_height:
             raise ValueError(
                 "Select a fixed supported display rate (59.94, 60, 120, 144 or 240 Hz) "
                 "in macOS System Settings > Displays, then retry."
             )
+        self.refresh_hz = refresh_hz
         detected = detect_primary_display_settings()
         self.screen_width_spin = create_double_spin_box(
             parent=self, object_name="local_test_screen_width", minimum=1, maximum=500,

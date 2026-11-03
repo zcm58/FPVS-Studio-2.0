@@ -119,6 +119,23 @@ launches are blocked. Source updates use Git and the setup helper, not a Windows
 
 ## Test Performance
 
+Windows remains the primary platform. Repo `precommit` and `full` run mypy over
+all source with `--platform win32`, followed by a Darwin check of the Mac adapter
+owners. The `macos` focused route also runs that adapter type check. Imported
+Windows-only owners stay covered by the primary pass.
+
+Tests use `tests/platform_adapters.py` to replace the owning module's view of
+`sys`, preserving the real process platform. Windows acquisition tests retain their
+hardware/display assertions through existing fakes; Mac tests explicitly exercise
+source-only guards, Retina backing pixels and child-process boundaries. Synthetic
+helper IPC tests resolve linked POSIX interpreters while retaining the parent's
+import paths; production executable validation stays unchanged.
+
+Verification chooses `.venv3.10`, then `.venv`, using the current host's executable
+layout and preserving POSIX venv symlinks. Full repository audits require PowerShell;
+install `pwsh` on Mac before running the repo route. Mac source setup reuses an
+existing `.venv` when `.venv3.10` is absent.
+
 The verification driver reports the 20 slowest test phases by default. Use
 `-Durations 0` to remove the count limit or choose another nonnegative count.
 Pytest hides phases shorter than 5 ms in its normal concise output.

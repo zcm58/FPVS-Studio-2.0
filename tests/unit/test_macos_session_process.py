@@ -9,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import RunMode
@@ -39,7 +40,8 @@ def _summary(plan):
 
 def _fake_process(monkeypatch, callback=None):
     calls = []
-    monkeypatch.setattr(process.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, process, "darwin")
+    set_module_platform(monkeypatch, launcher, "darwin")
     monkeypatch.setattr(process.sys, "frozen", False, raising=False)
 
     def run(command, **options):
@@ -74,7 +76,7 @@ def _fake_process(monkeypatch, callback=None):
 def test_mac_blocked_launch_never_probes_recorders_or_constructs_engine(
     monkeypatch, tmp_path, entrypoint, updates, match,
 ):
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, launcher, "darwin")
 
     def forbidden(*_args, **_kwargs):
         raise AssertionError("Hardware or engine must not be accessed")
@@ -88,7 +90,7 @@ def test_mac_blocked_launch_never_probes_recorders_or_constructs_engine(
 
 @pytest.mark.parametrize("entrypoint", [launcher.launch_run, launcher.launch_session])
 def test_mac_direct_launch_requires_process_main_thread(monkeypatch, tmp_path, entrypoint):
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, launcher, "darwin")
     monkeypatch.setattr(launcher.threading, "current_thread", lambda: object())
 
     def forbidden(*_args, **_kwargs):
@@ -101,7 +103,7 @@ def test_mac_direct_launch_requires_process_main_thread(monkeypatch, tmp_path, e
 
 
 def test_mac_frozen_guard_precedes_recording_checks(monkeypatch):
-    monkeypatch.setattr(launcher.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, launcher, "darwin")
     monkeypatch.setattr(launcher.sys, "frozen", True, raising=False)
     with pytest.raises(launcher.LaunchSettingsError, match="source environment"):
         launcher._validate_launch_settings(_settings())
@@ -109,7 +111,7 @@ def test_mac_frozen_guard_precedes_recording_checks(monkeypatch):
 
 @pytest.mark.parametrize("platform", ["win32", "linux"])
 def test_other_platform_launch_policy_remains_unchanged(monkeypatch, platform):
-    monkeypatch.setattr(launcher.sys, "platform", platform)
+    set_module_platform(monkeypatch, launcher, platform)
     launcher._validate_launch_settings(launcher.LaunchSettings(
         fullscreen=False, verify_refresh_rate=False, display_index=1,
     ))
@@ -235,7 +237,7 @@ def test_refresh_proxy_rejects_invalid_measurement(monkeypatch):
 
 
 def test_child_rejects_unknown_opcode_without_loading_engine(monkeypatch, tmp_path):
-    monkeypatch.setattr(process.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, process, "darwin")
     private = tmp_path / "request-area"
     private.mkdir(mode=0o700)
     request = private / "request.json"
@@ -249,7 +251,7 @@ def test_child_rejects_unknown_opcode_without_loading_engine(monkeypatch, tmp_pa
 
 @pytest.mark.parametrize("platform,frozen", [("win32", False), ("darwin", True)])
 def test_process_boundary_rejects_unsupported_host_before_spawning(monkeypatch, platform, frozen):
-    monkeypatch.setattr(process.sys, "platform", platform)
+    set_module_platform(monkeypatch, process, platform)
     monkeypatch.setattr(process.sys, "frozen", frozen, raising=False)
 
     def forbidden(*_args, **_kwargs):

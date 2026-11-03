@@ -6,6 +6,7 @@ import csv
 
 import pytest
 from pydantic import ValidationError
+from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -36,6 +37,11 @@ from fpvs_studio.runtime.launcher import LaunchSettings, launch_session
 from fpvs_studio.runtime.preflight import PreflightError, preflight_session_plan
 
 ORDER = ["faces", "second", "third", "faces", "second"]
+
+
+@pytest.fixture(autouse=True)
+def _windows_acquisition_contract(monkeypatch):
+    windows_runtime(monkeypatch)
 
 
 def _project(project, *, saved=False):

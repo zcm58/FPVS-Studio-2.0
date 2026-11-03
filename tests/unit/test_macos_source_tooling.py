@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,43 @@ import yaml
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize("command", ["run", "setup"])
+@pytest.mark.parametrize("preferred", [False, True])
+@pytest.mark.skipif(os.name != "posix", reason="Native POSIX shell/interpreter layout")
+def test_source_helper_reuses_native_environment(tmp_path, command, preferred):
+    bash = shutil.which("bash")
+    if bash is None:
+        pytest.skip("The macOS source helper requires Bash")
+    scripts = tmp_path / "scripts"
+    scripts.mkdir()
+    helper = scripts / "macos-source.sh"
+    shutil.copyfile(ROOT / "scripts/macos-source.sh", helper)
+    tools = tmp_path / "tools"
+    tools.mkdir()
+    uname = tools / "uname"
+    uname.write_text('#!/bin/sh\necho Darwin\n', encoding="utf-8")
+    uname.chmod(0o700)
+    for environment in (".venv", ".venv3.10") if preferred else (".venv",):
+        python = tmp_path / environment / "bin/python"
+        python.parent.mkdir(parents=True)
+        python.write_text(
+            '#!/bin/sh\nprintf "%s\\n" "$0" "$@" >> "$FPVS_TEST_COMMANDS"\n',
+            encoding="utf-8",
+        )
+        python.chmod(0o700)
+    log = tmp_path / "commands.txt"
+    env = dict(os.environ, PATH=str(tools) + os.pathsep + os.environ["PATH"],
+               FPVS_TEST_COMMANDS=str(log))
+    result = subprocess.run([bash, str(helper), command], env=env, capture_output=True,
+                            text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stderr
+    selected = ".venv3.10" if preferred else ".venv"
+    commands = log.read_text(encoding="utf-8")
+    assert str(tmp_path / selected / "bin/python") in commands
+    assert ("fpvs_studio.app" if command == "run" else ".[dev,engine]") in commands
+    assert (tmp_path / ".venv3.10").exists() is preferred
+
+
 def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -> None:
     workflow = yaml.load(
         (ROOT / ".github/workflows/macos-source.yml").read_text(encoding="utf-8"),
@@ -22,6 +60,13 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
     assert "workflow_dispatch" in workflow["on"]
     jobs = workflow["jobs"]
     assert jobs["windows-source"]["runs-on"] == "windows-latest"
+    windows_checks = next(
+        step for step in jobs["windows-source"]["steps"]
+        if "--tier precommit" in step.get("run", "")
+    )
+    assert "--scope repo" in windows_checks["run"]
+    assert "FPVS_ALLOW_QT_TESTS" not in str(windows_checks)
+    assert "continue-on-error" not in windows_checks
     assert jobs["windows-return"]["runs-on"] == "windows-latest"
     assert jobs["windows-return"]["needs"] == "source"
     job = jobs["source"]

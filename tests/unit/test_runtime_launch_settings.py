@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
     StubEngine,
@@ -19,6 +20,11 @@ from fpvs_studio.runtime.launcher import (
     launch_session,
 )
 from fpvs_studio.runtime.preflight import PreflightError
+
+
+@pytest.fixture(autouse=True)
+def _windows_acquisition_contract(monkeypatch):
+    windows_runtime(monkeypatch)
 
 
 def test_launch_settings_default_to_strict_timing_fail_fast() -> None:

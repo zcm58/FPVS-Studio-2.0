@@ -7,7 +7,7 @@ import sys
 from collections.abc import Sequence
 from importlib import import_module
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from pydantic import ValidationError
 
@@ -44,6 +44,16 @@ from fpvs_studio.runtime.recording import (
     recording_backend_label,
     validate_recording_configuration,
 )
+
+
+class _SessionLaunchRequired(TypedDict):
+    participant_number: str
+    launch_settings: LaunchSettings
+
+
+class _SessionLaunchArguments(_SessionLaunchRequired, total=False):
+    participant_metadata: ParticipantMetadata
+    participant_session_number: int
 
 
 def _document_dependency(name: str) -> Any:
@@ -318,7 +328,7 @@ class DocumentRuntimeMixin:
                 _sharing_protocol(self._project, self._project_root)
                 if session_plan is self._last_session_plan else None
             )
-            launch_kwargs = {
+            launch_kwargs: _SessionLaunchArguments = {
                 "participant_number": participant_number,
                 "launch_settings": LaunchSettings(
                     engine_name=engine_name,
@@ -389,7 +399,7 @@ class DocumentRuntimeMixin:
                 from fpvs_studio.runtime.macos_session_process import launch_macos_test_session
 
                 launch = launch_macos_test_session
-            summary = launch(
+            summary: LaunchSummary = launch(
                 self._project_root,
                 session_plan,
                 **launch_kwargs,
@@ -397,7 +407,7 @@ class DocumentRuntimeMixin:
             self.refresh_participant_summary_if_stale()
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
-        return cast(LaunchSummary, summary)
+        return summary
 
     def launch_session(
         self,

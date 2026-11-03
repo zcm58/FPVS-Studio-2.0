@@ -585,8 +585,6 @@ class StudioController(QObject):
     def ensure_default_recording_configured(self) -> bool:
         """Require an explicit hardware choice after Root Folder setup."""
 
-        import sys
-
         if sys.platform == "darwin":
             return True  # Authoring needs no EEG; explicit Test/Pilot is launch-only.
         error_message = ""

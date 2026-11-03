@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -40,6 +41,11 @@ from fpvs_studio.runtime.recording import (
 from fpvs_studio.runtime.run_worker import RuntimeWorker, _build_and_connect_trigger_backend
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
 from fpvs_studio.triggers.null_backend import NullBackend
+
+
+@pytest.fixture(autouse=True)
+def _windows_acquisition_contract(monkeypatch):
+    windows_runtime(monkeypatch)
 
 
 class FakeUnicorn(NullBackend):

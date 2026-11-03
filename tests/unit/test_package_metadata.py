@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 import re
@@ -13,6 +14,8 @@ from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
 import pytest
+from packaging.markers import default_environment
+from packaging.requirements import Requirement
 from PIL import ImageFont
 
 from fpvs_studio import __version__
@@ -141,6 +144,48 @@ def test_default_install_requires_pyside6_but_keeps_psychopy_optional() -> None:
     assert "pytest-qt" in dev_dependencies_block
     assert "pytest-timeout" in dev_dependencies_block
     assert "pyinstaller" in packaging_dependencies_block
+
+
+@pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
+def test_mac_qt_constraint_preserves_windows_and_linux_dependency_range(platform_name) -> None:
+    requirements = [
+        Requirement(value)
+        for value in ast.literal_eval(f"[{_extract_list_assignment('dependencies')}]")
+    ]
+    environment = {**default_environment(), "sys_platform": platform_name}
+    selected = [
+        requirement for requirement in requirements
+        if requirement.name.lower() == "pyside6"
+        and (requirement.marker is None or requirement.marker.evaluate(environment))
+    ]
+    assert len(selected) == 1
+    if platform_name == "darwin":
+        assert str(selected[0].specifier) == "==6.11.3"
+    else:
+        assert "6.11.2" in selected[0].specifier
+        assert "6.12.0" in selected[0].specifier
+        assert "6.11.1" not in selected[0].specifier
+        assert "7.0" not in selected[0].specifier
+
+
+@pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
+def test_mac_engine_binding_constraint_does_not_apply_to_other_platforms(platform_name) -> None:
+    environment = {**default_environment(), "sys_platform": platform_name}
+    requirements = [
+        Requirement(value)
+        for value in ast.literal_eval(f"[{_extract_list_assignment('engine')}]")
+    ]
+    selected = [
+        requirement for requirement in requirements
+        if requirement.name.lower() == "pyqt6"
+        and (requirement.marker is None or requirement.marker.evaluate(environment))
+    ]
+    if platform_name == "darwin":
+        assert len(selected) == 1
+        assert "6.11.0" in selected[0].specifier
+        assert "6.12.0" not in selected[0].specifier
+    else:
+        assert selected == []
 
 
 def test_pyinstaller_includes_psychopy_visual_lazy_imports() -> None:

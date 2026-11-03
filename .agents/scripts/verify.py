@@ -22,6 +22,14 @@ CONFIG_PATH = REPO_ROOT / ".agents" / "verification.toml"
 QT_OPT_IN_ENV = "FPVS_ALLOW_QT_TESTS"
 QT_PLATFORM_ENV = "QT_QPA_PLATFORM"
 SUPPORTED_PYTHON = (3, 10)
+MACOS_TYPE_TARGETS = (
+    "src/fpvs_studio/runtime/macos_display.py",
+    "src/fpvs_studio/runtime/macos_session_process.py",
+    "src/fpvs_studio/gui/local_test_display_dialog.py",
+    "src/fpvs_studio/gui/document_runtime.py",
+    "src/fpvs_studio/gui/run_page.py",
+    "src/fpvs_studio/engines/psychopy_window.py",
+)
 KNOWN_CHECKS = frozenset({"docs-hygiene", "gc"})
 
 
@@ -40,13 +48,13 @@ class VerificationScope:
 def resolve_repo_python(repo_root: Path = REPO_ROOT) -> Path:
     """Prefer .venv3.10, then .venv, then the current Python 3.10."""
 
+    suffix = Path("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     for environment in (".venv3.10", ".venv"):
-        for suffix in (Path("Scripts/python.exe"), Path("bin/python")):
-            candidate = repo_root / environment / suffix
-            if candidate.is_file():
-                # POSIX venv executables are symlinks; resolving them selects the
-                # base interpreter and loses the environment's installed packages.
-                return candidate.absolute()
+        candidate = repo_root / environment / suffix
+        if candidate.is_file():
+            # POSIX venv executables are symlinks; resolving them selects the
+            # base interpreter and loses the environment's installed packages.
+            return candidate.absolute()
     if sys.version_info[:2] != SUPPORTED_PYTHON:
         version = ".".join(map(str, sys.version_info[:2]))
         raise RuntimeError(
@@ -290,7 +298,8 @@ def build_commands(
     if tier == "full" and scope.name == "repo":
         return [
             [str(python), "-m", "ruff", "check", "."],
-            [str(python), "-m", "mypy", "src"],
+            [str(python), "-m", "mypy", "--platform", "win32", "src"],
+            _macos_type_command(python),
             _check_command("gc", powershell=powershell),
             _check_command("docs-hygiene", powershell=powershell),
             _pytest_command(python, (), allow_qt=True, durations=durations),
@@ -310,7 +319,8 @@ def build_commands(
         )
         commands.extend(
             [
-                [str(python), "-m", "mypy", "src"],
+                [str(python), "-m", "mypy", "--platform", "win32", "src"],
+                _macos_type_command(python),
                 _check_command("gc", powershell=powershell),
                 _check_command("docs-hygiene", powershell=powershell),
                 _pytest_command(
@@ -327,6 +337,8 @@ def build_commands(
     commands.extend(
         _changed_python_commands(python, scope_python_files(scope, changed))
     )
+    if scope.name == "macos":
+        commands.append(_macos_type_command(python))
     tests = scope.tests
     allow_qt = False
     if tier == "full":
@@ -340,6 +352,15 @@ def build_commands(
             )
         )
     return commands
+
+
+def _macos_type_command(python: Path) -> list[str]:
+    """Check secondary source adapters without reclassifying Windows-only owners."""
+
+    return [
+        str(python), "-m", "mypy", "--platform", "darwin", "--follow-imports=silent",
+        *MACOS_TYPE_TARGETS,
+    ]
 
 
 def run_commands(commands: Sequence[Sequence[str]], *, list_only: bool) -> int:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.gui import native_files
 
@@ -41,7 +42,7 @@ def _native_modules(monkeypatch, *, trash_result=True, open_result=True, error=N
         requested.append(name)
         return {"Foundation": foundation, "AppKit": appkit}[name]
 
-    monkeypatch.setattr(native_files.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, native_files, "darwin")
     monkeypatch.setattr(native_files.importlib, "import_module", load)
     return requested, trashed, opened
 
@@ -74,7 +75,7 @@ def test_trash_denied_or_unavailable_keeps_item_and_reports_failure(monkeypatch,
 def test_missing_cocoa_does_not_delete_or_launch_a_fallback(monkeypatch, tmp_path):
     item = tmp_path / "project"
     item.mkdir()
-    monkeypatch.setattr(native_files.sys, "platform", "darwin")
+    set_module_platform(monkeypatch, native_files, "darwin")
 
     def missing(_name):
         raise ImportError("private framework loader state")
@@ -105,7 +106,7 @@ def test_finder_failure_stays_explicit(monkeypatch, tmp_path, error):
 def test_mac_helpers_never_import_or_call_native_modules_on_other_platforms(
     monkeypatch, tmp_path, operation,
 ):
-    monkeypatch.setattr(native_files.sys, "platform", "win32")
+    set_module_platform(monkeypatch, native_files, "win32")
 
     def forbidden(_name):
         raise AssertionError("Native imports are forbidden on this platform")

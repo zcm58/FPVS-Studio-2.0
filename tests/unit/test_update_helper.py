@@ -15,6 +15,7 @@ from threading import Event, Thread
 from types import SimpleNamespace
 
 import pytest
+from tests.platform_adapters import python_child_command
 
 from fpvs_studio.updates import (
     helper_client,
@@ -549,7 +550,7 @@ raise SystemExit(helper_service.serve_stdio())
             "helper_service.check_update = check",
             "sys.stdin = None\nsys.stdout = None\nhelper_service.check_update = check",
         )
-    client = helper_client.HelperClient(lambda *args: [sys.executable, "-c", script])
+    client = helper_client.HelperClient(lambda *args: python_child_command(script))
     phases = []
     result = client.check("1.2.3", phase_callback=phases.append)
     assert result.current_version == result.latest_version == "1.2.3"
@@ -568,7 +569,7 @@ def check(current_version, **kwargs):
 helper_service.check_update = check
 raise SystemExit(helper_service.serve_stdio())
 """
-    client = helper_client.HelperClient(lambda *args: [sys.executable, "-c", script])
+    client = helper_client.HelperClient(lambda *args: python_child_command(script))
     cancel = Event()
     with pytest.raises(UpdateCancelled, match="Canceled by Studio"):
         client.check("1.2.3", cancel_event=cancel, phase_callback=lambda _: cancel.set())
@@ -589,7 +590,7 @@ accept = read_message(source)
 assert accept['kind'] == 'accept' and accept['nonce'] == '1' * 32
 Path(sys.argv[1]).write_text('accepted synthetic handoff; no installer executed')
 """
-    client = helper_client.HelperClient(lambda *args: [sys.executable, "-c", script, str(marker)])
+    client = helper_client.HelperClient(lambda *args: python_child_command(script, marker))
     process = client.launch_install(_downloaded(tmp_path), parent_pid=None)
     assert process.wait(timeout=5) == 0
     assert marker.read_text().startswith("accepted synthetic handoff")
@@ -622,7 +623,7 @@ Event().wait(30)  # Simulate the recovery window; no Qt or installer is loaded.
     monkeypatch.setattr(helper_client, "_spawn", record_spawn)
     monkeypatch.setattr(helper_client, "_CANCEL_GRACE_SECONDS", 0.05)
     client = helper_client.HelperClient(
-        lambda *args: [sys.executable, "-c", script, "1" if cancelled else "0"]
+        lambda *args: python_child_command(script, "1" if cancelled else "0")
     )
     try:
         error_type = UpdateCancelled if cancelled else UpdateError
@@ -816,7 +817,7 @@ def check(current_version, **kwargs):
 helper_service.check_update = check
 raise SystemExit(helper_service.serve_stdio())
 """
-    client = helper_client.HelperClient(lambda *args: [sys.executable, "-c", script])
+    client = helper_client.HelperClient(lambda *args: python_child_command(script))
     cancel = Event()
     started = time.monotonic()
     with pytest.raises(UpdateCancelled):

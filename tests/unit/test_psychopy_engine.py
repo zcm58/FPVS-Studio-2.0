@@ -15,6 +15,7 @@ from typing import Any
 import numpy as np
 import pytest
 from PIL import Image
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.compiler import compile_run_spec
 from fpvs_studio.core.contrast_modulation import sinusoidal_contrast_envelope
@@ -64,6 +65,7 @@ class _FakeWindow:
         self.recordFrameIntervals = False
         self.frameIntervals: list[float] = []
         self.size = kwargs.get("size", [1920, 1080])
+        self.frameBufferSize = self.size
         self.monitor = None
         self.events = events if events is not None else []
         self.raise_on_flip_index = raise_on_flip_index
@@ -360,7 +362,10 @@ def _build_flip_times(
     return flip_times
 
 
-def _patch_fake_psychopy(monkeypatch, engine: PsychoPyEngine, fake_psychopy: object) -> None:
+def _patch_fake_psychopy(
+    monkeypatch, engine: PsychoPyEngine, fake_psychopy: object, *, platform_name: str = "win32",
+) -> None:
+    set_module_platform(monkeypatch, psychopy_window_module, platform_name)
     # Keep resource barriers simulated even when real PsychoPy is installed.
     # Patch the loader so tests can still override synchronize_gpu to exercise failures.
     monkeypatch.setattr(psychopy_stimuli_module, "_load_psychopy_gl", lambda: fake_psychopy.gl)

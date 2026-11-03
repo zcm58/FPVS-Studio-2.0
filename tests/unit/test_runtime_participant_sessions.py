@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from openpyxl import load_workbook
 from pydantic import ValidationError
+from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import StubEngine, _read_csv_rows
 from tests.unit.test_runtime_participant_history import (
     _write_condition_history_rows,
@@ -37,6 +38,11 @@ from fpvs_studio.runtime.session_export import (
     write_group_summary,
     write_participant_summary,
 )
+
+
+@pytest.fixture(autouse=True)
+def _windows_acquisition_contract(monkeypatch):
+    windows_runtime(monkeypatch)
 
 
 def test_visit_preview_is_read_only_and_preserves_leading_zeros(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from tests.platform_adapters import set_module_platform
 from tests.qt_test_registry import requested_registered_qt_files
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -37,20 +38,38 @@ def _scope(
     )
 
 
-def test_resolve_repo_python_prefers_venv310_then_venv(tmp_path: Path) -> None:
-    venv_python = tmp_path / ".venv" / "Scripts" / "python.exe"
+def test_native_powershell_wrapper_resolves_environment_and_driver(tmp_path):
+    powershell = shutil.which("pwsh") or shutil.which("powershell")
+    if powershell is None:
+        pytest.skip("PowerShell is required for the native wrapper integration check")
+    result = subprocess.run(
+        [powershell, "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(PROJECT_ROOT / "scripts/verify.ps1"), "-CheckConfig"],
+        cwd=tmp_path, capture_output=True, text=True, timeout=30, check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Verification config passed" in result.stdout
+
+
+@pytest.mark.parametrize("platform,suffix", [
+    ("win32", "Scripts/python.exe"), ("darwin", "bin/python"), ("linux", "bin/python"),
+])
+def test_resolve_repo_python_prefers_venv310_then_venv(monkeypatch, tmp_path, platform, suffix):
+    set_module_platform(monkeypatch, verify, platform)
+    venv_python = tmp_path / ".venv" / suffix
     venv_python.parent.mkdir(parents=True)
     venv_python.touch()
     assert verify.resolve_repo_python(tmp_path) == venv_python.resolve()
 
-    preferred_python = tmp_path / ".venv3.10" / "Scripts" / "python.exe"
+    preferred_python = tmp_path / ".venv3.10" / suffix
     preferred_python.parent.mkdir(parents=True)
     preferred_python.touch()
     assert verify.resolve_repo_python(tmp_path) == preferred_python.resolve()
 
 
 
-def test_resolve_repo_python_keeps_posix_virtual_environment_symlink(tmp_path: Path) -> None:
+def test_resolve_repo_python_keeps_posix_virtual_environment_symlink(monkeypatch, tmp_path):
+    set_module_platform(monkeypatch, verify, "darwin")
     base_python = tmp_path / "base-python"
     base_python.touch()
     venv_python = tmp_path / ".venv3.10" / "bin" / "python"
@@ -65,6 +84,39 @@ def test_resolve_repo_python_keeps_posix_virtual_environment_symlink(tmp_path: P
     assert selected == venv_python.absolute()
     assert selected != base_python
     assert selected.is_symlink()
+
+
+@pytest.mark.parametrize("platform,foreign", [
+    ("win32", "bin/python"), ("darwin", "Scripts/python.exe"),
+])
+def test_resolve_repo_python_ignores_foreign_environment(monkeypatch, tmp_path, platform, foreign):
+    set_module_platform(monkeypatch, verify, platform)
+    monkeypatch.setattr(verify.sys, "version_info", (3, 10))
+    wrong_host = tmp_path / ".venv3.10" / foreign
+    wrong_host.parent.mkdir(parents=True)
+    wrong_host.touch()
+    assert verify.resolve_repo_python(tmp_path) == Path(sys.executable).absolute()
+
+
+@pytest.mark.parametrize("tier", ["precommit", "full"])
+def test_repo_type_checks_keep_windows_primary_and_check_mac_adapters(tier):
+    commands = verify.build_commands(
+        _scope(), tier=tier, python=Path("python"), powershell="pwsh", changed=(),
+    )
+    types = [command for command in commands if "mypy" in command]
+    assert types == [
+        ["python", "-m", "mypy", "--platform", "win32", "src"],
+        ["python", "-m", "mypy", "--platform", "darwin", "--follow-imports=silent",
+         *verify.MACOS_TYPE_TARGETS],
+    ]
+
+
+def test_mac_focused_checks_secondary_adapter_types_without_qt():
+    commands = verify.build_commands(
+        _scope(name="macos"), tier="focused", python=Path("python"),
+        powershell="pwsh", changed=(),
+    )
+    assert commands == [verify._macos_type_command(Path("python"))]
 
 
 def test_validate_config_rejects_qt_test_only_from_local_bundle(tmp_path: Path) -> None:
@@ -251,7 +303,8 @@ def test_repo_full_runs_one_qt_enabled_pytest_command() -> None:
     assert "--allow-qt-tests" in pytest_commands[0]
     assert plugin_name in pytest_commands[0]
     assert ["python.exe", "-m", "ruff", "check", "."] in commands
-    assert ["python.exe", "-m", "mypy", "src"] in commands
+    assert ["python.exe", "-m", "mypy", "--platform", "win32", "src"] in commands
+    assert verify._macos_type_command(Path("python.exe")) in commands
 
 
 def test_gui_focused_skips_qt_while_gui_full_uses_registered_tree() -> None:

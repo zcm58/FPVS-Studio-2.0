@@ -11,6 +11,7 @@ from pathlib import Path
 from threading import Event
 
 import pytest
+from tests.platform_adapters import windows_runtime
 
 import fpvs_studio.core.library_publish as publisher
 from fpvs_studio.core.enums import StimulusVariant
@@ -45,6 +46,11 @@ from fpvs_studio.preprocessing.manifest import (
 )
 from fpvs_studio.preprocessing.models import DerivedImageRecord
 from fpvs_studio.runtime.launcher import LaunchSettings, _validate_launch_settings
+
+
+@pytest.fixture(autouse=True)
+def _windows_acquisition_contract(monkeypatch):
+    windows_runtime(monkeypatch)
 
 
 def _ready_project(project_root, project):

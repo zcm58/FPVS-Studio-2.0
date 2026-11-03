@@ -204,6 +204,66 @@ must not be described as full Phase-1 parity.
 
 ## Verification record
 
+### Local source-startup investigation, 2026-11-02
+
+The user's standalone base Python lacked Studio dependencies, and the existing `.venv`
+still described Studio 1.0.0 with incomplete/outdated dependencies. Refreshing its
+editable `dev,engine` install and selecting `.venv/bin/python` in PyCharm resolved
+startup imports. The user approved visible startup and observed Studio opening, then
+reported a native crash after a Library download. The native trace entered PySide6
+6.12.0's QObject wrapper/event-filter handling during garbage collection while a
+worker read the bundle manifest. This is evidence of the crash location, not proof
+of a particular ownership or upstream defect.
+
+Repeated synthetic workers, cancellation/handoff checks and five read-only reviews
+of the retained downloaded archive did not reproduce the fault. Mac dependency
+selection now uses the PySide6 6.11.3 maintenance release as a bounded compatibility
+mitigation, with PyQt6 6.11 for valid engine type stubs. Windows/Linux dependency
+ranges and production Python code remain unchanged. Keep the original crash and
+broader physical acceptance open until the actual workflow has confirming evidence;
+the earlier CI matrix does not qualify this new dependency selection.
+
+Local verification on macOS 26.5.2 / arm64 / CPython 3.10.20, Studio 2.5.8,
+PySide6 6.11.3 and PsychoPy 2026.2.5:
+
+- Mac focused: 1,353 passed, 15 platform/native-opt-in skips. Two separately selected
+  native dependency/display probes passed; personal Keychain/Trash probes were not run.
+- Metadata, documentation-harness, import-boundary and Qt-registry checks: 82 passed,
+  6 Windows build/junction skips. Windows/Linux base, dev, engine and packaging
+  dependency selections also matched the pre-change revision exactly.
+- Approved visible Library, worker and deferred-shutdown coverage: 76 passed. Library
+  layout states passed at 900x640 and 1040x760 with the native default palette.
+- An offline native-Cocoa check used the retained approximately 500 MB, 3,080-entry
+  download with a fake transport and an isolated temporary Studio Root. Manifest
+  review, full extraction, **Open with Imported Values**, an exposed project window,
+  lease release and clean exit code 0 passed. The temporary import was removed;
+  the user's cache, projects and normal settings were preserved. No service request
+  or experiment playback was made by this check.
+- Windows-targeted mypy passed all 267 source files. Changed-file Ruff, compilation
+  and whitespace checks passed. These are not physical Windows acquisition checks.
+- Full repo precommit remains unqualified: PowerShell is unavailable for its audits;
+  native-Mac mypy reports the same 35 pre-existing Windows-API/Mac-branch type errors.
+  The safe GUI scope has 8 Windows-recording-policy fixture failures on Mac, and a
+  broader safe run was stopped on Windows-assumption failures. Extra native
+  QMessageBox smoke coverage had 11 failures and one fixture teardown error involving
+  Mac title/size/Escape behavior and a previously deleted reporter. These failures
+  were retained as acceptance gaps rather than changing unrelated production code.
+
+The successful offline import is new workflow evidence, not a deterministic
+reproduction or proof of the original native crash's cause. Keep its intermittent
+stability qualification and the remaining physical/interactive acceptance open.
+
+The subsequent [Windows-primary test-adapter repair](../completed/windows-primary-platform-test-adapters.md)
+resolved the host-dependent safe-suite and type-checking gaps above: native Mac repo
+precommit passed **4,973 tests**, 64 platform/filesystem skips and 24 subtests; Windows
+mypy passed all 266 current source files and Darwin mypy passed six adapter owners.
+Mac focused passed 1,376 tests with 15 platform/native-opt-in skips. Existing audits
+ran through official temporary PowerShell 7.6.9; both native verification launchers
+now select the active environment correctly. CI runs Windows precommit before the
+Mac jobs. These are local Mac results pending the new native CI run. The Mac became
+locked, preventing a further visible Qt pass; native QMessageBox failures and the
+intermittent original crash remain open. No physical timing/hardware claim follows.
+
 Current implementation evidence is in the gate table above and
 [MACOS_SUPPORT.md](../../MACOS_SUPPORT.md). Native CI source commit `f6b6721` passed
 all six jobs in [run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134).

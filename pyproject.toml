@@ -27,7 +27,9 @@ dependencies = [
   "packaging>=24,<26",
   "pillow>=11.3,<12",
   "pyserial>=3.5,<4.0",
-  "PySide6>=6.11.2,<7.0",
+  "PySide6>=6.11.2,<7.0; sys_platform != 'darwin'",
+  # Keep Mac source on the 6.11 maintenance line during native crash qualification.
+  "PySide6==6.11.3; sys_platform == 'darwin'",
   "pydantic>=2.8,<3.0",
   "cryptography>=50.0,<51.0",
   "keyring>=25,<26; sys_platform == 'linux' or sys_platform == 'darwin'",
@@ -39,6 +41,8 @@ dependencies = [
 engine = [
   "psychopy>=2024.2,<2027.0",
   "sounddevice>=0.4,<0.6",
+  # PyQt6 6.12.0 ships invalid type stubs; retain the compatible Mac engine binding.
+  "PyQt6>=6.11,<6.12; sys_platform == 'darwin'",
   # Security floors for dependencies already required by PsychoPy.
   "GitPython>=3.1.60,<4.0",
   "requests>=2.33.0,<3.0",

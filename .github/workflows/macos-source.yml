@@ -10,6 +10,8 @@ on:
       - .agents/verification.toml
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
+      - scripts/script_helpers.ps1
+      - scripts/verify.ps1
       - .github/workflows/macos-source.yml
   pull_request:
     paths:
@@ -19,6 +21,8 @@ on:
       - .agents/verification.toml
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
+      - scripts/script_helpers.ps1
+      - scripts/verify.ps1
       - .github/workflows/macos-source.yml
   workflow_dispatch:
 
@@ -31,7 +35,7 @@ concurrency:
 
 jobs:
   windows-source:
-    name: Create Windows transfer fixture
+    name: Windows contracts and transfer fixture
     runs-on: windows-latest
     timeout-minutes: 20
     defaults:
@@ -46,6 +50,8 @@ jobs:
           cache-dependency-path: pyproject.toml
       - name: Install authoring and test dependencies
         run: python -m pip install --editable '.[dev]'
+      - name: Verify primary Windows contracts before secondary Mac checks
+        run: python .agents/scripts/verify.py --scope repo --tier precommit --workers 4
       - name: Create and relocate a synthetic portable project
         run: >-
           python tests/integration/macos_bundle_handoff.py create

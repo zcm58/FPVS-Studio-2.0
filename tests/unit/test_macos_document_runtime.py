@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.gui import document_runtime
@@ -32,7 +33,7 @@ class Document(DocumentRuntimeMixin):
 def test_local_calibration_compiles_a_copy_and_preserves_lab_values(
     monkeypatch, sample_project, sample_project_root,
 ):
-    monkeypatch.setattr(document_runtime, "sys", SimpleNamespace(platform="darwin"))
+    set_module_platform(monkeypatch, document_runtime, "darwin")
     document = Document(sample_project, sample_project_root)
     before = sample_project.model_dump(mode="json")
     local = sample_project.settings.display.model_copy(deep=True)
@@ -67,7 +68,7 @@ def test_same_target_local_copy_preserves_seeded_schedules(
 def test_mac_production_launch_is_blocked_before_backend_resolution(
     monkeypatch, sample_project, sample_project_root,
 ):
-    monkeypatch.setattr(document_runtime, "sys", SimpleNamespace(platform="darwin"))
+    set_module_platform(monkeypatch, document_runtime, "darwin")
     resolver = Mock(side_effect=AssertionError("Must not inspect acquisition"))
     monkeypatch.setattr(document_runtime, "validate_recording_configuration", resolver)
     document = Document(sample_project, sample_project_root, test=False)
@@ -79,7 +80,7 @@ def test_mac_production_launch_is_blocked_before_backend_resolution(
 def test_mac_test_uses_null_options_and_preserves_selected_hardware(
     monkeypatch, sample_project, sample_project_root,
 ):
-    monkeypatch.setattr(document_runtime, "sys", SimpleNamespace(platform="darwin"))
+    set_module_platform(monkeypatch, document_runtime, "darwin")
     document = Document(sample_project, sample_project_root)
     assert document.validate_recording_launch() == "null"
     assert document.recording_launch_options()["serial_enabled"] is False
@@ -95,7 +96,7 @@ def test_mac_local_launch_uses_process_and_keeps_refresh_verification(
 
     document = Document(sample_project, sample_project_root)
     plan = document.compile_session(refresh_hz=60)
-    monkeypatch.setattr(document_runtime, "sys", SimpleNamespace(platform="darwin"))
+    set_module_platform(monkeypatch, document_runtime, "darwin")
     monkeypatch.setattr(document_runtime, "_sharing_protocol", lambda *_: None)
     monkeypatch.setattr(document_runtime, "_toolbox_handoff_config", lambda *_: {})
     direct = Mock(side_effect=AssertionError("Must not render on GUI worker"))

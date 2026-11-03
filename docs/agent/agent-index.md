@@ -41,18 +41,21 @@ follow the owning sibling repository's guidance instead of loading desktop contr
 
 - `focused`: scope checks plus changed-file Ruff/compilation.
 - `precommit`: repo audits, mypy, changed-file checks and the safe non-Qt suite.
-  Use it after shared behavior or cross-layer changes.
+  Use it after shared behavior or cross-layer changes. All-source mypy targets
+  primary Windows; a separate Darwin pass checks secondary Mac adapter owners.
 - `full`: optional complete Ruff/mypy/pytest including registered Qt tests. It requires
   `FPVS_ALLOW_QT_TESTS=1` and user approval for a safe visible environment. Never set
   `QT_QPA_PLATFORM=offscreen` locally. Default collection excludes Qt modules before
   import, including registered `ProjectDocument` tests beneath `tests/unit/`.
 
-The driver selects `.venv3.10`, `.venv`, then compatible current Python. Add `-List`
-to inspect steps; use `-CheckConfig` after harness edits. Non-Qt tiers support
+The driver selects `.venv3.10`, `.venv`, then compatible current Python,
+using each host's native `Scripts/python.exe` or `bin/python` layout. Existing audits
+require PowerShell (`pwsh` on macOS).
+Use `-List` to inspect steps and `-CheckConfig` after harness edits. Non-Qt tiers support
 `-Workers 4` (default one); Qt stays serial. See
 [test performance](../ENVIRONMENT.md#test-performance) for isolation and `-Durations`.
-GitHub runs documentation publishing and the macOS source lane, including clean
-dependency installs and cross-OS bundle checks. It does not replace local precommit,
+GitHub runs documentation publishing and primary Windows precommit before the
+secondary macOS source/bundle lane. It does not replace local precommit,
 visible GUI acceptance or physical display qualification.
 
 ## Skill Routing

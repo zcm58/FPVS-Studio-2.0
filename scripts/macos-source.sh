@@ -20,6 +20,9 @@ fi
 repo_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 cd -- "$repo_root"
 venv_python="$repo_root/.venv3.10/bin/python"
+if [ ! -x "$venv_python" ] && [ -x "$repo_root/.venv/bin/python" ]; then
+  venv_python="$repo_root/.venv/bin/python"
+fi
 
 require_python310() {
   "$1" -c 'import sys; assert sys.version_info[:2] == (3, 10), "FPVS Studio requires Python 3.10"'

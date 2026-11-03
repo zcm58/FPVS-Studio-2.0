@@ -15,7 +15,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "script_helpers.ps1")
 $Python = Resolve-RepoPython -RepoRoot $RepoRoot
-$VerifyArgs = @(".agents\scripts\verify.py")
+$VerifyArgs = @((Join-Path $RepoRoot ".agents/scripts/verify.py"))
 $VerifyArgs += @("--workers", $Workers.ToString(), "--durations", $Durations.ToString())
 
 if ($CheckConfig -and ($List -or -not [string]::IsNullOrWhiteSpace($Scope))) {
