@@ -179,6 +179,12 @@ It uploads exact host/dependency/test evidence; it never qualifies a physical di
 The repo-wide `full` tier also requires the `dev` and `engine` extras shown in the local
 setup commands above.
 
+Popup widget tests use `tests/gui/helpers.py` to prevent Cocoa alert substitution
+when checking Windows widget behavior on Mac; separate coverage exercises native
+Cocoa reporting. Windows keeps title/minimum-width assertions, while Mac checks
+content sizing and full text/button bounds. Wait for exposure and asynchronous
+closure when testing Return/Escape; drain deferred fixture deletion between cases.
+
 ## Manual Verification
 
 For local GUI work:

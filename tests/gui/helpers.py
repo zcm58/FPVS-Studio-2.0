@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -15,6 +16,15 @@ from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.controller import StudioController
+
+
+def widget_message_box(*args: Any, **kwargs: Any) -> QMessageBox:
+    """Exercise Windows widget geometry on Mac without Cocoa alert substitution."""
+
+    box = QMessageBox(*args, **kwargs)
+    if sys.platform == "darwin":
+        box.setOption(QMessageBox.Option.DontUseNativeDialog, True)
+    return box
 
 
 class ImmediateProgressTask(QObject):

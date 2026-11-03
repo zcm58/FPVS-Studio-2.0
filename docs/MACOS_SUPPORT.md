@@ -20,11 +20,14 @@ policy, [GUI workflow](GUI_WORKFLOW.md) owns authoring behavior and
 | --- | --- |
 | Implementation | Source helpers, adapters, local testing, bundle guards, handoff CLI and software inventory complete. |
 | Windows regressions | Repo precommit: 4,974 passed, 14 symlink-permission skips; Ruff, full source mypy, compilation and audits passed. Final focused bundle/fixture run: 197 passed, 5 native-only skips. Counts overlap. |
+| Windows environment/test-adapter repair | Native Windows precommit on `185471b` in [run 41571020291](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41571020291): 5,033 passed, four POSIX-only skips, 24 subtests; both type passes and transfer fixture passed. |
+| Local Mac repair | Python 3.10.20/arm64 `.venv` passes `pip check`; repo precommit: 4,973 passed, 64 platform/filesystem skips, 24 subtests. Focused visible Mac/Welcome/Library/worker/popup coverage: 100 passed. Original intermittent crash stability remains open. |
 | Visible Windows checks | 18 focused GUI cases passed across calibration, source updates, test availability, shortcuts and Save. Mac-only policy was faked; these are not native Mac GUI results. |
 | Mac CI | [Run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134), source commit `f6b6721`: all six jobs passed. Each Mac CPU lane passed 1,358 checks with 10 platform-specific skips. Native private-Keychain roundtrip, Trash, display metadata and real child IPC passed. |
+| Mac CI after the compatibility repair | Both arm64 and Intel source jobs on `185471b` in [run 41571020291](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41571020291) passed 1,382 checks with ten platform skips, adapter mypy and native probes using the new dependency selection. |
 | Cross-OS bundles | Windows -> Mac -> Windows and Mac -> Windows -> Mac passed on both CPUs. Each transfer matched semantic settings, all 14 asset hashes and complete 7-run plans/fixation schedules, preserving recording settings and seeds. |
 | Windows acquisition policy | Separate offline checks of four real Mac exports resolved normal launch flags to Brain Products TriggerBox, never null; missing amplifier/sampling-rate setup correctly blocked readiness. No saved Test/Pilot flags or project-byte changes; no hardware was probed. |
-| Physical Mac software | Visible GUI/PsychoPy/display, interactive secure-store/service, filesystem and failure/recovery acceptance deferred by user. |
+| Physical Mac software | Focused visible Qt checks are recorded above; full GUI/PsychoPy/display, interactive secure-store/service, filesystem and failure/recovery acceptance remain separate. |
 | EEG/hardware | Phase 2; not implemented or qualified here. |
 
 Keep the active plan open for the deferred physical and interactive acceptance gates.

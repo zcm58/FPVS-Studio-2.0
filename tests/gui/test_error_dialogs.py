@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import errno
+import sys
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QCoreApplication, QEvent, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import assert_visible_children_within_parent, widget_message_box
 
 from fpvs_studio.gui.error_dialogs import REPORT_BUTTON_TEXT, ErrorDialogReporter
 from fpvs_studio.triggers.parallel_backend import (
@@ -19,6 +20,7 @@ from fpvs_studio.triggers.parallel_backend import (
 
 @pytest.fixture
 def popups(qapp):
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     requests = []
     previous = qapp.findChild(ErrorDialogReporter, "fpvs_error_dialog_reporter")
     if previous is not None:
@@ -27,6 +29,7 @@ def popups(qapp):
     yield reporter, requests
     qapp.removeEventFilter(reporter)
     reporter.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     if previous is not None:
         qapp.installEventFilter(previous)
 
@@ -34,10 +37,13 @@ def popups(qapp):
 @pytest.mark.parametrize("icon", [QMessageBox.Icon.Critical, QMessageBox.Icon.Warning])
 def test_report_button_automatically_covers_static_error_popups(qtbot, popups, icon):
     _reporter, requests = popups
-    box = QMessageBox(
+    box = widget_message_box(
         icon, "Import Error", "Unable to import project bundle", QMessageBox.StandardButton.Ok
     )
     qtbot.addWidget(box)
+    expected_title = box.windowTitle()
+    if sys.platform != "darwin":
+        assert expected_title == "Import Error"
     box.setDetailedText("PermissionError: [WinError 5] Access is denied")
     box.show()
     button = box.findChild(QPushButton, "report_error_button")
@@ -50,7 +56,7 @@ def test_report_button_automatically_covers_static_error_popups(qtbot, popups, i
     qtbot.waitUntil(lambda: len(requests) == 1)
     assert not box.isVisible()
     title, diagnostic, message = requests[0]
-    assert title == "Import Error"
+    assert title == expected_title
     assert "WinError 5" in diagnostic
     assert "couldn't access" in message
 
@@ -61,25 +67,25 @@ def test_confirmations_information_and_normal_dismissal_do_not_report(qtbot, pop
         (QMessageBox.Icon.Information, QMessageBox.StandardButton.Ok),
         (QMessageBox.Icon.Warning, QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No),
     ):
-        box = QMessageBox(icon, "Review", "Continue?", buttons)
+        box = widget_message_box(icon, "Review", "Continue?", buttons)
         qtbot.addWidget(box)
         box.show()
         assert box.findChild(QPushButton, "report_error_button") is None
         box.close()
-    box = QMessageBox(
+    box = widget_message_box(
         QMessageBox.Icon.Critical, "Error", "Unable to save", QMessageBox.StandardButton.Ok
     )
     qtbot.addWidget(box)
     box.show()
+    qtbot.waitExposed(box)
     qtbot.keyClick(box, Qt.Key.Key_Return)
-    QApplication.processEvents()
-    assert not box.isVisible()
+    qtbot.waitUntil(lambda: not box.isVisible())
     assert requests == []
 
 
 def test_exception_popup_without_explicit_buttons_keeps_ok_and_escape(qtbot, popups):
     reporter, requests = popups
-    box = QMessageBox()
+    box = widget_message_box()
     qtbot.addWidget(box)
     box.setIcon(QMessageBox.Icon.Critical)
     box.setText("Unable to import")
@@ -87,9 +93,9 @@ def test_exception_popup_without_explicit_buttons_keeps_ok_and_escape(qtbot, pop
     reporter.decorate(box)
     assert box.standardButtons() & QMessageBox.StandardButton.Ok
     box.show()
+    qtbot.waitExposed(box)
     qtbot.keyClick(box, Qt.Key.Key_Escape)
-    QApplication.processEvents()
-    assert not box.isVisible()
+    qtbot.waitUntil(lambda: not box.isVisible())
     assert requests == []
 
 
@@ -97,7 +103,7 @@ def test_exception_popup_without_explicit_buttons_keeps_ok_and_escape(qtbot, pop
 @pytest.mark.parametrize("expanded", [False, True])
 def test_long_error_button_and_details_fit_without_clipping(qtbot, popups, background, expanded):
     reporter, _requests = popups
-    box = QMessageBox(
+    box = widget_message_box(
         QMessageBox.Icon.Critical,
         "Import FPVS Studio Project Error",
         "Unable to import project bundle",
@@ -142,7 +148,7 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
     error = RuntimeError("Trigger preflight failed before launch")
     error.__cause__ = initialization_error
     details = f"Parallel-port initialization failed. Details: {driver_message}"
-    box = QMessageBox(
+    box = widget_message_box(
         QMessageBox.Icon.Critical, "Launch Error", str(error), QMessageBox.StandardButton.Ok,
     )
     qtbot.addWidget(box)
@@ -167,7 +173,11 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
     QApplication.processEvents()
     assert details_button.isVisible()
     assert_visible_children_within_parent(box)
-    assert box.width() >= 580
+    if sys.platform == "darwin":
+        # QMessageBox chooses its content width on Mac even in widget mode.
+        assert box.width() >= box.minimumSizeHint().width()
+    else:
+        assert box.width() >= 580
     assert box.width() <= box.screen().availableGeometry().width()
     for label in box.findChildren(QLabel):
         if not label.isVisible() or not label.text():
@@ -181,9 +191,9 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
     for button in (report_button, details_button, box.button(QMessageBox.StandardButton.Ok)):
         assert button is not None
         assert button.width() >= button.sizeHint().width()
+    qtbot.waitExposed(box)
     qtbot.keyClick(box, Qt.Key.Key_Escape)
-    QApplication.processEvents()
-    assert not box.isVisible()
+    qtbot.waitUntil(lambda: not box.isVisible())
     assert requests == []
 
 
@@ -193,7 +203,7 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
 ])
 def test_other_recording_errors_do_not_request_parallel_driver_installation(qtbot, popups, message):
     reporter, requests = popups
-    box = QMessageBox(
+    box = widget_message_box(
         QMessageBox.Icon.Critical, "Launch Error", message, QMessageBox.StandardButton.Ok,
     )
     qtbot.addWidget(box)
@@ -203,3 +213,24 @@ def test_other_recording_errors_do_not_request_parallel_driver_installation(qtbo
     assert "install drivers" not in box.informativeText()
     assert message in box.detailedText()
     assert requests == []
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="Native Cocoa alert contract")
+def test_native_mac_alert_keeps_reporting_and_dismissal(qtbot, popups):
+    _reporter, requests = popups
+    box = QMessageBox(
+        QMessageBox.Icon.Critical, "Import Error", "Unable to import project bundle",
+        QMessageBox.StandardButton.Ok,
+    )
+    qtbot.addWidget(box)
+    assert not box.testOption(QMessageBox.Option.DontUseNativeDialog)
+    expected_title = box.windowTitle()
+    box.setDetailedText("PermissionError: synthetic Mac import failure")
+    box.show()
+    report = box.findChild(QPushButton, "report_error_button")
+    assert report is not None
+    report.click()
+    qtbot.waitUntil(lambda: len(requests) == 1)
+    assert not box.isVisible()
+    assert requests[0][0] == expected_title
+    assert "synthetic Mac import failure" in requests[0][1]

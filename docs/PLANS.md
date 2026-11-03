@@ -40,7 +40,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Completed implementation/release records](exec-plans/completed/)
 - [Windows-primary platform test adapters](exec-plans/completed/windows-primary-platform-test-adapters.md):
   explicit platform seams, native environment selection and Windows-first CI; obsolete
-  environments removed, full safe Mac precommit passed, further visible checks locked.
+  environments removed, native Windows/Mac safe checks and 100 visible Qt cases passed.
 - [Remove Create Control Condition](exec-plans/completed/remove-control-condition-workflow.md):
   dedicated GUI/document workflow removed; saved conditions, formats, assets and manual
   authoring preserved, with full safe precommit and 27 visible Qt cases passed.

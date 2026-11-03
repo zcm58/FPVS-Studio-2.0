@@ -264,6 +264,21 @@ Mac jobs. These are local Mac results pending the new native CI run. The Mac bec
 locked, preventing a further visible Qt pass; native QMessageBox failures and the
 intermittent original crash remain open. No physical timing/hardware claim follows.
 
+After the user unlocked the Mac, 80 visible Mac/Library/worker cases passed and the
+obsolete IDE interpreter registration was removed. Popup test adapters preserve
+primary Windows titles/580 px sizing while checking actual Mac content bounds,
+native Cocoa reporting and asynchronous Return/Escape dismissal. Deferred test
+reporter deletion is drained between cases; application dialog behavior is unchanged.
+The final combined visible selection passed 100 cases, including all 19 popup cases,
+Welcome actions, Mac calibration/policy, Library dialogs and native worker shutdown.
+Native Windows precommit on `185471b` passed
+5,033 tests, four POSIX-only skips, 24 subtests and both type passes in
+[run 41571020291](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41571020291).
+Both secondary Mac CPU jobs passed 1,382 checks, ten platform skips, adapter mypy
+and native probes with the new Qt selection. Final local precommit after the popup
+test changes again passed 4,973 tests, 64 platform/filesystem skips and 24 subtests.
+Original crash stability, actual presentation timing and hardware remain unqualified.
+
 Current implementation evidence is in the gate table above and
 [MACOS_SUPPORT.md](../../MACOS_SUPPORT.md). Native CI source commit `f6b6721` passed
 all six jobs in [run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134).
