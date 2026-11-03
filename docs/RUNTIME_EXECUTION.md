@@ -1151,7 +1151,7 @@ In the current v1 runtime:
 
 Windows/Linux runs and macOS source can enable the app-level Experiment Test Mode. The
 GUI supplies reserved participant ID `0`, omits participant metadata and manual-electrode
-updates, and skips the Sophia/BioSemi recording gate. After the ordinary full-project
+updates, and skips the Recording Reminder gate. After the ordinary full-project
 launch validation succeeds, the test confirmation defaults to all conditions and may
 instead pass one stable condition ID into session compilation for that launch only. A
 selected condition is still compiled once per configured block and keeps its normal

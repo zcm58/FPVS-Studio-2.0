@@ -54,7 +54,7 @@ _HOME_RECORDING_DEVICE_NAMES = {
     "unicorn_udp": "Unicorn Black Mobile Headset",
 }
 _SOPHIA_MODE_TICKER_TEXT = (
-    "SOPHIA MODE ENABLED    SOPHIA MODE ENABLED    SOPHIA MODE ENABLED"
+    "RECORDING REMINDER ENABLED    RECORDING REMINDER ENABLED    RECORDING REMINDER ENABLED"
 )
 _SOPHIA_MODE_TICKER_HEIGHT = 30
 _SOPHIA_MODE_TICKER_INTERVAL_MS = 24
@@ -62,13 +62,15 @@ _SOPHIA_MODE_TICKER_STEP_PX = 3
 
 
 class SophiaModeTicker(QWidget):
-    """Scrolling launch-surface indicator shown while Sophia Mode is enabled."""
+    """Scrolling launch-surface indicator shown while the recording reminder is enabled."""
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("sophia_mode_ticker")
         self.setProperty("sophiaModeTickerActive", "false")
         self.setProperty("sophiaModeTickerText", _SOPHIA_MODE_TICKER_TEXT)
+        self.setAccessibleName("Recording reminder enabled")
+        self.setToolTip("Recording reminder enabled")
         self.setFixedHeight(_SOPHIA_MODE_TICKER_HEIGHT)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         ticker_font = self.font()

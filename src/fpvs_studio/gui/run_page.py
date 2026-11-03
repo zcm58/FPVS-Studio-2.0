@@ -433,20 +433,21 @@ class ParticipantNumberDialog(QDialog):
 
 
 class BioSemiRecordingConfirmationDialog(QDialog):
-    """Require a Sophia Mode administrator confirmation before runtime launch."""
+    """Remind the operator to start EEG recording before runtime launch."""
 
-    CONFIRMATION_WORD = "confirm"
+    CONFIRMATION_WORD = "confirmed"
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("biosemi_recording_confirmation_dialog")
-        self.setWindowTitle("Sophia Mode Recording Check")
+        self.setWindowTitle("Recording Reminder")
         self.setModal(True)
+        self.setMinimumSize(520, 240)
         self.resize(640, 260)
 
         self.prompt_label = QLabel(
-            "NERD Lab Administrator: Sophia Mode is enabled. Confirm that the BioSemi "
-            "PC is recording data, then type 'Confirm' to continue.",
+            "Please ensure that you've started recording EEG data before continuing. "
+            "Type 'Confirmed' to continue.",
             self,
         )
         self.prompt_label.setObjectName("biosemi_recording_confirmation_prompt")
@@ -454,7 +455,7 @@ class BioSemiRecordingConfirmationDialog(QDialog):
 
         self.confirmation_edit = QLineEdit(self)
         self.confirmation_edit.setObjectName("biosemi_recording_confirmation_edit")
-        self.confirmation_edit.setPlaceholderText("Type Confirm to continue")
+        self.confirmation_edit.setPlaceholderText("Type Confirmed to continue")
         self.confirmation_edit.setFocus()
 
         self.button_box = QDialogButtonBox(
@@ -511,7 +512,7 @@ class TestModeLaunchConfirmationDialog(QDialog):
         self.prompt_label = QLabel(
             "Experiment Test Mode is enabled. This launch verifies experiment setup "
             "and behavior without lab hardware. Serial-port validation and output, the "
-            "Sophia Mode recording check, connected-display refresh verification, and "
+            "recording reminder, connected-display refresh verification, and "
             "participant information collection are disabled. The run uses reserved "
             "test ID 0. Fullscreen presentation, compiled timing and asset validation, "
             "runtime timing QC, condition tasks, and normal test outputs remain enabled. "

@@ -277,7 +277,7 @@ class ProjectDocument(
 
     @property
     def show_sophia_mode_ticker(self) -> bool:
-        """Return whether Home should show the Sophia Mode ticker."""
+        """Return whether Home should show the recording reminder ticker."""
 
         return self._show_sophia_mode_ticker
 
@@ -670,7 +670,7 @@ class ProjectDocument(
         self.project_changed.emit()
 
     def set_show_sophia_mode_ticker(self, enabled: bool) -> None:
-        """Set whether Home shows the Sophia Mode ticker when Sophia Mode is enabled."""
+        """Set whether Home shows the ticker when the recording reminder is enabled."""
 
         enabled = bool(enabled)
         if self._show_sophia_mode_ticker == enabled:

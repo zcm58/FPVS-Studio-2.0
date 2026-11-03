@@ -6,7 +6,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QThread
+from PySide6.QtCore import QRect, Qt, QThread
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -284,11 +285,19 @@ def test_run_page_launch_uses_fixed_current_runtime_defaults(
     assert window.run_page.findChild(QWidget, "engine_name_value") is None
 
 
-def test_biosemi_recording_confirmation_dialog_blocks_continue_until_confirm(
-    qtbot,
+@pytest.mark.parametrize("size", [(520, 240), (640, 260)])
+@pytest.mark.parametrize("dark", [False, True])
+def test_recording_reminder_requires_confirmed_and_fits(
+    qtbot, size, dark,
 ) -> None:
     dialog = BioSemiRecordingConfirmationDialog()
     qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202124" if dark else "#f4f7fb"))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
 
     prompt = dialog.findChild(QLabel, "biosemi_recording_confirmation_prompt")
     confirmation_edit = dialog.findChild(QLineEdit, "biosemi_recording_confirmation_edit")
@@ -303,15 +312,29 @@ def test_biosemi_recording_confirmation_dialog_blocks_continue_until_confirm(
     assert continue_button is not None
     assert continue_button.text() == "Continue"
     assert continue_button.isEnabled() is False
-    assert dialog.windowTitle() == "Sophia Mode Recording Check"
-    assert "NERD Lab Administrator" in prompt.text()
-    assert "Sophia Mode is enabled" in prompt.text()
+    assert dialog.windowTitle() == "Recording Reminder"
+    assert prompt.text() == (
+        "Please ensure that you've started recording EEG data before continuing. "
+        "Type 'Confirmed' to continue."
+    )
+    assert confirmation_edit.placeholderText() == "Type Confirmed to continue"
+    _assert_visible_children_within_parent(dialog)
+    required_text = prompt.fontMetrics().boundingRect(
+        QRect(0, 0, prompt.width(), 10000), Qt.TextFlag.TextWordWrap, prompt.text(),
+    )
+    assert prompt.height() >= required_text.height()
 
-    confirmation_edit.setText("con")
-    assert continue_button.isEnabled() is False
+    for invalid in ("", "con", "Confirm", "confirmed!"):
+        confirmation_edit.setText(invalid)
+        assert continue_button.isEnabled() is False
+        dialog.accept()
+        assert dialog.isVisible()
 
-    confirmation_edit.setText(" CONFIRM ")
-    assert continue_button.isEnabled() is True
+    for valid in ("Confirmed", "confirmed", " CONFIRMED "):
+        confirmation_edit.setText(valid)
+        assert continue_button.isEnabled() is True
+    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
+    assert dialog.result() == dialog.DialogCode.Accepted
 
 
 def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
@@ -487,6 +510,7 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "BioSemi Cancel Project")
     _prepare_compile_ready_project(window, tmp_path / "biosemi-cancel")
+    monkeypatch.setattr("fpvs_studio.gui.run_page.ProgressTask", _ImmediateProgressTask)
     monkeypatch.setattr(
         "fpvs_studio.gui.document.create_engine",
         lambda engine_name: {"engine_name": engine_name},
@@ -509,7 +533,13 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
             manual_removed_electrodes=(" ft7 ", "P9", "FT7"),
         ),
     )
-    monkeypatch.setattr(window.run_page, "_confirm_biosemi_recording_started", lambda: False)
+    reminder_checks = []
+
+    def _cancel_reminder():
+        reminder_checks.append(True)
+        return False
+
+    monkeypatch.setattr(window.run_page, "_confirm_biosemi_recording_started", _cancel_reminder)
 
     def _unexpected_launch(*_args, **_kwargs):
         raise AssertionError("Runtime launch should not start when BioSemi check is cancelled")
@@ -518,6 +548,8 @@ def test_run_page_biosemi_confirmation_cancel_blocks_runtime_launch(
 
     window.run_page.launch_session()
 
+    assert reminder_checks == [True]
+    assert window.run_page._active_participant_session_check is None
     assert window.run_page._active_launch_task is None
     assert "status: launch checks queued" in window.run_page.summary_text.toPlainText().lower()
     assert load_project_file(

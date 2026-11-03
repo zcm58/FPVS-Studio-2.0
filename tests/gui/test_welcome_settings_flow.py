@@ -1461,8 +1461,8 @@ def test_settings_dialog_sophia_mode_checkbox_triggers_callback(
     ticker_checkbox = dialog.findChild(QCheckBox, "sophia_mode_ticker_checkbox")
     assert checkbox is not None
     assert ticker_checkbox is not None
-    assert checkbox.text() == "Enable Sophia Mode"
-    assert "NERD Lab administrator" in checkbox.toolTip()
+    assert checkbox.text() == "Enable Recording Reminder"
+    assert checkbox.toolTip() == "Type Confirmed after starting EEG recording to continue."
     assert checkbox.isChecked() is True
     assert ticker_checkbox.isEnabled() is True
     assert ticker_checkbox.isChecked() is False
@@ -1492,7 +1492,7 @@ def test_settings_dialog_sophia_mode_ticker_checkbox_triggers_callback(
 
     checkbox = dialog.findChild(QCheckBox, "sophia_mode_ticker_checkbox")
     assert checkbox is not None
-    assert checkbox.text() == "Show Sophia Mode ticker on Home"
+    assert checkbox.text() == "Show recording reminder ticker on Home"
     assert "launch confirmation remains separate" in checkbox.toolTip()
     assert checkbox.isChecked() is True
 

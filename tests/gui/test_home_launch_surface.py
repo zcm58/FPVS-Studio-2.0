@@ -632,7 +632,9 @@ def test_home_sophia_mode_ticker_follows_launch_safety_setting(
 
     assert ticker.isVisible()
     assert ticker.property("sophiaModeTickerActive") == "true"
-    assert "SOPHIA MODE ENABLED" in str(ticker.property("sophiaModeTickerText"))
+    assert "RECORDING REMINDER ENABLED" in str(ticker.property("sophiaModeTickerText"))
+    assert ticker.accessibleName() == "Recording reminder enabled"
+    assert ticker.toolTip() == "Recording reminder enabled"
     assert ticker_timer.isActive()
 
     window.document.set_show_sophia_mode_ticker(False)

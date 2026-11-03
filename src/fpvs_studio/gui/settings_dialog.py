@@ -180,12 +180,12 @@ class AppSettingsDialog(QDialog):
         )
         participant_layout.addWidget(self.detailed_run_exports_checkbox)
         self.sophia_mode_checkbox = QCheckBox(
-            "Enable Sophia Mode",
+            "Enable Recording Reminder",
             self,
         )
         self.sophia_mode_checkbox.setObjectName("sophia_mode_checkbox")
         self.sophia_mode_checkbox.setToolTip(
-            "Requires a NERD Lab administrator to type Confirm before each launch."
+            "Type Confirmed after starting EEG recording to continue."
         )
         self.sophia_mode_checkbox.setChecked(
             biosemi_recording_confirmation_required
@@ -196,7 +196,7 @@ class AppSettingsDialog(QDialog):
         self.biosemi_recording_confirmation_checkbox = self.sophia_mode_checkbox
         participant_layout.addWidget(self.sophia_mode_checkbox)
         self.sophia_mode_ticker_checkbox = QCheckBox(
-            "Show Sophia Mode ticker on Home",
+            "Show recording reminder ticker on Home",
             self,
         )
         self.sophia_mode_ticker_checkbox.setObjectName("sophia_mode_ticker_checkbox")
@@ -235,7 +235,7 @@ class AppSettingsDialog(QDialog):
                 else "bypasses connected-display refresh verification"
             )
             self.experiment_test_mode_checkbox.setToolTip(
-                "Uses logged null-trigger output, skips the Sophia Mode recording check, "
+                "Uses logged null-trigger output, skips the recording reminder, "
                 f"{refresh_policy}, and replaces participant "
                 "collection with an explicit test-launch acknowledgement. Fullscreen "
                 "presentation remains enabled, along with compiled timing validation and "
@@ -254,7 +254,7 @@ class AppSettingsDialog(QDialog):
                 pilot.setObjectName("attentional_blink_pilot_mode_checkbox")
                 pilot.setToolTip(
                     "Collects full participant demographics and saves T1/T2 accuracy without "
-                    "EEG hardware. Skips Sophia Mode and graphics-memory checks; "
+                    "EEG hardware. Skips the recording reminder and graphics-memory checks; "
                     f"{refresh_policy}. Fullscreen playback and timing records remain enabled. "
                     "Takes precedence over Test Mode for attentional-blink studies only."
                 )

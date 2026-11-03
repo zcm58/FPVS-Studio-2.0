@@ -614,7 +614,7 @@ class StudioController(QObject):
             self.main_window.document.set_require_biosemi_recording_confirmation(required)
 
     def show_sophia_mode_ticker(self) -> bool:
-        """Return whether Home should show the Sophia Mode ticker."""
+        """Return whether Home should show the recording reminder ticker."""
 
         return bool(
             self._settings.value(
@@ -625,7 +625,7 @@ class StudioController(QObject):
         )
 
     def set_show_sophia_mode_ticker(self, enabled: bool) -> None:
-        """Persist the Sophia Mode ticker display preference."""
+        """Persist the recording reminder ticker display preference."""
 
         self._settings.setValue(_SOPHIA_MODE_TICKER_KEY, bool(enabled))
         self._settings.sync()

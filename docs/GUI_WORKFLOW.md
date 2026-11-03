@@ -383,9 +383,10 @@ Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`,
 template storage out of the top-level folder list used for experiment projects.
 The Settings dialog can reopen the root-folder setup guide, manage condition templates,
 and choose whether launched sessions write full `runs/` folders or compact summary logs
-only. It also exposes the default-on Sophia Mode launch gate used before runtime
-launch, plus a separate option to hide the Home ticker without disabling the launch
-confirmation. Windows/Linux and macOS source expose Experiment Test Mode for explicit
+only. It also exposes the default-on `Enable Recording Reminder` launch gate used
+before runtime launch, plus `Show recording reminder ticker on Home` to hide/show the
+Home ticker without disabling launch confirmation. Windows/Linux and macOS source
+expose Experiment Test Mode for explicit
 no-hardware launches. Mac authoring skips first-run EEG setup; launch requires Test
 or AB Pilot mode and preserves authored recording settings. Before launching, a local
 display dialog confirms viewing distance/physical width and native backing resolution/
@@ -599,8 +600,8 @@ The authoring window is organized around two user-facing modes:
     using the existing setup-step completion checks
   - when launch is disabled, the Home card, launch button tooltip, and status tip show
     the first actionable setup blocker
-  - when Sophia Mode and its ticker display option are enabled, Home shows a green
-    horizontally scrolling `SOPHIA MODE ENABLED` ticker at the top of the launch panel
+  - when Recording Reminder and its ticker display option are enabled, Home shows a green
+    horizontally scrolling `RECORDING REMINDER ENABLED` ticker at the top of the launch panel
   - returning from app-expanded Setup restores the compact Home footprint unless
     the user manually resized the larger setup window
   - opening a project builds Home first; the Setup Wizard, Run / Runtime page, Image
@@ -905,13 +906,18 @@ colorblind fields are written as runtime participant metadata for the launched s
 The manually removed electrode list remains editable project metadata, and each new
 visit stores a reviewed snapshot in its execution metadata. It does not alter
 `RunSpec`, `SessionPlan`, or playback behavior. Accepting the participant dialog persists
-its participant entry before compilation and before the Sophia Mode gate. Launch then
+its participant entry before compilation and before the Recording Reminder gate. Launch then
 compiles the session and runs routine preflight checks after participant details are
 collected, so the prompt appears before any project image-set scan. When the app-level
-Sophia Mode setting is enabled, launch then shows a blocking NERD Lab administrator
-check that
-requires typing `Confirm` before the runtime task starts; cancelling that check returns
-to FPVS Studio without starting the experiment.
+Recording Reminder setting is enabled for the existing eligible BioSemi launches,
+launch shows a blocking dialog titled `Recording Reminder` with this exact prompt:
+`Please ensure that you've started recording EEG data before continuing. Type 'Confirmed' to continue.`
+The placeholder is `Type Confirmed to continue`; `Continue` enables only when the
+trimmed, case-insensitive input equals `confirmed`. The former `Confirm` token is
+rejected. Cancelling returns to FPVS Studio without starting the experiment.
+This wording/token update retains backend eligibility, Test/Pilot bypasses and the
+persisted `launch/require_biosemi_recording_confirmation` and
+`launch/show_sophia_mode_ticker` preference keys.
 
 Project recording configuration is validated before participant collection. **Settings > Recording >
 Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree,
@@ -976,14 +982,15 @@ operator still selects real electrodes, raw logging, the intended recording and 
 matching UDP input in Recorder. Successful readiness allows the normal launch to send
 real markers to the selected loopback UDP port, initially `1000`. Full receiver and
 physical timing qualification remain pending in the exported metadata; they do not
-block launch or require a separate mode or approval. The Sophia prompt remains specific to BioSemi.
+block launch or require a separate mode or approval. Recording Reminder retains its
+existing BioSemi-only eligibility; the generic wording does not extend it to Unicorn.
 Test/Pilot uses null output and skips Recorder checks. Runtime validation remains the
 authority if callers bypass the GUI; see
 [Runtime execution](RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
 
 Recording setup has a `700x640` minimum/default size.
 BioSemi ActiveTwo and ActiveThree share the existing project serial settings and
-Sophia prompt. Their selector defaults unset ports to COM3 and lists available driver
+Recording Reminder prompt. Their selector defaults unset ports to COM3 and lists available driver
 ports on a worker without opening them. Refresh retains the selected/manual value,
 including when that port is not currently listed; generic USB serial names do not
 identify BioSemi and never replace the current choice automatically.
@@ -1011,7 +1018,7 @@ pulse settings disable Apply; runtime rechecks them and compiled marker spacing.
 TriggerBox uses its own port and fixed vendor baudrate; its guidance describes
 Recorder startup, and tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
 Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
-or Sophia confirmation. Home identifies the selected device independently of
+or Recording Reminder confirmation. Home identifies the selected device independently of
 ActiveThree's shared serial transport. Test/Pilot remains no-output for all choices.
 The [runtime contract](RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
 owns pulse/low-interval scheduling, errors and hardware acceptance.
@@ -1084,7 +1091,7 @@ compiled contracts; the resulting ordinary `SessionPlan` contains only the compi
 condition entries. A selected condition still runs once per configured block with its
 ordinary pre/post tasks, timing, preflight, and output behavior. Test mode uses reserved
 participant ID `0`, skips manual-electrode
-project updates, suppresses the Sophia/BioSemi gate, uses logged null-trigger output,
+project updates, suppresses the Recording Reminder gate, uses logged null-trigger output,
 and disables connected-display refresh verification. Fullscreen playback, frame
 schedules, task flow, timing warmup/QC, and normal test exports remain unchanged.
 Production launches do not expose the selector and continue to compile all conditions.
@@ -1199,9 +1206,11 @@ version from `pyproject.toml` during source-tree runs and from package metadata 
 bundled installs, and exposes the app-level run export mode. Full run export mode is the
 default and writes detailed `runs/` folders after launch; compact mode skips those
 folders and keeps only project-level summary logs. Settings also exposes default-on
-Sophia Mode, which requires administrators to confirm that BioSemi recording is active
-by typing `Confirm` before launch can continue. Settings can hide the Sophia Mode Home
-ticker independently, without disabling that confirmation gate. In source and installed builds on Windows
+`Enable Recording Reminder`, which reminds operators to start recording EEG data
+before eligible launches and requires trimmed, case-insensitive `Confirmed` before
+continuing. `Show recording reminder ticker on Home` controls the
+`RECORDING REMINDER ENABLED` ticker independently of the launch gate. In source and
+installed builds on Windows
 and Linux, Settings also exposes Experiment Test Mode with a detailed tooltip that
 names every skipped hardware/participant check and every timing behavior that remains.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
@@ -1655,7 +1664,7 @@ and takes precedence over Test Mode only in AB. Other categories retain Test Mod
 existing behavior. The participant dialog identifies a pilot without EEG hardware.
 Repeat-visit rules still apply to entered participant numbers.
 
-Pilot uses null triggers, skips Sophia recording confirmation and connected-display
+Pilot uses null triggers, skips Recording Reminder confirmation and connected-display
 refresh/graphics verification, and preserves fullscreen playback and compiled timing.
 T1/T2 accuracy includes pilots; Bursts over time marks them Pilot. Hover the participant
 cell for demographics; Export Excel includes flat demographics and Pilot columns.

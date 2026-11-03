@@ -127,7 +127,7 @@ services; named custom profiles and display-identity changes are not prerequisit
 4. An explicitly selected local configuration takes precedence over legacy serial
    fields. With no selection, retain the existing BioSemi behavior. An invalid saved
    selection is an actionable error, never a reason to switch to serial or null.
-5. Show the effective choice before launch. Preserve existing BioSemi/Sophia prompt
+5. Show the effective choice before launch. Preserve the existing BioSemi Recording Reminder
    behavior for that choice and preserve display/timing preflight requirements.
 6. Test/Pilot remains an explicit no-output workflow. Selecting Unicorn must not turn
    test sessions into real transmissions or bypass existing production safeguards.

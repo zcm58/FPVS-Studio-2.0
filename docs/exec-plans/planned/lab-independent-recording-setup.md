@@ -13,7 +13,9 @@ when implementation becomes the selected task.
 The separately authorized [computer default EEG hardware work](../completed/default-eeg-hardware.md)
 implements first-time hardware selection and project inheritance only. It does not
 implement the named profiles or display identity work below. The evidence below
-records the original proposal; current recording behavior is in `docs/GUI_WORKFLOW.md`.
+records the remaining profile/display proposal; current recording behavior is in
+`docs/GUI_WORKFLOW.md`. The separately authorized Recording Reminder wording/token
+update on 2026-11-02 does not implement named profiles or selected-display verification.
 
 The narrower [Unicorn recording plan](../active/unicorn-hybrid-black-support.md) now
 implements a local BioSemi/Unicorn transport choice through the existing preferences.
@@ -23,15 +25,18 @@ owner when implementing profiles; named profiles and display identity work descr
 here remain unimplemented.
 
 Give researchers named recording profiles for this computer: participant display,
-supported trigger output and serial port, and recording-confirmation policy. Keep the
-existing Sophia behavior available as an explicit lab preset.
+supported trigger output and serial port, and recording-reminder policy. Reuse the
+current generic Recording Reminder and existing preference values; a lab-branded
+preset is not part of the current wording/token change.
 
 ## Problem, Alternative, And Benefit
 
 The application assumes an enabled serial connection on COM3, verifies the primary
-display, and launches on the default display. Settings exposes the Sophia recording
-confirmation, which defaults on and names NERD Lab and BioSemi. These choices suit the
-original installation but are difficult to inspect or change through the GUI elsewhere.
+display, and launches on the default display. Settings exposes the default-on
+`Enable Recording Reminder` preference for the existing eligible BioSemi launches.
+Its generic EEG reminder requires trimmed, case-insensitive `Confirmed`; the optional
+Home ticker reads `RECORDING REMINDER ENABLED`. Named profiles and selected-display
+verification remain the separate unmet needs addressed by this plan.
 
 Replace those implicit assumptions with a concise Recording setup editor and a visible
 selected-profile summary before launch. Researchers select an identified participant
@@ -57,8 +62,8 @@ labs; it remains a design hypothesis pending operator walkthroughs.
   the primary display through native mode queries and engine measurement; simply
   exposing an engine display index would not make selected-monitor verification work.
 - [controller.py](../../../src/fpvs_studio/gui/controller.py) persists the default-on
-  Sophia preference; [settings_dialog.py](../../../src/fpvs_studio/gui/settings_dialog.py)
-  presents it. [triggers](../../../src/fpvs_studio/triggers) supplies serial and null
+  Recording Reminder gate and separate ticker preference under their existing keys;
+  [settings_dialog.py](../../../src/fpvs_studio/gui/settings_dialog.py) presents them. [triggers](../../../src/fpvs_studio/triggers) supplies serial and null
   adapters. Named profiles, monitor identity reconciliation, and migration UX are new.
 
 ## Proposed User Workflow
@@ -68,8 +73,10 @@ labs; it remains a design hypothesis pending operator walkthroughs.
    name, resolution, configured refresh and an explicit Identify display action.
 3. Configure supported output: serial device/port and applicable communication values,
    or an explicitly chosen no-output configuration whose launch meaning is visible.
-4. Choose a generic recording confirmation or the Sophia lab preset. Preserve the
-   existing preset's wording and typed confirmation behavior for users who select it.
+4. Choose the recording-reminder policy for the profile, retaining the current generic
+   `Recording Reminder` text and trimmed, case-insensitive `Confirmed` token. Preserve
+   existing preference values and backend/Test/Pilot eligibility until an explicit
+   profile-policy change is approved.
 5. Review and apply the profile, then verify the selected monitor. Applying edits
    invalidates affected verification; saving a profile does not prove hardware readiness.
 6. Before launch, show profile, participant monitor, output configuration and verification
@@ -109,7 +116,8 @@ monitor, nearest display, unverified mode, or a null trigger after a configured 
 
 ## Legacy Resolution And Migration
 
-Inventory existing project trigger fields and persisted Sophia preferences first.
+Inventory existing project trigger fields and persisted Recording Reminder preferences
+first, retaining the historical preference keys and saved values.
 Present their effective values when offering a local profile; do not invent a successful
 hardware match from a legacy COM port or default display index.
 
@@ -143,7 +151,8 @@ an explicit compatible extension is required to record runtime configuration evi
 ## Verification And Acceptance
 
 - Unit-test profile validation/round trips, migration precedence, missing/deleted profiles,
-  serial errors, explicit no-output selection and Sophia-preset preservation with fakes.
+  serial errors, explicit no-output selection and Recording Reminder preference/token
+  preservation with fakes.
 - Test display reorder, duplicate identities, disconnect/reconnect, mode changes and
   mismatched native/engine mappings; unresolved or stale verification must block launch.
 - Add registered pytest-qt coverage for Apply/Cancel, keyboard navigation, busy/error
@@ -153,7 +162,8 @@ an explicit compatible extension is required to record runtime configuration evi
   offscreen execution. Ordinary checks must not open hardware or transmit triggers.
 - In an approved visible hardware session, identify two monitors, verify and launch on
   the chosen one, then disconnect/reorder it and confirm blocking or correct remapping.
-  Check busy/missing serial devices and the Sophia preset; send test markers only with
+  Check busy/missing serial devices and unchanged Recording Reminder eligibility;
+  send test markers only with
   explicit authorization and a known receiving setup. Report untested hardware cases.
 
 Done means the selected physical display is the verified presentation display, effective

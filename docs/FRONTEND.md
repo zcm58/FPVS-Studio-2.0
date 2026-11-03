@@ -143,9 +143,13 @@ interaction.
   can assign a distinct project name to the portable copy without changing the open
   project, and imports always target the configured absolute FPVS Studio Root Folder.
 - Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
-  templates, run export mode, Sophia Mode, and Experiment Test Mode in source and installed builds on
+  templates, run export mode, `Enable Recording Reminder`, and Experiment Test Mode in source and installed builds on
   Windows and Linux. These preferences are persisted with `QSettings`
-  and remain outside project files. Shared dialog headers and form-control styles
+  and remain outside project files. The separate `Show recording reminder ticker on Home`
+  checkbox controls the `RECORDING REMINDER ENABLED` ticker. The launch dialog is
+  titled `Recording Reminder` and requires trimmed, case-insensitive `Confirmed`;
+  backend eligibility and existing preference keys are unchanged. Shared dialog headers
+  and form-control styles
   also cover the staged Presentation and Condition Modifiers editors; Settings retains
   immediate saving. See [GUI workflow](GUI_WORKFLOW.md#setup-design-and-manual-acceptance)
   for minimum sizes and the visible acceptance path.
