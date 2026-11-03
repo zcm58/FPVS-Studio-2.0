@@ -2,6 +2,7 @@
 
 from types import SimpleNamespace
 
+import numpy as np
 import pytest
 from tests.platform_adapters import set_module_platform
 from tests.unit.test_psychopy_engine import (
@@ -10,6 +11,7 @@ from tests.unit.test_psychopy_engine import (
     _tiny_run_spec,
 )
 
+from fpvs_studio.engines import psychopy_engine as engine_module
 from fpvs_studio.engines import psychopy_window
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 
@@ -22,6 +24,25 @@ def test_mac_window_uses_retina_pyglet(monkeypatch):
     assert values["winType"] == "pyglet"
     assert values["checkTiming"] is False
     assert values["screen"] == 0
+    assert values["fullscr"] is False
+    assert values["allowGUI"] is False
+    assert values["size"] == [1440, 900]
+    assert values["pos"] == [0, 0]
+
+
+def test_mac_display_size_failure_does_not_open_smaller_window(monkeypatch):
+    set_module_platform(monkeypatch, psychopy_window, "darwin")
+    monkeypatch.setattr(psychopy_window, "_detect_fullscreen_size_px", lambda _: None)
+    with pytest.raises(RuntimeError, match="Mac presentation display size"):
+        psychopy_window.build_window_kwargs({"fullscreen": True})
+
+
+def test_mac_realized_display_size_accepts_numpy_viewport(monkeypatch):
+    set_module_platform(monkeypatch, engine_module, "darwin")
+    engine = PsychoPyEngine()
+    size = np.asarray((2880, 1800))
+    engine._window = SimpleNamespace(size=size, frameBufferSize=size)
+    assert engine.current_display_size_px() == (2880, 1800)
 
 
 @pytest.mark.parametrize("actual", [(1440, 900), None])
@@ -61,8 +82,15 @@ def test_shared_engine_keeps_windows_contract_and_mac_backing_pixel_guard(
         assert captures["window_kwargs"].get("useRetina", False) is (platform == "darwin")
         if platform == "darwin":
             assert captures["window_kwargs"]["checkTiming"] is False
+            assert captures["window_kwargs"]["fullscr"] is False
+            assert captures["keyboard_kwargs"] == {"backend": "event"}
+            assert window.useRetina is False
+            if backing == "matching":
+                assert engine.current_display_size_px() == expected
         else:
             assert "checkTiming" not in captures["window_kwargs"]
+            assert captures["window_kwargs"]["fullscr"] is True
+            assert captures["keyboard_kwargs"] == {}
         if platform == "darwin" and backing != "matching":
             with pytest.raises(RuntimeError, match="backing pixels"):
                 engine._prepare_condition_playback(spec, sample_project_root)

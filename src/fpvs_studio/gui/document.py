@@ -377,6 +377,17 @@ class ProjectDocument(
         )
         self._apply_project_update(settings=settings)
 
+    def save_display_resolution(self, width_px: int, height_px: int) -> None:
+        """Persist explicit pixel dimensions before adopting them in the document."""
+        display = _validated_copy(
+            self._project.settings.display,
+            screen_width_px=width_px,
+            screen_height_px=height_px,
+            use_current_screen_resolution=False,
+        )
+        settings = _validated_copy(self._project.settings, display=display)
+        self._persist_project_update(_validated_copy(self._project, settings=settings))
+
     def update_protocol_settings(self, **updates: object) -> None:
         """Update project-wide FPVS timing through Pydantic validation."""
 

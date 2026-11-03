@@ -7,7 +7,8 @@ from __future__ import annotations
 
 import gc
 import logging
-from collections.abc import Mapping
+import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
@@ -50,6 +51,12 @@ from fpvs_studio.engines.psychopy_graphics_lifetime import (
     release_failed_graphics_frames,
 )
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
+from fpvs_studio.engines.psychopy_macos_display import (
+    create_macos_test_keyboard,
+    guard_macos_display_link,
+    prepare_macos_fullscreen_presentation,
+    use_macos_framebuffer_pixels,
+)
 from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
 from fpvs_studio.engines.psychopy_scenes import (
     estimate_scene_image_memory,
@@ -128,6 +135,7 @@ class PsychoPyEngine(PresentationEngine):
         self._active_run_clock: Any | None = None
         self._prepared_scene: _PreparedPlayback | None = None
         self._graphics_lifetime: GraphicsLifetime | None = None
+        self._restore_presentation: Callable[[], None] | None = None
 
     @property
     def engine_id(self) -> str:
@@ -154,7 +162,15 @@ class PsychoPyEngine(PresentationEngine):
         visual = self._require_visual()
         probe_window = visual.Window(**build_refresh_probe_window_kwargs(runtime_options))
         graphics_lifetime = None
+        restore_presentation = None
         try:
+            presentation = prepare_macos_fullscreen_presentation()
+            if presentation is not None:
+                activate_presentation, restore_presentation = presentation
+            guard_macos_display_link(probe_window)
+            use_macos_framebuffer_pixels(probe_window)
+            if presentation is not None:
+                activate_presentation()
             graphics_lifetime = GraphicsLifetime(probe_window)
             return measure_window_refresh_hz(probe_window)
         finally:
@@ -164,7 +180,11 @@ class PsychoPyEngine(PresentationEngine):
             finally:
                 if graphics_lifetime is not None:
                     graphics_lifetime.retire()
-                probe_window.close()
+                try:
+                    probe_window.close()
+                finally:
+                    if restore_presentation is not None:
+                        restore_presentation()
 
     def open_session(
         self,
@@ -183,22 +203,46 @@ class PsychoPyEngine(PresentationEngine):
         self._event = getattr(psychopy, "event", self._event)
 
         self._runtime_options = dict(runtime_options or {})
+        # Mac source only supports Test/Pilot. Select foreground input before
+        # opening its surface so denied global HID permissions cannot strand it.
+        mac_keyboard = (
+            create_macos_test_keyboard(keyboard_module) if sys.platform == "darwin" else None
+        )
+        LOGGER.info("Opening presentation window")
         self._window = visual.Window(**build_window_kwargs(self._runtime_options))
         try:
+            presentation = (
+                prepare_macos_fullscreen_presentation()
+                if self._runtime_options.get("fullscreen", True) else None
+            )
+            if presentation is not None:
+                activate_presentation, self._restore_presentation = presentation
+            guard_macos_display_link(self._window)
+            use_macos_framebuffer_pixels(self._window)
+            if presentation is not None:
+                activate_presentation()
             self._graphics_lifetime = GraphicsLifetime(self._window)
             self._window.recordFrameIntervals = True
-            self._keyboard = keyboard_module.Keyboard()
+            self._keyboard = (
+                mac_keyboard if mac_keyboard is not None else keyboard_module.Keyboard()
+            )
             self._keyboard.clearEvents()
         except BaseException as error:
             release_failed_graphics_frames(error)
             self.close_session()
             raise
         self._aborted = False
+        LOGGER.info("Presentation window and keyboard ready")
 
     def current_display_size_px(self) -> tuple[int, int] | None:
         window = self._window
         if window is None:
             return None
+        if sys.platform == "darwin":
+            # PsychoPy exposes a NumPy viewport on Mac, rather than a list/tuple.
+            # Report the realized backing pixels for the runtime mismatch guard.
+            size = window.frameBufferSize
+            return (int(size[0]), int(size[1]))
         size = getattr(window, "size", None)
         if not isinstance(size, (list, tuple)) or len(size) < 2:
             return None
@@ -862,6 +906,7 @@ class PsychoPyEngine(PresentationEngine):
         if hasattr(window, "frameIntervals"):
             window.frameIntervals = []
         try:
+            LOGGER.info("Presenting task screen (response_kind=%s)", step.response_kind)
             return render_task_step(
                 visual=self._require_visual(),
                 core=self._require_core(),
@@ -923,6 +968,8 @@ class PsychoPyEngine(PresentationEngine):
         if graphics_lifetime is not None:
             graphics_lifetime.assert_owner()
         window = self._window
+        restore_presentation = self._restore_presentation
+        self._restore_presentation = None
         prepared_scene = self._prepared_scene
         self._prepared_scene = None
         cleanup_report = None
@@ -938,8 +985,12 @@ class PsychoPyEngine(PresentationEngine):
             self._graphics_lifetime = None
             if graphics_lifetime is not None:
                 graphics_lifetime.retire()
-            if window is not None:
-                window.close()
+            try:
+                if window is not None:
+                    window.close()
+            finally:
+                if restore_presentation is not None:
+                    restore_presentation()
         if cleanup_report is not None and not cleanup_report.succeeded:
             raise ConditionResourceCleanupError(cleanup_report)
 

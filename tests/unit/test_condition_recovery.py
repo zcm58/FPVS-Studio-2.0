@@ -22,7 +22,7 @@ from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_models import TaskModuleSpec, TaskStepSpec
 from fpvs_studio.engines.base import TaskEngineInput
-from fpvs_studio.runtime import condition_recovery
+from fpvs_studio.runtime import condition_recovery, triggers
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryRecorder,
@@ -34,6 +34,22 @@ from fpvs_studio.runtime.condition_recovery import (
 )
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.triggers import TriggerEmissionError
+from fpvs_studio.triggers.null_backend import NullBackend
+
+
+@pytest.fixture(autouse=True)
+def recording_transport(monkeypatch):
+    """Exercise real recording recovery with an in-memory serial transport."""
+    class FakeSerial(NullBackend):
+        @property
+        def backend_name(self):
+            return "serial"
+
+        @property
+        def emits_external_markers(self):
+            return True
+
+    monkeypatch.setattr(triggers, "SerialBackend", lambda *_args, **_kwargs: FakeSerial())
 
 
 @pytest.fixture
@@ -56,9 +72,12 @@ def _record(root, plan):
     )
 
 
-def _files(root):
+def _files(root, *, exclude_locks=False):
     root = filesystem_path(root)
-    return {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    return {
+        path.relative_to(root): path.read_bytes() for path in root.rglob("*")
+        if path.is_file() and not (exclude_locks and path.suffix == ".lock")
+    }
 
 
 def test_query_empty_project_creates_nothing(tmp_path):
@@ -155,6 +174,41 @@ def test_terminal_execution_is_not_reported_as_crashed(execution, state):
     assert not list((root / "logs" / ".condition-recovery").glob("*.plan.json"))
 
 
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+@pytest.mark.parametrize("outcome", ["completed", "escape", "error", "process_loss"])
+@pytest.mark.parametrize("export_mode", ["compact", "full"])
+def test_test_pilot_sessions_never_persist_incomplete_conditions(
+    execution, monkeypatch, mode, outcome, export_mode,
+):
+    root, plan = execution
+    worker = RuntimeWorker(StubEngine({"abort_on_transition": outcome == "escape"}))
+
+    class SimulatedProcessLoss(BaseException):
+        pass
+
+    error = SimulatedProcessLoss if outcome == "process_loss" else RuntimeError
+    if outcome in {"error", "process_loss"}:
+        monkeypatch.setattr(worker, "_show_condition_feedback", Mock(side_effect=error))
+
+    def execute():
+        return worker.execute_session(
+            root, plan, root / "runs" / "visit", participant_number="0012",
+            runtime_options={"export_mode": export_mode, mode: True},
+        )
+
+    if outcome in {"error", "process_loss"}:
+        with pytest.raises(error):
+            execute()
+    else:
+        assert execute().aborted is (outcome == "escape")
+    assert list((root / "logs" / "acquisition").glob("*.acquisition-v1.json"))
+    assert not (root / "logs" / ".condition-recovery").exists()
+    report = query_condition_recovery(root)
+    assert not report.records
+    assert not report.warnings
+    ensure_project_update_recovery_ready(root)
+
+
 def test_explicit_replacement_selects_one_occurrence_and_uses_new_plan(execution):
     _root, plan = execution
     first = plan.ordered_entries()[0]
@@ -194,7 +248,7 @@ def test_full_playback_artifacts_exist_before_later_task_failure(execution, monk
             plan,
             root / "runs" / "visit",
             participant_number="0012",
-            runtime_options={"export_mode": "full", "experiment_test_mode": True},
+            runtime_options={"export_mode": "full", "serial_port": "COM3"},
         )
     assert not (root / "runs" / "visit" / "session_summary.json").exists()
     (record,) = query_condition_recovery(root).records
@@ -249,7 +303,7 @@ def test_feedback_failure_preserves_completed_playback_and_reports_distinct_stag
             participant_number="0012",
             participant_session_number=3,
             relative_output_dir="runs/visit",
-            runtime_options={"export_mode": export_mode, "experiment_test_mode": True},
+            runtime_options={"export_mode": export_mode, "serial_port": "COM3"},
         )
     (record,) = query_condition_recovery(root).records
     first = plan.ordered_entries()[0]
@@ -291,7 +345,7 @@ def test_playback_failure_identifies_current_run_without_repeating_completed_run
             plan,
             root / "unused",
             participant_number="0012",
-            runtime_options={"export_mode": "compact", "experiment_test_mode": True},
+            runtime_options={"export_mode": "compact", "serial_port": "COM3"},
         )
     (record,) = query_condition_recovery(root).records
     assert record.run_ordinal == 2
@@ -309,7 +363,7 @@ def test_normal_escape_does_not_create_interruption_notice(execution):
         plan,
         root / "unused",
         participant_number="0012",
-        runtime_options={"export_mode": "compact", "experiment_test_mode": True},
+        runtime_options={"export_mode": "compact", "serial_port": "COM3"},
     )
     assert summary.aborted
     assert not query_condition_recovery(root).records
@@ -334,7 +388,7 @@ def test_trigger_failure_keeps_exact_interrupted_occurrence_available(
     monkeypatch.setattr(engine, "run_condition", fail_second)
     result = RuntimeWorker(engine).execute_session(
         root, plan, root / "runs" / "visit", participant_number="0012",
-        runtime_options={"export_mode": export_mode, "experiment_test_mode": True},
+        runtime_options={"export_mode": export_mode, "serial_port": "COM3"},
     )
     assert result.aborted
     assert "fake transport write failed" in result.abort_reason
@@ -441,7 +495,7 @@ def test_native_timed_pre_task_to_playback_has_no_recovery_writes(
             plan,
             root / "runs" / "visit",
             participant_number="0012",
-            runtime_options={"export_mode": export_mode, "experiment_test_mode": True},
+            runtime_options={"export_mode": export_mode, "serial_port": "COM3"},
         )
 
     if interrupted:
@@ -475,7 +529,7 @@ def test_historical_acquisition_identifies_sixth_occurrence_and_requires_confirm
         session_id=original.session_id,
         participant_number="0012",
         participant_session_number=1,
-        runtime_options={"experiment_test_mode": True},
+        runtime_options={"serial_port": "COM3"},
     )
     evidence = recorder.evidence
     assert evidence is not None and recorder.path is not None
@@ -962,3 +1016,147 @@ def test_acknowledgement_accepts_cloud_placeholders_but_not_redirects(
     else:
         acknowledge_condition_recovery(root, (record,))
         assert not query_condition_recovery(root, include_acknowledged=False).records
+
+
+def _checkpoint(root, plan, *, participant="0012", live=False):
+    recorder = ConditionRecoveryRecorder(
+        root, plan, participant_number=participant, participant_session_number=3,
+    )
+    recorder.start_run(plan.ordered_entries()[0].run_id)
+    recorder.stage("playback")
+    if not live:
+        recorder.close()
+    return recorder
+
+
+def _acquisition(root, plan, *, execution_id=None, mode="experiment_test_mode", participant="0012"):
+    recorder = AcquisitionEvidenceRecorder(
+        root, [entry.run_spec for entry in plan.ordered_entries()], project_id=plan.project_id,
+        runtime_options={mode: True} if mode else {}, participant_number=participant,
+        participant_session_number=3, session_id=plan.session_id, execution_id=execution_id,
+    )
+    recorder.start_run(plan.ordered_entries()[0].run_id, 0)
+    return recorder
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+@pytest.mark.parametrize("acknowledged", [False, True])
+def test_matching_old_test_checkpoint_is_hidden_without_changing_files(
+    execution, mode, acknowledged,
+):
+    root, plan = execution
+    checkpoint = _checkpoint(root, plan)
+    _acquisition(root, plan, execution_id=checkpoint.execution_id, mode=mode)
+    # An unnecessary large plan need not be retained or loaded just to hide a test.
+    path = root / "logs/.condition-recovery" / f"{checkpoint.execution_id}.plan.json"
+    path.unlink()
+    before = _files(root)
+    report = query_condition_recovery(root, include_acknowledged=acknowledged)
+    assert report.records == ()
+    assert report.warnings == ()
+    ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_legacy_null_receipt_alone_does_not_alert_or_block_update(execution, mode):
+    root, plan = execution
+    _acquisition(root, plan, mode=mode)
+    before = _files(root)
+    report = query_condition_recovery(root)
+    assert report.records == ()
+    assert report.warnings == ()
+    ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+
+
+@pytest.mark.parametrize("damage", [
+    "missing", "malformed", "foreign_project", "foreign_participant", "foreign_visit",
+    "foreign_session", "foreign_run",
+])
+def test_unknown_test_provenance_cannot_hide_a_checkpoint(execution, damage):
+    root, plan = execution
+    checkpoint = _checkpoint(root, plan)
+    acquisition = _acquisition(root, plan, execution_id=checkpoint.execution_id)
+    path = acquisition.path
+    assert path is not None
+    if damage == "missing":
+        path.unlink()
+    elif damage == "malformed":
+        path.write_text("not JSON", encoding="utf-8")
+    else:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        if damage == "foreign_project":
+            payload["project_id"] = "different-project"
+        elif damage == "foreign_participant":
+            payload["participant_number"] = "0099"
+        elif damage == "foreign_visit":
+            payload["participant_session_number"] = 2
+        elif damage == "foreign_session":
+            payload["session_id"] = "different-session"
+        else:
+            payload["runs"][0]["run_id"] = "different-run"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    before = _files(root)
+    report = query_condition_recovery(root)
+    assert len(report.records) == 1
+    assert report.records[0].execution_id == checkpoint.execution_id
+    if damage == "malformed":
+        assert any("Could not inspect acquisition record" in warning for warning in report.warnings)
+    with pytest.raises(ValueError, match="resolve interrupted runs|evidence needs review"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+
+
+def test_participant_zero_does_not_prove_that_a_checkpoint_was_a_test(execution):
+    root, plan = execution
+    recorder = _checkpoint(root, plan, participant="0")
+    before = _files(root)
+    (record,) = query_condition_recovery(root).records
+    assert record.execution_id == recorder.execution_id
+    assert record.participant_number == "0"
+    assert _files(root) == before
+
+
+def test_normal_recording_receipt_keeps_recovery_available(execution):
+    root, plan = execution
+    checkpoint = _checkpoint(root, plan)
+    _acquisition(root, plan, execution_id=checkpoint.execution_id, mode=None)
+    before = _files(root)
+    (record,) = query_condition_recovery(root).records
+    assert record.execution_id == checkpoint.execution_id
+    assert record.can_rerun
+    with pytest.raises(ValueError, match="resolve interrupted runs"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
+
+
+def test_live_legacy_test_still_prevents_replacing_assets(execution):
+    root, plan = execution
+    checkpoint = _checkpoint(root, plan, live=True)
+    try:
+        _acquisition(root, plan, execution_id=checkpoint.execution_id)
+        # Windows protects the locked byte from reads by other file handles.
+        before = _files(root, exclude_locks=True)
+        assert query_condition_recovery(root).records == ()
+        with pytest.raises(ValueError, match="Close other Studio instances"):
+            ensure_project_update_recovery_ready(root)
+        assert _files(root, exclude_locks=True) == before
+    finally:
+        checkpoint.close()
+    ensure_project_update_recovery_ready(root)
+
+
+def test_corrupt_old_test_checkpoint_keeps_diagnostic_warning(execution):
+    root, plan = execution
+    checkpoint = _checkpoint(root, plan)
+    _acquisition(root, plan, execution_id=checkpoint.execution_id)
+    path = root / "logs/.condition-recovery" / f"{checkpoint.execution_id}.json"
+    path.write_text("not JSON", encoding="utf-8")
+    before = _files(root)
+    report = query_condition_recovery(root)
+    assert not report.records
+    assert any("Could not inspect recovery record" in warning for warning in report.warnings)
+    with pytest.raises(ValueError, match="evidence needs review"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before

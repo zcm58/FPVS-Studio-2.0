@@ -41,6 +41,13 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Reporting protocol and delivery audit](exec-plans/completed/reporting-protocol-audit-20261103.md):
   eleven additional current scopes connected, four proven sessions recovered,
   legacy electrode placeholder handling fixed and all eligible completed output reconciled.
+- [Mac Retina presentation](exec-plans/completed/macos-retina-presentation.md):
+  one-to-one backing pixels, restorable fullscreen chrome and explicit saved target
+  resolution at Home/Run launch; native first-task pixels and safe/visible checks passed.
+- [Mac Test/Pilot display freeze](exec-plans/completed/macos-test-display-freeze.md):
+  nonexclusive display, bounded callback wait and foreground input; native refresh,
+  callback-failure recovery and Cognitive Load abort/finalization passed. Literal
+  keyboard interaction and full-session physical acceptance remain open.
 - [Mac refresh recovery](exec-plans/completed/macos-refresh-recovery.md): bounded
   cancellable refresh-only children, protected automatic preflight and no duplicate
   Mac constructor check; safe precommit and 58 visible fake-only Qt checks passed.

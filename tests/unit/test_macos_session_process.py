@@ -30,6 +30,23 @@ def _settings(**updates):
     ), **updates)
 
 
+def test_child_diagnostics_use_bounded_local_logs_without_crash_registration(monkeypatch, tmp_path):
+    from fpvs_studio.support import storage
+
+    monkeypatch.setattr(storage, "support_directory", lambda: tmp_path)
+
+    def execute():
+        process.LOGGER.info("Mac presentation child started (operation=refresh pid=123)")
+        return 7
+
+    monkeypatch.setattr(process, "main", execute)
+    assert process._main_with_diagnostics() == 7
+    logs = list((tmp_path / "logs").glob("session-*.log"))
+    assert len(logs) == 1
+    assert "operation=refresh pid=123" in logs[0].read_text(encoding="utf-8")
+    assert {path.name for path in tmp_path.iterdir()} == {"logs"}
+
+
 def _summary(plan):
     return SessionExecutionSummary(
         project_id=plan.project_id, session_id=plan.session_id, engine_name="psychopy",
@@ -321,3 +338,26 @@ def test_display_guidance_is_bounded_without_echoing_arbitrary_failure_payloads(
         RuntimeError("Mac presentation uses (1440, 900) backing pixels"),
     )
     assert "local calibration" in framebuffer.guidance
+
+
+@pytest.mark.parametrize("message", [
+    "macOS display refresh callback stopped. Retry after checking the display.",
+    "Mac Test/Pilot requires the foreground-window keyboard backend.",
+    "PsychoPy could not determine the Mac presentation display size.",
+])
+def test_mac_display_adapter_failures_retain_actionable_guidance(message):
+    response = process._launch_failure(RuntimeError(message))
+
+    assert response.error == "display_verification"
+    assert response.guidance == message
+    assert response.summary is None
+    assert response.verification is None
+
+
+def test_mac_display_adapter_guidance_remains_bounded():
+    response = process._launch_failure(
+        RuntimeError("macOS display refresh callback stopped. " * 100),
+    )
+
+    assert response.error == "display_verification"
+    assert len(response.guidance) == 1000

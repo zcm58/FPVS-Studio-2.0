@@ -41,6 +41,7 @@ from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.recording import (
     recording_backend_label,
     recording_snapshot,
+    resolve_recording_backend,
     validate_recording_trigger_schedule,
 )
 from fpvs_studio.runtime.session_export import (
@@ -277,6 +278,7 @@ class RuntimeWorker:
         recovery = ConditionRecoveryRecorder(
             project_root, session_plan, participant_number=participant_number,
             participant_session_number=participant_session_number,
+            enabled=resolve_recording_backend(runtime_options) != "null",
         )
         try:
             result = self._execute_session(

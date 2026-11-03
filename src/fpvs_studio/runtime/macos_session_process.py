@@ -37,9 +37,9 @@ from fpvs_studio.runtime.launcher import (
 )
 from fpvs_studio.runtime.preflight import PreflightError
 
-LOGGER = logging.getLogger(__name__)
+LOGGER = logging.getLogger("fpvs_studio.runtime.macos_session_process")
 MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
-REFRESH_TIMEOUT_SECONDS = 30.0
+REFRESH_TIMEOUT_SECONDS = 20.0
 _CHILD_MODULE = "fpvs_studio.runtime.macos_session_process"
 
 
@@ -102,6 +102,14 @@ def _launch_failure(error: Exception) -> _Response:
         )
     if isinstance(error, (ImportError, ModuleNotFoundError)):
         return _Response(error="missing_dependency", child_traceback=_stack_locations(error))
+    if isinstance(error, RuntimeError) and str(error).startswith((
+        "macOS display refresh callback", "Mac Test/Pilot requires the foreground-window",
+        "PsychoPy could not determine the Mac presentation display size.",
+    )):
+        return _Response(
+            error="display_verification", guidance=str(error)[:1000],
+            child_traceback=_stack_locations(error),
+        )
     if isinstance(error, RuntimeError) and str(error).startswith((
         "Mac presentation uses ", "PsychoPy could not confirm the Mac display's backing pixels.",
     )):
@@ -256,7 +264,7 @@ def _run_refresh_child(
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise MacOSSessionProcessError(
-                    "Display refresh check timed out after 30 seconds. The fullscreen probe "
+                    "Display refresh check timed out after 20 seconds. The fullscreen probe "
                     "was stopped. Check macOS System Settings > Displays for a fixed refresh "
                     "rate before retrying. No refresh rate was verified."
                 )
@@ -349,6 +357,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         response = _Response(error="invalid_request", child_traceback=_stack_locations(error))
     else:
         try:
+            LOGGER.info("Mac presentation child started (operation=%s pid=%d)",
+                        request.operation, os.getpid())
             if isinstance(request, _RefreshRequest):
                 from fpvs_studio.engines.registry import create_engine
                 from fpvs_studio.runtime.display_refresh import (
@@ -372,6 +382,10 @@ def main(argv: Sequence[str] | None = None) -> int:
                 response = _Response(summary=summary)
         except Exception as error:
             response = _launch_failure(error)
+            LOGGER.error("Mac presentation child failed (%s); stack locations: %s",
+                         response.error, " | ".join(response.child_traceback))
+        else:
+            LOGGER.info("Mac presentation child completed (operation=%s)", request.operation)
     try:
         _private_file(
             path.parent / "response.json", write=response.model_dump_json().encode("utf-8"),
@@ -381,5 +395,19 @@ def main(argv: Sequence[str] | None = None) -> int:
     return 0 if response.error is None else 1
 
 
+def _main_with_diagnostics() -> int:
+    # Reuse bounded, redacted local support logs without creating an automatic
+    # crash-report session for each disposable child. No participant payloads.
+    from fpvs_studio.support.diagnostics import DiagnosticLogging
+    from fpvs_studio.support.storage import support_directory
+
+    diagnostics = DiagnosticLogging(support_directory())
+    diagnostics.start()
+    try:
+        return main()
+    finally:
+        diagnostics.close()
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(_main_with_diagnostics())

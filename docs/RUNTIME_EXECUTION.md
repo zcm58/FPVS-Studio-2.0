@@ -126,14 +126,28 @@ to AppKit's fixed refresh intervals. Unknown or variable intervals (Adaptive Syn
 ProMotion) fail explicitly; a zero CoreGraphics rate is usable only with a proven
 fixed native interval. The fullscreen engine still verifies delivery. Local Test/Pilot
 compiles a deep project copy using confirmed local physical calibration and backing
-pixels, then runs the existing runtime on a child process's main thread. Retina
-framebuffer size must match that calibration before resource upload. Mac launch guards
+pixels, then runs the existing runtime on a child process's main thread. Before either
+Home or Run compiles, a detected resolution mismatch requires explicit acceptance.
+Accepting updates the project's target pixel width/height through its existing save
+owner in the launch worker; a failed save blocks launch. Physical width, viewing
+distance and refresh from the local dialog remain test-only. Cancel saves nothing.
+Retina
+framebuffer size must match that calibration before resource upload. Mac presentation
+uses a borderless desktop-sized window, avoiding Pyglet's exclusive display capture
+and shielding-level window. The requested fullscreen/default-display policy remains
+mandatory; this is a Mac implementation adapter, not an optional smaller test window.
+App-scoped Cocoa presentation options hide the Dock/menu bar while active and restore
+previous options on close/failure, without disabling application switching or quit.
+After native backing storage is realized, the Mac adapter normalizes PsychoPy's
+coordinate flag so `pix` means one backing pixel. The backing framebuffer, viewport
+and native content scale remain intact; no authored positions or schedules are scaled.
+Mac launch guards
 reject production, trigger output, windowed/unverified playback and non-primary displays
 before creating engines or acquisition services. Test/Pilot does not qualify EEG or
 physical timing; native GUI acceptance is tracked in [Mac support](MACOS_SUPPORT.md).
 
 Mac Setup detection and automatic preflight use the same refresh-only child, with a
-30-second parent deadline covering imports, fullscreen capture, measurement and
+20-second parent deadline covering imports, window creation, measurement and
 window cleanup. A stalled or canceled probe is killed and reaped, then its private
 transport is removed; no rate is accepted and preflight cannot start playback.
 Setup's Cancel action and application shutdown signal cancellation without waiting
@@ -141,8 +155,20 @@ on the GUI thread. This deadline applies only to the disposable probe, not an ac
 experiment session or its result finalization. Mac playback constructors disable
 PsychoPy's duplicate implicit frame-rate check; the mandatory native/fullscreen probe
 and Studio's compiled-frame timing QC remain in force. Windows measurement and
-constructor behavior are unchanged. A GPU/kernel stall remains a physical acceptance
-concern; fake process tests do not qualify display-driver recovery.
+constructor behavior are unchanged. Both Mac probe and playback windows additionally
+bound PsychoPy's DisplayLink callback polling to one second per flip; a missing
+callback raises an explicit error and closes the window rather than bypassing sync.
+This does not interrupt a blocked native driver call or qualify physical timing.
+
+Mac Test/Pilot explicitly selects PsychoPy's `event` keyboard backend before opening
+the window. It consumes foreground-window input instead of a global PTB HID queue
+that requires macOS Input Monitoring permission. The active backend is recorded in
+existing runtime metadata; this is not acquisition-qualified keyboard timing.
+The engine's [Mac input adapter](ENGINE_INTERFACE.md#boundary-rules) normalizes legacy
+event key names per device while retaining foreground muting and response filtering.
+Windows keeps its default keyboard selection and dispatcher. Mac children write bounded, redacted
+local support logs identifying operation, window/input readiness and failure locations;
+they do not create separate automatic crash-report sessions or log participant payloads.
 
 Preflight validates the compiled stimulus payload before playback. Routine participant
 launches require image events to reference existing project-relative files, while full
@@ -908,11 +934,18 @@ Per run, full export mode:
 ### Interrupted condition recovery
 
 `runtime/condition_recovery.py` writes a separate project-local checkpoint beneath
-`logs/.condition-recovery/` for each session execution, independently of crash-report
+`logs/.condition-recovery/` for each recording session, independently of crash-report
 consent, registration and network delivery. Before presentation it saves the frozen
 compiled session plan and holds an OS file lock for that execution's lifetime. Process
 exit releases the lock; discovery never treats a still-held or unreadable lock as proof
 of interruption. Read-only inspection does not create, repair or delete research files.
+
+Test/Pilot sessions retain execution identity and ordinary result/acquisition exports,
+but do not persist recovery locks, checkpoints or frozen-plan snapshots. Discovery
+excludes historical Test/Pilot acquisition receipts identified by their effective null
+recording backend. Older checkpoints are excluded only when matching acquisition
+evidence confirms that mode; missing, invalid or mismatched evidence remains available
+for review. These exclusions apply on Windows and macOS without changing saved files.
 
 At safe boundaries the snapshot records the exact run occurrence, original ordinal,
 condition, participant/visit, completed playback runs and runs not yet reached. Stages

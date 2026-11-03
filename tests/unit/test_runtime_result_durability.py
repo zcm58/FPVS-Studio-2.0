@@ -12,13 +12,29 @@ from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.core.task_models import TaskPhase, TaskResponseRecord
-from fpvs_studio.runtime import run_worker, session_export
+from fpvs_studio.runtime import run_worker, session_export, triggers
 from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryRecorder,
     query_condition_recovery,
 )
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.triggers import TriggerEmissionError
+from fpvs_studio.triggers.null_backend import NullBackend
+
+
+@pytest.fixture
+def recording_transport(monkeypatch):
+    """Keep recording-mode recovery tests independent of physical serial hardware."""
+    class FakeSerial(NullBackend):
+        @property
+        def backend_name(self):
+            return "serial"
+
+        @property
+        def emits_external_markers(self):
+            return True
+
+    monkeypatch.setattr(triggers, "SerialBackend", lambda *_args, **_kwargs: FakeSerial())
 
 
 @pytest.fixture
@@ -75,7 +91,7 @@ def test_single_run_preserves_completed_results_before_later_failure(
 
 @pytest.mark.parametrize("mode", ["single", "full", "compact"])
 def test_final_trigger_reset_failure_retains_returned_playback_results(
-    execution, monkeypatch, mode,
+    execution, monkeypatch, recording_transport, mode,
 ):
     root, plan = execution
     first = plan.ordered_entries()[0]
@@ -97,14 +113,14 @@ def test_final_trigger_reset_failure_retains_returned_playback_results(
     if mode == "single":
         result = worker.execute(
             root, first.run_spec, root / "runs" / "visit", participant_number="0007",
-            runtime_options={"experiment_test_mode": True},
+            runtime_options={"serial_port": "COM3"},
         )
         saved_path = root / "runs" / "visit" / "run_summary.json"
     else:
         session = worker.execute_session(
             root, plan, root / "runs" / "visit", participant_number="0007",
             participant_session_number=1,
-            runtime_options={"export_mode": mode, "experiment_test_mode": True},
+            runtime_options={"export_mode": mode, "serial_port": "COM3"},
         )
         assert session.aborted
         (result,) = session.run_results
@@ -168,7 +184,7 @@ def test_original_trigger_error_survives_secondary_failure(
 
 @pytest.mark.parametrize("export_mode", ["full", "compact"])
 def test_final_recovery_write_preserves_original_trigger_error(
-    execution, monkeypatch, export_mode,
+    execution, monkeypatch, recording_transport, export_mode,
 ):
     root, plan = execution
     original = TriggerEmissionError("fake reset failed")
@@ -180,7 +196,7 @@ def test_final_recovery_write_preserves_original_trigger_error(
     with pytest.raises(TriggerEmissionError) as caught:
         RuntimeWorker(StubEngine({})).execute_session(
             root, plan, root / "runs" / "visit", participant_number="0007",
-            runtime_options={"export_mode": export_mode, "experiment_test_mode": True},
+            runtime_options={"export_mode": export_mode, "serial_port": "COM3"},
         )
     assert caught.value is original
     assert caught.value.__cause__ is secondary
