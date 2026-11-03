@@ -73,3 +73,12 @@ The physical OS freeze is not claimed reproduced or fully qualified. A system-wi
 GPU/kernel deadlock may exceed user-space recovery; the separate Mac Phase 1 plan
 retains physical display/presentation acceptance. The repaired software no longer
 waits indefinitely on its disposable measurement process.
+
+## Native CI evidence
+
+[Run 41583072217](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41583072217)
+on source commit `79756a4` passed all six jobs. Primary Windows precommit passed
+5,051 tests, 15 platform skips and 24 subtests. Apple Silicon and Intel each passed
+1,411 checks with ten platform skips after clean managed-Python/engine installs.
+Both cross-OS bundle chains passed. These are native software/service and synthetic
+transfer results; no hosted fullscreen presentation window or EEG hardware was used.
