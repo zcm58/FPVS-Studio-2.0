@@ -44,10 +44,47 @@ sidecars, matching the preceding release. Mac remains source-only.
 
 ## Progress
 
-- Reporting changes committed; all six remote fixes merged, one documentation conflict
-  resolved without dropping entries. Version/notes and qualification are in progress.
-- Earlier reporting precommit passed 5,039 tests and 31 platform-specific skips;
-  this does not replace verification of the merged release source.
+- Exact build source is `1cceee5a16b6b8f5583405c1e2c651a2b474a2df`, committed and
+  pushed to master. Annotated `v2.6.1` resolves to this source. The merge retains all
+  six remote fixes and the reporting repair; the documentation conflict preserves
+  both sets of plan entries.
+- Merged-source precommit passed Ruff, compilation, repository audits, mypy for
+  267 source files and the additional nine-file Darwin target, and all 5,137 safe
+  tests. The 32 skips are Windows symlink/native POSIX and PsychoPy-version cases.
+  Packaging focused passed 189 checks; dependency consistency passed.
+- Canonical staging build completed under `release-2.6.1`, with `-SkipInstall`
+  after refreshing editable metadata and `-SkipSmoke` while visible approval is
+  pending. No application installer has been executed.
+- Authenticated 2.6.0 installer bytes and its qualified complete 7,062-file bundle
+  were checked. All 555 native input paths/hashes and 482 target DLL/PYD files
+  match, as do the 22 normalized warnings. Only editable app metadata changed
+  among installed distributions. No runtime dependency updates were introduced.
+- Static target audit passed: all 7,062 owned files match inventory SHA-256
+  `8a48b95bc3294411f1543d2cdcf793d8226fe72fc5f0038360ff9e72de5e711b`;
+  all 267 Studio modules plus entry and all 22 updater modules plus entry match
+  exact source code objects. Studio/updater metadata and the GUI-free updater
+  diagnostic report 2.6.1. Full-only update JSON and both checksum sidecars validate.
+- GitHub draft `433297229` is staged with all four verified assets and exact
+  178-character notes. Repository release immutability remains enabled. Exact
+  draft asset inventory, remote sizes/SHA-256 digests and annotated source tag pass.
+- [Source CI 41731234561](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41731234561)
+  targets exact build source. Windows contracts, both native Mac CPUs and the Windows
+  return check passed; final Mac-origin round-trip jobs remain in progress at this
+  staging checkpoint. Documentation CI passed separately.
+- Bounded Studio and updater visible smoke checks remain pending the explicit
+  visible-environment approval required by AGENTS.md and the canonical runner.
+  Approval was requested in the chat; do not infer it from elapsed time or publish
+  before that smoke gate passes. Public downloads/attestations and live updater
+  acceptance follow publication and remain pending.
+
+## Staged assets
+
+| Asset | Bytes | SHA-256 |
+| --- | ---: | --- |
+| `FPVS-Studio-Setup-2.6.1.exe` | 298,968,689 | `9a6482669d75a798172675199ef79411366716b908091979fdfb2d5a31156b86` |
+| `FPVS-Studio-Setup-2.6.1.exe.sha256` | 95 | `32fc40d0c98d011c9b8a154750bf2d3af52bccd381366b77131c350e1dd17db3` |
+| `FPVS-Studio-Update-2.6.1.json` | 107 | `cc648a9f7639d6caf2b178ab2b69b2263431d46db91a234a5d10afad026c1ee5` |
+| `FPVS-Studio-Update-2.6.1.json.sha256` | 97 | `2f8813d0e0775073e850d0cf274150b7a37b138bc41f32ceaff7734cdaaecec3` |
 
 No production installation, real participant session, EEG marker activity or physical
 Mac acceptance is authorized by the release smoke workflow. Preserve the existing
