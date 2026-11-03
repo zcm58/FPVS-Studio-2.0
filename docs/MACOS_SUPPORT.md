@@ -24,6 +24,7 @@ policy, [GUI workflow](GUI_WORKFLOW.md) owns authoring behavior and
 | Local Mac repair | Python 3.10.20/arm64 `.venv` passes `pip check`; repo precommit: 4,973 passed, 64 platform/filesystem skips, 24 subtests. Focused visible Mac/Welcome/Library/worker/popup coverage: 100 passed. Original intermittent crash stability remains open. |
 | Mac clone bootstrap | Clean managed Python 3.10.22/arm64 install in a spaced path passed full engine requirements, dependency/import checks and nine approved visible Qt cases. Existing `.venv` reuse and scoped PyCharm setup verified; final focused checks: 1,397 passed/15 skips; repo precommit: 4,993 passed/64 skips/24 subtests. See [setup record](exec-plans/completed/mac-clone-bootstrap.md). |
 | Refresh recovery | [Run 41583072217](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41583072217), source `79756a4`: all six jobs passed; Windows 5,051 tests/15 skips/24 subtests; each Mac CPU 1,411 checks/10 skips; both bundle-transfer chains passed. Local 58 visible fake-only Qt checks passed. The physical fullscreen freeze was not rerun; see the [repair record](exec-plans/completed/macos-refresh-recovery.md). |
+| Subsequent display/input repair | Local precommit: 5,027 passed/64 skips/24 subtests; both type passes and two visible launch-dialog cases passed. Native nonexclusive refresh, callback-loss/retry and Cognitive Load task abort/export passed; literal keyboard interaction/full sessions remain open. See the [investigation](exec-plans/completed/macos-test-display-freeze.md). |
 | Visible Windows checks | 18 focused GUI cases passed across calibration, source updates, test availability, shortcuts and Save. Mac-only policy was faked; these are not native Mac GUI results. |
 | Mac CI | [Run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134), source commit `f6b6721`: all six jobs passed. Each Mac CPU lane passed 1,358 checks with 10 platform-specific skips. Native private-Keychain roundtrip, Trash, display metadata and real child IPC passed. |
 | Mac CI after the compatibility repair | Both arm64 and Intel source jobs on `185471b` in [run 41571020291](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41571020291) passed 1,382 checks with ten platform skips, adapter mypy and native probes using the new dependency selection. |
@@ -145,8 +146,18 @@ Cancel and responds to application shutdown; a stopped check leaves the refresh 
 unverified and can be retried. Automatic preflight uses the same protected probe,
 and playback skips PsychoPy's duplicate constructor measurement. See the
 [runtime contract](RUNTIME_EXECUTION.md#session-flow) for lifetime
-and validation rules. The reported physical fullscreen freeze has not been rerun;
-software timeout/cancellation coverage does not establish GPU-driver recovery.
+and validation rules. Subsequent physical failure evidence indicates the refresh
+child finished before the playback window opened; that later window was outside the
+probe deadline. Pyglet's exclusive Cocoa fullscreen and PsychoPy's unbounded
+DisplayLink callback wait were implicated, and macOS denied global keyboard monitoring.
+Mac presentation now uses a borderless desktop-sized window without exclusive capture,
+bounds missing refresh callbacks to one second, and explicitly uses foreground-window
+keyboard input for Test/Pilot. Successful native sync is retained, not bypassed.
+Command+Tab can return to Studio; Escape remains the normal experiment abort.
+Windows fullscreen and keyboard behavior are unchanged. Native refresh, callback-loss
+recovery and Cognitive Load task abort/finalization passed locally. Literal keyboard
+interaction and complete session acceptance remain open; see the
+[display investigation](exec-plans/completed/macos-test-display-freeze.md).
 
 ## Evidence levels and software inventory
 

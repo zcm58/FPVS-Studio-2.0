@@ -38,6 +38,10 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Mac Test/Pilot display freeze](exec-plans/completed/macos-test-display-freeze.md):
+  nonexclusive display, bounded callback wait and foreground input; native refresh,
+  callback-failure recovery and Cognitive Load abort/finalization passed. Literal
+  keyboard interaction and full-session physical acceptance remain open.
 - [Mac refresh recovery](exec-plans/completed/macos-refresh-recovery.md): bounded
   cancellable refresh-only children, protected automatic preflight and no duplicate
   Mac constructor check; safe precommit and 58 visible fake-only Qt checks passed.

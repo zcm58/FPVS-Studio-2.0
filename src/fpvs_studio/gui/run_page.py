@@ -509,16 +509,26 @@ class TestModeLaunchConfirmationDialog(QDialog):
         self.setMinimumSize(700, 380)
         self.resize(700, 380)
 
-        self.prompt_label = QLabel(
+        prompt = (
             "Experiment Test Mode is enabled. This launch verifies experiment setup "
             "and behavior without lab hardware. Serial-port validation and output, the "
             "recording reminder, connected-display refresh verification, and "
             "participant information collection are disabled. The run uses reserved "
             "test ID 0. Fullscreen presentation, compiled timing and asset validation, "
             "runtime timing QC, condition tasks, and normal test outputs remain enabled. "
-            "Choose the full session or one condition for this launch.",
-            self,
+            "Choose the full session or one condition for this launch."
         )
+        if sys.platform == "darwin":
+            prompt = (
+                "Mac Experiment Test Mode verifies setup and behavior without lab hardware, "
+                "using reserved test ID 0. It checks display refresh, compiled timing and "
+                "assets, and retains runtime timing QC, condition tasks and test outputs. "
+                "Presentation fills the desktop without capturing the display. Keyboard "
+                "input is limited to the experiment window and is not acquisition-qualified. "
+                "Press Escape to abort; Command+Tab can return to Studio. "
+                "Choose the full session or one condition for this launch."
+            )
+        self.prompt_label = QLabel(prompt, self)
         self.prompt_label.setObjectName("test_mode_launch_confirmation_prompt")
         self.prompt_label.setWordWrap(True)
 

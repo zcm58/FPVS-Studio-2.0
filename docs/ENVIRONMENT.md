@@ -122,7 +122,8 @@ Windows/Linux expose app-level `Experiment Test Mode` using the same fullscreen
 compiled session and timing QC with explicit null output and no participant collection.
 Their local-test policy skips connected-display verification. macOS source exposes
 Test/Pilot only, retains native plus PsychoPy refresh verification, and uses a child
-process's main thread. Its calibration dialog applies to one test without saving lab
+process's main thread with nonexclusive desktop-sized presentation and explicit
+foreground-window keyboard input. Its calibration dialog applies to one test without saving lab
 display/EEG settings. macOS first-run authoring requires no EEG choice; acquisition
 launches are blocked. Source updates use Git and the setup helper, not a Windows installer.
 

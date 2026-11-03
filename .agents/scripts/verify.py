@@ -29,6 +29,8 @@ MACOS_TYPE_TARGETS = (
     "src/fpvs_studio/gui/document_runtime.py",
     "src/fpvs_studio/gui/run_page.py",
     "src/fpvs_studio/engines/psychopy_window.py",
+    "src/fpvs_studio/engines/psychopy_macos_display.py",
+    "src/fpvs_studio/engines/psychopy_engine.py",
 )
 KNOWN_CHECKS = frozenset({"docs-hygiene", "gc"})
 

@@ -24,6 +24,9 @@ as PsychoPy. Runtime owns flow and calls engines through
   On Mac, runtime owns the bounded refresh subprocess. Mac window constructors set
   `checkTiming=False` to avoid a second unbounded implicit measurement after required
   preflight; Studio's frame-based QC remains independent of that constructor check.
+  `psychopy_macos_display` bounds the backend's DisplayLink polling without disabling
+  synchronization and selects foreground `event` keyboard input for Mac Test/Pilot.
+  Missing callbacks fail explicitly; Windows retains its original backend/input path.
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.
@@ -135,8 +138,11 @@ during preparation and never writes a project file.
 Before creating either the temporary refresh probe or the session window, the PsychoPy
 helper queries the selected Pyglet screen and passes its native pixel dimensions as the
 fullscreen `size`. This avoids PsychoPy interpreting its own `800x600` constructor
-default as the requested fullscreen size. If screen enumeration fails, PsychoPy retains
-ownership of fullscreen sizing and the diagnostic is warning-only.
+default as the requested fullscreen size. Windows/Linux retain warning-only sizing
+delegation if enumeration fails. Mac requires known logical screen dimensions and
+uses a borderless desktop-sized window at `(0, 0)` with Retina backing pixels, rather
+than Pyglet's exclusive capture/shielding path. Actual backing pixels must still match
+the local calibration. No system display mode is changed.
 
 Production launch settings enable graphics-memory verification. The engine rejects
 known software renderers and uses Windows DXGI per-process budgets plus physical-RAM

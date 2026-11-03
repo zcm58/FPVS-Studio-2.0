@@ -28,6 +28,7 @@ from tests.gui.helpers import (
     _open_created_project,
     _prepare_compile_ready_project,
 )
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
@@ -37,6 +38,7 @@ from fpvs_studio.core.serialization import (
     save_project_file,
 )
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.gui import run_page
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
@@ -337,9 +339,11 @@ def test_recording_reminder_requires_confirmed_and_fits(
     assert dialog.result() == dialog.DialogCode.Accepted
 
 
+@pytest.mark.parametrize("platform_name", ["win32", "darwin"])
 def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
-    qtbot,
+    qtbot, monkeypatch, platform_name,
 ) -> None:
+    set_module_platform(monkeypatch, run_page, platform_name)
     long_condition_name = (
         "Word Recognition With Pre-Task Encoding and a Deliberately Long Display Name"
     )
@@ -372,8 +376,18 @@ def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
     assert dialog.size().width() == 700
     assert dialog.size().height() == 380
     assert dialog.windowTitle() == "Confirm Experiment Test Launch"
-    assert "Serial-port validation" in prompt.text()
-    assert "participant information collection" in prompt.text()
+    if platform_name == "darwin":
+        assert "checks display refresh" in prompt.text()
+        assert "without capturing the display" in prompt.text()
+        assert "input is limited to the experiment window" in prompt.text()
+        assert "not acquisition-qualified" in prompt.text()
+        assert "Escape to abort" in prompt.text()
+        assert "Command+Tab can return to Studio" in prompt.text()
+    else:
+        assert "Serial-port validation" in prompt.text()
+        assert "participant information collection" in prompt.text()
+        assert "connected-display refresh verification" in prompt.text()
+        assert "disabled" in prompt.text()
     assert "reserved test ID 0" in prompt.text()
     assert "runtime timing QC" in prompt.text()
     assert condition_combo.count() == 3
@@ -384,6 +398,14 @@ def test_test_mode_launch_confirmation_requires_explicit_acknowledgement(
     assert acknowledgement.width() >= acknowledgement.fontMetrics().horizontalAdvance(
         acknowledgement.text()
     )
+    assert prompt.wordWrap()
+    required_text = prompt.fontMetrics().boundingRect(
+        QRect(0, 0, prompt.contentsRect().width(), 10000),
+        Qt.TextFlag.TextWordWrap,
+        prompt.text(),
+    )
+    assert prompt.contentsRect().height() >= required_text.height()
+    _assert_visible_children_within_parent(dialog)
 
     condition_combo.setCurrentIndex(2)
     QApplication.processEvents()

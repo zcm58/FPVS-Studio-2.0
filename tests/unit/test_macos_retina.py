@@ -22,6 +22,17 @@ def test_mac_window_uses_retina_pyglet(monkeypatch):
     assert values["winType"] == "pyglet"
     assert values["checkTiming"] is False
     assert values["screen"] == 0
+    assert values["fullscr"] is False
+    assert values["allowGUI"] is False
+    assert values["size"] == [1440, 900]
+    assert values["pos"] == [0, 0]
+
+
+def test_mac_display_size_failure_does_not_open_smaller_window(monkeypatch):
+    set_module_platform(monkeypatch, psychopy_window, "darwin")
+    monkeypatch.setattr(psychopy_window, "_detect_fullscreen_size_px", lambda _: None)
+    with pytest.raises(RuntimeError, match="Mac presentation display size"):
+        psychopy_window.build_window_kwargs({"fullscreen": True})
 
 
 @pytest.mark.parametrize("actual", [(1440, 900), None])
@@ -61,8 +72,12 @@ def test_shared_engine_keeps_windows_contract_and_mac_backing_pixel_guard(
         assert captures["window_kwargs"].get("useRetina", False) is (platform == "darwin")
         if platform == "darwin":
             assert captures["window_kwargs"]["checkTiming"] is False
+            assert captures["window_kwargs"]["fullscr"] is False
+            assert captures["keyboard_kwargs"] == {"backend": "event"}
         else:
             assert "checkTiming" not in captures["window_kwargs"]
+            assert captures["window_kwargs"]["fullscr"] is True
+            assert captures["keyboard_kwargs"] == {}
         if platform == "darwin" and backing != "matching":
             with pytest.raises(RuntimeError, match="backing pixels"):
                 engine._prepare_condition_playback(spec, sample_project_root)

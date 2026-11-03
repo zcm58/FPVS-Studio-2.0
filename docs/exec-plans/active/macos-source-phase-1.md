@@ -76,6 +76,12 @@ thread. Mac testing retains native/engine refresh verification and timing QC whi
 using null output without changing saved lab settings. Keychain and Finder/Trash
 adapters remain lazy and preserve existing secure-store/file-operation boundaries.
 
+The [Test/Pilot freeze repair](../completed/macos-test-display-freeze.md) adds a
+small Mac display/input adapter: nonexclusive desktop-sized windows, bounded
+DisplayLink callback polling and explicit foreground keyboard input. Native refresh,
+callback-loss/retry and Cognitive Load abort/finalization passed locally. Full
+interactive sessions and physical timing remain open acceptance gates.
+
 `core/portable_paths.py` and `core/project_bundle.py` retain the bundle schema and
 payload bytes while rejecting ambiguous/unportable paths, source links and archive
 links/special files. Signature-recognized, unreferenced Finder metadata is omitted at

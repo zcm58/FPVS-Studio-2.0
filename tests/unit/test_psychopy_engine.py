@@ -28,6 +28,8 @@ from fpvs_studio.core.enums import (
     StimulusTransform,
 )
 from fpvs_studio.core.run_spec import FixationEvent, TriggerEvent
+from fpvs_studio.engines import psychopy_engine as psychopy_engine_module
+from fpvs_studio.engines import psychopy_macos_display as psychopy_macos_display_module
 from fpvs_studio.engines import psychopy_stimuli as psychopy_stimuli_module
 from fpvs_studio.engines import psychopy_window as psychopy_window_module
 from fpvs_studio.engines.graphics_readiness import (
@@ -78,6 +80,7 @@ class _FakeWindow:
         self.actual_frame_rate = actual_frame_rate
         self.actual_frame_rate_kwargs: dict[str, object] | None = None
         self.closed = False
+        self.backend = SimpleNamespace(refreshEventHandlerMacOS=SimpleNamespace(frameLock=False))
 
     @property
     def last_flip_time(self) -> float:
@@ -311,11 +314,12 @@ def _build_fake_psychopy(
         captures["window"] = window
         return window
 
-    def _fake_keyboard():
+    def _fake_keyboard(**kwargs):
+        captures["keyboard_kwargs"] = kwargs
         keyboard = _FakeKeyboard(
-            captures["window"],
+            captures.get("window", _FakeWindow()),
             key_batches=key_batches,
-            backend=keyboard_backend,
+            backend=kwargs.get("backend", keyboard_backend),
         )
         captures["keyboard"] = keyboard
         return keyboard
@@ -366,6 +370,8 @@ def _patch_fake_psychopy(
     monkeypatch, engine: PsychoPyEngine, fake_psychopy: object, *, platform_name: str = "win32",
 ) -> None:
     set_module_platform(monkeypatch, psychopy_window_module, platform_name)
+    set_module_platform(monkeypatch, psychopy_engine_module, platform_name)
+    set_module_platform(monkeypatch, psychopy_macos_display_module, platform_name)
     # Keep resource barriers simulated even when real PsychoPy is installed.
     # Patch the loader so tests can still override synchronize_gpu to exercise failures.
     monkeypatch.setattr(psychopy_stimuli_module, "_load_psychopy_gl", lambda: fake_psychopy.gl)
@@ -709,6 +715,7 @@ def test_fullscreen_window_falls_back_to_psychopy_when_screen_query_fails(
     monkeypatch,
     caplog,
 ) -> None:
+    set_module_platform(monkeypatch, psychopy_window_module, "win32")
     def _fail_import(_module_name: str) -> object:
         raise RuntimeError("display enumeration failed")
 
@@ -724,6 +731,7 @@ def test_fullscreen_window_falls_back_to_psychopy_when_screen_query_fails(
 
 
 def test_refresh_probe_uses_fullscreen_size_when_launch_is_windowed(monkeypatch) -> None:
+    set_module_platform(monkeypatch, psychopy_window_module, "win32")
     monkeypatch.setattr(
         psychopy_window_module,
         "_detect_fullscreen_size_px",

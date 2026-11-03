@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import gc
 import logging
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -50,6 +51,10 @@ from fpvs_studio.engines.psychopy_graphics_lifetime import (
     release_failed_graphics_frames,
 )
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
+from fpvs_studio.engines.psychopy_macos_display import (
+    create_macos_test_keyboard,
+    guard_macos_display_link,
+)
 from fpvs_studio.engines.psychopy_metadata import runtime_metadata_for_run
 from fpvs_studio.engines.psychopy_scenes import (
     estimate_scene_image_memory,
@@ -155,6 +160,7 @@ class PsychoPyEngine(PresentationEngine):
         probe_window = visual.Window(**build_refresh_probe_window_kwargs(runtime_options))
         graphics_lifetime = None
         try:
+            guard_macos_display_link(probe_window)
             graphics_lifetime = GraphicsLifetime(probe_window)
             return measure_window_refresh_hz(probe_window)
         finally:
@@ -183,17 +189,27 @@ class PsychoPyEngine(PresentationEngine):
         self._event = getattr(psychopy, "event", self._event)
 
         self._runtime_options = dict(runtime_options or {})
+        # Mac source only supports Test/Pilot. Select foreground input before
+        # opening its surface so denied global HID permissions cannot strand it.
+        mac_keyboard = (
+            create_macos_test_keyboard(keyboard_module) if sys.platform == "darwin" else None
+        )
+        LOGGER.info("Opening presentation window")
         self._window = visual.Window(**build_window_kwargs(self._runtime_options))
         try:
+            guard_macos_display_link(self._window)
             self._graphics_lifetime = GraphicsLifetime(self._window)
             self._window.recordFrameIntervals = True
-            self._keyboard = keyboard_module.Keyboard()
+            self._keyboard = (
+                mac_keyboard if mac_keyboard is not None else keyboard_module.Keyboard()
+            )
             self._keyboard.clearEvents()
         except BaseException as error:
             release_failed_graphics_frames(error)
             self.close_session()
             raise
         self._aborted = False
+        LOGGER.info("Presentation window and keyboard ready")
 
     def current_display_size_px(self) -> tuple[int, int] | None:
         window = self._window

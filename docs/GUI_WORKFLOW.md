@@ -399,7 +399,10 @@ or AB Pilot mode and preserves authored recording settings. Before launching, a 
 display dialog confirms viewing distance/physical width and native backing resolution/
 refresh. Compilation uses a transient copy; saved lab calibration is unchanged.
 Mac playback and refresh probes use a child process's main thread, retain refresh
-verification and defer teardown until completion. Mac update UI instructs users to
+verification and defer teardown until completion. The Mac test confirmation explains
+desktop-sized presentation without exclusive capture, foreground-window keyboard
+input, Escape abort and Command+Tab recovery; this input is not acquisition-qualified.
+Mac update UI instructs users to
 pull changes from the remote repository and rerun the source setup helper.
 
 ## Settings appearance and layout

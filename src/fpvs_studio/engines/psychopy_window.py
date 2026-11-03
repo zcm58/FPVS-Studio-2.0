@@ -59,6 +59,15 @@ def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, obje
         window_kwargs.update({"useRetina": True, "winType": "pyglet", "checkTiming": False})
     if fullscreen:
         fullscreen_size = _detect_fullscreen_size_px(selected_display_index)
+        if sys.platform == "darwin":
+            if fullscreen_size is None:
+                raise RuntimeError(
+                    "PsychoPy could not determine the Mac presentation display size."
+                )
+            # Pyglet's Cocoa fullscreen captures the display at shielding level.
+            # Use the same display-sized surface without exclusive display capture;
+            # macOS must remain able to switch applications during a local test.
+            window_kwargs.update({"fullscr": False, "allowGUI": False, "pos": [0, 0]})
         if fullscreen_size is not None:
             window_kwargs["size"] = list(fullscreen_size)
     else:
