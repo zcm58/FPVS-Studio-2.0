@@ -5,39 +5,178 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialogButtonBox, QLabel
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialogButtonBox,
+    QFrame,
+    QLabel,
+    QPushButton,
+    QWidget,
+)
 from tests.gui.helpers import assert_visible_children_within_parent
 
+from fpvs_studio.gui.components import SectionCard
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 
-@pytest.mark.parametrize("developer", [False, True])
-@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_settings_sections_fit_minimum_size(qtbot, tmp_path, developer, background) -> None:
+def _assert_visible_settings_text_fits(dialog: AppSettingsDialog) -> None:
+    assert_visible_children_within_parent(dialog)
+    for label in dialog.findChildren(QLabel):
+        if not label.isVisible() or not label.text():
+            continue
+        context = f"{label.objectName() or label.text()}: {label.size().toTuple()}"
+        if label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width()), context
+        else:
+            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text()), context
+        if label.property("settingsSectionTitle") == "true":
+            assert label.alignment() & Qt.AlignmentFlag.AlignLeft, context
+    for control_type in (QCheckBox, QPushButton):
+        for control in dialog.findChildren(control_type):
+            if control.isVisible():
+                assert control.width() >= control.sizeHint().width(), control.text()
+
+
+@pytest.mark.parametrize(
+    ("test_mode", "pilot_mode", "library", "height"),
+    [(False, False, False, 560), (True, False, False, 650), (True, True, True, 764)],
+    ids=["ordinary", "test-mode", "pilot-and-library"],
+)
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_settings_sections_fit_minimum_size(
+    qtbot, tmp_path, test_mode, pilot_mode, library, height, background,
+) -> None:
+    root_path = tmp_path / ("Long research project root " * 5)
     dialog = AppSettingsDialog(
-        fpvs_root_dir=tmp_path / ("Long research project root " * 5),
-        experiment_test_mode_available=developer,
+        fpvs_root_dir=root_path,
+        theme_mode="auto",
+        experiment_test_mode_available=test_mode,
+        attentional_blink_pilot_mode_available=pilot_mode,
+        on_show_library=(lambda: None) if library else None,
         on_show_root_folder_setup=lambda _: None,
         on_manage_condition_templates=lambda: None,
+        automatic_crash_reports_status=(
+            "Crash reporting is enabled. The last report could not be sent while this "
+            "computer was offline. It will be retried when a connection is available."
+        ),
     )
     qtbot.addWidget(dialog)
+    assert dialog.size() == dialog.minimumSize()
+    assert dialog.minimumSize().toTuple() == (700, height)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.resize(dialog.minimumSize())
     dialog.show()
     QApplication.processEvents()
 
-    assert dialog.width() == 700
-    assert dialog.height() == (650 if developer else 560)
-    assert_visible_children_within_parent(dialog)
-    for label in dialog.findChildren(QLabel):
-        if label.isVisible() and not label.wordWrap():
-            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
-    for checkbox in dialog.findChildren(QCheckBox):
-        if checkbox.isVisible():
-            assert checkbox.width() >= checkbox.sizeHint().width()
+    assert dialog.tabs.documentMode()
+    assert [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())] == [
+        "General", "Advanced", "Recording", "Diagnostics",
+    ]
+    section_names = [
+        "settings_appearance_section", "settings_workspace_section", "settings_participant_section",
+    ]
+    if test_mode:
+        section_names.append("settings_developer_section")
+    for name in section_names:
+        section = dialog.findChild(QWidget, name)
+        assert section is not None, name
+        assert not isinstance(section, QFrame), name
+        assert section.property("sectionCard") not in (True, "true"), name
+        ancestor = section.parentWidget()
+        while ancestor is not None:
+            assert not isinstance(ancestor, SectionCard), name
+            ancestor = ancestor.parentWidget()
+
+    assert dialog.root_folder_setup_button.toolTip() == str(root_path)
     assert "saved immediately" in dialog.header.subtitle_label.text()
+    for index in range(dialog.tabs.count()):
+        dialog.tabs.setCurrentIndex(index)
+        QApplication.processEvents()
+        assert dialog.size().toTuple() == (700, height), dialog.tabs.tabText(index)
+        _assert_visible_settings_text_fits(dialog)
+        page = dialog.tabs.currentWidget()
+        titles = [
+            label for label in page.findChildren(QLabel)
+            if label.isVisible() and label.property("settingsSectionTitle") == "true"
+        ]
+        assert titles, dialog.tabs.tabText(index)
+        title_left_edges = {label.mapTo(page, label.rect().topLeft()).x() for label in titles}
+        assert len(title_left_edges) == 1, dialog.tabs.tabText(index)
+
+
+@pytest.mark.parametrize("initial_mode", ["light", "dark", "auto"])
+def test_theme_choices_are_exclusive_and_apply_immediately(qtbot, tmp_path, initial_mode) -> None:
+    changes: list[str] = []
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, theme_mode=initial_mode, on_theme_mode_changed=changes.append,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert set(dialog.theme_buttons) == {"light", "dark", "auto"}
+    assert all(isinstance(button, QPushButton) for button in dialog.theme_buttons.values())
+    assert all(button.isCheckable() for button in dialog.theme_buttons.values())
+    assert dialog.theme_button_group.exclusive()
+    assert dialog.theme_buttons[initial_mode].isChecked()
+    assert "system" in dialog.theme_buttons["auto"].toolTip().lower()
+    assert any(label.text() == "Appearance" for label in dialog.findChildren(QLabel))
+    assert changes == []
+
+    modes = [mode for mode in ("light", "dark", "auto") if mode != initial_mode]
+    modes.append(initial_mode)
+    for index, mode in enumerate(modes, start=1):
+        button = dialog.theme_buttons[mode]
+        qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+        assert changes == modes[:index]
+        assert [key for key, value in dialog.theme_buttons.items() if value.isChecked()] == [mode]
+        qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+        assert button.isChecked()
+        assert changes == modes[:index]
+        assert not dialog.theme_status.isVisible()
+    _assert_visible_settings_text_fits(dialog)
+    qtbot.mouseClick(
+        dialog.button_box.button(QDialogButtonBox.StandardButton.Close),
+        Qt.MouseButton.LeftButton,
+    )
+    assert changes == modes
+    assert dialog.theme_buttons[initial_mode].isChecked()
+
+
+@pytest.mark.parametrize("failure_type", [ValueError, OSError])
+def test_theme_save_failure_restores_selection_and_can_retry(
+    qtbot, tmp_path, failure_type,
+) -> None:
+    attempts: list[str] = []
+
+    def save(mode: str) -> None:
+        attempts.append(mode)
+        if len(attempts) == 1:
+            raise failure_type("Synthetic preference save failure")
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, theme_mode="auto", on_theme_mode_changed=save,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    qtbot.mouseClick(dialog.theme_buttons["dark"], Qt.MouseButton.LeftButton)
+    assert attempts == ["dark"]
+    assert dialog.theme_buttons["auto"].isChecked()
+    assert not dialog.theme_buttons["dark"].isChecked()
+    assert dialog.theme_status.isVisible()
+    assert "Try again" in dialog.theme_status.text()
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == (700, 560)
+    _assert_visible_settings_text_fits(dialog)
+
+    dialog.theme_buttons["dark"].setFocus()
+    qtbot.keyClick(dialog.theme_buttons["dark"], Qt.Key.Key_Space)
+    assert attempts == ["dark", "dark"]
+    assert dialog.theme_buttons["dark"].isChecked()
+    assert not dialog.theme_buttons["auto"].isChecked()
+    assert not dialog.theme_status.isVisible()
 
 
 def test_settings_changes_are_immediate_and_close_keeps_them(qtbot, tmp_path) -> None:

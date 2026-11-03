@@ -142,17 +142,14 @@ interaction.
   result page until the user opens/copies the destination or selects Done. Bundle export
   can assign a distinct project name to the portable copy without changing the open
   project, and imports always target the configured absolute FPVS Studio Root Folder.
-- Settings exposes app-level preferences for the FPVS Studio Root Folder, condition
-  templates, run export mode, `Enable Recording Reminder`, and Experiment Test Mode in source and installed builds on
-  Windows and Linux. These preferences are persisted with `QSettings`
-  and remain outside project files. The separate `Show recording reminder ticker on Home`
-  checkbox controls the `RECORDING REMINDER ENABLED` ticker. The launch dialog is
-  titled `Recording Reminder` and requires trimmed, case-insensitive `Confirmed`;
-  backend eligibility and existing preference keys are unchanged. Shared dialog headers
-  and form-control styles
-  also cover the staged Presentation and Condition Modifiers editors; Settings retains
-  immediate saving. See [GUI workflow](GUI_WORKFLOW.md#setup-design-and-manual-acceptance)
-  for minimum sizes and the visible acceptance path.
+- Settings uses a flat header/section/control hierarchy without nested cards. Its
+  exclusive Light/Dark/Auto toggle applies a persisted computer preference immediately;
+  Auto follows the OS theme. Existing root/template, run export, Recording Reminder,
+  Test/Pilot, recording, developer and diagnostics workflows retain their eligibility
+  and callbacks. App preferences remain outside project files. Shared dialog headers
+  and form-control styles also cover the staged Presentation and Condition Modifiers
+  editors. Exact layout, persistence/error behavior and sizing acceptance live in
+  [Settings appearance and layout](GUI_WORKFLOW.md#settings-appearance-and-layout).
 - The current Setup Wizard does not expose Advanced buttons; dense/internal support
   pages should remain behind guided workflows unless a future plan explicitly
   reintroduces them.

@@ -110,6 +110,8 @@ _FPVS_ROOT_DIR_KEY = "paths/fpvs_root_dir"
 _DEFAULT_RECORDING_CONFIGURATION_KEY = "recording/default_configuration"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
+_THEME_MODE_KEY = "appearance/theme_mode"
+_THEME_MODES = frozenset({"light", "dark", "auto"})
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
 _SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
 _EXPERIMENT_TEST_MODE_KEY = "launch/experiment_test_mode"
@@ -212,6 +214,7 @@ class StudioController(QObject):
             _SETTINGS_ORGANIZATION,
             _SETTINGS_APPLICATION,
         )
+        self._apply_theme_mode(self.load_theme_mode())
         self._developer_mode = DeveloperMode(self._settings)
         self._fpvs_root_dir: Path | None = None
         self._projects_parent_dir = Path.cwd()
@@ -471,6 +474,37 @@ class StudioController(QObject):
         self._fpvs_root_dir = root_dir
         self._projects_parent_dir = root_dir
         self._normalize_fpvs_root_layout()
+
+    def load_theme_mode(self) -> str:
+        """Read the authoring appearance preference; Auto follows the operating system."""
+        value = self._settings.value(_THEME_MODE_KEY, "auto", type=str)
+        return value if isinstance(value, str) and value in _THEME_MODES else "auto"
+
+    def _apply_theme_mode(self, theme_mode: str) -> None:
+        """Let Qt update its native chrome and notify existing palette observers."""
+        scheme = {
+            "light": Qt.ColorScheme.Light,
+            "dark": Qt.ColorScheme.Dark,
+            "auto": Qt.ColorScheme.Unknown,
+        }[theme_mode]
+        self._app.setProperty("studioThemeMode", theme_mode)
+        self._app.styleHints().setColorScheme(scheme)
+
+    def set_theme_mode(self, theme_mode: str) -> None:
+        """Persist and immediately apply an app-only appearance choice."""
+        if not isinstance(theme_mode, str) or theme_mode not in _THEME_MODES:
+            raise ValueError("Appearance must be Light, Dark or Auto.")
+        previous = self._settings.value(_THEME_MODE_KEY)
+        self._settings.setValue(_THEME_MODE_KEY, theme_mode)
+        self._settings.sync()
+        if self._settings.status() != QSettings.Status.NoError:
+            if previous is None:
+                self._settings.remove(_THEME_MODE_KEY)
+            else:
+                self._settings.setValue(_THEME_MODE_KEY, previous)
+            self._settings.sync()
+            raise OSError("Could not save appearance. Check Settings access and retry.")
+        self._apply_theme_mode(theme_mode)
 
     def load_run_export_mode(self) -> str:
         """Load the app-level run export mode, falling back to detailed exports."""
@@ -1012,6 +1046,8 @@ class StudioController(QObject):
         automatic_reports = crash_report_controller()
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
+            theme_mode=self.load_theme_mode(),
+            on_theme_mode_changed=self.set_theme_mode,
             default_recording_configuration=self.load_default_recording_configuration(),
             on_default_recording_configuration_changed=self.save_default_recording_configuration,
             recording_configuration=self.load_recording_configuration(),

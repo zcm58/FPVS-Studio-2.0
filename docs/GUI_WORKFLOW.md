@@ -395,6 +395,39 @@ Mac playback and refresh probes use a child process's main thread, retain refres
 verification and defer teardown until completion. Mac update UI instructs users to
 pull changes from the remote repository and rerun the source setup helper.
 
+## Settings appearance and layout
+
+Settings keeps General, Advanced, Recording and Diagnostics tabs with plain section
+widgets and no nested cards or outer tab-pane border. Tab content aligns to 16 px
+insets; section headings and 20 px section gaps establish the hierarchy. General
+starts with an inline `Appearance` heading and an exclusive `Light` / `Dark` / `Auto`
+button toggle. Advanced uses `Developer tools`; Recording separates `Computer default`
+and `This project`; Diagnostics uses `Crash reporting`. Existing control identities,
+actions, eligibility and immediate-save behavior remain unchanged.
+
+Theme selection applies immediately and persists for this computer in
+`appearance/theme_mode`. Missing or invalid values resolve to `Auto`. Auto's tooltip
+is `Follow the system theme.` It follows OS color-scheme changes while Studio is open;
+explicit Light/Dark remain selected through OS changes, and returning to Auto uses the
+current OS theme. Auto releases the native `QStyleHints` color-scheme override with
+`Qt.ColorScheme.Unknown`; existing palette observers restyle open windows/dialogs.
+The preference stays outside project/config/bundle/compiled contracts and does not edit
+the experiment's authored display background or scientific settings.
+
+If the theme callback fails, Settings restores the previous selected button and shows
+`Theme could not be saved. Try again.` inline. Successful selection clears that error;
+no routine success paragraph or additional confirmation is shown.
+
+Retain the existing minimum/default sizes: `700x560` normally, `700x650` with Test Mode
+and `700x720` with AB Pilot Mode. Library access adds 44 px (`700x604`, `700x694`,
+`700x764`). Visible acceptance covers every tab in Light, Dark and Auto, longest paths,
+relevant unavailable/error states, keyboard selection and no clipping. Verify selection
+survives closing/reopening Settings and controller restart; check deterministic OS
+notifications without changing the host's global OS setting; report native observation
+separately. Theme-only edits must preserve
+project bytes/settings. Registered coverage uses synthetic preferences and fake service
+callbacks; native/visible test results must report the actual environment.
+
 ## Main Window
 
 ### Authoring and project discovery responsiveness
@@ -1614,12 +1647,9 @@ Research and implementation rationale are recorded in the
 
 The shared component owner supplies theme-aware form fields, keyboard focus states,
 validation text, dialog headers, and button roles. Shared cards and fixation-editor
-styles follow application palette changes in place. Settings groups preferences into
-Workspace, Participant runs, and Development; preferences still save immediately.
-Its minimum/default size is `700x560`, or `700x650` with local experiment testing
-available. Library access adds 44 pixels of height (`700x604` / `700x694`).
-The AB Pilot controls use `700x720`, or `700x764` with Library access, in source and
-installed builds. The Recording tab preserves these existing dimensions.
+styles follow application palette changes in place. Settings hierarchy, theme behavior,
+size budgets and acceptance are defined in
+[Settings appearance and layout](#settings-appearance-and-layout).
 Presentation (`900x600` minimum) and FPVS Condition Modifiers retain staged Apply/Cancel behavior.
 Native dropdown/spinner affordances and system file pickers remain available.
 
@@ -1649,7 +1679,7 @@ verification busy/failure/verified states, and unequal condition durations. Insp
 default and one-character names, both image-folder pickers, import failure/retry,
 and instruction Save/Cancel/clear at both dialog sizes. Confirm saved AB settings are
 unchanged through all eight steps. Inspect
-Settings, Presentation, and FPVS Condition Modifiers at their documented sizes; check keyboard
+Presentation and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
 this manual review and is not run by ordinary local verification.

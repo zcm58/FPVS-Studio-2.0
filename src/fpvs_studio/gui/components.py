@@ -1156,15 +1156,47 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.text_secondary};
         font-size: {FONT_SIZE_BODY}px;
     }}
-    QFrame[settingsSection="true"] {{
-        background-color: {theme.surface};
-        border: 1px solid {theme.border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
+    QTabWidget#settings_tabs::pane {{
+        background-color: transparent;
+        border: none;
+        border-radius: 0;
+    }}
+    QTabWidget#settings_tabs QTabBar::tab {{
+        background-color: transparent;
     }}
     QLabel[settingsSectionTitle="true"] {{
         color: {theme.text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 600;
+    }}
+    QPushButton[settingsThemeOption="true"] {{
+        color: {theme.text_secondary};
+        background-color: {theme.surface_alt};
+        border: 1px solid {theme.border};
+        border-radius: 0;
+        padding: 7px 12px;
+        min-height: 20px;
+    }}
+    QPushButton[settingsThemePosition="first"] {{
+        border-top-left-radius: 6px;
+        border-bottom-left-radius: 6px;
+    }}
+    QPushButton[settingsThemePosition="last"] {{
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+    }}
+    QPushButton[settingsThemeOption="true"]:hover {{
+        color: {theme.text_primary};
+        background-color: {theme.surface_elevated};
+    }}
+    QPushButton[settingsThemeOption="true"]:checked {{
+        color: {theme.selected_text};
+        background-color: {theme.primary};
+        border-color: {theme.primary_border};
+    }}
+    QPushButton[settingsThemeOption="true"]:focus {{
+        border: 2px solid {theme.primary};
+        padding: 6px 11px;
     }}
     """
 

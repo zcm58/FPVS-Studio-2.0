@@ -9,10 +9,10 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QButtonGroup,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -27,6 +27,7 @@ from fpvs_studio import __version__
 from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
+    mark_error_text,
     mark_secondary_action,
 )
 from fpvs_studio.gui.recording_dialog import (
@@ -38,6 +39,12 @@ from fpvs_studio.gui.recording_dialog import (
 _LOGGER = logging.getLogger(__name__)
 
 
+def _section_title(text: str, parent: QWidget) -> QLabel:
+    title = QLabel(text, parent)
+    title.setProperty("settingsSectionTitle", "true")
+    return title
+
+
 class AppSettingsDialog(QDialog):
     """Expose computer defaults and project recording overrides."""
 
@@ -45,6 +52,8 @@ class AppSettingsDialog(QDialog):
         self,
         *,
         fpvs_root_dir: Path,
+        theme_mode: str = "auto",
+        on_theme_mode_changed: Callable[[str], None] | None = None,
         default_recording_configuration: dict[str, object] | None = None,
         on_default_recording_configuration_changed: Callable[[dict[str, object]], None]
         | None = None,
@@ -88,6 +97,8 @@ class AppSettingsDialog(QDialog):
         self.resize(self.minimumSize())
 
         self._developer_mode_active = developer_mode_active
+        self._on_theme_mode_changed = on_theme_mode_changed
+        self._theme_mode = theme_mode if theme_mode in ("light", "dark", "auto") else "auto"
         self._on_automatic_crash_reports_changed = on_automatic_crash_reports_changed
         self._default_recording_configuration = dict(default_recording_configuration or {
             "recording_backend": "serial", "unicorn_udp_port": 1000,
@@ -123,15 +134,58 @@ class AppSettingsDialog(QDialog):
             "Preferences for this computer. Changes are saved immediately.",
             parent=self,
         )
-        workspace = QFrame(self)
+        appearance = QWidget(self)
+        appearance.setObjectName("settings_appearance_section")
+        appearance_layout = QVBoxLayout(appearance)
+        appearance_layout.setContentsMargins(0, 0, 0, 0)
+        appearance_layout.setSpacing(8)
+        appearance_row = QHBoxLayout()
+        appearance_row.addWidget(_section_title("Appearance", appearance))
+        appearance_row.addStretch(1)
+        theme_toggle = QWidget(appearance)
+        theme_toggle.setAccessibleName("Color theme")
+        theme_toggle_layout = QHBoxLayout(theme_toggle)
+        theme_toggle_layout.setContentsMargins(0, 0, 0, 0)
+        theme_toggle_layout.setSpacing(0)
+        self.theme_button_group = QButtonGroup(self)
+        self.theme_button_group.setExclusive(True)
+        self.theme_buttons: dict[str, QPushButton] = {}
+        for mode, title, position in (
+            ("light", "Light", "first"),
+            ("dark", "Dark", "middle"),
+            ("auto", "Auto", "last"),
+        ):
+            button = QPushButton(title, theme_toggle)
+            button.setObjectName(f"settings_theme_{mode}")
+            button.setCheckable(True)
+            button.setAutoDefault(False)
+            button.setProperty("settingsThemeOption", "true")
+            button.setProperty("settingsThemePosition", position)
+            button.setMinimumWidth(78)
+            button.setToolTip(
+                "Follow the system theme." if mode == "auto" else f"Use the {mode} theme."
+            )
+            self.theme_button_group.addButton(button)
+            self.theme_buttons[mode] = button
+            theme_toggle_layout.addWidget(button)
+            button.clicked.connect(lambda _checked=False, value=mode: self._set_theme_mode(value))
+        self.theme_buttons[self._theme_mode].setChecked(True)
+        appearance_row.addWidget(theme_toggle)
+        appearance_layout.addLayout(appearance_row)
+        self.theme_status = QLabel(appearance)
+        self.theme_status.setObjectName("settings_theme_status")
+        self.theme_status.setWordWrap(True)
+        mark_error_text(self.theme_status)
+        self.theme_status.hide()
+        appearance_layout.addWidget(self.theme_status)
+
+        workspace = QWidget(self)
         workspace.setObjectName("settings_workspace_section")
         workspace.setProperty("settingsSection", "true")
         workspace_layout = QVBoxLayout(workspace)
-        workspace_layout.setContentsMargins(16, 12, 16, 12)
-        workspace_layout.setSpacing(10)
-        workspace_title = QLabel("Workspace", workspace)
-        workspace_title.setProperty("settingsSectionTitle", "true")
-        workspace_layout.addWidget(workspace_title)
+        workspace_layout.setContentsMargins(0, 0, 0, 0)
+        workspace_layout.setSpacing(8)
+        workspace_layout.addWidget(_section_title("Workspace", workspace))
         workspace_actions = QHBoxLayout()
         workspace_actions.setSpacing(12)
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
@@ -160,15 +214,13 @@ class AppSettingsDialog(QDialog):
         if on_show_library is not None:
             self.setMinimumHeight(self.minimumHeight() + 44)
             self.resize(self.minimumSize())
-        participant = QFrame(self)
+        participant = QWidget(self)
         participant.setObjectName("settings_participant_section")
         participant.setProperty("settingsSection", "true")
         participant_layout = QVBoxLayout(participant)
-        participant_layout.setContentsMargins(16, 12, 16, 12)
-        participant_layout.setSpacing(10)
-        participant_title = QLabel("Participant runs", participant)
-        participant_title.setProperty("settingsSectionTitle", "true")
-        participant_layout.addWidget(participant_title)
+        participant_layout.setContentsMargins(0, 0, 0, 0)
+        participant_layout.setSpacing(8)
+        participant_layout.addWidget(_section_title("Participant runs", participant))
         self.detailed_run_exports_checkbox = QCheckBox(
             "Save detailed runs folder after each participant run",
             self,
@@ -214,17 +266,15 @@ class AppSettingsDialog(QDialog):
 
         self.experiment_test_mode_checkbox: QCheckBox | None = None
         self.attentional_blink_pilot_mode_checkbox: QCheckBox | None = None
-        developer: QFrame | None = None
+        developer: QWidget | None = None
         if experiment_test_mode_available:
-            developer = QFrame(self)
+            developer = QWidget(self)
             developer.setObjectName("settings_developer_section")
             developer.setProperty("settingsSection", "true")
             developer_layout = QVBoxLayout(developer)
-            developer_layout.setContentsMargins(16, 12, 16, 12)
-            developer_layout.setSpacing(10)
-            developer_title = QLabel("Local experiment testing", developer)
-            developer_title.setProperty("settingsSectionTitle", "true")
-            developer_layout.addWidget(developer_title)
+            developer_layout.setContentsMargins(0, 0, 0, 0)
+            developer_layout.setSpacing(8)
+            developer_layout.addWidget(_section_title("Local experiment testing", developer))
             self.experiment_test_mode_checkbox = QCheckBox(
                 "Enable experiment test mode",
                 self,
@@ -293,10 +343,12 @@ class AppSettingsDialog(QDialog):
         layout.addWidget(self.header)
         self.tabs = QTabWidget(self)
         self.tabs.setObjectName("settings_tabs")
+        self.tabs.setDocumentMode(True)
         general = QWidget(self.tabs)
         general_layout = QVBoxLayout(general)
-        general_layout.setContentsMargins(0, 8, 0, 0)
-        general_layout.setSpacing(12)
+        general_layout.setContentsMargins(16, 16, 16, 0)
+        general_layout.setSpacing(20)
+        general_layout.addWidget(appearance)
         general_layout.addWidget(workspace)
         general_layout.addWidget(participant)
         if developer is not None:
@@ -307,6 +359,7 @@ class AppSettingsDialog(QDialog):
         recording_layout = QVBoxLayout(recording)
         recording_layout.setContentsMargins(16, 16, 16, 16)
         recording_layout.setSpacing(12)
+        recording_layout.addWidget(_section_title("Computer default", recording))
         self.default_recording_summary = QLabel(recording)
         self.default_recording_summary.setWordWrap(True)
         self.default_recording_summary.setObjectName("settings_default_recording_summary")
@@ -319,6 +372,8 @@ class AppSettingsDialog(QDialog):
         )
         self.default_recording_setup_button.clicked.connect(self._show_default_recording_setup)
         recording_layout.addWidget(self.default_recording_setup_button)
+        recording_layout.addSpacing(8)
+        recording_layout.addWidget(_section_title("This project", recording))
         self.recording_summary = QLabel(recording_preference_summary(
             self._recording_configuration,
         ), recording)
@@ -354,6 +409,7 @@ class AppSettingsDialog(QDialog):
         advanced_layout = QVBoxLayout(advanced)
         advanced_layout.setContentsMargins(16, 16, 16, 16)
         advanced_layout.setSpacing(12)
+        advanced_layout.addWidget(_section_title("Developer tools", advanced))
         self.developer_mode_checkbox = QCheckBox("Enable developer mode", advanced)
         self.developer_mode_checkbox.setObjectName("developer_mode_checkbox")
         self.developer_mode_checkbox.setChecked(developer_mode_requested)
@@ -399,6 +455,7 @@ class AppSettingsDialog(QDialog):
         diagnostics_layout = QVBoxLayout(diagnostics)
         diagnostics_layout.setContentsMargins(16, 16, 16, 16)
         diagnostics_layout.setSpacing(12)
+        diagnostics_layout.addWidget(_section_title("Crash reporting", diagnostics))
         self.crash_reports_checkbox = QCheckBox("Automatically send crash reports", diagnostics)
         self.crash_reports_checkbox.setObjectName("automatic_crash_reports_checkbox")
         self.crash_reports_checkbox.setChecked(automatic_crash_reports_enabled)
@@ -435,6 +492,21 @@ class AppSettingsDialog(QDialog):
         layout.addWidget(self.tabs, 1)
         layout.addLayout(footer_layout)
         apply_dialog_theme(self)
+
+    def _set_theme_mode(self, mode: str) -> None:
+        if mode == self._theme_mode:
+            return
+        try:
+            if self._on_theme_mode_changed is not None:
+                self._on_theme_mode_changed(mode)
+        except (ValueError, OSError):
+            _LOGGER.exception("Could not save color theme preference")
+            self.theme_buttons[self._theme_mode].setChecked(True)
+            self.theme_status.setText("Theme could not be saved. Try again.")
+            self.theme_status.show()
+            return
+        self._theme_mode = mode
+        self.theme_status.hide()
 
     def _configure_crash_reports(self, enabled: bool) -> None:
         if self._on_automatic_crash_reports_changed is not None:
@@ -483,7 +555,7 @@ class AppSettingsDialog(QDialog):
             (label for label, value in RECORDING_HARDWARE_CHOICES if value == backend),
             "Choose EEG hardware",
         )
-        self.default_recording_summary.setText(f"Default for this computer: {label}")
+        self.default_recording_summary.setText(label)
         if self._on_recording_configuration_changed is None:
             text = "Open a project to override the computer default."
         else:
