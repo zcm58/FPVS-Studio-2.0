@@ -41,6 +41,7 @@ class ImmediateProgressTask(QObject):
         dialog_factory=None,
         window_title: str | None = None,
         persistent_thread: bool = False,
+        cancel_callback=None,
     ) -> None:
         super().__init__(parent_widget)
         self._callback = callback

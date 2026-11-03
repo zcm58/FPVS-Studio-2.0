@@ -135,7 +135,7 @@ def _presentation_thread_finished() -> None:
 
 
 class ProgressTask(QObject):
-    """Own a progress dialog and worker thread for one GUI task."""
+    """Own progress and a worker; optional cancellation must only signal the worker."""
 
     succeeded = Signal(object)
     failed = Signal(object)
@@ -150,6 +150,7 @@ class ProgressTask(QObject):
         dialog_factory: ProgressDialogFactory = QProgressDialog,
         window_title: str | None = None,
         persistent_thread: bool = False,
+        cancel_callback: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(update_lifecycle())
         self._parent_widget = parent_widget
@@ -160,6 +161,8 @@ class ProgressTask(QObject):
         self._dialog_factory = dialog_factory
         self._window_title = window_title
         self._persistent_thread = persistent_thread
+        self._cancel_callback = cancel_callback
+        self._cancel_requested = False
         self._thread: QThread | None = None
         self._worker: GuiTaskWorker | None = None
         self._persistent_worker: PersistentThreadTaskWorker | None = None
@@ -167,13 +170,22 @@ class ProgressTask(QObject):
         self._dialog: QProgressDialog | None = None
 
     def start(self) -> None:
-        dialog = self._dialog_factory(self._label, "", 0, 0, self._parent_widget)
+        dialog = self._dialog_factory(
+            self._label, "Cancel" if self._cancel_callback is not None else "",
+            0, 0, self._parent_widget,
+        )
         if self._window_title is not None:
             dialog.setWindowTitle(self._window_title)
-        dialog.setCancelButton(None)
+        if self._cancel_callback is None:
+            dialog.setCancelButton(None)
+        else:
+            dialog.canceled.connect(self._cancel_pending_presentation)
         dialog.setWindowModality(Qt.WindowModality.WindowModal)
         dialog.setMinimumDuration(0)
         dialog.show()
+
+        if self._cancel_callback is not None and not self._persistent_thread:
+            update_lifecycle().shutdown_started.connect(self._cancel_pending_presentation)
 
         if self._persistent_thread:
             request = _PresentationRequest(self._callback)
@@ -213,7 +225,8 @@ class ProgressTask(QObject):
 
     @Slot(object)
     def _handle_succeeded(self, result: object) -> None:
-        if self._owner_alive and not update_lifecycle().is_shutting_down:
+        if (self._owner_alive and not self._cancel_requested
+                and not update_lifecycle().is_shutting_down):
             self.succeeded.emit(result)
 
     @Slot(object)
@@ -230,6 +243,8 @@ class ProgressTask(QObject):
     @Slot()
     def _handle_worker_finished(self) -> None:
         if self._dialog is not None:
+            if self._cancel_callback is not None:
+                self._dialog.canceled.disconnect(self._cancel_pending_presentation)
             self._dialog.close()
 
     @Slot(object, object)
@@ -244,6 +259,9 @@ class ProgressTask(QObject):
 
     @Slot()
     def _cancel_pending_presentation(self) -> None:
+        if self._cancel_callback is not None and not self._cancel_requested:
+            self._cancel_requested = True
+            self._cancel_callback()
         request = self._persistent_request
         if request is None:
             return
@@ -265,6 +283,7 @@ class ProgressTask(QObject):
         self._persistent_worker = None
         self._persistent_request = None
         self._dialog = None
+        self._detach_owner()
         if self._owner_alive:
             self.finished.emit()
         self.deleteLater()
@@ -274,9 +293,18 @@ class ProgressTask(QObject):
         self._thread = None
         self._worker = None
         self._dialog = None
+        if self._cancel_callback is not None:
+            update_lifecycle().shutdown_started.disconnect(self._cancel_pending_presentation)
+        self._detach_owner()
         if self._owner_alive:
             self.finished.emit()
         self.deleteLater()
+
+    def _detach_owner(self) -> None:
+        # The wrapper can release its last widget reference during its own native
+        # destruction. Do not call back into that partially destroyed receiver.
+        if self._owner_alive and isValid(self._parent_widget):
+            self._parent_widget.destroyed.disconnect(self._owner_destroyed)
 
 
 class BackgroundTask(QObject):

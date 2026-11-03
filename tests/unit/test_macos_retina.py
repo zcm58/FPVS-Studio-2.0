@@ -20,6 +20,7 @@ def test_mac_window_uses_retina_pyglet(monkeypatch):
     values = psychopy_window.build_window_kwargs({"fullscreen": True})
     assert values["useRetina"] is True
     assert values["winType"] == "pyglet"
+    assert values["checkTiming"] is False
     assert values["screen"] == 0
 
 
@@ -58,6 +59,10 @@ def test_shared_engine_keeps_windows_contract_and_mac_backing_pixel_guard(
             tuple(value // 2 for value in expected) if backing == "logical_only" else None
         )
         assert captures["window_kwargs"].get("useRetina", False) is (platform == "darwin")
+        if platform == "darwin":
+            assert captures["window_kwargs"]["checkTiming"] is False
+        else:
+            assert "checkTiming" not in captures["window_kwargs"]
         if platform == "darwin" and backing != "matching":
             with pytest.raises(RuntimeError, match="backing pixels"):
                 engine._prepare_condition_playback(spec, sample_project_root)

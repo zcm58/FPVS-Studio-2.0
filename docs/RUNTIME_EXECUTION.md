@@ -132,6 +132,18 @@ reject production, trigger output, windowed/unverified playback and non-primary 
 before creating engines or acquisition services. Test/Pilot does not qualify EEG or
 physical timing; native GUI acceptance is tracked in [Mac support](MACOS_SUPPORT.md).
 
+Mac Setup detection and automatic preflight use the same refresh-only child, with a
+30-second parent deadline covering imports, fullscreen capture, measurement and
+window cleanup. A stalled or canceled probe is killed and reaped, then its private
+transport is removed; no rate is accepted and preflight cannot start playback.
+Setup's Cancel action and application shutdown signal cancellation without waiting
+on the GUI thread. This deadline applies only to the disposable probe, not an active
+experiment session or its result finalization. Mac playback constructors disable
+PsychoPy's duplicate implicit frame-rate check; the mandatory native/fullscreen probe
+and Studio's compiled-frame timing QC remain in force. Windows measurement and
+constructor behavior are unchanged. A GPU/kernel stall remains a physical acceptance
+concern; fake process tests do not qualify display-driver recovery.
+
 Preflight validates the compiled stimulus payload before playback. Routine participant
 launches require image events to reference existing project-relative files, while full
 image decoding is reserved for preprocessing/manual deep preflight and engine stimulus

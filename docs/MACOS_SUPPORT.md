@@ -139,6 +139,14 @@ over the experiment's lab settings. A successful local test is not EEG readiness
 physical timing qualification. Follow the current [launch contract](GUI_WORKFLOW.md#launch)
 for unsupported display modes, timing constraints, test identity and eligibility.
 
+Mac refresh checks now have a 30-second deadline. Setup's progress dialog also offers
+Cancel and responds to application shutdown; a stopped check leaves the refresh rate
+unverified and can be retried. Automatic preflight uses the same protected probe,
+and playback skips PsychoPy's duplicate constructor measurement. See the
+[runtime contract](RUNTIME_EXECUTION.md#session-flow) for lifetime
+and validation rules. The reported physical fullscreen freeze has not been rerun;
+software timeout/cancellation coverage does not establish GPU-driver recovery.
+
 ## Evidence levels and software inventory
 
 - **Shared:** the same models, services, GUI/runtime routes or contracts exist on both

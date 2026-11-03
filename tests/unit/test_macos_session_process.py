@@ -61,6 +61,20 @@ def _fake_process(monkeypatch, callback=None):
                                else callback(path))
 
     monkeypatch.setattr(process.subprocess, "run", run)
+
+    class Probe:
+        pid = 12345
+
+        def __init__(self, command, **options):
+            self.returncode = run(command, check=False, **options).returncode
+
+        def wait(self, **_options):
+            return self.returncode
+
+        def poll(self):
+            return self.returncode
+
+    monkeypatch.setattr(process.subprocess, "Popen", Probe)
     return calls
 
 
@@ -213,7 +227,7 @@ def test_refresh_proxy_measures_only_primary_fullscreen_in_child_main_thread(mon
         seen.append(runtime_options)
         return verification
 
-    monkeypatch.setattr(display_refresh, "verify_primary_display_refresh", verify)
+    monkeypatch.setattr(display_refresh, "_verify_primary_display_refresh_in_process", verify)
     calls = _fake_process(monkeypatch)
     assert process.verify_macos_primary_display_refresh() == verification
     assert seen == [{"fullscreen": True, "display_index": None}]
@@ -258,6 +272,7 @@ def test_process_boundary_rejects_unsupported_host_before_spawning(monkeypatch, 
         raise AssertionError("No child process should be started")
 
     monkeypatch.setattr(process.subprocess, "run", forbidden)
+    monkeypatch.setattr(process.subprocess, "Popen", forbidden)
     with pytest.raises(process.MacOSSessionProcessError, match="macOS source"):
         process.verify_macos_primary_display_refresh()
 

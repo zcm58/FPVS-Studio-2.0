@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import traceback
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
@@ -38,6 +39,7 @@ from fpvs_studio.runtime.preflight import PreflightError
 
 LOGGER = logging.getLogger(__name__)
 MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
+REFRESH_TIMEOUT_SECONDS = 30.0
 _CHILD_MODULE = "fpvs_studio.runtime.macos_session_process"
 
 
@@ -218,10 +220,12 @@ def launch_macos_test_session(
     return summary
 
 
-def verify_macos_primary_display_refresh() -> DisplayRefreshVerification:
-    """Measure the primary fullscreen display in a child main thread."""
+def verify_macos_primary_display_refresh(
+    *, cancel_event: threading.Event | None = None,
+) -> DisplayRefreshVerification:
+    """Measure fullscreen on a child main thread with a deadline and cancellation."""
     _require_source_macos()
-    response = _exchange(_RefreshRequest())
+    response = _exchange(_RefreshRequest(), cancel_event=cancel_event)
     result = response.verification
     if (result is None or response.summary is not None
             or not isfinite(result.psychopy_measured_hz) or result.psychopy_measured_hz <= 0
@@ -233,7 +237,43 @@ def verify_macos_primary_display_refresh() -> DisplayRefreshVerification:
     return result
 
 
-def _exchange(request: _Request | _RefreshRequest) -> _Response:
+def _run_refresh_child(
+    command: list[str], environment: dict[str, str], cancel_event: threading.Event | None,
+) -> int:
+    """Bound imports, display capture, flips and cleanup; never kill a session process."""
+    if cancel_event is not None and cancel_event.is_set():
+        raise MacOSSessionProcessError("Display refresh check canceled.")
+    deadline = time.monotonic() + REFRESH_TIMEOUT_SECONDS
+    child = subprocess.Popen(
+        command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL, env=environment,
+    )
+    LOGGER.info("Mac display refresh probe started (pid=%d)", child.pid)
+    try:
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                raise MacOSSessionProcessError("Display refresh check canceled.")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise MacOSSessionProcessError(
+                    "Display refresh check timed out after 30 seconds. The fullscreen probe "
+                    "was stopped. Check macOS System Settings > Displays for a fixed refresh "
+                    "rate before retrying. No refresh rate was verified."
+                )
+            try:
+                return child.wait(timeout=min(0.1, remaining))
+            except subprocess.TimeoutExpired:
+                continue
+    finally:
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
+            LOGGER.warning("Stopped unresponsive or canceled Mac refresh probe (pid=%d)", child.pid)
+
+
+def _exchange(
+    request: _Request | _RefreshRequest, *, cancel_event: threading.Event | None = None,
+) -> _Response:
     with tempfile.TemporaryDirectory(prefix="fpvs-macos-session-") as directory:
         folder = Path(directory)
         os.chmod(folder, 0o700)
@@ -245,18 +285,26 @@ def _exchange(request: _Request | _RefreshRequest) -> _Response:
             item for item in (source_root, environment.get("PYTHONPATH", "")) if item
         )
         try:
-            process = subprocess.run(
-                [sys.executable, "-m", _CHILD_MODULE, str(request_path)],
-                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                env=environment, check=False,
-            )
+            command = [sys.executable, "-m", _CHILD_MODULE, str(request_path)]
+            if isinstance(request, _RefreshRequest):
+                returncode = _run_refresh_child(command, environment, cancel_event)
+                if cancel_event is not None and cancel_event.is_set():
+                    raise MacOSSessionProcessError("Display refresh check canceled.")
+            else:
+                process = subprocess.run(
+                    command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL, env=environment, check=False,
+                )
+                returncode = process.returncode
             response = _Response.model_validate_json(_private_file(folder / "response.json"))
+        except MacOSSessionProcessError:
+            raise
         except Exception:
             raise MacOSSessionProcessError(
                 "The macOS test session did not return a result. Check saved project output "
                 "before retrying."
             ) from None
-        if (process.returncode != 0 or response.error is not None
+        if (returncode != 0 or response.error is not None
                 or (response.summary is None and response.verification is None)):
             message = ("The macOS source environment is missing a presentation dependency."
                        if response.error == "missing_dependency" else
@@ -303,9 +351,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         try:
             if isinstance(request, _RefreshRequest):
                 from fpvs_studio.engines.registry import create_engine
-                from fpvs_studio.runtime.display_refresh import verify_primary_display_refresh
+                from fpvs_studio.runtime.display_refresh import (
+                    _verify_primary_display_refresh_in_process,
+                )
 
-                verification = verify_primary_display_refresh(
+                verification = _verify_primary_display_refresh_in_process(
                     create_engine(EngineName.PSYCHOPY),
                     runtime_options={"fullscreen": True, "display_index": None},
                 )

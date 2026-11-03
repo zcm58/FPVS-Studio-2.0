@@ -385,6 +385,7 @@ tests = [
   "tests/unit/test_macos_document_runtime.py",
   "tests/unit/test_macos_retina.py",
   "tests/unit/test_macos_session_process.py",
+  "tests/unit/test_macos_refresh_recovery.py",
   "tests/unit/test_runtime_display_refresh.py",
   "tests/unit/test_library_credentials.py",
   "tests/unit/test_native_files.py",

@@ -9,7 +9,8 @@ from threading import Event
 
 import pytest
 from PySide6.QtCore import QThread, QTimer
-from PySide6.QtWidgets import QWidget
+from PySide6.QtWidgets import QPushButton, QWidget
+from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui.thread_completion import ThreadCompletion
 from fpvs_studio.gui.update_lifecycle import UpdateLifecycle
@@ -63,6 +64,76 @@ def worker_lifecycle(qapp, qtbot, monkeypatch):
     qapp.aboutToQuit.disconnect(lifecycle._about_to_quit)
     lifecycle.deleteLater()
     qapp.setQuitOnLastWindowClosed(original_auto_quit)
+
+
+@pytest.mark.parametrize("persistent", [False, True])
+@pytest.mark.parametrize("reason", ["button", "shutdown", "owner_destroyed"])
+def test_optional_probe_cancel_drains_worker_without_blocking_gui(
+    qtbot, worker_lifecycle, persistent, reason,
+):
+    lifecycle, _quit_requests = worker_lifecycle
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    parent.show()
+    started, canceled, returned = Event(), Event(), Event()
+    cancellation_calls = []
+    finished = []
+
+    def callback():
+        started.set()
+        try:
+            assert canceled.wait(3), "GUI cancellation must reach the probe worker"
+            raise RuntimeError("Display refresh check canceled.")
+        finally:
+            returned.set()
+
+    def cancel():
+        cancellation_calls.append(True)
+        canceled.set()
+
+    task = ProgressTask(
+        parent_widget=parent, label="Measuring the connected display refresh rate...",
+        callback=callback, window_title="Check Refresh Rate", persistent_thread=persistent,
+        cancel_callback=cancel,
+    )
+    task.finished.connect(lambda: finished.append(True))
+    task.start()
+    qtbot.waitUntil(started.is_set)
+    dialog = task._dialog
+    assert dialog is not None
+    button = dialog.findChild(QPushButton)
+    assert button is not None and button.text() == "Cancel" and button.isEnabled()
+    assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    assert_visible_children_within_parent(dialog)
+    if reason == "button":
+        button.click()
+    elif reason == "shutdown":
+        lifecycle.request_shutdown()
+    else:
+        parent.deleteLater()
+    qtbot.waitUntil(returned.is_set)
+    if reason != "owner_destroyed":
+        qtbot.waitUntil(lambda: bool(finished))
+    assert cancellation_calls == [True]
+
+
+def test_successful_optional_probe_does_not_cancel_during_dialog_cleanup(
+    qtbot, worker_lifecycle,
+):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    canceled = Event()
+    results, finished = [], []
+    task = ProgressTask(
+        parent_widget=parent, label="Synthetic probe", callback=lambda: 60.0,
+        persistent_thread=True, cancel_callback=canceled.set,
+    )
+    task.succeeded.connect(results.append)
+    task.finished.connect(lambda: finished.append(True))
+    task.start()
+    qtbot.waitUntil(lambda: bool(finished))
+    assert results == [60.0]
+    assert not canceled.is_set()
 
 
 def test_persistent_progress_task_runs_on_stable_presentation_thread(

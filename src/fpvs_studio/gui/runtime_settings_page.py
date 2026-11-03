@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable
+from threading import Event
 
 from PySide6.QtCore import QObject, QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QColor, QPainter, QPaintEvent, QPen, QShowEvent
@@ -664,15 +666,15 @@ class DisplaySettingsEditor(QWidget):
             return
         self._clear_refresh_verification()
 
-        def _measure() -> DisplayRefreshVerification:
-            import sys
+        cancel_event = Event()
 
+        def _measure() -> DisplayRefreshVerification:
             if sys.platform == "darwin":
                 from fpvs_studio.runtime.macos_session_process import (
                     verify_macos_primary_display_refresh,
                 )
 
-                return verify_macos_primary_display_refresh()
+                return verify_macos_primary_display_refresh(cancel_event=cancel_event)
             engine = create_engine(EngineName.PSYCHOPY)
             return verify_primary_display_refresh(
                 engine, runtime_options={"fullscreen": True, "display_index": None}
@@ -684,6 +686,7 @@ class DisplaySettingsEditor(QWidget):
             callback=_measure,
             window_title="Check Refresh Rate",
             persistent_thread=True,
+            cancel_callback=cancel_event.set if sys.platform == "darwin" else None,
         )
         self._refresh_probe_task = task
         task.succeeded.connect(self._on_refresh_detection_succeeded)

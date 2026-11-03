@@ -54,7 +54,9 @@ def build_window_kwargs(runtime_options: Mapping[str, object]) -> dict[str, obje
         "units": "pix",
     }
     if sys.platform == "darwin":
-        window_kwargs.update({"useRetina": True, "winType": "pyglet"})
+        # Runtime already requires a bounded native/fullscreen verification. The
+        # constructor's extra getActualFrameRate loop cannot be canceled or timed.
+        window_kwargs.update({"useRetina": True, "winType": "pyglet", "checkTiming": False})
     if fullscreen:
         fullscreen_size = _detect_fullscreen_size_px(selected_display_index)
         if fullscreen_size is not None:

@@ -246,6 +246,9 @@ mode for the primary/default display plus a temporary fullscreen PsychoPy stabil
 observation. Windows uses its exact rational display path; KDE Linux uses KScreen's
 structured current-mode and VRR data, while Linux X11 uses XRandR. Variable-refresh
 configurations remain blocking for timing-sensitive playback.
+On Mac, the check offers Cancel and a bounded probe; failure/cancellation leaves the
+rate unverified and enables retry. Application shutdown cancels a running Setup check.
+The [runtime contract](RUNTIME_EXECUTION.md#session-flow) owns timeout/cleanup rules.
 
 ## Welcome Flow
 

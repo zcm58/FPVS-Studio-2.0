@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Mac refresh recovery](exec-plans/completed/macos-refresh-recovery.md): bounded
+  cancellable refresh-only children, protected automatic preflight and no duplicate
+  Mac constructor check; safe precommit and 58 visible fake-only Qt checks passed.
 - [Simple Mac clone setup](exec-plans/completed/mac-clone-bootstrap.md): automatic
   project-contained Python/dependencies, Finder shortcuts and scoped PyCharm setup;
   fresh install, focused/native Qt and safe precommit checks passed.

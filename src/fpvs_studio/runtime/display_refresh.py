@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
 from math import isclose, isfinite
@@ -60,6 +61,23 @@ def verify_primary_display_refresh(
     runtime_options: Mapping[str, object] | None = None,
 ) -> DisplayRefreshVerification:
     """Verify the primary display's native mode and stable fullscreen frame delivery."""
+
+    if sys.platform == "darwin" and getattr(engine, "engine_id", None) == "psychopy":
+        from fpvs_studio.runtime.macos_session_process import verify_macos_primary_display_refresh
+
+        try:
+            return verify_macos_primary_display_refresh()
+        except RuntimeError as exc:
+            raise DisplayRefreshVerificationError(str(exc)) from exc
+    return _verify_primary_display_refresh_in_process(engine, runtime_options=runtime_options)
+
+
+def _verify_primary_display_refresh_in_process(
+    engine: PresentationEngine,
+    *,
+    runtime_options: Mapping[str, object] | None = None,
+) -> DisplayRefreshVerification:
+    """Observe on the presentation thread; Mac callers use the bounded probe child."""
 
     try:
         display_mode = query_primary_native_display_mode()

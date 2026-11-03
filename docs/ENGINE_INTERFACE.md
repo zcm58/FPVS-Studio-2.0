@@ -21,6 +21,9 @@ as PsychoPy. Runtime owns flow and calls engines through
   temporary fullscreen probe window; measured values do not leak PsychoPy types across
   the engine boundary. Runtime combines that stability observation with the exact
   Windows rational display mode; engines do not classify `59.94` versus `60`.
+  On Mac, runtime owns the bounded refresh subprocess. Mac window constructors set
+  `checkTiming=False` to avoid a second unbounded implicit measurement after required
+  preflight; Studio's frame-based QC remains independent of that constructor check.
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.

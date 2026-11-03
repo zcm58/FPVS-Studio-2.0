@@ -28,6 +28,7 @@ from tests.gui.helpers import (
     _open_created_project,
     record_setup_validation_dialogs,
 )
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode, StimulusModality
 from fpvs_studio.core.models import (
@@ -35,12 +36,71 @@ from fpvs_studio.core.models import (
     ProjectPresentationSettings,
     StimulusPresentationDefaults,
 )
+from fpvs_studio.gui import runtime_settings_page
 from fpvs_studio.gui.components import studio_theme_stylesheet
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.runtime_settings_page import ImageSizePreview, ImageSizePreviewDialog
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
+
+
+@pytest.fixture(autouse=True)
+def _windows_refresh_contract(monkeypatch, qapp):
+    """Use primary Windows refresh/focus policy without changing Mac OS settings."""
+    set_module_platform(monkeypatch, runtime_settings_page, "win32")
+    hints = qapp.styleHints()
+    original = hints.tabFocusBehavior()
+    hints.setTabFocusBehavior(Qt.TabFocusBehavior.TabFocusAllControls)
+    yield
+    hints.setTabFocusBehavior(original)
+
+
+def test_mac_failed_probe_preserves_rate_and_can_be_retried(
+    qtbot, controller, tmp_path, monkeypatch,
+):
+    from fpvs_studio.runtime import macos_session_process
+
+    set_module_platform(monkeypatch, runtime_settings_page, "darwin")
+    fail = [True]
+
+    def probe(*, cancel_event):
+        assert not cancel_event.is_set()
+        if fail[0]:
+            raise RuntimeError(
+                "Display refresh check timed out after 30 seconds. The fullscreen probe "
+                "was stopped. Check macOS System Settings > Displays for a fixed refresh "
+                "rate before retrying. No refresh rate was verified."
+            )
+        return _refresh_verification(60, 1, 60.0, 60.0)
+
+    monkeypatch.setattr(macos_session_process, "verify_macos_primary_display_refresh", probe)
+    monkeypatch.setattr(runtime_settings_page, "ProgressTask", _ImmediateProgressTask)
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Mac probe recovery")
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="display")
+    editor = window.setup_wizard_page.runtime_settings_editor
+    saved_rate = window.document.project.settings.display.preferred_refresh_hz
+    editor.detect_refresh_button.click()
+    QApplication.processEvents()
+    assert not editor.refresh_is_verified()
+    assert editor.detect_refresh_button.isEnabled()
+    assert window.document.project.settings.display.preferred_refresh_hz == saved_rate
+    assert "timed out" in editor.timing_status_label.text()
+    _assert_visible_children_within_parent(editor)
+    label = editor.timing_status_label
+    required = label.fontMetrics().boundingRect(
+        QRect(0, 0, max(1, label.contentsRect().width()), 1000),
+        Qt.TextFlag.TextWordWrap, label.text(),
+    )
+    assert label.contentsRect().height() >= required.height()
+    _assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
+    fail[0] = False
+    editor.detect_refresh_button.click()
+    QApplication.processEvents()
+    assert editor.refresh_is_verified()
+    assert editor.detect_refresh_button.isEnabled()
+    assert window.document.project.settings.display.preferred_refresh_hz == 60.0
 
 
 @pytest.mark.parametrize("ratio", [1.0, 1.25, 1.5, 2.0])
