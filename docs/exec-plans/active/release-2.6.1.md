@@ -68,9 +68,10 @@ sidecars, matching the preceding release. Mac remains source-only.
   178-character notes. Repository release immutability remains enabled. Exact
   draft asset inventory, remote sizes/SHA-256 digests and annotated source tag pass.
 - [Source CI 41731234561](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41731234561)
-  targets exact build source. Windows contracts, both native Mac CPUs and the Windows
-  return check passed; final Mac-origin round-trip jobs remain in progress at this
-  staging checkpoint. Documentation CI passed separately.
+  targets exact build source and completed successfully. Windows contracts, both
+  native Mac CPUs, the Windows return check and both final Mac-origin round-trip
+  jobs passed. Documentation CI passed separately. The complete observed job
+  result is retained in `source-ci-checkpoint.json` under the evidence directory.
 - Bounded Studio and updater visible smoke checks remain pending the explicit
   visible-environment approval required by AGENTS.md and the canonical runner.
   Approval was requested in the chat; do not infer it from elapsed time or publish
