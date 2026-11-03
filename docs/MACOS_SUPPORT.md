@@ -18,10 +18,10 @@ policy, [GUI workflow](GUI_WORKFLOW.md) owns authoring behavior and
 | Gate | Recorded evidence/status |
 | --- | --- |
 | Implementation | Source helpers, adapters, local testing, bundle guards, handoff CLI and software inventory complete. |
-| Safe Windows checks | Mac-focused scope: 345 passed, 4 native-only skips. Broader bundle/preprocessing/task/update checks: 228 passed; latest portability/handoff subset: 51 passed, including 3 CLI checks. Counts overlap. |
-| Visible Windows checks | 7 new GUI cases plus 1 palette and 2 Save cases passed. Mac-only policy was faked; these are not native Mac GUI results. |
-| Repo precommit | Running; final result pending. |
+| Windows regressions | Repo precommit: 4,974 passed, 14 symlink-permission skips; Ruff, full source mypy, compilation and audits passed. Final focused bundle/fixture run: 197 passed, 5 native-only skips. Counts overlap. |
+| Visible Windows checks | 18 focused GUI cases passed across calibration, source updates, test availability, shortcuts and Save. Mac-only policy was faked; these are not native Mac GUI results. |
 | Mac CI | arm64/x86_64 dependency/native checks and actual Windows -> Mac -> Windows artifact chain configured; successful-run evidence pending. |
+| Real Mac exports received on Windows | Four actual artifacts from [run 41544719168](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41544719168) matched semantic settings, all 14 asset hashes and complete 7-run plans/fixation schedules. Both CPU origins and re-exports preserved recording settings and seeds; automated final Mac return remains pending. |
 | Physical Mac software | Visible GUI/PsychoPy/display, interactive secure-store/service, filesystem and failure/recovery acceptance deferred by user. |
 | EEG/hardware | Phase 2; not implemented or qualified here. |
 

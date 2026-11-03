@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -126,3 +127,44 @@ def test_ci_keychain_never_changes_a_personal_or_self_hosted_mac(monkeypatch, tm
     with pytest.raises(pytest.skip.Exception):
         with native._temporary_ci_keychain(tmp_path):
             pytest.fail("The hosted-only resource must not be created")
+
+
+@pytest.mark.parametrize("status", [-25307, -25293])
+def test_ci_keychain_distinguishes_no_default_from_a_failed_snapshot(
+    monkeypatch, tmp_path, status,
+):
+    from tests.integration import test_macos_native as native
+
+    calls = []
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "github-hosted")
+    fake_security = SimpleNamespace(
+        kSecPreferencesDomainUser=0, errSecNoDefaultKeychain=-25307,
+        SecKeychainCopyDomainDefault=lambda domain, target: (status, None),
+    )
+    original_import = native.importlib.import_module
+    monkeypatch.setattr(
+        native.importlib, "import_module",
+        lambda name: fake_security if name == "Security" else original_import(name),
+    )
+
+    def security(*arguments):
+        calls.append(arguments)
+        if arguments == ("default-keychain", "-d", "user"):
+            raise subprocess.CalledProcessError(1, ["security", *arguments])
+        return ""
+
+    monkeypatch.setattr(native, "_security", security)
+    if status == -25307:
+        with native._temporary_ci_keychain(tmp_path) as owned:
+            assert owned.parent == tmp_path
+        assert calls[-3:] == [
+            ("default-keychain", "-d", "user", "-s"),
+            ("list-keychains", "-d", "user", "-s"),
+            ("delete-keychain", str(owned)),
+        ]
+    else:
+        with pytest.raises(subprocess.CalledProcessError):
+            with native._temporary_ci_keychain(tmp_path):
+                pytest.fail("An unknown selection must not be modified")
+        assert calls == [("default-keychain", "-d", "user")]

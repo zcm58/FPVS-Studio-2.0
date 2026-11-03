@@ -74,9 +74,18 @@ def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
         or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted"
     ):
         pytest.skip("Private Keychain selection requires a disposable GitHub-hosted Mac")
-    previous = shlex.split(_security("default-keychain", "-d", "user"))
+    try:
+        previous = shlex.split(_security("default-keychain", "-d", "user"))
+    except subprocess.CalledProcessError:
+        security = importlib.import_module("Security")
+        status, _keychain = security.SecKeychainCopyDomainDefault(
+            security.kSecPreferencesDomainUser, None,
+        )
+        if status != security.errSecNoDefaultKeychain:
+            raise
+        previous = []
     search_list = shlex.split(_security("list-keychains", "-d", "user"))
-    if len(previous) != 1:
+    if len(previous) > 1:
         pytest.fail("Cannot safely snapshot the hosted runner's default Keychain")
     keychain = root / f"fpvs-ci-{uuid.uuid4().hex}.keychain-db"
     password = secrets.token_urlsafe(32)
@@ -94,7 +103,7 @@ def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
     finally:
         try:
             if selected:
-                _security("default-keychain", "-d", "user", "-s", previous[0])
+                _security("default-keychain", "-d", "user", "-s", *previous)
         finally:
             try:
                 if selected:
