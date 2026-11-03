@@ -934,11 +934,18 @@ Per run, full export mode:
 ### Interrupted condition recovery
 
 `runtime/condition_recovery.py` writes a separate project-local checkpoint beneath
-`logs/.condition-recovery/` for each session execution, independently of crash-report
+`logs/.condition-recovery/` for each recording session, independently of crash-report
 consent, registration and network delivery. Before presentation it saves the frozen
 compiled session plan and holds an OS file lock for that execution's lifetime. Process
 exit releases the lock; discovery never treats a still-held or unreadable lock as proof
 of interruption. Read-only inspection does not create, repair or delete research files.
+
+Test/Pilot sessions retain execution identity and ordinary result/acquisition exports,
+but do not persist recovery locks, checkpoints or frozen-plan snapshots. Discovery
+excludes historical Test/Pilot acquisition receipts identified by their effective null
+recording backend. Older checkpoints are excluded only when matching acquisition
+evidence confirms that mode; missing, invalid or mismatched evidence remains available
+for review. These exclusions apply on Windows and macOS without changing saved files.
 
 At safe boundaries the snapshot records the exact run occurrence, original ordinal,
 condition, participant/visit, completed playback runs and runs not yet reached. Stages

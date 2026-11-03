@@ -157,7 +157,10 @@ def _unlock(stream: BinaryIO) -> None:
 
 
 class ConditionRecoveryRecorder:
-    """Hold an OS lifetime lock; persist only between presentation operations."""
+    """Persist recording recovery at safe boundaries under an OS lifetime lock.
+
+    Disabled Test/Pilot executions keep only in-memory progress and export identity.
+    """
 
     def __init__(
         self,
@@ -166,14 +169,11 @@ class ConditionRecoveryRecorder:
         *,
         participant_number: str,
         participant_session_number: int | None,
+        enabled: bool = True,
     ) -> None:
         self.execution_id = uuid4().hex
-        self._path = resolve_project_relative_path(
-            project_root,
-            f"{_DIRECTORY}/{self.execution_id}.json",
-        )
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._stream = self._path.with_suffix(".lock").open("x+b")
+        self._path: Path | None = None
+        self._stream: BinaryIO | None = None
         self._locked = False
         self.checkpoint = _Checkpoint(
             execution_id=self.execution_id,
@@ -190,6 +190,14 @@ class ConditionRecoveryRecorder:
                 for entry in plan.ordered_entries()
             ],
         )
+        if not enabled:
+            return
+        self._path = resolve_project_relative_path(
+            project_root,
+            f"{_DIRECTORY}/{self.execution_id}.json",
+        )
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._stream = self._path.with_suffix(".lock").open("x+b")
         try:
             self._stream.write(b"0")
             self._stream.flush()
@@ -203,7 +211,8 @@ class ConditionRecoveryRecorder:
 
     def _write(self) -> None:
         self.checkpoint.updated_at = datetime.now(timezone.utc)
-        write_json_file(self._path, self.checkpoint)
+        if self._path is not None:
+            write_json_file(self._path, self.checkpoint)
 
     def start_run(self, run_id: str, *, playback_armed: bool = False) -> None:
         self.checkpoint.current_run_id = run_id
@@ -223,7 +232,7 @@ class ConditionRecoveryRecorder:
     def finish(self, state: Literal["completed", "cancelled", "interrupted"]) -> None:
         self.checkpoint.state = state
         self._write()
-        if state in {"completed", "cancelled"}:
+        if self._path is not None and state in {"completed", "cancelled"}:
             # Keep the small terminal marker to suppress historical acquisition fallback;
             # only interrupted launches need a duplicate, potentially large compiled plan.
             try:
@@ -232,7 +241,7 @@ class ConditionRecoveryRecorder:
                 _LOGGER.warning("Could not retire a completed condition recovery plan.")
 
     def close(self) -> None:
-        if not self._stream.closed:
+        if self._stream is not None and not self._stream.closed:
             if self._locked:
                 _unlock(self._stream)
                 self._locked = False
@@ -365,6 +374,29 @@ def _acknowledged_at(
     return saved.acknowledged_at if saved.evidence_updated_at == record.updated_at else None
 
 
+def _is_test_checkpoint(project_root: Path, checkpoint: _Checkpoint) -> bool:
+    """Recognize old Test/Pilot runs only through matching recording evidence."""
+    try:
+        path = resolve_project_relative_path(
+            project_root, f"logs/acquisition/{checkpoint.execution_id}.acquisition-v1.json",
+        )
+        evidence = _bounded_read(path, AcquisitionEvidence)
+    except (OSError, ValueError):
+        # Unknown provenance remains recoverable. The ordinary acquisition scan
+        # still reports malformed evidence instead of hiding its warning.
+        return False
+    return (
+        evidence.recording.effective_backend == "null"
+        and evidence.execution_id == checkpoint.execution_id
+        and evidence.project_id == checkpoint.project_id
+        and evidence.participant_number == checkpoint.participant_number
+        and evidence.participant_session_number == checkpoint.participant_session_number
+        and evidence.session_id == checkpoint.session_id
+        and [(run.run_id, run.condition_id, run.condition_name) for run in evidence.runs]
+        == [(run.run_id, run.condition_id, run.condition_name) for run in checkpoint.runs]
+    )
+
+
 def query_condition_recovery(
     project_root: Path, *, include_acknowledged: bool = True,
 ) -> ConditionRecoveryReport:
@@ -402,6 +434,8 @@ def query_condition_recovery(
             if checkpoint.execution_id != candidate.stem:
                 raise ValueError("Recovery execution identifier does not match its filename.")
             known.add(checkpoint.execution_id)
+            if _is_test_checkpoint(project_root, checkpoint):
+                continue
             if checkpoint.state in {"completed", "cancelled"} or not _inactive(project_root, path):
                 continue
             runs = checkpoint.runs
@@ -452,6 +486,8 @@ def query_condition_recovery(
             evidence = _bounded_read(path, AcquisitionEvidence)
             if candidate.name != f"{evidence.execution_id}.acquisition-v1.json":
                 raise ValueError("Acquisition execution identifier does not match its filename.")
+            if evidence.recording.effective_backend == "null":
+                continue
             if evidence.execution_id in known or evidence.state not in {"running", "interrupted"}:
                 continue
             if not evidence.runs:
@@ -548,6 +584,8 @@ def ensure_project_update_recovery_ready(
             if checkpoint.execution_id != candidate.stem:
                 raise ValueError(unreadable)
             known.add(checkpoint.execution_id)
+            if _is_test_checkpoint(project_root, checkpoint):
+                continue
             if checkpoint.state not in {"completed", "cancelled"} and not _inactive(
                 project_root,
                 path,
@@ -571,6 +609,8 @@ def ensure_project_update_recovery_ready(
             evidence = _bounded_read(path, AcquisitionEvidence)
             if candidate.name != f"{evidence.execution_id}.acquisition-v1.json":
                 raise ValueError(unreadable)
+            if evidence.recording.effective_backend == "null":
+                continue
             if (
                 evidence.execution_id not in known
                 and evidence.state in {"running", "interrupted"}
