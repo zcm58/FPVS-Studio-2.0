@@ -2,7 +2,7 @@
 
 Status: Active
 
-Source implementation is complete. Mac CI qualification is pending; physical Mac
+Source implementation and automated source/bundle qualification are complete; physical Mac
 GUI/display/service acceptance was explicitly deferred by the user and remains open.
 Keep this plan active until those gates have evidence; no full parity claim is made.
 
@@ -61,12 +61,10 @@ Windows production behavior and existing Linux support must remain intact.
 | Gate | Current evidence | Status |
 | --- | --- | --- |
 | Source implementation | Mac source helper/dependencies, native display/Retina, Keychain, Trash/Finder, local Test/Pilot calibration, presentation subprocess, portable bundle guards and software inventory implemented. | Complete; native acceptance is separate. |
-| Safe Mac-focused regressions on Windows | 345 passed, 4 native-only checks skipped. Covers fake-backed Mac policy/adapters and shared portability/runtime contracts. | Passed on Windows; skipped native checks are not qualified. |
-| Visible Windows regressions | 7 new GUI cases, 1 palette case and 2 Save cases passed; Mac-only platform policy was faked. | Passed on Windows; no native Mac GUI claim. |
-| Bundle/handoff implementation | 228 broader bundle/preprocessing/task/update checks passed; latest portability/handoff subset 51 passed, including three local CLI checks. Counts overlap. | Passed locally; one-OS relocations are not cross-OS evidence. |
-| Repository precommit | Full safe precommit is running; final result will be recorded after completion. | Pending. |
-| Native dependency/adapter CI | Python 3.10 arm64 and x86_64 lanes configured with OS/dependency/test artifacts and opt-in native probes. | Pending first successful run per target. |
-| Cross-OS artifact CI | Windows fixture -> each Mac import/compile/re-export -> Windows return comparison configured. | Pending actual job/artifact results. |
+| Windows regressions | Repo precommit: 4,974 passed, 14 symlink-permission skips; Ruff, full source mypy, compilation and audits passed. Final focused bundle/fixture checks: 197 passed, 5 native-only skips. Counts overlap. | Passed. |
+| Visible Windows regressions | 18 focused GUI cases passed; Mac-only platform policy was faked. | Passed on Windows; no native Mac GUI claim. |
+| Native dependency/adapter CI | Each CPU passed 1,358 checks with 10 platform skips, including real private-Keychain roundtrip, Trash, display queries and actual child IPC. Exact matrix in the support guide. | Both lanes passed on `f6b6721`. |
+| Cross-OS artifact CI | All six jobs in [run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134) passed, covering both transfer directions on both CPUs. Full settings, 14 asset hashes and 7-run/fixation plans matched. | Passed; no physical GUI/timing claim. |
 | Physical Mac software acceptance | Native visible GUI, connected display/PsychoPy, interactive secure-store/service and failure/recovery checks. | Explicitly deferred by user; open. |
 | EEG/hardware acquisition | No Mac adapters or physical qualification claimed. | Phase 2, outside this implementation. |
 
@@ -87,7 +85,7 @@ compile validation, cancellation and collision-safe installation remain in place
 
 Source paths above are relative to `src/fpvs_studio/`. The
 [software inventory and native checklist](../../MACOS_SUPPORT.md) records shared
-features, adapters, pending CI and deferred native evidence. Detailed behavior stays
+features, adapters, successful CI and deferred physical evidence. Detailed behavior stays
 in [GUI workflow](../../GUI_WORKFLOW.md), [runtime execution](../../RUNTIME_EXECUTION.md),
 [environment](../../ENVIRONMENT.md) and [architecture](../../../ARCHITECTURE.md).
 Coordinate with [lab-independent recording setup](../planned/lab-independent-recording-setup.md)
@@ -97,7 +95,7 @@ without expanding this phase into named lab profiles or multi-monitor selection.
 
 Checked items mean implementation/recorded checks are complete. They do not close
 an adjacent native acceptance item. Physical acceptance below remains deferred by the
-user; CI items remain pending until real hosted results exist.
+user; completed CI items link to the real hosted results.
 
 ### 1. Establish a reproducible Mac source environment
 
@@ -107,7 +105,7 @@ user; CI items remain pending until real hosted results exist.
 - [x] Document Terminal/source-update workflows and inventory all non-hardware areas,
   including Library/results, reports, templates, maintainer/access boundaries,
   file/folder actions, previews, shortcuts, fonts and source-version messaging.
-- [ ] Run clean arm64/x86_64 dependency/import CI and record exact macOS, CPU,
+- [x] Run clean arm64/x86_64 dependency/import CI and record exact macOS, CPU,
   Python/PsychoPy/Qt/native-wheel versions. Unavailable combinations remain unqualified.
 - [ ] Complete visible first source launch, preferences/restart and close on each
   claimed native target. Physical acceptance deferred by user.
@@ -122,9 +120,9 @@ Neutral imports must not open PsychoPy windows or access EEG.
   errors. Do not invent an exact refresh from Qt's nominal rate.
 - [x] Implement shared Keychain load/save/delete for Library/results credentials with
   fake-backed failure coverage; no plaintext fallback or bundled credentials.
-- [x] Implement native Trash and Finder opening, preserving cancellation/errors,
+- [x] Implement native Trash and portable Qt folder opening, preserving cancellation/errors,
   nonblocking worker ownership and cleanup. Use native Save/Find shortcut bindings.
-- [ ] Execute opted-in native CI probes for bindings, display diagnostics and unique
+- [x] Execute opted-in native CI probes for bindings, display diagnostics and unique
   synthetic Keychain/Trash entries. A hosted display probe is not physical timing proof.
 - [ ] Verify interactive enrollment/restart/revocation, locked/unavailable Keychain,
   Finder/Trash permissions/cancel and recovery on a physical Mac. Deferred by user.
@@ -171,15 +169,15 @@ fixation-onset schedules across different refresh targets are not promised.
   words, derivatives, task media, 3/2/2 saved blocks, independent seeds, fixation
   schedules and a Windows recording declaration. Source relocation and semantic,
   SHA256/full 60 Hz plan comparison pass in local CLI checks.
-- [ ] Run the actual Windows -> Mac -> Windows CI chain for both Mac CPU lanes and
-  retain the baseline/artifacts/evidence. Locally reusing the CLI is not this result.
-- [ ] Qualify Mac -> Windows -> Mac transfers, case-sensitive/native Unicode
-  filesystem cases and visible import-display choices on physical computers. Compare
-  semantic state/assets/same-target schedules after relocating synthetic sources;
-  allow only deliberate rename/collision-ID remapping. Deferred by user.
-- [ ] Check receiving Windows production readiness with faked acquisition dependencies
-  for real returned artifacts; confirm no Mac null/test/preflight bypass is persisted.
-  Actual acquisition/marker validation remains Phase 2.
+- [x] Run actual Windows -> Mac -> Windows and Mac -> Windows -> Mac CI chains on
+  both CPUs; retain unchanged baselines, artifact payload hashes and complete plans.
+- [ ] Complete physical dialogs, case-sensitive volumes and broader scene/media
+  workflow checks, allowing only deliberate collision-ID remapping. Deferred by user.
+- [x] Check normal Windows recording policy offline for four real Mac exports:
+  explicit production flags resolve to Brain Products TriggerBox, never null;
+  missing amplifier/sampling-rate configuration correctly blocks readiness. No
+  Test/Pilot flags were saved or project bytes changed. Hardware/probes were not used;
+  actual acquisition/marker validation remains Phase 2.
 
 Exit: recorded two-direction native transfer evidence on the declared matrix, with
 receiving-root containment and unchanged scientific/recording state. Offline bundle
@@ -187,14 +185,14 @@ import must not require Mac enrollment or a new network connection.
 
 ### 5. Complete software parity and document support
 
-- [x] Document source installation/update, candidate targets, local-test limits,
+- [x] Document source installation/update, recorded source environments, local-test limits,
   portable handoff/recovery and a complete shared/adapter/native-evidence inventory.
   Preserve existing services, external-app and maintainer authorization boundaries.
 - [x] Configure the `macos` verification scope, native CPU CI lanes, evidence artifacts
   and cross-OS handoff jobs. Update canonical policy/routing/docs for CI execution;
   neither local nor hosted offscreen Qt is a substitute for approved visible checks.
-- [ ] Record successful native CI runs, resolved dependency versions and unsupported
-  cases before advertising any target as qualified. CI results are pending.
+- [x] Record successful native CI runs, resolved dependency versions and qualification
+  limits. Both recorded source environments pass; physical acceptance remains open.
 - [ ] Finish physical software acceptance: eight Setup steps at 1120x820 in both
   themes, long paths, Retina/dialog/font geometry, keyboard/accessibility, native
   rendering/cleanup and authorized Library/sharing/support/maintainer/export flows.
@@ -207,9 +205,17 @@ must not be described as full Phase-1 parity.
 ## Verification record
 
 Current implementation evidence is in the gate table above and
-[MACOS_SUPPORT.md](../../MACOS_SUPPORT.md). Root will add CI run links and the final
-repo-precommit result separately. No real projects, participant data, live services,
-EEG devices or physical Mac presentation were used for the recorded Windows checks.
+[MACOS_SUPPORT.md](../../MACOS_SUPPORT.md). Native CI source commit `f6b6721` passed
+all six jobs in [run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134).
+ARM used macOS 15.8.2 / CPython 3.10.11; Intel used 15.7.9 / 3.10.21. Both used
+PySide6 6.12.0, PsychoPy 2026.2.5 and PyObjC 12.2.2; complete freezes and host/JUnit
+evidence are attached to the run. Private native Keychain probes performed real
+save/load/delete without an interactive skip. Hosted 60 Hz / 1024x768 display
+metadata is recorded with `physical_display_qualified=false`.
+
+No real projects, participant data, live service enrollment, EEG devices or physical
+Mac presentation were used. Physical and interactive acceptance remains explicitly
+deferred rather than inferred from the automated results.
 
 Planning baseline (historical): 30 focused non-Qt bundle/path/task/relocation checks
 and 13 documentation checks passed before implementation. Those checks established

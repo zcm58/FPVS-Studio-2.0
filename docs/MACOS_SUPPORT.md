@@ -1,8 +1,9 @@
 # macOS source support
 
 Phase 1 targets the Windows source application's non-hardware authoring and local
-experiment-testing workflows on macOS. Source implementation is complete; native CI
-qualification is pending. Physical Mac GUI/display/service acceptance was explicitly
+experiment-testing workflows on macOS. Source implementation and automated source,
+native-service and bundle-transfer checks are complete on the recorded CI matrix.
+Physical Mac GUI/display/service acceptance was explicitly
 deferred by the user on 2026-11-02 and remains open. No full software-parity or hardware
 qualification claim follows from source changes or Windows/fake-backed tests.
 
@@ -20,14 +21,15 @@ policy, [GUI workflow](GUI_WORKFLOW.md) owns authoring behavior and
 | Implementation | Source helpers, adapters, local testing, bundle guards, handoff CLI and software inventory complete. |
 | Windows regressions | Repo precommit: 4,974 passed, 14 symlink-permission skips; Ruff, full source mypy, compilation and audits passed. Final focused bundle/fixture run: 197 passed, 5 native-only skips. Counts overlap. |
 | Visible Windows checks | 18 focused GUI cases passed across calibration, source updates, test availability, shortcuts and Save. Mac-only policy was faked; these are not native Mac GUI results. |
-| Mac CI | arm64/x86_64 dependency/native checks and actual Windows -> Mac -> Windows artifact chain configured; successful-run evidence pending. |
-| Real Mac exports received on Windows | Four actual artifacts from [run 41544719168](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41544719168) matched semantic settings, all 14 asset hashes and complete 7-run plans/fixation schedules. Both CPU origins and re-exports preserved recording settings and seeds; automated final Mac return remains pending. |
+| Mac CI | [Run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134), source commit `f6b6721`: all six jobs passed. Each Mac CPU lane passed 1,358 checks with 10 platform-specific skips. Native private-Keychain roundtrip, Trash, display metadata and real child IPC passed. |
+| Cross-OS bundles | Windows -> Mac -> Windows and Mac -> Windows -> Mac passed on both CPUs. Each transfer matched semantic settings, all 14 asset hashes and complete 7-run plans/fixation schedules, preserving recording settings and seeds. |
+| Windows acquisition policy | Separate offline checks of four real Mac exports resolved normal launch flags to Brain Products TriggerBox, never null; missing amplifier/sampling-rate setup correctly blocked readiness. No saved Test/Pilot flags or project-byte changes; no hardware was probed. |
 | Physical Mac software | Visible GUI/PsychoPy/display, interactive secure-store/service, filesystem and failure/recovery acceptance deferred by user. |
 | EEG/hardware | Phase 2; not implemented or qualified here. |
 
-Keep the active plan open until its remaining native gates have evidence. Root will
-record CI links and resolved versions after execution; candidate runners are not an
-advertised supported matrix yet.
+Keep the active plan open for the deferred physical and interactive acceptance gates.
+The matrix below qualifies installation, shared software checks and selected native
+APIs on hosted Macs; it does not establish physical presentation or full GUI parity.
 
 ## Install, run and update from source
 
@@ -84,23 +86,23 @@ for unsupported display modes, timing constraints, test identity and eligibility
 - **Shared:** the same models, services, GUI/runtime routes or contracts exist on both
   hosts. Existing safe tests support their logic; this does not establish native GUI,
   service-account or physical presentation success on macOS.
-- **Adapter:** a Mac-specific seam has source/fake-backed coverage. Native execution
-  is still required for that seam.
-- **CI pending:** the Mac lane is configured; no successful run is claimed here until
-  its OS, CPU, resolved dependencies, test report and commit are recorded.
+- **Adapter:** a Mac-specific seam behind shared contracts; its fake-backed and native
+  evidence are distinguished below.
+- **CI passed:** recorded host, CPU, dependencies and commit passed the stated
+  automated checks. Physical presentation is not inferred.
 - **Physical deferred:** requires an approved visible Mac session or two computers;
   hosted adapter tests cannot replace it.
 
 | Software area | Current implementation/evidence | Remaining Mac evidence |
 | --- | --- | --- |
-| Source startup and dependencies | Shared Python 3.10/PySide6 app; source helper installs real engine dependencies. | CI pending for each CPU; first visible startup, restart and close are physical deferred. |
+| Source startup and dependencies | Clean engine installs, dependency checks and windowless source imports passed both CPU lanes. | First visible startup, restart and close are physical deferred. |
 | Projects and all eight Setup steps | Shared root discovery, create/open/save, drafts, templates and validation; same persisted schemas. | Native dialogs, long paths, cancel/permission errors, 1120x820 bounds and both themes. |
 | Experiment categories | Shared FPVS Oddball, Cognitive Load FPVS and supported letter-stream Attentional-Blink authoring/compiler/runtime. Standard FPVS remains unavailable on all hosts; retired image-pair AB remains unsupported. | Representative native local tests for every supported category; no category is qualified merely by being listed. |
-| Timing, session order and fixation | Shared frame compiler, display-rate constraints, randomization domains, saved/partial condition blocks, fixation counts/timing rules and seeded realization. | Same-target cross-OS schedule comparisons; physical refresh, Retina geometry and onset checks. Different refresh targets need compatible authored timing, not assumed identical frames. |
+| Timing, session order and fixation | Shared frame compiler, display-rate constraints, randomization domains, saved/partial condition blocks, fixation rules and seeded realization; same-target cross-OS schedule comparisons passed. | Physical refresh, Retina geometry and onset checks. Different refresh targets need compatible authored timing, not assumed identical frames. |
 | Images and words | Shared import, inspection, variants, normalization, resizing, image/character geometry and word content. Portable intake guards and Finder-metadata tests are non-Qt. | Native source selection, case-sensitive volumes, Unicode filenames, previews and resizer flows. |
 | Tasks and modifiers | Shared instructions, study/choice/questionnaire/key/feedback steps, backward counting, image memory, masking scenes, questions, branches and scoring. | Native task rendering/input, explicit/exact geometry, abort/recovery and result comparison. |
 | Local presentation | Existing PsychoPy session/runtime reused; Mac launch/display/process adapters preserve explicit local testing and project settings. | CI imports/adapters do not open a presentation window; fullscreen render, main-thread lifecycle, keyboard response and cleanup remain physical deferred. |
-| Display, file/folder actions and secure credentials | Mac native mode provider, Finder/Trash operations and Keychain seam; fake-backed regression coverage. | Native CI probes are pending; physical display accuracy, Finder presentation, locked Keychain and interactive recovery remain deferred. |
+| Display, file/folder actions and secure credentials | Native display queries, Trash and private-Keychain roundtrips passed CI; shared Qt folder opening and fake-backed failure coverage retained. | Physical display accuracy, Finder presentation, real login/locked Keychain and interactive recovery remain deferred. |
 | Library and project version updates | Shared catalog, enrollment, independent imports and reviewed same-folder update services; credentials remain machine-local. | Authorized native login/enrollment, restart, disconnect/revocation, download/update/cancel and network failure flows. No live service action is claimed by this change. |
 | Sharing, comparisons and support | Shared results/consent/outbox, comparisons, manual bug reports and crash reporting through existing service contracts. | Native authorized end-to-end checks, opt-out, offline/retry and secure-store recovery; no automatic permission to contact services. |
 | Templates and presets | Shared factory/app-owned condition templates, modifier presets, import/export and project category boundaries. | Native dialogs and paths; unchanged source/preset behavior after relocation and restart. |
@@ -112,9 +114,21 @@ for unsupported display modes, timing constraints, test identity and eligibility
 ## Automated Mac evidence
 
 [macos-source.yml](../.github/workflows/macos-source.yml) defines native Python 3.10
-lanes for `macos-15`/arm64 and `macos-15-intel`/x86_64. These are qualification
-candidates, not an advertised support matrix until their runs pass. The workflow
-records OS/interpreter/dependency versions and JUnit results for the exact commit.
+lanes for `macos-15`/arm64 and `macos-15-intel`/x86_64. Successful
+[run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134)
+records this source-environment matrix for `f6b6721`:
+
+| CPU | macOS | CPython | PySide6 | PsychoPy | Source checks |
+| --- | --- | --- | --- | --- | --- |
+| Apple Silicon / arm64 | 15.8.2 (24H232) | 3.10.11 | 6.12.0 | 2026.2.5 | 1,358 passed; 10 platform skips |
+| Intel / x86_64 | 15.7.9 (24G830) | 3.10.21 | 6.12.0 | 2026.2.5 | 1,358 passed; 10 platform skips |
+
+Both resolved pyglet 1.5.27, PyObjC/Cocoa/Security 12.2.2, cryptography 50.0.2,
+keyring 25.7.0, NumPy 2.2.6 and Pillow 11.3.0. Full dependency freezes, host data,
+JUnit and handoff evidence are workflow artifacts. Toolchain inventories are
+[ARM image 20261028.0489.1](https://github.com/actions/runner-images/blob/macos-15-arm64/20261028.0489/images/macos/macos-15-arm64-Readme.md)
+and [Intel image 20260824.0482.1](https://github.com/actions/runner-images/blob/macos-15/20260824.0482/images/macos/macos-15-Readme.md).
+Later dependency/OS combinations require another run before qualification.
 A dependency or runner failure is a visible gap, not a reason to bypass constraints.
 
 The handoff jobs exchange an actual synthetic artifact: Windows creates a bundle and
@@ -141,9 +155,10 @@ establish physical display timing. Neutral
 core imports must remain independent of Qt/PsychoPy/hardware. Qt execution requires
 the approved visible-environment policy in [Environment](ENVIRONMENT.md#gui-test-environment).
 
-Record successful run links and the resolved matrix before marking **CI pending**
-items qualified. Hosted display diagnostics can explain an unavailable mode without
-claiming a connected research monitor was verified.
+Both private credential probes recorded `result="roundtrip"`, `domain=0`,
+`default_status=0`, `keychain_flags=7`; neither used the interactive-write skip.
+Hosted displays reported configured 60 Hz at 1024x768 with
+`physical_display_qualified=false`. No PsychoPy presentation window was opened.
 
 ## Bundle transfer and portability
 
@@ -185,8 +200,10 @@ Use task-owned synthetic projects and record OS/CPU, Studio commit, dependency
 versions, display mode/scaling and results. Do not run these steps against real
 participant data or publish/contact external services without authorization.
 
-- [ ] Clean source install, first launch, preferences/restart and clean shutdown on
-  each claimed target; record the actual dependency matrix.
+- [x] Clean dependency installation, windowless source imports and native-service
+  checks on both recorded hosted targets.
+- [ ] Visible first source launch, preferences/restart and clean shutdown on each
+  physical target.
 - [ ] All eight Setup steps at 1120x820 in both themes, long values, dialogs,
   validation/busy/error states, shortcuts, focus and accessibility.
 - [ ] Native Keychain, Trash/Finder, locked/unavailable-store and permission/cancel
@@ -196,10 +213,10 @@ participant data or publish/contact external services without authorization.
   native/observed refresh agreement, geometry, timing QC and stable abort/close/recovery.
 - [ ] Save/open/re-export without unintended changes to lab display/recording values,
   seeds, order, fixation rules, word text, media or participant/test eligibility.
-- [ ] Windows -> Mac -> Windows and Mac -> Windows -> Mac bundles, including Unicode,
-  spaces, case-sensitive destinations and task/scene media. Relocate/delete synthetic
-  external sources, compare payload hashes and semantic design state, and allow only
-  deliberate collision-ID remapping. Same-target seeded schedules must match.
+- [x] Both native CI transfer directions with Unicode, spaces, images/words, derivatives,
+  task media, relocated source and exact same-target plans/hashes.
+- [ ] Physical import/export dialogs, case-sensitive volumes and broader scene/media
+  workflows; preserve only deliberate collision-ID remapping.
 - [ ] Reports/configs/Toolbox handoff generation and authorized Library/sharing/support/
   maintainer flows, with unchanged consent and access checks.
 - [ ] Windows lab import and normal production preflight with explicit lab hardware;

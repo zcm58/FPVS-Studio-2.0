@@ -9,7 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source authoring/local testing, native adapters and Windows/Mac bundle handoff; native Mac acceptance required |
+| [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
 | [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Manual service implemented; retained native/packaged acceptance and automatic-crash follow-up have separate evidence |
