@@ -145,7 +145,7 @@ from fpvs_studio.library.credentials import MacOSKeychainCredentialStore
 from fpvs_studio.library.models import DeviceCredential
 settings = json.load(sys.stdin)
 assert Security.SecKeychainSetUserInteractionAllowed(False) == 0
-status, keychain = Security.SecKeychainOpen(settings['path'], None)
+status, keychain = Security.SecKeychainOpen(settings['path'].encode('utf-8'), None)
 assert status == 0
 password = settings['password'].encode('utf-8')
 assert Security.SecKeychainUnlock(keychain, len(password), password, True) == 0
