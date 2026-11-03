@@ -156,8 +156,9 @@ status, selected = Security.SecKeychainCopyDefault(None)
 assert status == 0 and CoreFoundation.CFEqual(selected, keychain)
 status, flags = Security.SecKeychainGetStatus(selected, None)
 assert status == 0 and flags & Security.kSecUnlockStateStatus
-result = {'domain': int(Security.SecKeychainGetPreferenceDomain()),
-          'default_status': int(status), 'keychain_flags': int(flags)}
+domain_status, domain = Security.SecKeychainGetPreferenceDomain(None)
+assert domain_status == 0
+result = {'domain': int(domain), 'default_status': int(status), 'keychain_flags': int(flags)}
 store = MacOSKeychainCredentialStore(sys.argv[1])
 credential = DeviceCredential(token='synthetic_ci_' + uuid.uuid4().hex + uuid.uuid4().hex,
                               device_name='Synthetic macOS CI', library_api_version=2)
