@@ -75,8 +75,9 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
-The [2.6.0 release record](exec-plans/active/release-2.6.0.md) tracks the current
-Setup/session, theme and Mac-source feature release, artifact audits and publication checks.
+The [2.6.0 release record](exec-plans/completed/release-2.6.0.md) tracks the published
+Setup/session, theme and Mac-source feature release, immutable artifacts and successful
+public-download/attestation/updater checks.
 The [2.5.8 release record](exec-plans/completed/release-2.5.8.md) tracks measured participant
 instruction layout and the Birth Control overlap repair.
 The [2.5.7 release record](exec-plans/completed/release-2.5.7.md) tracks shared task mouse

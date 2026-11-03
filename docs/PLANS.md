@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.6.0 release](exec-plans/active/release-2.6.0.md) | Explicitly authorized minor feature release; isolated full-installer build, immutable draft/publication and artifact/updater verification |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
@@ -39,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Studio 2.6.0 release](exec-plans/completed/release-2.6.0.md):
+  Setup/session, themes and Mac-source features published immutable/latest; frozen
+  build, public-byte/attestation and eight production-updater checks passed.
 - [Windows-primary platform test adapters](exec-plans/completed/windows-primary-platform-test-adapters.md):
   explicit platform seams, native environment selection and Windows-first CI; obsolete
   environments removed, native Windows/Mac safe checks and 100 visible Qt cases passed.
