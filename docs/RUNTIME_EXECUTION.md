@@ -133,7 +133,7 @@ before creating engines or acquisition services. Test/Pilot does not qualify EEG
 physical timing; native GUI acceptance is tracked in [Mac support](MACOS_SUPPORT.md).
 
 Mac Setup detection and automatic preflight use the same refresh-only child, with a
-30-second parent deadline covering imports, fullscreen capture, measurement and
+20-second parent deadline covering imports, fullscreen capture, measurement and
 window cleanup. A stalled or canceled probe is killed and reaped, then its private
 transport is removed; no rate is accepted and preflight cannot start playback.
 Setup's Cancel action and application shutdown signal cancellation without waiting

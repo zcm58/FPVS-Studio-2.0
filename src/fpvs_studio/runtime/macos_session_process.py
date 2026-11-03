@@ -39,7 +39,7 @@ from fpvs_studio.runtime.preflight import PreflightError
 
 LOGGER = logging.getLogger(__name__)
 MAX_PAYLOAD_BYTES = 256 * 1024 * 1024
-REFRESH_TIMEOUT_SECONDS = 30.0
+REFRESH_TIMEOUT_SECONDS = 20.0
 _CHILD_MODULE = "fpvs_studio.runtime.macos_session_process"
 
 
@@ -256,7 +256,7 @@ def _run_refresh_child(
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise MacOSSessionProcessError(
-                    "Display refresh check timed out after 30 seconds. The fullscreen probe "
+                    "Display refresh check timed out after 20 seconds. The fullscreen probe "
                     "was stopped. Check macOS System Settings > Displays for a fixed refresh "
                     "rate before retrying. No refresh rate was verified."
                 )

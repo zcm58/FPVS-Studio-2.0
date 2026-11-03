@@ -68,7 +68,7 @@ def test_mac_failed_probe_preserves_rate_and_can_be_retried(
         assert not cancel_event.is_set()
         if fail[0]:
             raise RuntimeError(
-                "Display refresh check timed out after 30 seconds. The fullscreen probe "
+                "Display refresh check timed out after 20 seconds. The fullscreen probe "
                 "was stopped. Check macOS System Settings > Displays for a fixed refresh "
                 "rate before retrying. No refresh rate was verified."
             )

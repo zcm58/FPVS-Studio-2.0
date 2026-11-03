@@ -140,7 +140,7 @@ over the experiment's lab settings. A successful local test is not EEG readiness
 physical timing qualification. Follow the current [launch contract](GUI_WORKFLOW.md#launch)
 for unsupported display modes, timing constraints, test identity and eligibility.
 
-Mac refresh checks now have a 30-second deadline. Setup's progress dialog also offers
+Mac refresh checks now have a 20-second deadline. Setup's progress dialog also offers
 Cancel and responds to application shutdown; a stopped check leaves the refresh rate
 unverified and can be retried. Automatic preflight uses the same protected probe,
 and playback skips PsychoPy's duplicate constructor measurement. See the
