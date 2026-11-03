@@ -169,6 +169,12 @@ normalizes coordinate units after native window creation and hides Dock/menu bar
 restorable app-scoped presentation options. See the
 [Retina repair](exec-plans/completed/macos-retina-presentation.md) for native pixel evidence.
 
+Visible instructions exposed a separate legacy keyboard-dispatch bug: timestamped
+pairs were treated as key names, preventing Space/Escape matches and dropping later
+keys in the same batch. The Mac adapter now delivers all string key names through
+the existing foreground safety checks. Windows keyboard dispatch is unchanged;
+physical key interaction remains a separate acceptance check.
+
 ## Evidence levels and software inventory
 
 - **Shared:** the same models, services, GUI/runtime routes or contracts exist on both

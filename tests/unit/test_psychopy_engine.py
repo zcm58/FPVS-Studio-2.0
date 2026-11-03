@@ -151,6 +151,11 @@ class _FakeKeyboard:
         self.clock = _FakeClock(window)
         self._key_batches = list(key_batches or [])
         self._backend = backend
+        self.device = SimpleNamespace(
+            dispatchMessages=lambda: None,
+            parseMessage=lambda name: SimpleNamespace(name=name, value=name, duration=None),
+            receiveMessage=lambda response: None,
+        )
 
     def clearEvents(self) -> None:
         return None
@@ -344,7 +349,9 @@ def _build_fake_psychopy(
         visual=fake_visual,
         core=fake_core,
         gl=SimpleNamespace(glFinish=lambda: events.append(("gpu_sync", None))),
-        hardware=SimpleNamespace(keyboard=SimpleNamespace(Keyboard=_fake_keyboard)),
+        hardware=SimpleNamespace(keyboard=SimpleNamespace(
+            Keyboard=_fake_keyboard, event=SimpleNamespace(getKeys=lambda **_: []),
+        )),
         logging=fake_logging,
         __version__="fake-psychopy",
     )

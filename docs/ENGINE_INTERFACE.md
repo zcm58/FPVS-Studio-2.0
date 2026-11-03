@@ -27,6 +27,11 @@ as PsychoPy. Runtime owns flow and calls engines through
   `psychopy_macos_display` bounds the backend's DisplayLink polling without disabling
   synchronization and selects foreground `event` keyboard input for Mac Test/Pilot.
   Missing callbacks fail explicitly; Windows retains its original backend/input path.
+  The Mac keyboard adapter replaces only the returned device's event dispatcher:
+  it delivers every queued string key name to PsychoPy's existing parser and receiver.
+  This avoids the legacy dispatcher's timestamp-pair name mismatch and dropped batch
+  entries. Foreground muting, response filters, clearing and clocks remain intact;
+  no keyboard class or Windows dispatcher is patched.
 - PsychoPy imports must remain lazy and local to engine implementations.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.

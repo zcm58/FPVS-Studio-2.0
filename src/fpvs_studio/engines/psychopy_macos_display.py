@@ -78,6 +78,26 @@ def create_macos_test_keyboard(keyboard_module: Any) -> Any:
     keyboard = keyboard_module.Keyboard(backend="event")
     if keyboard.getBackend() != "event":
         raise RuntimeError("Mac Test/Pilot requires the foreground-window keyboard backend.")
+    device = getattr(keyboard, "device", None)
+    get_event_keys = getattr(getattr(keyboard_module, "event", None), "getKeys", None)
+    if device is None or not callable(get_event_keys) or not all(callable(value) for value in (
+        getattr(device, "dispatchMessages", None),
+        getattr(device, "parseMessage", None), getattr(device, "receiveMessage", None),
+    )):
+        raise RuntimeError(
+            "Mac Test/Pilot requires the foreground-window keyboard event interface."
+        )
+
+    def dispatch_foreground_messages() -> None:
+        # PsychoPy's event dispatcher passes a timestamped pair as the key name
+        # and consumes only the first event. Preserve its parser, focus guard and
+        # response filtering, while delivering every foreground key as a string.
+        for name in get_event_keys(modifiers=False, timeStamped=False):
+            response = device.parseMessage(name)
+            if response is not None:
+                device.receiveMessage(response)
+
+    device.dispatchMessages = dispatch_foreground_messages
     LOGGER.info("Mac Test/Pilot keyboard uses foreground-window events (not acquisition timing)")
     return keyboard
 

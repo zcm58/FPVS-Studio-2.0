@@ -164,7 +164,9 @@ Mac Test/Pilot explicitly selects PsychoPy's `event` keyboard backend before ope
 the window. It consumes foreground-window input instead of a global PTB HID queue
 that requires macOS Input Monitoring permission. The active backend is recorded in
 existing runtime metadata; this is not acquisition-qualified keyboard timing.
-Windows keeps its default keyboard selection. Mac children write bounded, redacted
+The engine's [Mac input adapter](ENGINE_INTERFACE.md#boundary-rules) normalizes legacy
+event key names per device while retaining foreground muting and response filtering.
+Windows keeps its default keyboard selection and dispatcher. Mac children write bounded, redacted
 local support logs identifying operation, window/input readiness and failure locations;
 they do not create separate automatic crash-report sessions or log participant payloads.
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ast
+import builtins
 from importlib import metadata
 from types import SimpleNamespace
 
@@ -27,6 +28,11 @@ def mac_clock(monkeypatch):
 def _window():
     target = SimpleNamespace(frameLock=None, callback_identity="native target")
     return SimpleNamespace(backend=SimpleNamespace(refreshEventHandlerMacOS=target)), target
+
+
+def _keyboard_device():
+    return SimpleNamespace(dispatchMessages=lambda: None, parseMessage=lambda name: name,
+                           receiveMessage=lambda response: None)
 
 
 def _presentation_app(monkeypatch, events, *, failure=None):
@@ -213,7 +219,7 @@ def test_engine_restores_mac_presentation_after_keyboard_clear_failure(monkeypat
         raise RuntimeError("foreground keyboard clear failed")
 
     fake.hardware.keyboard.Keyboard = lambda **_: SimpleNamespace(
-        getBackend=lambda: "event", clearEvents=clear_events,
+        getBackend=lambda: "event", clearEvents=clear_events, device=_keyboard_device(),
     )
     _patch_fake_psychopy(monkeypatch, engine, fake, platform_name="darwin")
     app, previous = _presentation_app(monkeypatch, events)
@@ -386,15 +392,44 @@ def test_other_platforms_leave_backend_untouched(monkeypatch, platform):
 
 def test_mac_test_keyboard_requests_foreground_backend_explicitly():
     calls = []
-    keyboard = SimpleNamespace(getBackend=lambda: "event")
+    keyboard = SimpleNamespace(getBackend=lambda: "event", device=_keyboard_device())
 
     def create(**kwargs):
         calls.append(kwargs)
         return keyboard
 
-    result = adapter.create_macos_test_keyboard(SimpleNamespace(Keyboard=create))
+    result = adapter.create_macos_test_keyboard(SimpleNamespace(
+        Keyboard=create, event=SimpleNamespace(getKeys=lambda **_: []),
+    ))
     assert result is keyboard
     assert calls == [{"backend": "event"}]
+
+
+def test_windows_session_preserves_default_keyboard_and_dispatcher(monkeypatch):
+    captures = {}
+    fake = _build_fake_psychopy(captures, flip_times=[])
+    create = fake.hardware.keyboard.Keyboard
+    dispatchers = []
+
+    def create_keyboard(**kwargs):
+        keyboard = create(**kwargs)
+        dispatchers.append(keyboard.device.dispatchMessages)
+        return keyboard
+
+    def reject_mac_adapter(_module):
+        pytest.fail("Windows must not use the Mac keyboard adapter")
+
+    fake.hardware.keyboard.Keyboard = create_keyboard
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake, platform_name="win32")
+    monkeypatch.setattr(engine_module, "create_macos_test_keyboard", reject_mac_adapter)
+    try:
+        engine.open_session(runtime_options={"fullscreen": False})
+        assert captures["keyboard_kwargs"] == {}
+        assert engine._keyboard.getBackend() == "ptb"
+        assert engine._keyboard.device.dispatchMessages is dispatchers[0]
+    finally:
+        engine.close_session()
 
 
 @pytest.mark.parametrize("backend", ["ptb", "iohub", None])
@@ -403,6 +438,155 @@ def test_mac_test_keyboard_rejects_unrequested_backend(backend):
     module = SimpleNamespace(Keyboard=lambda **_: keyboard)
     with pytest.raises(RuntimeError, match="foreground-window keyboard backend"):
         adapter.create_macos_test_keyboard(module)
+
+
+@pytest.mark.parametrize("missing", ["device", "event_reader", "dispatcher", "parser", "receiver"])
+def test_mac_keyboard_rejects_unsupported_event_interface(missing):
+    device = _keyboard_device()
+    keyboard = SimpleNamespace(getBackend=lambda: "event", device=device)
+    event = SimpleNamespace(getKeys=lambda **_: [])
+    if missing == "device":
+        del keyboard.device
+    elif missing == "event_reader":
+        del event.getKeys
+    else:
+        method = {"dispatcher": "dispatchMessages", "parser": "parseMessage",
+                  "receiver": "receiveMessage"}[missing]
+        setattr(device, method, None)
+    module = SimpleNamespace(Keyboard=lambda **_: keyboard, event=event)
+    with pytest.raises(RuntimeError, match="foreground-window keyboard event interface"):
+        adapter.create_macos_test_keyboard(module)
+
+
+@pytest.fixture
+def upstream_event_keyboard():
+    """Use the dependency's keyboard/response methods with fake native input only."""
+    try:
+        distribution = metadata.distribution("psychopy")
+    except metadata.PackageNotFoundError:
+        pytest.skip("Optional PsychoPy engine is not installed")
+    keyboard_source = distribution.locate_file("psychopy/hardware/keyboard.py")
+    keyboard_ast = ast.parse(keyboard_source.read_text(encoding="utf-8"))
+    base_source = distribution.locate_file("psychopy/hardware/base.py")
+    base_ast = ast.parse(base_source.read_text(encoding="utf-8"))
+    classes = {node.name: node for node in [*keyboard_ast.body, *base_ast.body]
+               if isinstance(node, ast.ClassDef)}
+    base_response = classes["BaseResponse"]
+    base_response.body = [node for node in base_response.body
+                          if isinstance(node, ast.FunctionDef) and node.name == "__init__"]
+    response = classes["KeyPress"]
+    keyboard_methods = [node for node in classes["KeyboardDevice"].body
+                        if isinstance(node, ast.FunctionDef) and node.name in {
+                            "dispatchMessages", "parseMessage", "getKeys", "getBackend",
+                            "clearEvents",
+                        }]
+    receive = next(node for node in classes["BaseResponseDevice"].body
+                   if isinstance(node, ast.FunctionDef) and node.name == "receiveMessage")
+    state = SimpleNamespace(pending=[], focus=True, now=0.25, reads=[], clears=[])
+
+    def read_events(*, modifiers, timeStamped):
+        state.reads.append((modifiers, timeStamped))
+        pending, state.pending = state.pending, []
+        return pending if timeStamped else [entry[0] for entry in pending]
+
+    def clear_events(event_type):
+        state.clears.append(event_type)
+        state.pending.clear()
+
+    event = SimpleNamespace(getKeys=read_events, clearEvents=clear_events)
+    device_class = type("SourceKeyboardDevice", (), {"_backend": "event"})
+    systemtools = SimpleNamespace(isRegisteredApp=lambda: state.focus)
+
+    def source_import(name, globals=None, locals=None, fromlist=(), level=0):
+        assert name == "psychopy.tools.systemtools", f"Unexpected graphics import: {name}"
+        return systemtools
+
+    namespace = {
+        "__builtins__": {**vars(builtins), "__import__": source_import},
+        "KeyboardDevice": device_class,
+        "event": event,
+        "logging": SimpleNamespace(exp=lambda *_: None, error=lambda *_: None,
+                                   info=lambda *_args, **_kwargs: None),
+    }
+    exec(compile(ast.Module(body=[base_response, response, *keyboard_methods, receive],
+                            type_ignores=[]), str(keyboard_source), "exec"), namespace)
+    for method in [*keyboard_methods, receive]:
+        setattr(device_class, method.name, namespace[method.name])
+    device_class.responseClass = namespace["KeyPress"]
+
+    def create():
+        device = device_class()
+        device.clock = SimpleNamespace(getTime=lambda: state.now)
+        device.responses, device.listeners = [], []
+        device.muteOutsidePsychopy = True
+        device.checkCallbacks = lambda _: None
+        keyboard = SimpleNamespace(device=device, getBackend=device.getBackend,
+                                   getKeys=device.getKeys, clearEvents=device.clearEvents,
+                                   clock=device.clock)
+        module = SimpleNamespace(Keyboard=lambda **_: keyboard, event=event)
+        return keyboard, module
+
+    return SimpleNamespace(state=state, create=create, device_class=device_class)
+
+
+def test_upstream_event_dispatcher_mislabels_timestamped_keys_and_drops_batch(
+    upstream_event_keyboard,
+):
+    if metadata.version("psychopy") != "2026.2.5":
+        pytest.skip("Bug reproduction targets PsychoPy 2026.2.5; adapter tests are separate")
+    source = upstream_event_keyboard
+    keyboard, _module = source.create()
+    source.state.pending = [["space", 10.0], ["escape", 10.1]]
+    assert keyboard.getKeys(keyList=["space", "escape"], waitRelease=False, clear=True) == []
+    assert [key.name for key in keyboard.device.responses] == [["space", 10.0]]
+    assert source.state.pending == []
+    assert source.state.reads == [(False, True)]
+
+
+def test_mac_dispatcher_preserves_all_key_names_filtering_and_instance_scope(
+    upstream_event_keyboard,
+):
+    source = upstream_event_keyboard
+    keyboard, module = source.create()
+    untouched, _ = source.create()
+    original_dispatch = source.device_class.dispatchMessages
+    original_parse, original_receive = keyboard.device.parseMessage, keyboard.device.receiveMessage
+    result = adapter.create_macos_test_keyboard(module)
+    source.state.pending = [["space", 10.0], ["escape", 10.1], ["f", 10.2]]
+    keys = result.getKeys(keyList=["space", "escape"], waitRelease=False, clear=True)
+    assert [key.name for key in keys] == ["space", "escape"]
+    assert all(isinstance(key.name, str) and key.rt == source.state.now for key in keys)
+    assert [key.name for key in result.getKeys(keyList=["f"], waitRelease=False)] == ["f"]
+    assert result.device.responses == []
+    assert source.state.reads == [(False, False), (False, False)]
+    assert source.device_class.dispatchMessages is original_dispatch
+    assert untouched.device.dispatchMessages.__func__ is original_dispatch
+    assert keyboard.device.parseMessage == original_parse
+    assert keyboard.device.receiveMessage == original_receive
+    assert keyboard.device.muteOutsidePsychopy is True
+
+
+def test_mac_dispatcher_keeps_ignore_clear_and_foreground_muting(upstream_event_keyboard):
+    source = upstream_event_keyboard
+    keyboard, module = source.create()
+    adapter.create_macos_test_keyboard(module)
+    source.state.pending = [["escape", 10.0], ["f", 10.1]]
+    keys = keyboard.getKeys(ignoreKeys=["escape"], waitRelease=False, clear=False)
+    assert [key.name for key in keys] == ["f"]
+    assert [key.name for key in keyboard.getKeys(keyList=["f"], waitRelease=False)] == ["f"]
+    assert [key.name for key in keyboard.device.responses] == ["escape"]
+    source.state.pending = [["space", 10.2]]
+    keyboard.clearEvents()
+    assert keyboard.device.responses == []
+    assert source.state.pending == []
+    assert source.state.clears == [None]
+    source.state.focus = False
+    source.state.pending = [["space", 10.3], ["escape", 10.4]]
+    assert keyboard.getKeys(waitRelease=False) == []
+    assert keyboard.device.muteOutsidePsychopy is True
+    source.state.focus = True
+    source.state.pending = [["escape", 10.5]]
+    assert [key.name for key in keyboard.getKeys(waitRelease=False)] == ["escape"]
 
 
 @pytest.mark.parametrize("operation", ["probe", "session"])
