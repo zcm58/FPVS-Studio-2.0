@@ -31,6 +31,22 @@ Sometimes, using OneDrive or other services that sync with a cloud service can c
 issues with loading and running your experiments, so I recommend placing your root folder
 outside of one of those directories.
 
+### Mac source setup
+
+Download or clone the **entire repository**, then open its folder in Finder:
+
+1. Double-click **Setup Mac.command**. It prepares native Python 3.10, the virtual
+   environment and all Mac GUI/engine requirements, then checks the installation.
+2. Double-click **Run Mac.command** to open Studio. Python and PyCharm do not need
+   to be installed beforehand.
+3. Optional: fully quit PyCharm, then use **Open in PyCharm Mac.command** and select
+   **FPVS Studio (Mac)** in its Run menu. The interpreter and `main.py` path are prepared.
+
+An Intel Mac may need Apple's Command Line Tools installer and administrator prompts
+for Homebrew build tools. Follow the setup window; rerun Setup after Apple's installer
+finishes. See the [Mac setup guide](docs/MACOS_SUPPORT.md#install-run-and-update-from-source)
+for first-run details, logs and recovery. Mac support remains experimental and excludes EEG.
+
 
 ## Create Your First Project
 

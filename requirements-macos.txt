@@ -1,0 +1,2 @@
+# Mac authoring, local presentation and verification; versions live in pyproject.toml.
+-e .[dev,engine]

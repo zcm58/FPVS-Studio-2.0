@@ -75,7 +75,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Runtime recording and evidence | `runtime/recording.py`, `runtime/acquisition_evidence.py` |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
-| Mac source services and test process | `runtime/macos_display.py`, `runtime/macos_session_process.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
+| Mac source setup and services | `scripts/macos-source.sh`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 
 ## Dependency Rules
 

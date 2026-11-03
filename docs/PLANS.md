@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Simple Mac clone setup](exec-plans/completed/mac-clone-bootstrap.md): automatic
+  project-contained Python/dependencies, Finder shortcuts and scoped PyCharm setup;
+  fresh install, focused/native Qt and safe precommit checks passed.
 - [Studio 2.6.0 release](exec-plans/completed/release-2.6.0.md):
   Setup/session, themes and Mac-source features published immutable/latest; frozen
   build, public-byte/attestation and eight production-updater checks passed.

@@ -22,6 +22,7 @@ policy, [GUI workflow](GUI_WORKFLOW.md) owns authoring behavior and
 | Windows regressions | Repo precommit: 4,974 passed, 14 symlink-permission skips; Ruff, full source mypy, compilation and audits passed. Final focused bundle/fixture run: 197 passed, 5 native-only skips. Counts overlap. |
 | Windows environment/test-adapter repair | Native Windows precommit on `185471b` in [run 41571020291](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41571020291): 5,033 passed, four POSIX-only skips, 24 subtests; both type passes and transfer fixture passed. |
 | Local Mac repair | Python 3.10.20/arm64 `.venv` passes `pip check`; repo precommit: 4,973 passed, 64 platform/filesystem skips, 24 subtests. Focused visible Mac/Welcome/Library/worker/popup coverage: 100 passed. Original intermittent crash stability remains open. |
+| Mac clone bootstrap | Clean managed Python 3.10.22/arm64 install in a spaced path passed full engine requirements, dependency/import checks and nine approved visible Qt cases. Existing `.venv` reuse and scoped PyCharm setup verified; final focused checks: 1,397 passed/15 skips; repo precommit: 4,993 passed/64 skips/24 subtests. See [setup record](exec-plans/completed/mac-clone-bootstrap.md). |
 | Visible Windows checks | 18 focused GUI cases passed across calibration, source updates, test availability, shortcuts and Save. Mac-only policy was faked; these are not native Mac GUI results. |
 | Mac CI | [Run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134), source commit `f6b6721`: all six jobs passed. Each Mac CPU lane passed 1,358 checks with 10 platform-specific skips. Native private-Keychain roundtrip, Trash, display metadata and real child IPC passed. |
 | Mac CI after the compatibility repair | Both arm64 and Intel source jobs on `185471b` in [run 41571020291](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41571020291) passed 1,382 checks with ten platform skips, adapter mypy and native probes using the new dependency selection. |
@@ -36,28 +37,56 @@ APIs on hosted Macs; it does not establish physical presentation or full GUI par
 
 ## Install, run and update from source
 
-Use the same Studio version or commit on the Mac and Windows computers. Install
-native Python 3.10 for the Mac's CPU architecture and obtain the source checkout.
+Use the same Studio version or commit on the Mac and Windows computers. Download
+or clone the **whole repository**, not just `src/`: setup needs `pyproject.toml`,
+the requirements files and `scripts/`. Keep it in a local folder.
 
-Intel installation also requires Apple command-line tools, Rust 1.83 or later and
-OpenSSL 3. The current [cryptography 50.0.2](https://pypi.org/project/cryptography/50.0.2/#files)
-and [zeroconf 0.152.1](https://pypi.org/project/zeroconf/0.152.1/#files) releases provide
-Apple Silicon wheels but build from source on Intel. Install Apple's tools with
-`xcode-select --install` if absent. With [Homebrew](https://brew.sh/) already installed:
+1. In Finder, double-click **Setup Mac.command**. A Terminal window shows progress.
+   Wait for **Setup complete**. No preinstalled Python or PyCharm is required.
+2. Double-click **Run Mac.command** to open Studio. Select an FPVS Studio Root Folder
+   on first launch, as on Windows.
+3. To work in PyCharm, install PyCharm separately and double-click **Open in PyCharm
+   Mac.command**. Choose **FPVS Studio (Mac)** in the Run menu and click Run. Fully
+   quit PyCharm before using this launcher so its interpreter setting is read; the
+   shortcut explains this if PyCharm is already running and preserves your open work.
 
-```bash
-brew install openssl@3 rust
-```
+Setup reuses `.venv3.10`, then `.venv`, when present and compatible. Otherwise it
+creates `.venv3.10`. Missing native Python 3.10 is downloaded through a pinned,
+checksum-verified [uv release](https://github.com/astral-sh/uv/releases/tag/0.13.7),
+using uv's [managed Python installation](https://docs.astral.sh/uv/guides/install-python/).
+The installer and Python live in ignored `.fpvs-macos/`; keep that folder alongside
+the environment because it can contain the environment's base interpreter. Setup
+does not change system Python or shell startup files. An existing environment with
+the wrong Python version/CPU or an incomplete interpreter is reported and preserved.
 
-See [cryptography's native build requirements](https://cryptography.io/en/50.0.2/installation/#building-cryptography-on-macos).
-Apple's system SSL libraries cannot substitute for OpenSSL 3. If setup cannot locate
-Homebrew's OpenSSL, prefix the `setup` command below with its explicit location:
+`pyproject.toml` remains the only dependency version list. `requirements-macos.txt`
+includes its `dev,engine` extras; the primary Windows `requirements.txt` keeps `dev`.
+Setup installs with pip, runs `pip check`, checks GUI imports without opening an app,
+and verifies engine metadata. Successful installation does not guarantee every GUI,
+presentation or service workflow is bug-free; those acceptance gates remain above.
 
-```bash
-OPENSSL_DIR="$(brew --prefix openssl@3)" bash scripts/macos-source.sh setup
-```
+Intel dependencies can require compilation. Setup checks Apple's Command Line Tools,
+Rust 1.83+ and OpenSSL 3. If Apple's tools are missing, complete the macOS installer
+that setup requests, then run Setup again. Missing Rust/OpenSSL are installed through
+[Homebrew](https://docs.brew.sh/Installation); installing Homebrew itself can require
+an administrator password in Terminal. These OS/admin prompts cannot be completed
+unattended on a new Mac. Existing build tools are reused. A preconfigured OpenSSL
+installation can be selected with `OPENSSL_DIR`; Apple's system SSL is insufficient.
+See [cryptography's build requirements](https://cryptography.io/en/50.0.2/installation/#building-cryptography-on-macos).
 
-On either architecture, run from the checkout directory in Terminal:
+The PyCharm helper prepares `.idea/runConfigurations/FPVS_Studio_Mac.xml`, with the
+active venv and `src/fpvs_studio/app/main.py`. It refuses to overwrite a custom file
+with that name. With the IDE closed, its optional launcher registers/reuses one SDK
+in the selected app's standard Mac settings profile and binds this project's SDK.
+Existing SDKs, other project components and run configurations are preserved;
+changed XML is backed up under `.fpvs-macos/pycharm-backups/`. This avoids the
+process-wide [interpreter startup variable](https://www.jetbrains.com/help/pycharm/configure-an-interpreter-using-command-line.html),
+which can change defaults for other unconfigured projects opened in that IDE process.
+PyCharm is optional; Run Mac.command launches the shared application directly.
+For a nonstandard IDE install, set
+`FPVS_PYCHARM_APP` to its `.app` path when invoking the shell helper.
+
+Terminal alternatives, from the checkout:
 
 ```bash
 bash scripts/macos-source.sh setup
@@ -65,24 +94,16 @@ bash scripts/macos-source.sh verify
 bash scripts/macos-source.sh run
 ```
 
-`setup` reuses `.venv3.10` or an existing `.venv`, creating `.venv3.10` if neither
-exists, installs the declared `dev,engine` extras and runs
-`pip check`. Set `FPVS_PYTHON=/absolute/path/to/python3.10` if Python is not available
-as `python3.10`. Dependency resolution must succeed without ignoring requirements or
-mixing Intel and Apple Silicon environments. A clean install on an untested target
-remains unqualified if wheels or compatible dependency versions are unavailable.
+`FPVS_PYTHON=/absolute/path/to/python3.10` selects an existing interpreter;
+`FPVS_MANAGED_PYTHON=1` exercises managed Python acquisition on a fresh checkout
+even if Python 3.10 is already on PATH. Existing environments are always preserved
+and reused first. Install the declared requirements without `--no-deps` or mixing
+Intel and Apple Silicon environments. No guarantee follows for an untested OS/CPU.
 
-For PyCharm, select the installed environment's `bin/python` as the project and Run
-configuration interpreter. A base interpreter such as `.python3.10-standalone/bin/python`
-does not acquire the virtual environment's dependencies. To refresh an existing `.venv`
-instead of creating the helper's `.venv3.10`, run:
-
-```bash
-.venv/bin/python -m pip install --editable '.[dev,engine]'
-.venv/bin/python -m pip check
-.venv/bin/python .agents/scripts/verify.py --scope macos --tier focused
-.venv/bin/python -m fpvs_studio.app
-```
+If setup fails, its window keeps the error visible. The complete log is
+`.fpvs-macos/setup.log`; correct the reported issue and rerun Setup. Network failures,
+invalid interpreter versions/architectures and failed packages stop setup. A damaged
+environment may be renamed before retrying; do not delete its Python base directory.
 
 Mac dependencies currently select PySide6 6.11.3 and the engine's PyQt6 6.11 line.
 The PySide selection is a compatibility mitigation following an observed PySide6

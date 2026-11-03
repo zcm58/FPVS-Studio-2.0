@@ -1,6 +1,7 @@
 .idea/
 
 # Environment / IDE
+/.fpvs-macos/
 .venv/
 .venv*/
 .venv3.10/

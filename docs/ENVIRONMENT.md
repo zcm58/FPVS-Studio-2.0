@@ -12,15 +12,24 @@ This is enforced in:
 
 ## Recommended Local Setup
 
-For experimental macOS source setup, use `bash scripts/macos-source.sh setup`, then
-`bash scripts/macos-source.sh run` from the checkout. This creates `.venv3.10`,
-installs the GUI/engine/dev extras and checks dependency consistency. Native Python
-3.10 must match the Mac's CPU architecture; `FPVS_PYTHON` can select its executable.
-Intel also needs Apple command-line tools, Rust 1.83 or later and OpenSSL 3 to build
-security-required dependencies that lack Intel wheels. See
+For experimental macOS source setup, double-click `Setup Mac.command`, then
+`Run Mac.command` in the complete checkout. The existing shell adapter creates or
+reuses a native Python 3.10 environment, installs `requirements-macos.txt` and checks
+consistency/imports. If Python is missing, a pinned, checksum-verified uv binary
+installs it under `.fpvs-macos/`; system Python and shell profiles are not modified.
+`FPVS_PYTHON` can select an existing native interpreter. Intel setup handles Rust
+1.83+/OpenSSL 3 through Homebrew and requests Apple's build tools when absent. See
 [Mac installation prerequisites](MACOS_SUPPORT.md#install-run-and-update-from-source)
-for Homebrew/OpenSSL setup, the CI matrix, test-only scope, local calibration and
+for required Apple/admin prompts, the CI matrix, test-only scope, local calibration and
 portable Windows handoff. No Developer ID is needed for source.
+
+`pyproject.toml` owns dependency versions. `requirements.txt` keeps the primary
+developer entry point; `requirements-macos.txt` selects `dev,engine` without copying
+versions. The optional `Open in PyCharm Mac.command` registers/reuses one SDK in the
+selected IDE's standard Mac profile while PyCharm is closed, binds this project and
+prepares its run configuration. Changed XML is backed up under `.fpvs-macos/`; other
+SDK entries and project components are preserved. The same actions are available through
+`bash scripts/macos-source.sh {setup|run|pycharm|verify}`.
 
 PowerShell:
 

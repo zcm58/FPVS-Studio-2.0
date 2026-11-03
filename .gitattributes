@@ -1,1 +1,2 @@
 scripts/macos-source.sh text eol=lf
+*.command text eol=lf

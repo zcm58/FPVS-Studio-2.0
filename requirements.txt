@@ -1,2 +1,3 @@
 # Developer environment dependencies are declared in pyproject.toml.
+# Mac users: double-click Setup Mac.command, or use requirements-macos.txt for the engine.
 -e .[dev]

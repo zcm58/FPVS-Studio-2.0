@@ -10,6 +10,9 @@ on:
       - .agents/verification.toml
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
+      - scripts/macos_pycharm.py
+      - '*Mac.command'
+      - requirements-macos.txt
       - scripts/script_helpers.ps1
       - scripts/verify.ps1
       - .github/workflows/macos-source.yml
@@ -21,6 +24,9 @@ on:
       - .agents/verification.toml
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
+      - scripts/macos_pycharm.py
+      - '*Mac.command'
+      - requirements-macos.txt
       - scripts/script_helpers.ps1
       - scripts/verify.ps1
       - .github/workflows/macos-source.yml
@@ -102,6 +108,8 @@ jobs:
           python -c 'import os, platform, sys; print(sys.version); print(platform.machine()); assert platform.machine() == os.environ["EXPECTED_CPU"]' | tee -a "$RUNNER_TEMP/macos-source-evidence/host.txt"
 
       - name: Install complete source dependencies
+        env:
+          FPVS_MANAGED_PYTHON: "1"
         run: bash scripts/macos-source.sh setup
 
       - name: Record resolved dependency versions

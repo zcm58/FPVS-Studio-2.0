@@ -380,6 +380,7 @@ tests = [
   "tests/unit/test_platform_adapters.py",
   "tests/unit/test_macos_display.py",
   "tests/unit/test_macos_source_tooling.py",
+  "tests/unit/test_macos_bootstrap.py",
   "tests/unit/test_macos_bundle_handoff.py",
   "tests/unit/test_macos_document_runtime.py",
   "tests/unit/test_macos_retina.py",
@@ -423,6 +424,10 @@ tests = [
 ]
 full_tests = ["tests/gui", "tests/integration/test_psychopy_engine.py"]
 include = [
+  "scripts/macos-source.sh",
+  "scripts/macos_pycharm.py",
+  "*Mac.command",
+  "requirements-macos.txt",
   "src/fpvs_studio/runtime/macos_display.py",
   "src/fpvs_studio/runtime/macos_session_process.py",
   "src/fpvs_studio/gui/document_runtime.py",

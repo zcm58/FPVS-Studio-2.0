@@ -29,7 +29,8 @@ def test_source_helper_reuses_native_environment(tmp_path, command, preferred):
     tools = tmp_path / "tools"
     tools.mkdir()
     uname = tools / "uname"
-    uname.write_text('#!/bin/sh\necho Darwin\n', encoding="utf-8")
+    uname.write_text('#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo arm64;; esac\n',
+                     encoding="utf-8")
     uname.chmod(0o700)
     for environment in (".venv", ".venv3.10") if preferred else (".venv",):
         python = tmp_path / environment / "bin/python"
@@ -48,7 +49,7 @@ def test_source_helper_reuses_native_environment(tmp_path, command, preferred):
     selected = ".venv3.10" if preferred else ".venv"
     commands = log.read_text(encoding="utf-8")
     assert str(tmp_path / selected / "bin/python") in commands
-    assert ("fpvs_studio.app" if command == "run" else ".[dev,engine]") in commands
+    assert ("fpvs_studio.app" if command == "run" else "requirements-macos.txt") in commands
     assert (tmp_path / ".venv3.10").exists() is preferred
 
 
@@ -80,6 +81,9 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
     ))
     assert setup["with"]["python-version"] == "3.10"
     steps = "\n".join(str(step) for step in job["steps"])
+    installation = next(step for step in job["steps"]
+                        if step.get("run") == "bash scripts/macos-source.sh setup")
+    assert installation["env"]["FPVS_MANAGED_PYTHON"] == "1"
     assert "FPVS_MACOS_NATIVE_CHECKS" in steps
     assert "FPVS_ALLOW_QT_TESTS" not in steps
     assert "offscreen" not in steps
@@ -99,7 +103,7 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
     assert ".[dev,engine]" not in str(reverse["steps"])
     assert "scripts/macos-source.sh setup" not in str(reverse["steps"])
     script = (ROOT / "scripts/macos-source.sh").read_text(encoding="utf-8")
-    assert "pip install --editable '.[dev,engine]'" in script
+    assert "pip install --requirement requirements-macos.txt" in script
     assert "-m pip check" in script
 
 
