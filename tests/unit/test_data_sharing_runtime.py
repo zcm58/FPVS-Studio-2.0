@@ -346,6 +346,36 @@ def test_completed_electrode_snapshot_preserves_nullable_launch_values(execution
     assert intent.electrode_exclusions == report.electrode_exclusions
 
 
+@pytest.mark.parametrize("removed", [["N/A"], [" n/a "]])
+def test_legacy_electrode_placeholder_shares_unknown_and_preserves_research(
+    execution, removed, caplog,
+):
+    root, _ = execution
+    metadata = ParticipantMetadata(manual_removed_electrodes=removed)
+    summary = execute(execution, metadata=metadata)
+    report = data_sharing.SessionReport.model_validate_json(list_records(root)[0].payload_json)
+    assert report.electrode_exclusions.removed_electrodes is None
+    assert metadata.manual_removed_electrodes == ["N/A"]
+    assert summary.participant_metadata.manual_removed_electrodes == ["N/A"]
+    assert not data_sharing.capture_errors(root)
+    assert any(getattr(record, "event", None) == "data_sharing_legacy_electrode_placeholder"
+               for record in caplog.records)
+    intent = data_sharing.read_capture_intents(root)[0]
+    assert intent.research_committed
+    assert data_sharing._history_evidence(root, intent) == intent.evidence_sha256
+
+
+def test_legacy_placeholder_does_not_replace_a_reviewed_electrode_snapshot(execution):
+    root, _ = execution
+    execute(execution, metadata=ParticipantMetadata(manual_removed_electrodes=["N/A"]))
+    intent = data_sharing.read_capture_intents(root)[0]
+    reviewed_none = intent.electrode_exclusions.model_copy(update={"removed_electrodes": ()})
+    with pytest.raises(data_sharing.SharingStorageError, match="Committed electrodes"):
+        data_sharing._history_evidence(root, intent.model_copy(update={
+            "electrode_exclusions": reviewed_none,
+        }))
+
+
 def test_capture_snapshot_cannot_claim_a_different_visit(execution):
     root, _ = execution
     execute(execution, metadata=ParticipantMetadata(manual_removed_electrodes=[]))

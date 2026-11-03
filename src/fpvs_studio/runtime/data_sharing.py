@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -41,6 +42,7 @@ from fpvs_studio.data_sharing.storage import (
 
 MAX_INTENT_BYTES = 256 * 1024
 MAX_HISTORY_BYTES = 64 * 1024 * 1024
+logger = logging.getLogger(__name__)
 
 
 class CaptureIntent(SharingModel):
@@ -159,6 +161,11 @@ def _history_evidence(root: Path, intent: CaptureIntent) -> str:
     if intent.electrode_exclusions is not None:
         electrodes = intent.electrode_exclusions.removed_electrodes
         for row in selected.values():
+            if (electrodes is None
+                    and row.get("manual_removed_electrodes_recorded", "").lower() == "true"
+                    and row.get("manual_removed_electrodes", "") == "N/A"):
+                # The original placeholder remains in the hashed research evidence.
+                continue
             if (
                 row.get("manual_removed_electrodes_recorded", "").lower()
                 != str(electrodes is not None).lower()
@@ -347,6 +354,12 @@ class SharingCapture:
             if participant_session_number is None:
                 raise ValueError("Session capture requires its reserved participant visit number.")
             removed = metadata.manual_removed_electrodes
+            if removed == ["N/A"]:
+                removed = None
+                logger.warning(
+                    "Legacy N/A electrode entry is unrecorded in the shared snapshot.",
+                    extra={"event": "data_sharing_legacy_electrode_placeholder"},
+                )
             electrodes = ElectrodeExclusions(
                 execution_id=execution_id, visit_id=participant_session_number,
                 removed_electrodes=tuple(removed) if removed is not None else None,

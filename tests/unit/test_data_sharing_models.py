@@ -107,6 +107,7 @@ def test_electrode_reports_preserve_unknown_empty_and_known_labels(removed):
     {"visit_id": True}, {"visit_id": 0}, {"visit_id": 1_000_000_000},
     {"removed_electrodes": ("ft7",)}, {"removed_electrodes": ("A1", "A1")},
     {"removed_electrodes": ("participant notes",)},
+    {"removed_electrodes": ("N/A",)},
     {"removed_electrodes": ("A" * 81,)},
     {"removed_electrodes": tuple(f"A{index}" for index in range(257))},
     {"removed_electrodes": ({"name": "private"},)},

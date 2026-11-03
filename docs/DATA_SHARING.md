@@ -294,6 +294,12 @@ matching `[A-Z0-9][A-Z0-9_.+-]{0,79}`. Invalid labels/bounds require review; not
 silently removed or truncated. The durable launch intent freezes this snapshot before
 presentation. Recovery never reads the project's latest participant prefill map.
 
+A sole legacy local `N/A` electrode entry means the shared snapshot is unrecorded
+(`null`), with a structured warning. Original metadata and numbered research rows
+retain `N/A`; commit verification hashes those original rows. This does not mean a
+review found no removed electrodes (`[]`). Other invalid labels and mixed lists
+still require review, and the strict wire format continues to reject `N/A` labels.
+
 `participant_summary` contains exactly `schema_version: "1.0"`, an opaque canonical
 UUID `subject_id`, nullable integer `age` (1â€“120), nullable `sex` (`Female` or `Male`),
 nullable `handedness` (`Right handed`, `Left handed` or `Ambidextrous`), and nullable

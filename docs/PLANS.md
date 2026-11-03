@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Reporting protocol and delivery audit](exec-plans/completed/reporting-protocol-audit-20261103.md):
+  eleven additional current scopes connected, four proven sessions recovered,
+  legacy electrode placeholder handling fixed and all eligible completed output reconciled.
 - [Mac refresh recovery](exec-plans/completed/macos-refresh-recovery.md): bounded
   cancellable refresh-only children, protected automatic preflight and no duplicate
   Mac constructor check; safe precommit and 58 visible fake-only Qt checks passed.
