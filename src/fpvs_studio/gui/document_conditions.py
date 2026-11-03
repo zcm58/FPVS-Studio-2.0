@@ -30,7 +30,6 @@ from fpvs_studio.core.enums import (
     ExperimentCategory,
     ProjectSchemaVersion,
     StimulusModality,
-    StimulusTransform,
     StimulusVariant,
 )
 from fpvs_studio.core.experiment_categories import (
@@ -447,83 +446,6 @@ class DocumentConditionMixin:
             self._project,
             conditions=self._reindex_conditions([*ordered_conditions, duplicated_condition]),
             stimulus_sets=[*self._project.stimulus_sets, *new_sets],
-        )
-        self._replace_project(project)
-        return new_condition_id
-
-    def create_control_condition(
-        self,
-        source_condition_id: str,
-        *,
-        variant: StimulusVariant,
-        transform: StimulusTransform | None = None,
-        name: str | None = None,
-    ) -> str:
-        """Create a file-backed or runtime-transformed control condition."""
-
-        if has_retired_image_pair_design(self._project):
-            raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
-
-        if variant == StimulusVariant.ORIGINAL and transform in {
-            None,
-            StimulusTransform.NONE,
-        }:
-            raise DocumentError(
-                "Control conditions must use a derived stimulus variant or runtime transform."
-            )
-
-        source_condition = self.get_condition(source_condition_id)
-        if source_condition is None:
-            raise DocumentError(f"Unknown condition '{source_condition_id}'.")
-        source_base_set = self.get_condition_stimulus_set(source_condition_id, "base")
-        if source_base_set.modality != StimulusModality.IMAGE:
-            raise DocumentError("Control conditions are only available for image conditions.")
-
-        ordered_conditions = self.ordered_conditions()
-        existing_condition_ids = {condition.condition_id for condition in self._project.conditions}
-        control_name = self._unique_condition_name(
-            name
-            or self._default_control_condition_name(
-                source_condition.name,
-                variant,
-                transform=transform,
-            ),
-            {condition.name for condition in ordered_conditions},
-        )
-        new_condition_id = self._unique_slug(control_name, existing_condition_ids)
-        presentation = source_condition.presentation
-        if transform is not None:
-            presentation = presentation.model_copy(
-                update={
-                    "common": presentation.common.model_copy(
-                        update={"transform": transform},
-                        deep=True,
-                    ),
-                    "base": presentation.base.model_copy(
-                        update={"transform": None},
-                        deep=True,
-                    ),
-                    "oddball": presentation.oddball.model_copy(
-                        update={"transform": None},
-                        deep=True,
-                    ),
-                },
-                deep=True,
-            )
-        control_condition = source_condition.model_copy(
-            deep=True,
-            update={
-                "condition_id": new_condition_id,
-                "name": control_name,
-                "stimulus_variant": variant,
-                "presentation": presentation,
-                "trigger_code": len(ordered_conditions) + 1,
-                "order_index": len(ordered_conditions),
-            }
-        )
-        project = validated_copy(
-            self._project,
-            conditions=self._reindex_conditions([*ordered_conditions, control_condition]),
         )
         self._replace_project(project)
         return new_condition_id
@@ -1101,34 +1023,3 @@ class DocumentConditionMixin:
             candidate = f"{base}-{suffix}"
             suffix += 1
         return candidate
-
-    def _unique_condition_name(self, preferred_name: str, existing_names: set[str]) -> str:
-        candidate = preferred_name.strip() or "Control Condition"
-        base = candidate
-        suffix = 2
-        while candidate in existing_names:
-            candidate = f"{base} {suffix}"
-            suffix += 1
-        return candidate
-
-    def _default_control_condition_name(
-        self,
-        source_name: str,
-        variant: StimulusVariant,
-        *,
-        transform: StimulusTransform | None = None,
-    ) -> str:
-        variant_label = {
-            StimulusVariant.GRAYSCALE: "Grayscale",
-            StimulusVariant.ROT180: "180 Degree Rotated",
-            StimulusVariant.PHASE_SCRAMBLED: "Phase-Scrambled",
-            StimulusVariant.ORIGINAL: "Original",
-        }[variant]
-        if transform is not None:
-            variant_label = {
-                StimulusTransform.NONE: "Original",
-                StimulusTransform.MIRROR_HORIZONTAL: "Horizontally Mirrored",
-                StimulusTransform.MIRROR_VERTICAL: "Vertically Mirrored",
-                StimulusTransform.ROT180: "180 Degree Rotated",
-            }[transform]
-        return f"{source_name} {variant_label} Control"

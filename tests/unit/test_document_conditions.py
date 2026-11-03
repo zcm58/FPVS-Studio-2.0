@@ -4,8 +4,12 @@ from __future__ import annotations
 
 import pytest
 
-from fpvs_studio.core.enums import StimulusModality, StimulusVariant
-from fpvs_studio.core.models import ProjectFile
+from fpvs_studio.core.enums import StimulusModality, StimulusTransform, StimulusVariant
+from fpvs_studio.core.models import (
+    ConditionPresentationSettings,
+    ProjectFile,
+    StimulusPresentationOverride,
+)
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 
@@ -32,55 +36,49 @@ def test_manual_removed_electrodes_update_saves_participant_map(
     }
 
 
-def test_create_control_condition_reuses_stimulus_sets_and_sets_variant(
+@pytest.mark.parametrize(
+    ("variant", "transform"),
+    [
+        (StimulusVariant.ORIGINAL, StimulusTransform.NONE),
+        (StimulusVariant.GRAYSCALE, StimulusTransform.NONE),
+        (StimulusVariant.ROT180, StimulusTransform.NONE),
+        (StimulusVariant.PHASE_SCRAMBLED, StimulusTransform.NONE),
+        (StimulusVariant.ORIGINAL, StimulusTransform.MIRROR_HORIZONTAL),
+        (StimulusVariant.ORIGINAL, StimulusTransform.MIRROR_VERTICAL),
+        (StimulusVariant.ORIGINAL, StimulusTransform.ROT180),
+    ],
+)
+def test_manual_condition_variant_and_transform_survive_copy_and_save(
     tmp_path,
     sample_project: ProjectFile,
+    variant: StimulusVariant,
+    transform: StimulusTransform,
 ) -> None:
     document = _document_for_project(tmp_path, sample_project)
-
-    control_id = document.create_control_condition(
-        "faces",
-        variant=StimulusVariant.GRAYSCALE,
+    original = document.get_condition("faces").model_copy(deep=True)
+    condition_id = document.create_condition(name="Edited images")
+    presentation = ConditionPresentationSettings(
+        common=StimulusPresentationOverride(transform=transform),
     )
+    document.update_condition(condition_id, stimulus_variant=variant)
+    document.set_condition_presentation(condition_id, presentation)
+    duplicate_id = document.duplicate_condition(condition_id)
+    document.save()
 
-    source = document.get_condition("faces")
-    control = document.get_condition(control_id)
-    assert source is not None
-    assert control is not None
-    assert control.name == "Faces Grayscale Control"
-    assert control.base_stimulus_set_id == source.base_stimulus_set_id
-    assert control.oddball_stimulus_set_id == source.oddball_stimulus_set_id
-    assert control.stimulus_variant == StimulusVariant.GRAYSCALE
-    assert control.trigger_code == 2
-    assert control.order_index == 1
-    assert len(document.project.stimulus_sets) == 2
-
-
-def test_create_control_condition_uses_unique_name_and_rejects_original(
-    tmp_path,
-    sample_project: ProjectFile,
-) -> None:
-    document = _document_for_project(tmp_path, sample_project)
-
-    first_id = document.create_control_condition(
-        "faces",
-        variant=StimulusVariant.ROT180,
-        name="Faces Control",
-    )
-    second_id = document.create_control_condition(
-        "faces",
-        variant=StimulusVariant.PHASE_SCRAMBLED,
-        name="Faces Control",
-    )
-
-    first = document.get_condition(first_id)
-    second = document.get_condition(second_id)
-    assert first is not None
-    assert second is not None
-    assert first.name == "Faces Control"
-    assert second.name == "Faces Control 2"
-    with pytest.raises(DocumentError, match="derived stimulus variant"):
-        document.create_control_condition("faces", variant=StimulusVariant.ORIGINAL)
+    condition = document.get_condition(condition_id)
+    duplicate = document.get_condition(duplicate_id)
+    assert condition is not None
+    assert duplicate is not None
+    assert condition.stimulus_variant == duplicate.stimulus_variant == variant
+    assert condition.presentation == duplicate.presentation == presentation
+    assert duplicate.base_stimulus_set_id != condition.base_stimulus_set_id
+    assert duplicate.oddball_stimulus_set_id != condition.oddball_stimulus_set_id
+    assert document.get_condition("faces") == original
+    loaded = load_project_file(document.project_file_path)
+    saved = {item.condition_id: item for item in loaded.conditions}
+    assert saved[condition_id] == condition
+    assert saved[duplicate_id] == duplicate
+    assert saved["faces"] == original
 
 
 def test_word_condition_words_update_and_duplicate_with_new_sets(
@@ -121,7 +119,7 @@ def test_populated_condition_modality_switch_is_rejected(
         document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.IMAGE)
 
 
-def test_word_condition_rejects_image_import_and_control_condition(
+def test_word_condition_rejects_image_import(
     tmp_path,
     sample_project: ProjectFile,
 ) -> None:
@@ -135,5 +133,3 @@ def test_word_condition_rejects_image_import_and_control_condition(
             role="base",
             source_dir=tmp_path,
         )
-    with pytest.raises(DocumentError, match="image conditions"):
-        document.create_control_condition(condition_id, variant=StimulusVariant.GRAYSCALE)

@@ -10,7 +10,6 @@ from PIL import Image
 from fpvs_studio.core.enums import (
     ExperimentCategory,
     StimulusModality,
-    StimulusVariant,
 )
 from fpvs_studio.core.models import AttentionalBlinkSettings, ProjectFile
 from fpvs_studio.gui.document_conditions import DocumentConditionMixin
@@ -242,8 +241,6 @@ def test_retired_image_pair_creation_and_design_apply_are_blocked(document):
         document.create_condition(name="Image pair")
     with pytest.raises(DocumentError, match="no longer supported"):
         document.duplicate_condition("faces")
-    with pytest.raises(DocumentError, match="no longer supported"):
-        document.create_control_condition("faces", variant=StimulusVariant.ORIGINAL)
     with pytest.raises(DocumentError, match="no longer supported"):
         _apply_ab(document)
     assert document._project == before

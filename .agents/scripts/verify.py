@@ -190,9 +190,9 @@ def _git_lines(repo_root: Path, *arguments: str) -> list[str]:
 
 
 def changed_files(repo_root: Path = REPO_ROOT) -> tuple[str, ...]:
-    """Return staged, unstaged, and untracked worktree paths."""
+    """Return staged, unstaged, and untracked worktree paths, excluding deletions."""
 
-    tracked = _git_lines(repo_root, "diff", "--name-only", "HEAD", "--")
+    tracked = _git_lines(repo_root, "diff", "--name-only", "--diff-filter=d", "HEAD", "--")
     untracked = _git_lines(repo_root, "ls-files", "--others", "--exclude-standard")
     return tuple(sorted(set(tracked) | set(untracked)))
 

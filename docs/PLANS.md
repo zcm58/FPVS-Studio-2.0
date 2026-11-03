@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Remove Create Control Condition](exec-plans/completed/remove-control-condition-workflow.md):
+  dedicated GUI/document workflow removed; saved conditions, formats, assets and manual
+  authoring preserved, with full safe precommit and 27 visible Qt cases passed.
 - [Settings hierarchy and theme preference](exec-plans/completed/settings-hierarchy-and-theme.md):
   flat Settings and persisted Light/Dark/Auto implemented; precommit and focused/visible
   checks passed, with optional Welcome test-order and native/scaling limits recorded.

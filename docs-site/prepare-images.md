@@ -68,14 +68,14 @@ size is `512x512`, with `256x256` and `1024x1024` also available.
 The Image Resizer does not change any open project. After it finishes, select the
 new output folder when you set up a condition.
 
-## Control Conditions
+## Additional Image Conditions
 
-For image conditions, FPVS Studio can create optional control conditions from an
-existing condition. Current options include grayscale, 180 degree rotation, and
-phase scrambling.
+Use Add or Duplicate in Conditions to create another condition, then choose its
+base/oddball folders and edit its settings normally. If you prepare grayscale,
+rotated or phase-scrambled images separately, keep each resulting stimulus group
+in its own folder and import it like other image stimuli.
 
-Control-condition tools are for image conditions only. They do not apply to word
-conditions.
+Existing saved conditions retain their image variants and presentation transforms.
 
 ## Word Stimuli
 

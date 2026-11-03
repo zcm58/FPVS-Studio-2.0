@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -89,6 +91,46 @@ def test_validate_config_rejects_qt_test_only_from_local_bundle(tmp_path: Path) 
     assert verify.validate_config(
         {"gui": full_only_scope}, registry, repo_root=tmp_path
     ) == []
+
+
+
+def test_changed_files_excludes_deletions_and_retains_existing_changes(tmp_path: Path) -> None:
+    git = shutil.which("git")
+    if git is None:
+        pytest.skip("Git is required to inspect worktree changes")
+    repo_root = tmp_path / "worktree"
+    repo_root.mkdir()
+    hooks_dir = tmp_path / "empty-hooks"
+    hooks_dir.mkdir()
+
+    def run_git(*arguments: str) -> None:
+        subprocess.run(
+            [git, "-c", "user.name=Verification Test", "-c", "user.email=verify@example.invalid",
+             "-c", "commit.gpgsign=false", "-c", f"core.hooksPath={hooks_dir}", *arguments],
+            cwd=repo_root, check=True, capture_output=True, text=True, encoding="utf-8",
+        )
+
+    run_git("init", "--quiet")
+    for name in (
+        "staged_deleted.py", "unstaged_deleted.py", "staged_changed.py", "unstaged_changed.py",
+        "unchanged.py",
+    ):
+        (repo_root / name).write_text("value = 1\n", encoding="utf-8")
+    run_git("add", ".")
+    run_git("commit", "--quiet", "-m", "Initial test files")
+
+    (repo_root / "staged_deleted.py").unlink()
+    run_git("add", "--", "staged_deleted.py")
+    (repo_root / "unstaged_deleted.py").unlink()
+    (repo_root / "staged_changed.py").write_text("value = 2\n", encoding="utf-8")
+    (repo_root / "staged_added.py").write_text("value = 3\n", encoding="utf-8")
+    run_git("add", "--", "staged_changed.py", "staged_added.py")
+    (repo_root / "unstaged_changed.py").write_text("value = 4\n", encoding="utf-8")
+    (repo_root / "untracked.py").write_text("value = 5\n", encoding="utf-8")
+
+    assert verify.changed_files(repo_root) == (
+        "staged_added.py", "staged_changed.py", "unstaged_changed.py", "untracked.py",
+    )
 
 
 def test_precommit_lints_changed_python_and_runs_only_safe_unit_tests() -> None:

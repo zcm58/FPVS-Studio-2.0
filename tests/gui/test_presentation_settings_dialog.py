@@ -36,7 +36,6 @@ from fpvs_studio.gui.condition_template_manager_dialog import _format_profile_de
 from fpvs_studio.gui.condition_template_profile_editor_dialog import (
     ConditionTemplateProfileEditorDialog,
 )
-from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.presentation_settings_dialog import (
@@ -596,25 +595,21 @@ def test_condition_preview_resolves_active_derived_variant_assets(
         tmp_path,
         "Derived Preview",
     )
-    source_id = document.create_condition(name="Faces")
+    condition_id = document.create_condition(name="Grayscale Faces")
     document.import_condition_stimulus_folder(
-        source_id,
+        condition_id,
         role="base",
         source_dir=_write_image_directory(tmp_path / "derived-preview-base"),
     )
     document.import_condition_stimulus_folder(
-        source_id,
+        condition_id,
         role="oddball",
         source_dir=_write_image_directory(tmp_path / "derived-preview-oddball"),
     )
-    control_id = document.create_control_condition(
-        source_id,
-        variant=StimulusVariant.GRAYSCALE,
-        name="Grayscale Faces",
-    )
+    document.update_condition(condition_id, stimulus_variant=StimulusVariant.GRAYSCALE)
     document.materialize_assets()
 
-    dialog = PresentationSettingsDialog(document, condition_id=control_id)
+    dialog = PresentationSettingsDialog(document, condition_id=condition_id)
     qtbot.addWidget(dialog)
     paths = [
         dialog.preview_stimulus_combo.itemData(index)
@@ -841,16 +836,3 @@ def test_create_project_uses_experiment_template_language(qtbot) -> None:
     assert "Experiment Template" in labels
     assert "Image Timing" not in labels
     assert "experiment template" in dialog.condition_profile_combo.placeholderText().lower()
-
-
-def test_control_dialog_distinguishes_runtime_transforms_from_derived_assets(qtbot) -> None:
-    dialog = ControlConditionDialog(source_condition_name="Faces")
-    qtbot.addWidget(dialog)
-    labels = "\n".join(label.text() for label in dialog.findChildren(QLabel))
-    choices = [
-        dialog.variant_combo.itemText(index) for index in range(dialog.variant_combo.count())
-    ]
-
-    assert "without creating files" in labels
-    assert any("Original assets" in choice and "no new files" in choice for choice in choices)
-    assert any("create derived assets" in choice for choice in choices)

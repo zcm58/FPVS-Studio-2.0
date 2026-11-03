@@ -98,7 +98,7 @@ interaction.
   `To continue` footer and `Show field` action are removed.
 - Conditions is a combined guided setup area for condition list/actions, names,
   triggers, instructions, modality selection, Base/Oddball image-folder selection, typed word-list
-  authoring, control-condition creation, and image normalization. It uses compact list
+  authoring, manual condition add/duplicate/edit, and image normalization. It uses compact list
   rows and source cards, separating `All conditions` repeat settings from
   `This condition` fields. Image sources have keyboard-accessible full-path details
   and copy. The highlighted condition's Base Images and Oddball Images buttons open
@@ -112,7 +112,8 @@ interaction.
   [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
   dimensions within a set are handled by the guided normalization flow when advancing
-  from Conditions. Control-condition creation and normalization stay image-only paths. A
+  from Conditions. Image normalization/materialization remain image-only paths. Existing
+  conditions retain their variants and runtime transforms. A
   condition-level `FPVS Condition Modifiers` dialog makes simple before/after
   questions the primary actions, opening a blank Yes/No builder directly. Existing
   questions remain editable from the dialog's list. Add Question and numbered-list

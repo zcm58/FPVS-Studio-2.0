@@ -840,11 +840,11 @@ The authoring window is organized around two user-facing modes:
     sizes or unsupported runtime formats through a progress task; uniform rectangular
     sets are valid native inputs, while inconsistent folders can still be normalized to
     project-local PNG copies before moving on
-  - the Conditions step includes a secondary `Create Control Condition...` action;
-    mirrored/rotated controls use runtime transforms with the original folders, while
-    grayscale and phase-scrambled controls retain file-backed derived variants
-  - control-condition creation, image normalization, and image materialization are
-    image-only paths and are disabled or skipped for word conditions
+  - conditions can be added, duplicated and edited manually. Existing condition records,
+    variants and runtime transforms remain supported; no condition/assets migration
+    or deletion is required
+  - image normalization and image materialization remain image-only paths and are
+    disabled or skipped for word conditions
   - raw timing fields such as `Cycles / Repeat` are hidden from the guided workflow
     while the friendly per-condition timing-template choice remains available
   - Conditions is complete when category conflicts are resolved and every condition
@@ -1456,7 +1456,7 @@ The current GUI supports:
 - reviewing the active project's pooled fixation accuracy and reaction-time history from
   `View > Fixation Task Accuracy...` without modifying logs or scoring, with an optional
   Excel export written only to the user-selected destination
-- authoring multiple conditions
+- adding, duplicating and editing ordinary conditions
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions
 - configuring inherited image/word presentation rules separately for Base and Oddball,
@@ -1466,7 +1466,6 @@ The current GUI supports:
 - reviewing Target Stimulus Repeats and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
-- creating optional derived-variant control conditions from existing condition stimuli
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan
 - running the supported session launch path with fullscreen PsychoPy playback

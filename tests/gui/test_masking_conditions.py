@@ -6,8 +6,13 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication
-from tests.gui.helpers import _open_created_project, assert_visible_children_within_parent
+from PySide6.QtGui import QPalette
+from PySide6.QtWidgets import QApplication, QPushButton
+from tests.gui.helpers import (
+    _open_created_project,
+    assert_setup_wizard_vertical_scrolling_disabled,
+    assert_visible_children_within_parent,
+)
 from tests.unit.test_masking import masking_project
 
 from fpvs_studio.core.enums import ProjectSchemaVersion
@@ -36,9 +41,35 @@ def _open_masking_setup(qtbot, controller, tmp_path, *, automatic_catches=False)
     return window, window.setup_wizard_page.condition_setup_step
 
 
-def _assert_fit(window, step):
+def _assert_fit(qtbot, window, step):
     QApplication.processEvents()
+    # Selecting a newly created catch posts another form-layout pass.
+    qtbot.waitUntil(lambda: all(
+        label.height() >= label.heightForWidth(label.width())
+        for label in (step.condition_list_hint, step.catch_schedule_summary)
+        if label.isVisible()
+    ))
     assert (window.width(), window.height()) == (1120, 820)
+    assert not hasattr(step, "create_control_condition_button")
+    assert not any("control condition" in button.text().casefold()
+                   for button in step.findChildren(QPushButton))
+    assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
+    action_buttons = (
+        step.add_condition_button, step.duplicate_condition_button,
+        step.add_catch_condition_button, step.remove_condition_button,
+    )
+    bounds = []
+    for button in action_buttons:
+        assert button.isVisible()
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 16
+        bounds.append(button.rect().translated(button.mapTo(step, button.rect().topLeft())))
+    add_bounds, duplicate_bounds, catch_bounds, remove_bounds = bounds
+    assert add_bounds.top() == duplicate_bounds.top()
+    assert catch_bounds.top() == remove_bounds.top()
+    assert catch_bounds.top() > add_bounds.bottom()
+    assert catch_bounds.right() < remove_bounds.left()
+    assert catch_bounds.left() == add_bounds.left()
+    assert remove_bounds.right() == duplicate_bounds.right()
     assert_visible_children_within_parent(step)
     assert_visible_children_within_parent(step.condition_details_section)
     for label in (step.condition_list_hint, step.catch_schedule_summary):
@@ -50,9 +81,24 @@ def _assert_fit(window, step):
     )
 
 
+@pytest.fixture
+def _restore_native_theme(qapp):
+    original_mode = qapp.property("studioThemeMode")
+    original_palette = QPalette(qapp.palette())
+    yield
+    qapp.styleHints().setColorScheme({
+        "light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark,
+    }.get(original_mode, Qt.ColorScheme.Unknown))
+    qapp.setPalette(original_palette)
+    qapp.setProperty("studioThemeMode", original_mode)
+    QApplication.processEvents()
+
+
+@pytest.mark.parametrize("theme_mode", ["light", "dark"])
 def test_masking_catches_are_real_rows_with_saved_identity_and_markers(
-    qtbot, controller: StudioController, tmp_path: Path,
+    qtbot, controller: StudioController, tmp_path: Path, theme_mode, _restore_native_theme,
 ) -> None:
+    controller.set_theme_mode(theme_mode)
     window, step = _open_masking_setup(qtbot, controller, tmp_path)
     original_modifiers = [
         item.model_dump() for item in window.document.project.condition_modifiers
@@ -62,8 +108,7 @@ def test_masking_catches_are_real_rows_with_saved_identity_and_markers(
         step._select_condition(f"{variant}-1")
         assert step.add_catch_condition_button.isVisible()
         assert step.add_catch_condition_button.isEnabled()
-        assert not step.create_control_condition_button.isVisible()
-        _assert_fit(window, step)
+        _assert_fit(qtbot, window, step)
         qtbot.mouseClick(step.add_catch_condition_button, Qt.MouseButton.LeftButton)
         catch_id = step.selected_condition_id()
         catch_ids.append(catch_id)
@@ -77,7 +122,7 @@ def test_masking_catches_are_real_rows_with_saved_identity_and_markers(
         assert "selected ordinary conditions" in step.catch_schedule_summary.text()
         assert not step.add_catch_condition_button.isEnabled()
         assert not step.duplicate_condition_button.isEnabled()
-        _assert_fit(window, step)
+        _assert_fit(qtbot, window, step)
     assert step.condition_list.count() == 12
     assert len(window.document.project.conditions) == 12
     assert [item.model_dump() for item in window.document.project.condition_modifiers] == (
@@ -113,7 +158,7 @@ def test_catch_action_explains_existing_catch_without_changing_shared_settings(
     else:
         assert "catch" in step.add_catch_condition_button.toolTip().lower()
     assert step.catch_schedule_summary.text() == step.add_catch_condition_button.toolTip()
-    _assert_fit(window, step)
+    _assert_fit(qtbot, window, step)
     qtbot.mouseClick(step.add_catch_condition_button, Qt.MouseButton.LeftButton)
     assert window.document.project.model_dump() == before
 
@@ -149,4 +194,6 @@ def test_catch_creation_is_hidden_for_ordinary_experiments(
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     assert not step.add_catch_condition_button.isVisible()
     assert not step.catch_schedule_summary.isVisible()
-    assert step.create_control_condition_button.isVisible()
+    assert not hasattr(step, "create_control_condition_button")
+    assert not any("control condition" in button.text().casefold()
+                   for button in step.findChildren(QPushButton))

@@ -35,7 +35,6 @@ from fpvs_studio.core.enums import (
     DutyCycleMode,
     ExperimentCategory,
     StimulusModality,
-    StimulusVariant,
 )
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.masking import condition_masking, masking_catch_condition_block_reason
@@ -65,7 +64,6 @@ from fpvs_studio.gui.condition_modifier_dialog import (
     ConditionModifierDialog,
     condition_modifier_summary,
 )
-from fpvs_studio.gui.control_condition_dialog import ControlConditionDialog
 from fpvs_studio.gui.designer_sources import import_designer_source
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import StimulusTypeChangeRequiresConfirmation
@@ -409,12 +407,6 @@ class ConditionSetupStep(QWidget):
         self.duplicate_condition_button.setObjectName("setup_wizard_duplicate_condition_button")
         self.duplicate_condition_button.clicked.connect(self._duplicate_condition)
         mark_secondary_action(self.duplicate_condition_button)
-        self.create_control_condition_button = QPushButton("Create Control Condition...", self)
-        self.create_control_condition_button.setObjectName(
-            "setup_wizard_create_control_condition_button"
-        )
-        self.create_control_condition_button.clicked.connect(self._create_control_condition)
-        mark_secondary_action(self.create_control_condition_button)
         self.add_catch_condition_button = QPushButton("Add Catch Condition", self)
         self.add_catch_condition_button.setObjectName("setup_wizard_add_catch_condition_button")
         self.add_catch_condition_button.clicked.connect(self._add_catch_condition)
@@ -444,11 +436,12 @@ class ConditionSetupStep(QWidget):
         action_grid.setContentsMargins(0, 0, 0, 0)
         action_grid.setHorizontalSpacing(8)
         action_grid.setVerticalSpacing(8)
+        self.condition_actions_grid = action_grid
+        self._masking_actions_visible = False
         action_grid.addWidget(self.add_condition_button, 0, 0)
         action_grid.addWidget(self.duplicate_condition_button, 0, 1)
-        action_grid.addWidget(self.create_control_condition_button, 1, 0)
         action_grid.addWidget(self.add_catch_condition_button, 1, 0)
-        action_grid.addWidget(self.remove_condition_button, 1, 1)
+        action_grid.addWidget(self.remove_condition_button, 1, 0, 1, 2)
         self.separate_conditions_button = QPushButton("Separate oddball conditions...", self)
         self.separate_conditions_button.setObjectName("setup_separate_conditions_button")
         mark_secondary_action(self.separate_conditions_button)
@@ -623,6 +616,9 @@ class ConditionSetupStep(QWidget):
         self.catch_schedule_summary.setObjectName("setup_conditions_catch_schedule_summary")
         self.catch_schedule_summary.setWordWrap(True)
         self.catch_schedule_summary.setMinimumWidth(0)
+        catch_summary_policy = self.catch_schedule_summary.sizePolicy()
+        catch_summary_policy.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
+        self.catch_schedule_summary.setSizePolicy(catch_summary_policy)
         form.addRow(self.catch_schedule_title, self.catch_schedule_summary)
         self.presentation_mode_label = QLabel("Presentation mode", self)
         self.presentation_mode_label.setBuddy(self.timing_template_combo)
@@ -1052,8 +1048,13 @@ class ConditionSetupStep(QWidget):
         self.appearance_row.setVisible(not stream and masking is None)
         self.appearance_label.setVisible(not stream and masking is None)
         self.trigger_label.setText("T1 Trigger Code" if stream else "Trigger Code")
-        self.create_control_condition_button.setVisible(not stream and masking is None)
         self.add_catch_condition_button.setVisible(masking is not None)
+        if self._masking_actions_visible != (masking is not None):
+            self._masking_actions_visible = masking is not None
+            self.condition_actions_grid.addWidget(
+                self.remove_condition_button, 1, 1 if masking is not None else 0,
+                1, 1 if masking is not None else 2,
+            )
         self.catch_schedule_title.setVisible(masking is not None)
         self.catch_schedule_summary.setVisible(masking is not None)
         catch_block_reason = (
@@ -1096,20 +1097,12 @@ class ConditionSetupStep(QWidget):
             self.oddball_import_button,
         ):
             widget.setEnabled(enabled)
-        self.create_control_condition_button.setEnabled(
-            enabled and self._condition_has_control_sources(condition)
-        )
         if condition is not None and condition.masking_catch:
             self.duplicate_condition_button.setEnabled(False)
             self.duplicate_condition_button.setToolTip(
                 "Each variant has one catch condition. Select an ordinary Masking condition "
                 "to add a catch for another variant."
             )
-        self.create_control_condition_button.setToolTip(
-            ""
-            if self.create_control_condition_button.isEnabled()
-            else "Choose base and oddball images before creating a control condition."
-        )
         if condition is None:
             self.condition_scope_label.setText("Add your first condition")
             self.condition_scope_label.setToolTip("")
@@ -1242,11 +1235,6 @@ class ConditionSetupStep(QWidget):
                 "Importing…" if self._import_role == role
                 else f"Choose {role.title()} Images..."
             )
-        self.create_control_condition_button.setToolTip(
-            "Control conditions are only available for image conditions."
-            if word_mode
-            else self.create_control_condition_button.toolTip()
-        )
         presentation_summary = condition_presentation_summary(
             self._document, condition.condition_id
         )
@@ -1411,44 +1399,6 @@ class ConditionSetupStep(QWidget):
             _show_error_dialog(self, "Catch Condition Error", error)
             return
         self._select_condition(condition_id)
-
-    def _create_control_condition(self) -> None:
-        self.flush_pending_edits()
-        condition_id = self.selected_condition_id()
-        source_condition = self._current_condition()
-        if condition_id is None or source_condition is None:
-            return
-        dialog = ControlConditionDialog(
-            source_condition_name=source_condition.name,
-            parent=self,
-        )
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return
-        variant = dialog.selected_variant()
-        transform = dialog.selected_transform()
-        should_materialize = transform is None and self._control_variant_missing(
-            condition_id, variant
-        )
-        try:
-            new_condition_id = self._document.create_control_condition(
-                condition_id,
-                variant=variant,
-                transform=transform,
-                name=dialog.condition_name(),
-            )
-            if (
-                transform is None
-                and variant not in self._document.project.settings.supported_variants
-            ):
-                self._document.set_supported_variants(
-                    [*self._document.project.settings.supported_variants, variant]
-                )
-        except Exception as error:
-            _show_error_dialog(self, "Control Condition Error", error)
-            return
-        self._select_condition(new_condition_id)
-        if should_materialize:
-            self._materialize_control_variant()
 
     def _remove_condition(self) -> None:
         self.flush_pending_edits()
@@ -1617,7 +1567,7 @@ class ConditionSetupStep(QWidget):
         )
         self._active_task.succeeded.connect(self._on_separation_succeeded)
         self._active_task.failed.connect(self._on_separation_failed)
-        self._active_task.finished.connect(self._on_materialization_finished)
+        self._active_task.finished.connect(self._on_condition_task_finished)
         self._refresh_editor()
         self.busy_changed.emit(True)
         self._active_task.start()
@@ -1726,7 +1676,7 @@ class ConditionSetupStep(QWidget):
         self._import_role = role
         task.succeeded.connect(lambda result: self._on_source_imported(condition_id, role, result))
         task.failed.connect(self._on_source_import_failed)
-        task.finished.connect(self._on_materialization_finished)
+        task.finished.connect(self._on_condition_task_finished)
         self._refresh_editor()
         self.busy_changed.emit(True)
         task.start()
@@ -1747,53 +1697,7 @@ class ConditionSetupStep(QWidget):
         project_stimuli_dir = stimuli_dir(self._document.project_root)
         return project_stimuli_dir if project_stimuli_dir.exists() else self._document.project_root
 
-    def _condition_has_control_sources(self, condition: Condition | None) -> bool:
-        if condition is None or self._active_task is not None:
-            return False
-        if condition_masking(self._document.project, condition) is not None:
-            return False
-        base_set = self._document.get_stimulus_set(condition.base_stimulus_set_id)
-        oddball_set = self._document.get_stimulus_set(condition.oddball_stimulus_set_id)
-        if (
-            base_set is None or oddball_set is None
-            or base_set.modality != StimulusModality.IMAGE
-            or oddball_set.modality != StimulusModality.IMAGE
-        ):
-            return False
-        return self._stimulus_ready(base_set) and self._stimulus_ready(oddball_set)
-
-    def _control_variant_missing(self, condition_id: str, variant: StimulusVariant) -> bool:
-        base_set = self._document.get_condition_stimulus_set(condition_id, "base")
-        oddball_set = self._document.get_condition_stimulus_set(condition_id, "oddball")
-        return (
-            variant not in base_set.available_variants
-            or variant not in oddball_set.available_variants
-        )
-
-    def _materialize_control_variant(self) -> None:
-        if self._active_task is not None:
-            return
-        task = ProgressTask(
-            parent_widget=self,
-            label="Building control-condition image variants...",
-            callback=self._document.materialize_assets,
-        )
-        self._active_task = task
-        self._refresh_editor()
-        self.busy_changed.emit(True)
-        task.succeeded.connect(lambda _result: self.refresh())
-        task.failed.connect(self._on_materialization_failed)
-        task.finished.connect(self._on_materialization_finished)
-        task.start()
-
-    def _on_materialization_failed(self, error: object) -> None:
-        _show_error_dialog(
-            self,
-            "Control Condition Variant Error",
-            _coerce_exception(error),
-        )
-
-    def _on_materialization_finished(self) -> None:
+    def _on_condition_task_finished(self) -> None:
         self._active_task = None
         self._import_role = None
         self._refresh_editor()

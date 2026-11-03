@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QTextCursor
+from PySide6.QtGui import QPalette, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -27,19 +27,16 @@ from tests.gui.helpers import (
     _open_created_project,
     _write_image_directory,
     _write_mixed_image_directory,
+    assert_setup_wizard_vertical_scrolling_disabled,
 )
 
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     StimulusModality,
-    StimulusTransform,
     StimulusVariant,
 )
-from fpvs_studio.core.models import (
-    ConditionPresentationSettings,
-    StimulusPresentationOverride,
-)
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.document import ProjectDocument
 
 
 @pytest.fixture
@@ -1524,174 +1521,152 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
     ]
 
 
-def test_setup_wizard_control_condition_button_requires_assigned_images(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
+@pytest.fixture
+def _restore_native_theme(qapp):
+    original_mode = qapp.property("studioThemeMode")
+    original_palette = QPalette(qapp.palette())
+    yield
+    qapp.styleHints().setColorScheme({
+        "light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark,
+    }.get(original_mode, Qt.ColorScheme.Unknown))
+    qapp.setPalette(original_palette)
+    qapp.setProperty("studioThemeMode", original_mode)
+    QApplication.processEvents()
+
+
+def _assert_manual_condition_actions_fit(window, step):
+    QApplication.processEvents()
+    assert (window.width(), window.height()) == (1120, 820)
+    for surface in (step, window.conditions_page):
+        assert not hasattr(surface, "create_control_condition_button")
+        assert not any("control condition" in button.text().casefold()
+                       for button in surface.findChildren(QPushButton))
+    buttons = (
+        step.add_condition_button, step.duplicate_condition_button,
+        step.remove_condition_button,
+    )
+    bounds = []
+    for button in buttons:
+        assert button.isVisible()
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 16
+        bounds.append(button.rect().translated(button.mapTo(step, button.rect().topLeft())))
+    add_bounds, duplicate_bounds, remove_bounds = bounds
+    assert add_bounds.top() == duplicate_bounds.top()
+    assert add_bounds.right() < duplicate_bounds.left()
+    assert remove_bounds.top() > add_bounds.bottom()
+    assert remove_bounds.left() == add_bounds.left()
+    assert remove_bounds.right() == duplicate_bounds.right()
+    assert not step.add_catch_condition_button.isVisible()
+    _assert_visible_children_within_parent(step)
+    assert_setup_wizard_vertical_scrolling_disabled(window.setup_wizard_page)
+
+
+@pytest.mark.parametrize("theme_mode", ["light", "dark"])
+@pytest.mark.parametrize("modality", [StimulusModality.IMAGE, StimulusModality.WORD])
+def test_conditions_manual_actions_work_without_control_workflow(
+    qtbot, controller: StudioController, tmp_path: Path,
+    theme_mode: str, modality: StimulusModality, _restore_native_theme,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Control Condition Enable")
-    guide = window.setup_wizard_page
-    step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    controller.set_theme_mode(theme_mode)
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Manual Conditions")
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="conditions")
+    step = window.setup_wizard_page.condition_setup_step
+    assert step.selected_condition_id() is None
+    assert step.add_condition_button.isEnabled()
+    assert not step.duplicate_condition_button.isEnabled()
+    assert not step.remove_condition_button.isEnabled()
+    _assert_manual_condition_actions_fit(window, step)
 
-    assert not step.create_control_condition_button.isEnabled()
-
-    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
-    condition_id = step.selected_condition_id()
-    assert condition_id is not None
-    assert not step.create_control_condition_button.isEnabled()
-
-    base_dir = _write_image_directory(tmp_path / "control-enable-base")
-    oddball_dir = _write_image_directory(tmp_path / "control-enable-oddball")
-    window.document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
-    window.document.import_condition_stimulus_folder(
-        condition_id,
-        role="oddball",
-        source_dir=oddball_dir,
-    )
-    qtbot.waitUntil(step.create_control_condition_button.isEnabled)
-
-
-@pytest.mark.parametrize(
-    ("variant", "name"),
-    [
-        (StimulusVariant.GRAYSCALE, "Faces Grayscale Control"),
-        (StimulusVariant.ROT180, "Faces 180 Degree Rotated Control"),
-        (StimulusVariant.PHASE_SCRAMBLED, "Faces Phase-Scrambled Control"),
-    ],
-)
-def test_setup_wizard_creates_control_condition_from_existing_stimuli(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-    monkeypatch,
-    variant: StimulusVariant,
-    name: str,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, f"{variant.value} Control")
-    guide = window.setup_wizard_page
-    step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
-    qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
-    condition_id = step.selected_condition_id()
-    assert condition_id is not None
-    window.document.update_condition(condition_id, name="Faces")
-    base_dir = _write_image_directory(tmp_path / f"{variant.value}-base")
-    oddball_dir = _write_image_directory(tmp_path / f"{variant.value}-oddball")
-    window.document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
-    window.document.import_condition_stimulus_folder(
-        condition_id,
-        role="oddball",
-        source_dir=oddball_dir,
-    )
-    qtbot.waitUntil(step.create_control_condition_button.isEnabled)
-    materialize_calls = 0
-
-    def _count_materialization() -> None:
-        nonlocal materialize_calls
-        materialize_calls += 1
-
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.exec",
-        lambda self: QDialog.DialogCode.Accepted,
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.selected_variant",
-        lambda self: variant,
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.condition_name",
-        lambda self: name,
-    )
-    monkeypatch.setattr(step, "_materialize_control_variant", _count_materialization)
-
-    qtbot.mouseClick(step.create_control_condition_button, Qt.MouseButton.LeftButton)
-
-    selected_id = step.selected_condition_id()
-    assert selected_id is not None
-    source = window.document.get_condition(condition_id)
-    control = window.document.get_condition(selected_id)
-    assert source is not None
-    assert control is not None
-    assert control.name == name
-    assert control.base_stimulus_set_id == source.base_stimulus_set_id
-    assert control.oddball_stimulus_set_id == source.oddball_stimulus_set_id
-    assert control.stimulus_variant == variant
-    assert control.trigger_code == 2
-    assert materialize_calls == 1
-
-
-def test_setup_wizard_rotated_runtime_control_reuses_originals_without_materializing(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Runtime Rotated Control")
-    guide = window.setup_wizard_page
-    step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     source_id = step.selected_condition_id()
     assert source_id is not None
-    window.document.update_condition(source_id, name="Faces")
-    window.document.update_condition(
-        source_id,
-        presentation=ConditionPresentationSettings(
-            base=StimulusPresentationOverride(transform=StimulusTransform.MIRROR_VERTICAL),
-            oddball=StimulusPresentationOverride(transform=StimulusTransform.MIRROR_HORIZONTAL),
-        ),
-    )
-    window.document.import_condition_stimulus_folder(
-        source_id,
-        role="base",
-        source_dir=_write_image_directory(tmp_path / "runtime-rotated-base"),
-    )
-    window.document.import_condition_stimulus_folder(
-        source_id,
-        role="oddball",
-        source_dir=_write_image_directory(tmp_path / "runtime-rotated-oddball"),
-    )
-    qtbot.waitUntil(step.create_control_condition_button.isEnabled)
-    materialize_calls = 0
+    name = f"Manually authored {modality.value} condition"
+    step.condition_name_edit.setText(name)
+    step.condition_name_edit.editingFinished.emit()
+    step.trigger_code_spin.setValue(42)
+    step.modality_combo.setCurrentIndex(step.modality_combo.findData(modality.value))
+    if modality == StimulusModality.WORD:
+        step.base_words_edit.setPlainText("cat\ndog")
+        step.oddball_words_edit.setPlainText("chair")
+        step.flush_pending_edits()
+    assert window.document.get_condition(source_id).name == name
+    assert window.document.get_condition(source_id).trigger_code == 42
+    assert step.duplicate_condition_button.isEnabled()
+    assert step.remove_condition_button.isEnabled()
+    assert step.words_panel.isVisible() == (modality == StimulusModality.WORD)
+    assert step.sources_row.isVisible() == (modality == StimulusModality.IMAGE)
+    _assert_manual_condition_actions_fit(window, step)
 
-    def _count_materialization() -> None:
-        nonlocal materialize_calls
-        materialize_calls += 1
+    qtbot.mouseClick(step.duplicate_condition_button, Qt.MouseButton.LeftButton)
+    duplicate_id = step.selected_condition_id()
+    assert duplicate_id is not None and duplicate_id != source_id
+    assert len(window.document.project.conditions) == 2
+    assert window.document.get_condition(duplicate_id).name == f"{name} Copy"
+    step.condition_name_edit.setText("Edited duplicate")
+    step.condition_name_edit.editingFinished.emit()
+    assert window.document.get_condition(duplicate_id).name == "Edited duplicate"
+    assert window.document.get_condition(source_id).name == name
+    assert window.document.get_condition_stimulus_set(duplicate_id, "base").modality == modality
+    _assert_manual_condition_actions_fit(window, step)
 
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.exec",
-        lambda self: QDialog.DialogCode.Accepted,
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.selected_variant",
-        lambda self: StimulusVariant.ORIGINAL,
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.selected_transform",
-        lambda self: StimulusTransform.ROT180,
-    )
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_setup_step.ControlConditionDialog.condition_name",
-        lambda self: "Faces 180 Degree Rotated Control",
-    )
-    monkeypatch.setattr(step, "_materialize_control_variant", _count_materialization)
+    qtbot.mouseClick(step.remove_condition_button, Qt.MouseButton.LeftButton)
+    assert window.document.get_condition(duplicate_id) is None
+    assert len(window.document.project.conditions) == 1
+    assert step.selected_condition_id() == source_id
+    qtbot.mouseClick(step.remove_condition_button, Qt.MouseButton.LeftButton)
+    assert not window.document.project.conditions
+    assert step.selected_condition_id() is None
+    assert not step.duplicate_condition_button.isEnabled()
+    assert not step.remove_condition_button.isEnabled()
+    _assert_manual_condition_actions_fit(window, step)
 
-    qtbot.mouseClick(step.create_control_condition_button, Qt.MouseButton.LeftButton)
 
-    control_id = step.selected_condition_id()
-    assert control_id is not None and control_id != source_id
-    source = window.document.get_condition(source_id)
-    control = window.document.get_condition(control_id)
-    assert source is not None
-    assert control is not None
-    assert control.stimulus_variant == StimulusVariant.ORIGINAL
-    assert control.presentation.common.transform == StimulusTransform.ROT180
-    assert control.presentation.base.transform is None
-    assert control.presentation.oddball.transform is None
-    assert control.base_stimulus_set_id == source.base_stimulus_set_id
-    assert control.oddball_stimulus_set_id == source.oddball_stimulus_set_id
-    assert materialize_calls == 0
+@pytest.mark.parametrize("variant", [
+    StimulusVariant.GRAYSCALE, StimulusVariant.ROT180, StimulusVariant.PHASE_SCRAMBLED,
+])
+def test_stored_derived_conditions_remain_visible_and_editable(
+    qtbot, controller: StudioController, tmp_path: Path, variant: StimulusVariant,
+) -> None:
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Stored variants")
+    condition_id = document.create_condition(name="Existing derived condition")
+    for role in ("base", "oddball"):
+        document.import_condition_stimulus_folder(
+            condition_id, role=role,
+            source_dir=_write_image_directory(tmp_path / role, count=1),
+        )
+    document.update_condition(condition_id, stimulus_variant=variant)
+    document.materialize_assets()
+    document.save()
+
+    controller.open_project(document.project_root)
+    window = controller.main_window
+    assert window is not None
+    qtbot.addWidget(window)
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="conditions")
+    step = window.setup_wizard_page.condition_setup_step
+    assert step.selected_condition_id() == condition_id
+    assert step.condition_name_edit.text() == "Existing derived condition"
+    assert window.document.get_condition(condition_id).stimulus_variant == variant
+    assert variant in window.document.get_condition_stimulus_set(
+        condition_id, "base",
+    ).available_variants
+    _assert_manual_condition_actions_fit(window, step)
+
+    step.condition_name_edit.setText("Edited stored condition")
+    step.condition_name_edit.editingFinished.emit()
+    step.trigger_code_spin.setValue(44)
+    window.document.save()
+    reopened = ProjectDocument.open_existing(document.project_root)
+    condition = reopened.get_condition(condition_id)
+    assert condition.name == "Edited stored condition"
+    assert condition.trigger_code == 44
+    assert condition.stimulus_variant == variant
+    assert condition.base_stimulus_set_id == (
+        document.get_condition(condition_id).base_stimulus_set_id
+    )
+    assert variant in reopened.get_condition_stimulus_set(condition_id, "base").available_variants
 
 
 def test_advanced_conditions_image_picker_starts_in_project_stimuli_folder(
