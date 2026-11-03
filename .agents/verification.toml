@@ -435,6 +435,7 @@ include = [
   "src/fpvs_studio/gui/document_runtime.py",
   "src/fpvs_studio/gui/local_test_display_dialog.py",
   "src/fpvs_studio/gui/run_page.py",
+  "src/fpvs_studio/gui/main_window.py",
   "src/fpvs_studio/engines/psychopy_window.py",
   "src/fpvs_studio/engines/psychopy_macos_display.py",
   "src/fpvs_studio/engines/psychopy_engine.py",

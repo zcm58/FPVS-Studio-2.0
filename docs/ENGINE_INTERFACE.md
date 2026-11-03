@@ -143,6 +143,13 @@ delegation if enumeration fails. Mac requires known logical screen dimensions an
 uses a borderless desktop-sized window at `(0, 0)` with Retina backing pixels, rather
 than Pyglet's exclusive capture/shielding path. Actual backing pixels must still match
 the local calibration. No system display mode is changed.
+The Mac adapter changes PsychoPy's coordinate-only `useRetina` flag after the native
+surface is realized, before creating stimuli. This removes the dependency's second
+factor-of-two transform; pixel, normalized, height and mouse conversions share the
+same backing-pixel convention. The constructor still requests Retina backing storage,
+and framebuffer size/content scale are unchanged. App-scoped HideDock/HideMenuBar
+options provide fullscreen presentation and restore on every exit without capture
+or disabled recovery shortcuts.
 
 Production launch settings enable graphics-memory verification. The engine rejects
 known software renderers and uses Windows DXGI per-process budgets plus physical-RAM

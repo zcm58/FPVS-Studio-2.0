@@ -136,8 +136,12 @@ workflow are not Mac source updates.
 
 Choose a local FPVS Studio Root Folder. Mac source testing uses the explicit local
 Test/Pilot path and null trigger output; it must retain native display verification,
-engine observation and timing QC. Test calibration is launch-local and must not save
-over the experiment's lab settings. A successful local test is not EEG readiness or
+engine observation and timing QC. Physical test calibration remains launch-local.
+When target and detected backing resolutions differ, Home and Run show both sizes
+and ask to save the detected target resolution before compiling. Acceptance saves
+only pixel dimensions/fixed-resolution policy; Cancel saves nothing, and a save error
+blocks launch. Physical width, distance, preferred refresh and recording settings stay
+saved as authored. A successful local test is not EEG readiness or
 physical timing qualification. Follow the current [launch contract](GUI_WORKFLOW.md#launch)
 for unsupported display modes, timing constraints, test identity and eligibility.
 
@@ -158,6 +162,12 @@ Windows fullscreen and keyboard behavior are unchanged. Native refresh, callback
 recovery and Cognitive Load task abort/finalization passed locally. Literal keyboard
 interaction and complete session acceptance remain open; see the
 [display investigation](exec-plans/completed/macos-test-display-freeze.md).
+
+The subsequent black first-task screen was a separate Retina coordinate mismatch:
+PsychoPy reported backing dimensions but doubled geometry again. The Mac adapter now
+normalizes coordinate units after native window creation and hides Dock/menu bar with
+restorable app-scoped presentation options. See the
+[Retina repair](exec-plans/completed/macos-retina-presentation.md) for native pixel evidence.
 
 ## Evidence levels and software inventory
 

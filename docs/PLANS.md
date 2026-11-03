@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Mac Retina presentation](exec-plans/completed/macos-retina-presentation.md):
+  one-to-one backing pixels, restorable fullscreen chrome and explicit saved target
+  resolution at Home/Run launch; native first-task pixels and safe/visible checks passed.
 - [Mac Test/Pilot display freeze](exec-plans/completed/macos-test-display-freeze.md):
   nonexclusive display, bounded callback wait and foreground input; native refresh,
   callback-failure recovery and Cognitive Load abort/finalization passed. Literal

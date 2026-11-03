@@ -68,6 +68,7 @@ class _FakeWindow:
         self.frameIntervals: list[float] = []
         self.size = kwargs.get("size", [1920, 1080])
         self.frameBufferSize = self.size
+        self.useRetina = kwargs.get("useRetina", False)
         self.monitor = None
         self.events = events if events is not None else []
         self.raise_on_flip_index = raise_on_flip_index
@@ -372,6 +373,17 @@ def _patch_fake_psychopy(
     set_module_platform(monkeypatch, psychopy_window_module, platform_name)
     set_module_platform(monkeypatch, psychopy_engine_module, platform_name)
     set_module_platform(monkeypatch, psychopy_macos_display_module, platform_name)
+    presentation_app = SimpleNamespace(
+        presentationOptions=lambda: 0,
+        setPresentationOptions_=lambda value: None,
+        activateIgnoringOtherApps_=lambda value: None,
+    )
+    appkit = SimpleNamespace(
+        NSApplication=SimpleNamespace(sharedApplication=lambda: presentation_app),
+        NSApplicationPresentationHideDock=2,
+        NSApplicationPresentationHideMenuBar=8,
+    )
+    monkeypatch.setattr(psychopy_macos_display_module, "import_module", lambda _: appkit)
     # Keep resource barriers simulated even when real PsychoPy is installed.
     # Patch the loader so tests can still override synchronize_gpu to exercise failures.
     monkeypatch.setattr(psychopy_stimuli_module, "_load_psychopy_gl", lambda: fake_psychopy.gl)

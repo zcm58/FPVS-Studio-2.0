@@ -5,10 +5,72 @@ from __future__ import annotations
 import logging
 import sys
 import time
+from collections.abc import Callable
+from importlib import import_module
+from numbers import Integral
 from typing import Any
 
 DISPLAY_LINK_TIMEOUT_SECONDS = 1.0
 LOGGER = logging.getLogger(__name__)
+
+
+def prepare_macos_fullscreen_presentation(
+) -> tuple[Callable[[], None], Callable[[], None]] | None:
+    """Prepare activation and restoration before changing app presentation options.
+
+    The caller owns closing the window before restoring options, including when
+    activation fails. Pyglet's native close itself resets presentation options.
+    """
+    if sys.platform != "darwin":
+        return None
+    appkit = import_module("AppKit")
+    application = appkit.NSApplication.sharedApplication()
+    previous = application.presentationOptions()
+    restored = False
+
+    def restore() -> None:
+        nonlocal restored
+        if not restored:
+            application.setPresentationOptions_(previous)
+            restored = True
+
+    def activate() -> None:
+        application.setPresentationOptions_(
+            appkit.NSApplicationPresentationHideDock | appkit.NSApplicationPresentationHideMenuBar
+        )
+        application.activateIgnoringOtherApps_(True)
+
+    return activate, restore
+
+
+def use_macos_framebuffer_pixels(window: Any) -> None:
+    """Use physical pixels after PsychoPy has realized the Retina framebuffer.
+
+    Pyglet must create the window with ``useRetina=True`` to discover its backing
+    size. PsychoPy's legacy coordinate conversions also use that flag to double
+    pixel geometry, even though ``window.size`` already contains backing pixels.
+    Change only that coordinate flag before constructing any stimuli. Native
+    backing storage, viewport, client size and content scale remain unchanged.
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        framebuffer = tuple(window.frameBufferSize)
+        viewport_size = tuple(window.size)
+        valid = (
+            len(framebuffer) == 2
+            and all(isinstance(value, Integral) and not isinstance(value, bool) and int(value) > 0
+                    for value in framebuffer)
+            and viewport_size == framebuffer
+        )
+    except (AttributeError, TypeError, ValueError):
+        valid = False
+    if not valid:
+        raise RuntimeError(
+            "PsychoPy could not confirm the Mac display's backing pixels. "
+            "Window and framebuffer dimensions must match before selecting pixel coordinates."
+        )
+    window.useRetina = False
 
 
 def create_macos_test_keyboard(keyboard_module: Any) -> Any:

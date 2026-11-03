@@ -6,6 +6,7 @@ messaging, not protocol semantics, RunSpec compilation rules, or execution flow.
 from __future__ import annotations
 
 import logging
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -30,7 +31,7 @@ from shiboken6 import delete as delete_qobject
 
 from fpvs_studio import __version__
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile
+from fpvs_studio.core.models import ConditionTemplateProfile, DisplaySettings, ProjectFile
 from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
@@ -942,9 +943,19 @@ class StudioMainWindow(QMainWindow):
             return
         try:
             refresh_hz = self._home_launch_refresh_hz()
-            validation = self.document.validation_report(refresh_hz=refresh_hz)
-            if not validation.is_valid:
-                raise DocumentError(format_validation_report(validation))
+            local_display = None
+            if sys.platform == "darwin":
+                from fpvs_studio.gui.local_test_display_dialog import confirm_local_test_display
+
+                local_display = confirm_local_test_display(self.document, self)
+                if local_display is None:
+                    return
+                assert local_display.preferred_refresh_hz is not None
+                refresh_hz = float(local_display.preferred_refresh_hz)
+            if local_display is None:
+                validation = self.document.validation_report(refresh_hz=refresh_hz)
+                if not validation.is_valid:
+                    raise DocumentError(format_validation_report(validation))
         except Exception as error:
             _show_error_dialog(self, "Launch Blocked", error)
             return
@@ -953,7 +964,10 @@ class StudioMainWindow(QMainWindow):
         if participant_details is None:
             return
         if self.document.experiment_test_mode_enabled:
-            self._launch_participant_session(participant_details, refresh_hz, None)
+            self._launch_participant_session(
+                participant_details, refresh_hz, None,
+                **({} if local_display is None else {"local_display": local_display}),
+            )
             return
         participant_number = participant_details.participant_number
         check = ParticipantSessionCheckTask(
@@ -970,7 +984,10 @@ class StudioMainWindow(QMainWindow):
         )
         check.finished.connect(self._on_participant_session_check_finished)
         check.confirmed.connect(
-            lambda number: self._launch_participant_session(participant_details, refresh_hz, number)
+            lambda number: self._launch_participant_session(
+                participant_details, refresh_hz, number,
+                **({} if local_display is None else {"local_display": local_display}),
+            )
         )
         check.start()
 
@@ -981,6 +998,7 @@ class StudioMainWindow(QMainWindow):
     def _launch_participant_session(
         self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
         participant_session_number: int | None,
+        *, local_display: DisplaySettings | None = None,
     ) -> None:
         participant_number = participant_details.participant_number
         try:
@@ -993,10 +1011,12 @@ class StudioMainWindow(QMainWindow):
             resolved_seeds = self.document.prepare_participant_randomization(
                 participant_number, participant_session_number,
             )
-            session_plan = self.document.compile_session(
-                refresh_hz=refresh_hz,
-                condition_ids=participant_details.selected_condition_ids,
-                resolved_seeds=resolved_seeds,
+            session_plan = (
+                self.document.compile_session(
+                    refresh_hz=refresh_hz,
+                    condition_ids=participant_details.selected_condition_ids,
+                    resolved_seeds=resolved_seeds,
+                ) if local_display is None else None
             )
         except Exception as error:
             _show_error_dialog(self, "Launch Blocked", error)
@@ -1008,15 +1028,27 @@ class StudioMainWindow(QMainWindow):
             return
 
         def _launch() -> LaunchTaskResult:
+            compiled_plan = session_plan
+            if local_display is not None:
+                from fpvs_studio.gui.local_test_display_dialog import save_local_test_resolution
+
+                save_local_test_resolution(self.document, local_display)
+                compiled_plan = self.document.compile_session(
+                    refresh_hz=refresh_hz,
+                    condition_ids=participant_details.selected_condition_ids,
+                    resolved_seeds=resolved_seeds,
+                    local_display=local_display,
+                )
+            assert compiled_plan is not None
             summary = self.document.launch_compiled_session(
-                session_plan,
+                compiled_plan,
                 participant_number=participant_number,
                 participant_metadata=participant_details.participant_metadata,
                 participant_session_number=participant_session_number,
                 display_index=None,
                 fullscreen=True,
             )
-            return LaunchTaskResult(session_plan=session_plan, summary=summary)
+            return LaunchTaskResult(session_plan=compiled_plan, summary=summary)
 
         self._active_launch_participant_number = participant_number
         task = ProgressTask(

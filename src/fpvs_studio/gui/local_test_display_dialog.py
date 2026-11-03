@@ -1,6 +1,8 @@
-"""Launch-only Mac calibration; authored lab settings remain in ProjectFile."""
+"""Mac test calibration and explicit project pixel-resolution confirmation."""
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
 
 from PySide6.QtWidgets import (
     QDialog,
@@ -22,9 +24,40 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.import_display_settings_dialog import detect_primary_display_settings
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 
+if TYPE_CHECKING:
+    from fpvs_studio.gui.document import ProjectDocument
+
+
+def confirm_local_test_display(
+    document: ProjectDocument, parent: QWidget,
+) -> DisplaySettings | None:
+    """Share the Mac display confirmation between Home and Run launch surfaces."""
+    from fpvs_studio.runtime.display_mode import query_primary_native_display_mode
+
+    dialog = LocalTestDisplayDialog(
+        document.project.settings.display, query_primary_native_display_mode(), parent,
+    )
+    if dialog.exec() != QDialog.DialogCode.Accepted:
+        return None
+    return dialog.local_display()
+
+
+def save_local_test_resolution(document: ProjectDocument, display: DisplaySettings) -> None:
+    """Save accepted pixel dimensions in the launch worker before compiling playback.
+
+    Physical calibration and refresh remain launch-only. Matching dimensions leave
+    the project and its resolution-selection policy untouched.
+    """
+    current = document.project.settings.display
+    if (current.screen_width_px, current.screen_height_px) == (
+        display.screen_width_px, display.screen_height_px,
+    ):
+        return
+    document.save_display_resolution(display.screen_width_px, display.screen_height_px)
+
 
 class LocalTestDisplayDialog(QDialog):
-    """Confirm physical calibration for one local fullscreen test."""
+    """Confirm the detected target resolution and launch-only physical calibration."""
 
     def __init__(
         self, display: DisplaySettings, mode: NativeDisplayMode,
@@ -37,6 +70,9 @@ class LocalTestDisplayDialog(QDialog):
         self.resize(600, 380)
         self._display = display.model_copy(deep=True)
         self._mode = mode
+        self.resolution_mismatch = (
+            display.screen_width_px, display.screen_height_px,
+        ) != (mode.pixel_width, mode.pixel_height)
         refresh_hz = nearest_approved_monitor_refresh_rate(mode.hz)
         if refresh_hz is None or not mode.pixel_width or not mode.pixel_height:
             raise ValueError(
@@ -59,18 +95,29 @@ class LocalTestDisplayDialog(QDialog):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
         layout.addWidget(DialogHeader(
-            "Local test display",
-            "These values apply to this test. Your project's lab display settings stay saved.",
+            "Display resolution differs" if self.resolution_mismatch else "Local test display",
+            (
+                "Save the detected pixel resolution to this project before launch. "
+                "Physical calibration and refresh apply only to this test."
+                if self.resolution_mismatch else
+                "Physical calibration and refresh apply only to this test."
+            ),
             parent=self,
         ))
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         form.setHorizontalSpacing(16)
         form.setVerticalSpacing(12)
+        self.configured_resolution_label = QLabel(
+            f"{display.screen_width_px} × {display.screen_height_px} px", self,
+        )
+        self.configured_resolution_label.setWordWrap(True)
+        form.addRow("Project resolution", self.configured_resolution_label)
         self.mode_label = QLabel(
-            f"{self.refresh_hz:g} Hz · {mode.pixel_width} × {mode.pixel_height} px", self,
+            f"{self.refresh_hz:g} Hz · {mode.pixel_width} × {mode.pixel_height} backing px", self,
         )
         self.mode_label.setWordWrap(True)
-        form.addRow("Current display", self.mode_label)
+        form.addRow("Detected display", self.mode_label)
         form.addRow("Physical screen width", self.screen_width_spin)
         form.addRow("Viewing distance", self.distance_spin)
         layout.addLayout(form)
@@ -78,7 +125,9 @@ class LocalTestDisplayDialog(QDialog):
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Cancel | QDialogButtonBox.StandardButton.Ok, self,
         )
-        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Use for this test")
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText(
+            "Update resolution and continue" if self.resolution_mismatch else "Use for this test"
+        )
         mark_primary_action(self.buttons.button(QDialogButtonBox.StandardButton.Ok))
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)

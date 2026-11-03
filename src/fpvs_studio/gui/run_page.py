@@ -5,7 +5,6 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIntValidator, QShowEvent
@@ -867,20 +866,17 @@ class RunPage(QWidget):
             refresh_hz = self.current_refresh_hz()
             local_display = None
             if sys.platform == "darwin":
-                from fpvs_studio.gui.local_test_display_dialog import LocalTestDisplayDialog
-                from fpvs_studio.runtime.display_mode import query_primary_native_display_mode
+                from fpvs_studio.gui.local_test_display_dialog import confirm_local_test_display
 
-                dialog = LocalTestDisplayDialog(
-                    self._document.project.settings.display,
-                    query_primary_native_display_mode(), self,
-                )
-                if dialog.exec() != QDialog.DialogCode.Accepted:
+                local_display = confirm_local_test_display(self._document, self)
+                if local_display is None:
                     return
-                local_display = dialog.local_display()
-                refresh_hz = dialog.refresh_hz
-            validation = self._document.validation_report(refresh_hz=refresh_hz)
-            if not validation.is_valid:
-                raise DocumentError(format_validation_report(validation))
+                assert local_display.preferred_refresh_hz is not None
+                refresh_hz = float(local_display.preferred_refresh_hz)
+            if local_display is None:
+                validation = self._document.validation_report(refresh_hz=refresh_hz)
+                if not validation.is_valid:
+                    raise DocumentError(format_validation_report(validation))
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
             return
@@ -946,26 +942,25 @@ class RunPage(QWidget):
             resolved_seeds = self._document.prepare_participant_randomization(
                 participant_number, participant_session_number,
             )
-            compile_options: dict[str, Any] = (
-                {} if local_display is None else {"local_display": local_display}
-            )
-            session_plan = self._document.compile_session(
-                refresh_hz=refresh_hz,
-                condition_ids=participant_details.selected_condition_ids,
-                resolved_seeds=resolved_seeds,
-                **compile_options,
+            session_plan = (
+                self._document.compile_session(
+                    refresh_hz=refresh_hz,
+                    condition_ids=participant_details.selected_condition_ids,
+                    resolved_seeds=resolved_seeds,
+                ) if local_display is None else None
             )
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
             return
-        self._set_summary(
-            session_plan,
-            extra_lines=[
-                "Status: launch checks queued.",
-                *([f"Participant Session: {participant_session_number}"]
-                  if participant_session_number is not None else []),
-            ],
-        )
+        if session_plan is not None:
+            self._set_summary(
+                session_plan,
+                extra_lines=[
+                    "Status: launch checks queued.",
+                    *([f"Participant Session: {participant_session_number}"]
+                      if participant_session_number is not None else []),
+                ],
+            )
         if (
             self._document.require_biosemi_recording_confirmation
             and not self._confirm_biosemi_recording_started()
@@ -973,15 +968,27 @@ class RunPage(QWidget):
             return
 
         def _launch() -> LaunchTaskResult:
+            compiled_plan = session_plan
+            if local_display is not None:
+                from fpvs_studio.gui.local_test_display_dialog import save_local_test_resolution
+
+                save_local_test_resolution(self._document, local_display)
+                compiled_plan = self._document.compile_session(
+                    refresh_hz=refresh_hz,
+                    condition_ids=participant_details.selected_condition_ids,
+                    resolved_seeds=resolved_seeds,
+                    local_display=local_display,
+                )
+            assert compiled_plan is not None
             summary = self._document.launch_compiled_session(
-                session_plan,
+                compiled_plan,
                 participant_number=participant_number,
                 participant_metadata=participant_details.participant_metadata,
                 participant_session_number=participant_session_number,
                 display_index=None,
                 fullscreen=True,
             )
-            return LaunchTaskResult(session_plan=session_plan, summary=summary)
+            return LaunchTaskResult(session_plan=compiled_plan, summary=summary)
 
         self._active_launch_participant_number = participant_number
         self._last_run_output_dir = None

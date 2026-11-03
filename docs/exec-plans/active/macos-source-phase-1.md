@@ -82,6 +82,14 @@ DisplayLink callback polling and explicit foreground keyboard input. Native refr
 callback-loss/retry and Cognitive Load abort/finalization passed locally. Full
 interactive sessions and physical timing remain open acceptance gates.
 
+The [Retina presentation repair](../completed/macos-retina-presentation.md) corrects
+the subsequent black first-task screen: the native backing size was scaled twice
+by PsychoPy's coordinate conversions. Native one-to-one pixel bounds and readable
+Cognitive Load instructions/footer are now recorded, with restorable Dock/menu-bar
+hiding. Home/Run both explicitly confirm and atomically save target-resolution
+mismatches; physical calibration/refresh remain local to the test. Complete human
+sessions and other physical targets remain open.
+
 `core/portable_paths.py` and `core/project_bundle.py` retain the bundle schema and
 payload bytes while rejecting ambiguous/unportable paths, source links and archive
 links/special files. Signature-recognized, unreferenced Finder metadata is omitted at

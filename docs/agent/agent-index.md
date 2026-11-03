@@ -14,7 +14,7 @@ use document headings or `rg -n '^#{1,3} ' <document>` to choose the contract se
 | Scope | Use for | Governing guide | One focused contract |
 | --- | --- | --- | --- |
 | `repo` | Harness, shared configuration, cross-layer ownership | `AGENTS.md` | `ARCHITECTURE.md` |
-| `macos` | Source bootstrap, display/input recovery, native adapters, safe tests and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
+| `macos` | Source bootstrap, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
 | `docs` | Guidance, contracts and plans | `AGENTS.md` | Edited document; `docs/exec-plans/README.md` for plan work |
 | `gui` | PySide6 widgets, controllers, workers and eight-step authoring | `src/fpvs_studio/gui/AGENTS.md` | Relevant `docs/GUI_WORKFLOW.md` section; `docs/FRONTEND.md` for design |
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |

@@ -126,11 +126,21 @@ to AppKit's fixed refresh intervals. Unknown or variable intervals (Adaptive Syn
 ProMotion) fail explicitly; a zero CoreGraphics rate is usable only with a proven
 fixed native interval. The fullscreen engine still verifies delivery. Local Test/Pilot
 compiles a deep project copy using confirmed local physical calibration and backing
-pixels, then runs the existing runtime on a child process's main thread. Retina
+pixels, then runs the existing runtime on a child process's main thread. Before either
+Home or Run compiles, a detected resolution mismatch requires explicit acceptance.
+Accepting updates the project's target pixel width/height through its existing save
+owner in the launch worker; a failed save blocks launch. Physical width, viewing
+distance and refresh from the local dialog remain test-only. Cancel saves nothing.
+Retina
 framebuffer size must match that calibration before resource upload. Mac presentation
 uses a borderless desktop-sized window, avoiding Pyglet's exclusive display capture
 and shielding-level window. The requested fullscreen/default-display policy remains
 mandatory; this is a Mac implementation adapter, not an optional smaller test window.
+App-scoped Cocoa presentation options hide the Dock/menu bar while active and restore
+previous options on close/failure, without disabling application switching or quit.
+After native backing storage is realized, the Mac adapter normalizes PsychoPy's
+coordinate flag so `pix` means one backing pixel. The backing framebuffer, viewport
+and native content scale remain intact; no authored positions or schedules are scaled.
 Mac launch guards
 reject production, trigger output, windowed/unverified playback and non-primary displays
 before creating engines or acquisition services. Test/Pilot does not qualify EEG or

@@ -397,11 +397,18 @@ expose Experiment Test Mode for explicit
 no-hardware launches. Mac authoring skips first-run EEG setup; launch requires Test
 or AB Pilot mode and preserves authored recording settings. Before launching, a local
 display dialog confirms viewing distance/physical width and native backing resolution/
-refresh. Compilation uses a transient copy; saved lab calibration is unchanged.
+refresh before both Home and Run launches. A mismatch shows configured and detected
+pixel dimensions. **Update resolution and continue** explicitly saves the target
+width/height (and fixed-resolution policy) in the launch worker before compiling;
+save failure blocks playback. Cancel preserves the project. Matching resolutions
+require no write. Physical width, viewing distance and detected refresh stay in the
+transient test copy; recording settings are unchanged.
 Mac playback and refresh probes use a child process's main thread, retain refresh
 verification and defer teardown until completion. The Mac test confirmation explains
 desktop-sized presentation without exclusive capture, foreground-window keyboard
 input, Escape abort and Command+Tab recovery; this input is not acquisition-qualified.
+Native presentation hides the Dock/menu bar while active and restores prior settings
+on close/failure. Corrected Retina coordinates keep task text and controls in view.
 Mac update UI instructs users to
 pull changes from the remote repository and rerun the source setup helper.
 
