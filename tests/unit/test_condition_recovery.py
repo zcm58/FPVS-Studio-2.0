@@ -72,9 +72,12 @@ def _record(root, plan):
     )
 
 
-def _files(root):
+def _files(root, *, exclude_locks=False):
     root = filesystem_path(root)
-    return {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
+    return {
+        path.relative_to(root): path.read_bytes() for path in root.rglob("*")
+        if path.is_file() and not (exclude_locks and path.suffix == ".lock")
+    }
 
 
 def test_query_empty_project_creates_nothing(tmp_path):
@@ -1133,11 +1136,12 @@ def test_live_legacy_test_still_prevents_replacing_assets(execution):
     checkpoint = _checkpoint(root, plan, live=True)
     try:
         _acquisition(root, plan, execution_id=checkpoint.execution_id)
-        before = _files(root)
+        # Windows protects the locked byte from reads by other file handles.
+        before = _files(root, exclude_locks=True)
         assert query_condition_recovery(root).records == ()
         with pytest.raises(ValueError, match="Close other Studio instances"):
             ensure_project_update_recovery_ready(root)
-        assert _files(root) == before
+        assert _files(root, exclude_locks=True) == before
     finally:
         checkpoint.close()
     ensure_project_update_recovery_ready(root)
