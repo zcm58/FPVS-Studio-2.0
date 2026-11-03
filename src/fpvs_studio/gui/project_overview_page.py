@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QEvent, QSignalBlocker, QSize, Qt
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -60,6 +60,54 @@ _PARTICIPANT_TUTORIAL_TOOLTIP = (
     "Run three practice fixation color changes before the first condition starts when "
     "fixation accuracy tracking is enabled."
 )
+_REPEAT_PARTICIPANT_SESSIONS_TOOLTIP = (
+    "Let a participant return using the same participant number for Session 2,\n"
+    "Session 3, and later visits. Each visit has separate results.\n"
+    "Previous session data is preserved.\n\n"
+    "When off, a participant number with an earlier session cannot be used\n"
+    "again in this project. This does not change condition repeats within a session."
+)
+
+
+class _ProjectFolderValueLabel(PathValueLabel):
+    """Fit the folder path to its card while retaining the complete value."""
+
+    def __init__(self, parent: QWidget) -> None:
+        self._full_path = ""
+        super().__init__(parent)
+        self.setIndent(0)
+
+    def set_full_path(self, path: str) -> None:
+        self._full_path = path
+        self.setToolTip(path)
+        self.setAccessibleDescription(path)
+        self._fit_path()
+
+    def _fit_path(self) -> None:
+        if self._full_path:
+            available_width = max(0, self.contentsRect().width() - 2 * self.margin())
+            self.setText(self.fontMetrics().elidedText(
+                self._full_path, Qt.TextElideMode.ElideMiddle, available_width,
+            ))
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        hint = super().sizeHint()
+        hint.setWidth(0)
+        return hint
+
+    def minimumSizeHint(self) -> QSize:  # noqa: N802
+        hint = super().minimumSizeHint()
+        hint.setWidth(0)
+        return hint
+
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        if event.type() in (
+            QEvent.Type.Resize, QEvent.Type.FontChange,
+            QEvent.Type.StyleChange, QEvent.Type.ContentsRectChange,
+        ):
+            self._fit_path()
+        return handled
 
 
 class ProjectOverviewEditor(QWidget):
@@ -102,7 +150,7 @@ class ProjectOverviewEditor(QWidget):
         )
         self.project_description_edit.textChanged.connect(self._description_committer.schedule)
 
-        self.project_root_value = PathValueLabel(self)
+        self.project_root_value = _ProjectFolderValueLabel(self)
         self.project_root_value.setObjectName("project_root_value")
         self.project_root_value.setWordWrap(False)
         self.project_root_value.setFixedHeight(32)
@@ -142,8 +190,13 @@ class ProjectOverviewEditor(QWidget):
             "allow_repeated_participant_sessions_checkbox"
         )
         self.repeat_participant_sessions_checkbox.setToolTip(
-            "Allow the same participant ID to return for Session 2, Session 3, and later "
-            "sessions. Previous session data is preserved."
+            _REPEAT_PARTICIPANT_SESSIONS_TOOLTIP
+        )
+        self.repeat_participant_sessions_checkbox.setWhatsThis(
+            _REPEAT_PARTICIPANT_SESSIONS_TOOLTIP
+        )
+        self.repeat_participant_sessions_checkbox.setAccessibleDescription(
+            _REPEAT_PARTICIPANT_SESSIONS_TOOLTIP
         )
         self.repeat_participant_sessions_checkbox.toggled.connect(
             self._apply_repeat_participant_sessions
@@ -181,15 +234,32 @@ class ProjectOverviewEditor(QWidget):
             QSizePolicy.Policy.Maximum,
         )
         self.project_overview_card.title_label.setVisible(False)
+        self.project_overview_card.setProperty("setupFlatSection", "true")
 
-        self.project_details_column = QWidget(self.project_overview_card)
+        self.project_details_card = SectionCard(
+            title="Project details",
+            object_name="project_details_card",
+            parent=self.project_overview_card,
+        )
+        self.experiment_setup_card = SectionCard(
+            title="Experiment setup",
+            object_name="experiment_setup_card",
+            parent=self.project_overview_card,
+        )
+        for card in (self.project_details_card, self.experiment_setup_card):
+            card.card_layout.setContentsMargins(16, 16, 16, 16)
+            card.card_layout.setSpacing(16)
+            card.card_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+            card.body_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+            card.setMinimumWidth(0)
+        self.project_details_heading = self.project_details_card.title_label
+        self.experiment_setup_heading = self.experiment_setup_card.title_label
+
+        self.project_details_column = QWidget(self.project_details_card)
         self.project_details_column.setObjectName("project_details_column")
         details_layout = QVBoxLayout(self.project_details_column)
         details_layout.setContentsMargins(0, 0, 0, 0)
         details_layout.setSpacing(16)
-        self.project_details_heading = QLabel("Project details", self.project_details_column)
-        self.project_details_heading.setProperty("sectionCardRole", "title")
-        details_layout.addWidget(self.project_details_heading)
         metadata_layout = QFormLayout()
         metadata_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         metadata_layout.addRow("Project Name", self.project_name_edit)
@@ -199,14 +269,11 @@ class ProjectOverviewEditor(QWidget):
         details_layout.addLayout(metadata_layout)
         details_layout.addStretch(1)
 
-        self.experiment_setup_column = QWidget(self.project_overview_card)
+        self.experiment_setup_column = QWidget(self.experiment_setup_card)
         self.experiment_setup_column.setObjectName("experiment_setup_column")
         setup_layout = QVBoxLayout(self.experiment_setup_column)
         setup_layout.setContentsMargins(0, 0, 0, 0)
         setup_layout.setSpacing(16)
-        self.experiment_setup_heading = QLabel("Experiment setup", self.experiment_setup_column)
-        self.experiment_setup_heading.setProperty("sectionCardRole", "title")
-        setup_layout.addWidget(self.experiment_setup_heading)
         experiment_layout = QFormLayout()
         experiment_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         experiment_layout.addRow("Experiment Category", self.experiment_category_value)
@@ -216,13 +283,15 @@ class ProjectOverviewEditor(QWidget):
         setup_layout.addWidget(self.participant_tutorial_checkbox)
         setup_layout.addWidget(self.repeat_participant_sessions_checkbox)
         setup_layout.addStretch(1)
+        self.project_details_card.body_layout.addWidget(self.project_details_column)
+        self.experiment_setup_card.body_layout.addWidget(self.experiment_setup_column)
 
         form_panel = QWidget(self.project_overview_card)
         form_layout = QHBoxLayout(form_panel)
         form_layout.setContentsMargins(0, 0, 0, 0)
-        form_layout.setSpacing(32)
-        form_layout.addWidget(self.project_details_column, 3)
-        form_layout.addWidget(self.experiment_setup_column, 2)
+        form_layout.setSpacing(24)
+        form_layout.addWidget(self.project_details_card, 3)
+        form_layout.addWidget(self.experiment_setup_card, 2)
         QWidget.setTabOrder(self.project_name_edit, self.project_description_edit)
         QWidget.setTabOrder(self.project_description_edit, self.condition_profile_combo)
         QWidget.setTabOrder(self.condition_profile_combo, self.apply_profile_to_conditions_button)
@@ -231,9 +300,9 @@ class ProjectOverviewEditor(QWidget):
         QWidget.setTabOrder(self.participant_tutorial_checkbox,
                            self.repeat_participant_sessions_checkbox)
 
-        self.project_overview_card.card_layout.setContentsMargins(20, 14, 20, 14)
-        self.project_overview_card.card_layout.setSpacing(8)
-        self.project_overview_card.body_layout.setSpacing(8)
+        self.project_overview_card.card_layout.setContentsMargins(0, 0, 0, 0)
+        self.project_overview_card.card_layout.setSpacing(0)
+        self.project_overview_card.body_layout.setSpacing(0)
         self.project_overview_card.body_layout.addWidget(form_panel)
 
         layout = QVBoxLayout(self)
@@ -257,7 +326,7 @@ class ProjectOverviewEditor(QWidget):
                 self.project_name_edit.setText(project.meta.name)
         if not self._description_committer.pending:
             _sync_text_editor_contents(self.project_description_edit, project.meta.description)
-        self.project_root_value.set_path_text(str(self._document.project_root), max_length=92)
+        self.project_root_value.set_full_path(str(self._document.project_root))
         self._refresh_condition_profile_widgets()
         with QSignalBlocker(self.participant_tutorial_checkbox):
             self.participant_tutorial_checkbox.setChecked(

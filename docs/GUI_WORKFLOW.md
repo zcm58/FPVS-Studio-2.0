@@ -165,9 +165,13 @@ controls at the top inside the frame; do not distribute spare height between fie
 Frameless wrappers add no vertical padding above the first visible card. Fixation's
 feasibility and adjustment guidance follows its aligned card row.
 
-Project has **Project details** and **Experiment setup** columns. Name, optional
-multiline description and folder sit on the left; category, template actions and
-participant settings sit on the right. Conditions keeps its navigator beside a
+Project has two sibling **Project details** and **Experiment setup** cards inside a
+frameless workspace. Their top/bottom edges and title baselines align, with 16 px
+internal padding and a 24 px gutter. Bold card titles sit above the field labels;
+content stays at the top and the row uses the taller card's natural height. Name, optional multiline
+description and folder sit on the left; category, template actions and participant
+settings sit on the right. Folder paths elide to the available pixel width, with the
+full path in the tooltip and accessible description. Conditions keeps its navigator beside a
 natural-height **This condition** card, followed by left-aligned image source cards or
 expanding word editors. Extra height belongs to the list and word editors, not empty
 space inside the details card.
@@ -666,7 +670,7 @@ The authoring window is organized around two user-facing modes:
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
     only show information needed for the current decision
-  - Project uses a frameless two-column workspace: Project details on the left,
+  - Project uses two aligned cards: Project details on the left,
     Experiment setup on the right. The folder path stays compact with full-path access.
     Name is required before continuing; description remains optional, editable and
     persisted. Refresh preserves pending name edits. Template actions sit below the
@@ -913,7 +917,11 @@ the project's top-level `manual_removed_electrodes` map in `project.json`; an em
 records that the administrator reviewed the field and reported none removed. Returning
 participants prefill the saved list for review and correction.
 Setup > Project includes `Allow repeat participant sessions`, disabled by default for
-projects without an explicit setting. Both Home and Run check participant history in
+projects without an explicit setting. Its tooltip explains returning with the same
+participant number, separate numbered visits/results, preservation of previous data,
+and blocking reused numbers when disabled. It distinguishes participant visits from
+condition repeats within a session; the same help is available through What's This
+and the control's accessible description. Both Home and Run check participant history in
 a worker after participant entry. A previously used PID, including an aborted visit,
 is blocked when repeat sessions are disabled. When enabled, the operator confirms
 `Start Session N`; declining returns to FPVS Studio without launching. Earlier visit data is

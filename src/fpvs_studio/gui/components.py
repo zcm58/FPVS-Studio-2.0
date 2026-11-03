@@ -2067,7 +2067,7 @@ def project_overview_stylesheet(theme: StudioTheme | QPalette | None = None) -> 
     theme = _resolved_theme(theme)
     return f"""
     QFrame#dashboard_project_overview_card {{
-        background-color: {theme.surface};
+        background-color: transparent;
     }}
     QLabel#project_overview_title {{
         color: {theme.text_primary};

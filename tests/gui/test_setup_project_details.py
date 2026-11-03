@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QPoint, QRect, Qt
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
@@ -178,13 +178,30 @@ def test_setup_project_contrast_profile_applies_required_background(
     )
 
 
-@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.fixture
+def _restore_native_theme(qapp):
+    original_mode = qapp.property("studioThemeMode")
+    original_palette = QPalette(qapp.palette())
+    yield
+    qapp.styleHints().setColorScheme({
+        "light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark,
+    }.get(original_mode, Qt.ColorScheme.Unknown))
+    qapp.setPalette(original_palette)
+    qapp.setProperty("studioThemeMode", original_mode)
+    QApplication.processEvents()
+
+
+@pytest.mark.parametrize("theme_mode", ["light", "dark"])
+@pytest.mark.parametrize("has_conditions", [False, True], ids=["empty", "with-conditions"])
 def test_project_details_template_actions_fit_at_setup_default_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    background: str,
+    theme_mode: str,
+    has_conditions: bool,
+    _restore_native_theme,
 ) -> None:
+    controller.set_theme_mode(theme_mode)
     _, window = _open_created_project(
         controller,
         qtbot,
@@ -193,15 +210,17 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     )
     guide = window.setup_wizard_page
     editor = guide.project_overview_editor
-    window.document.create_condition()
-    editor.project_description_edit.setPlainText(
-        "A realistic project description that confirms the Project step remains "
-        "readable while all template actions are visible."
+    if has_conditions:
+        window.document.create_condition()
+    description = (
+        "A longitudinal assessment comparing emotional image processing over multiple "
+        "participant visits. The project uses a shared stimulus template while retaining "
+        "separate results for each visit.\n\n"
+        "This longer description must remain editable without displacing the experiment "
+        "template actions or participant-session controls."
     )
+    editor.project_description_edit.setPlainText(description)
 
-    palette = guide.palette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(background))
-    guide.setPalette(palette)
     window.resize(1120, 820)
     window.main_stack.setCurrentWidget(guide)
     guide.open_wizard(step_key="project")
@@ -210,7 +229,7 @@ def test_project_details_template_actions_fit_at_setup_default_size(
 
     apply_button = editor.apply_profile_to_conditions_button
     manage_button = editor.manage_templates_button
-    qtbot.waitUntil(apply_button.isVisible)
+    qtbot.waitUntil(lambda: apply_button.isVisible() == has_conditions)
 
     blank_profile_index = editor.condition_profile_combo.findData(
         SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
@@ -219,27 +238,70 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     editor.condition_profile_combo.setCurrentIndex(blank_profile_index)
     QApplication.processEvents()
 
-    assert apply_button.isEnabled()
+    assert apply_button.isVisible() == has_conditions
+    if has_conditions:
+        assert apply_button.isEnabled()
     assert editor.findChild(QWidget, "project_overview_checklist") is None
     assert editor.project_overview_card.width() <= 1040
     assert editor.project_details_heading.text() == "Project details"
     assert editor.experiment_setup_heading.text() == "Experiment setup"
     assert editor.project_description_edit.height() >= 100
-    assert (editor.project_details_column.geometry().right()
-            < editor.experiment_setup_column.geometry().left())
-    assert (editor.project_details_column.geometry().top()
-            == editor.experiment_setup_column.geometry().top())
+    details_card = editor.project_details_card
+    setup_card = editor.experiment_setup_card
+    wrapper = editor.project_overview_card
+    assert wrapper.property("setupFlatSection") == "true"
+    assert details_card.parentWidget() is setup_card.parentWidget()
+    assert wrapper.isAncestorOf(details_card)
+    assert wrapper.isAncestorOf(setup_card)
+    for card in (details_card, setup_card):
+        assert card.property("sectionCard") == "true"
+        assert card.property("setupFlatSection") != "true"
+        margins = card.card_layout.contentsMargins()
+        assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
+            16, 16, 16, 16,
+        )
+    details_bounds = QRect(details_card.mapTo(editor, QPoint()), details_card.size())
+    setup_bounds = QRect(setup_card.mapTo(editor, QPoint()), setup_card.size())
+    assert setup_bounds.left() - details_bounds.right() - 1 == 24
+    assert details_bounds.top() == setup_bounds.top()
+    assert details_bounds.bottom() == setup_bounds.bottom()
+    assert editor.project_details_column.parentWidget() is details_card
+    assert editor.experiment_setup_column.parentWidget() is setup_card
+    assert editor.project_details_heading is details_card.title_label
+    assert editor.experiment_setup_heading is setup_card.title_label
+    assert (editor.project_details_heading.mapTo(editor, QPoint()).y()
+            == editor.experiment_setup_heading.mapTo(editor, QPoint()).y())
+    assert (editor.project_details_column.mapTo(editor, QPoint()).y()
+            == editor.experiment_setup_column.mapTo(editor, QPoint()).y())
+    assert editor.project_description_edit.toPlainText() == description
+    # The folder is intentionally shortened; its tooltip retains the complete path.
+    project_path = str(window.document.project_root)
+    assert len(project_path) > 92
+    folder_label = editor.project_root_value
+    assert folder_label.toolTip() == project_path
+    assert folder_label.accessibleDescription() == project_path
+    available_width = folder_label.contentsRect().width() - 2 * folder_label.margin()
+    assert available_width > 0
+    assert folder_label.text()
+    assert folder_label.fontMetrics().horizontalAdvance(folder_label.text()) <= available_width
     assert editor.project_name_edit.parentWidget() is editor.project_details_column
     assert editor.project_description_edit.parentWidget() is editor.project_details_column
     assert editor.project_root_value.parentWidget() is editor.project_details_column
     assert editor.experiment_category_value.parentWidget() is editor.experiment_setup_column
-    for heading in (editor.project_details_heading, editor.experiment_setup_heading):
-        assert heading.isVisible()
-        assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
+    for label in (
+        editor.project_details_heading, editor.experiment_setup_heading,
+        *editor.project_details_column.findChildren(QLabel),
+        *editor.experiment_setup_column.findChildren(QLabel),
+    ):
+        if not label.isVisible() or label is editor.project_root_value:
+            continue
+        assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     editor.project_name_edit.setFocus()
     qtbot.keyClick(editor.project_name_edit, Qt.Key.Key_Tab)
     assert editor.project_description_edit.hasFocus()
     for button in (apply_button, manage_button):
+        if not button.isVisible():
+            continue
         text_width = button.fontMetrics().horizontalAdvance(button.text())
         assert button.width() >= text_width + 24
         assert button.minimumWidth() >= text_width + 24
@@ -686,8 +748,20 @@ def test_repeat_participant_sessions_setting_persists_and_fits_setup(qtbot, cont
     assert window.size().height() == 820
     assert checkbox.isVisible()
     assert checkbox.width() >= checkbox.sizeHint().width()
-    assert "Previous session data is preserved" in checkbox.toolTip()
+    help_text = " ".join(checkbox.toolTip().split())
+    assert "Session 2" in help_text
+    assert "Session 3" in help_text
+    assert "Each visit has separate results" in help_text
+    assert "Previous session data is preserved" in help_text
+    assert "When off" in help_text
+    assert "an earlier session cannot be used again in this project" in help_text
+    assert "does not change condition repeats within a session" in help_text
+    assert checkbox.accessibleDescription() == checkbox.toolTip()
+    assert checkbox.whatsThis() == checkbox.toolTip()
     assert_visible_children_within_parent(wizard.project_step_surface)
     assert_setup_wizard_vertical_scrolling_disabled(wizard)
     window.document.update_allow_repeated_participant_sessions(False)
     assert not checkbox.isChecked()
+    window.document.save()
+    saved = load_project_file(window.document.project_root / "project.json")
+    assert not saved.settings.allow_repeated_participant_sessions
