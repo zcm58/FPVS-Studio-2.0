@@ -124,8 +124,10 @@ def _temporary_ci_keychain(root: Path, *, password: str | None = None) -> Iterat
                     _security("delete-keychain", str(keychain))
         # Removing our store may itself clear its default selection. Confirm the
         # final restored state only after all owned resources have been deleted.
-        if restore_error is not None and not _default_keychain_missing():
-            raise restore_error
+        if selected and not previous and not _default_keychain_missing():
+            if restore_error is not None:
+                raise restore_error
+            pytest.fail("The hosted runner's original absent default Keychain was not restored")
 
 
 @pytest.mark.timeout(120)
@@ -188,14 +190,14 @@ try:
             raise
         result.update(result='interaction_required', osstatus=statuses[0])
 finally:
-    restored = Security.SecKeychainSetDefault(before_default)
-    after_status, after_default = Security.SecKeychainCopyDefault(None)
-    if before_status == Security.errSecNoDefaultKeychain:
-        assert after_status == before_status
-    else:
+    # A missing default is restored by deleting the owned store in the parent
+    # fixture, which verifies the final native state after all cleanup.
+    print(json.dumps(result), flush=True)
+    if before_status == 0:
+        restored = Security.SecKeychainSetDefault(before_default)
+        after_status, after_default = Security.SecKeychainCopyDefault(None)
         assert restored == 0 and after_status == 0
         assert CoreFoundation.CFEqual(after_default, before_default)
-print(json.dumps(result))
 """
     password = secrets.token_urlsafe(32)
     with _temporary_ci_keychain(tmp_path, password=password) as keychain:
