@@ -8,6 +8,7 @@ Display metadata is diagnostic: a hosted VM cannot qualify a physical display.
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import platform
 import secrets
@@ -66,8 +67,16 @@ def _security(*arguments: str) -> str:
     ).stdout
 
 
+def _default_keychain_missing() -> bool:
+    security = importlib.import_module("Security")
+    status, _keychain = security.SecKeychainCopyDomainDefault(
+        security.kSecPreferencesDomainUser, None,
+    )
+    return bool(status == security.errSecNoDefaultKeychain)
+
+
 @contextmanager
-def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
+def _temporary_ci_keychain(root: Path, *, password: str | None = None) -> Iterator[Path]:
     """Isolate OS defaults only on a disposable hosted runner and restore them."""
     if (
         os.environ.get("GITHUB_ACTIONS") != "true"
@@ -77,18 +86,14 @@ def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
     try:
         previous = shlex.split(_security("default-keychain", "-d", "user"))
     except subprocess.CalledProcessError:
-        security = importlib.import_module("Security")
-        status, _keychain = security.SecKeychainCopyDomainDefault(
-            security.kSecPreferencesDomainUser, None,
-        )
-        if status != security.errSecNoDefaultKeychain:
+        if not _default_keychain_missing():
             raise
         previous = []
     search_list = shlex.split(_security("list-keychains", "-d", "user"))
     if len(previous) > 1:
         pytest.fail("Cannot safely snapshot the hosted runner's default Keychain")
     keychain = root / f"fpvs-ci-{uuid.uuid4().hex}.keychain-db"
-    password = secrets.token_urlsafe(32)
+    password = password or secrets.token_urlsafe(32)
     created = False
     selected = False
     try:
@@ -101,9 +106,15 @@ def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
         _security("default-keychain", "-d", "user", "-s", str(keychain))
         yield keychain
     finally:
+        restore_error = None
         try:
             if selected:
-                _security("default-keychain", "-d", "user", "-s", *previous)
+                try:
+                    _security("default-keychain", "-d", "user", "-s", *previous)
+                except subprocess.CalledProcessError as error:
+                    if previous:
+                        raise
+                    restore_error = error
         finally:
             try:
                 if selected:
@@ -111,6 +122,10 @@ def _temporary_ci_keychain(root: Path) -> Iterator[Path]:
             finally:
                 if created:
                     _security("delete-keychain", str(keychain))
+        # Removing our store may itself clear its default selection. Confirm the
+        # final restored state only after all owned resources have been deleted.
+        if restore_error is not None and not _default_keychain_missing():
+            raise restore_error
 
 
 @pytest.mark.timeout(120)
@@ -120,30 +135,86 @@ def test_native_keychain_roundtrip_uses_and_cleans_only_a_unique_synthetic_entry
     # keyring 25 ignores KEYCHAIN_PATH; use the actual backend against a temporary
     # OS default. Never unlock the login Keychain or weaken its access controls.
     code = """
+import json
 import sys
 import uuid
+import CoreFoundation
+import Security
+from keyring.backends.macOS import api
 from fpvs_studio.library.credentials import MacOSKeychainCredentialStore
 from fpvs_studio.library.models import DeviceCredential
+settings = json.load(sys.stdin)
+assert Security.SecKeychainSetUserInteractionAllowed(False) == 0
+status, keychain = Security.SecKeychainOpen(settings['path'], None)
+assert status == 0
+password = settings['password'].encode('utf-8')
+assert Security.SecKeychainUnlock(keychain, len(password), password, True) == 0
+before_status, before_default = Security.SecKeychainCopyDefault(None)
+assert before_status in (0, Security.errSecNoDefaultKeychain)
+assert Security.SecKeychainSetDefault(keychain) == 0
+status, selected = Security.SecKeychainCopyDefault(None)
+assert status == 0 and CoreFoundation.CFEqual(selected, keychain)
+status, flags = Security.SecKeychainGetStatus(selected, None)
+assert status == 0 and flags & Security.kSecUnlockStateStatus
+result = {'domain': int(Security.SecKeychainGetPreferenceDomain()),
+          'default_status': int(status), 'keychain_flags': int(flags)}
 store = MacOSKeychainCredentialStore(sys.argv[1])
 credential = DeviceCredential(token='synthetic_ci_' + uuid.uuid4().hex + uuid.uuid4().hex,
                               device_name='Synthetic macOS CI', library_api_version=2)
 try:
-    assert store.load() is None
-    store.save(credential)
-    assert MacOSKeychainCredentialStore(sys.argv[1]).load() == credential
-    store.delete()
-    assert store.load() is None
+    try:
+        assert store.load() is None
+        store.save(credential)
+        assert MacOSKeychainCredentialStore(sys.argv[1]).load() == credential
+        store.delete()
+        assert store.load() is None
+        result['result'] = 'roundtrip'
+    except Exception as error:
+        seen = set()
+        queue = [error]
+        statuses = []
+        while queue:
+            current = queue.pop()
+            if id(current) in seen:
+                continue
+            seen.add(id(current))
+            if isinstance(current, api.Error) and current.args:
+                if type(current.args[0]) is int:
+                    statuses.append(current.args[0])
+            queue.extend(item for item in (current.__cause__, current.__context__) if item)
+        interactive = {Security.errSecInteractionNotAllowed, Security.errSecInteractionRequired}
+        if not statuses or any(value not in interactive for value in statuses):
+            raise
+        result.update(result='interaction_required', osstatus=statuses[0])
 finally:
-    store.delete()
+    restored = Security.SecKeychainSetDefault(before_default)
+    after_status, after_default = Security.SecKeychainCopyDefault(None)
+    if before_status == Security.errSecNoDefaultKeychain:
+        assert after_status == before_status
+    else:
+        assert restored == 0 and after_status == 0
+        assert CoreFoundation.CFEqual(after_default, before_default)
+print(json.dumps(result))
 """
-    with _temporary_ci_keychain(tmp_path):
-        # A blocked Security prompt must fail this check without killing pytest
-        # before its fixture restores the original OS selection.
+    password = secrets.token_urlsafe(32)
+    with _temporary_ci_keychain(tmp_path, password=password) as keychain:
+        # Disable Security UI in the child: interactive-session limits must return
+        # a native OSStatus rather than block pytest or alter production behavior.
         result = subprocess.run(
             [sys.executable, "-c", code, f"FPVS-Studio/CI/{uuid.uuid4().hex}"],
+            input=json.dumps({"path": str(keychain), "password": password}),
             capture_output=True, text=True, check=False, timeout=20,
         )
         assert result.returncode == 0, result.stderr
+        diagnostic = json.loads(result.stdout.strip().splitlines()[-1])
+    record_property("keychain_diagnostic", json.dumps(diagnostic, sort_keys=True))
+    if diagnostic["result"] == "interaction_required":
+        assert diagnostic["osstatus"] in {-25308, -25315}
+        pytest.skip(
+            f"Native Keychain write needs an interactive session (OSStatus "
+            f"{diagnostic['osstatus']}); physical write qualification remains deferred."
+        )
+    assert diagnostic["result"] == "roundtrip"
     record_property(
         "keychain_scope", "temporary hosted-runner Keychain, original selection restored",
     )

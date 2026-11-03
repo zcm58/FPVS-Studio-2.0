@@ -168,3 +168,35 @@ def test_ci_keychain_distinguishes_no_default_from_a_failed_snapshot(
             with native._temporary_ci_keychain(tmp_path):
                 pytest.fail("An unknown selection must not be modified")
         assert calls == [("default-keychain", "-d", "user")]
+
+
+@pytest.mark.parametrize("missing_after_restore", [True, False])
+def test_ci_keychain_unset_error_requires_confirming_original_empty_state(
+    monkeypatch, tmp_path, missing_after_restore,
+):
+    from tests.integration import test_macos_native as native
+
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("RUNNER_ENVIRONMENT", "github-hosted")
+    states = iter([True, missing_after_restore])
+    monkeypatch.setattr(native, "_default_keychain_missing", lambda: next(states))
+    calls = []
+
+    def security(*arguments):
+        calls.append(arguments)
+        if arguments in {
+            ("default-keychain", "-d", "user"),
+            ("default-keychain", "-d", "user", "-s"),
+        }:
+            raise subprocess.CalledProcessError(1, ["security", *arguments])
+        return ""
+
+    monkeypatch.setattr(native, "_security", security)
+    if missing_after_restore:
+        with native._temporary_ci_keychain(tmp_path) as owned:
+            assert owned.parent == tmp_path
+    else:
+        with pytest.raises(subprocess.CalledProcessError):
+            with native._temporary_ci_keychain(tmp_path) as owned:
+                assert owned.parent == tmp_path
+    assert calls[-1] == ("delete-keychain", str(owned))
