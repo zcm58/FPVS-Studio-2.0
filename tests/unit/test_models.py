@@ -269,6 +269,36 @@ def test_presentation_settings_validate_geometry_and_balanced_text_heights() -> 
         )
 
 
+@pytest.mark.parametrize("include_mode", [False, True])
+def test_height_only_natural_geometry_loads_without_reintroducing_default_width(include_mode):
+    geometry = ImageGeometrySettings(width_degrees=None, height_degrees=3.5)
+    payload = geometry.model_dump(mode="json", exclude_none=True)
+    if not include_mode:
+        payload.pop("mode")
+    original = dict(payload)
+
+    restored = ImageGeometrySettings.model_validate(payload)
+
+    assert restored == geometry
+    assert payload == original
+    assert ImageGeometrySettings().width_degrees == 5.0
+    assert ImageGeometrySettings().height_degrees is None
+
+
+@pytest.mark.parametrize("mode", list(ImageGeometryMode))
+def test_image_geometry_dimension_requirements_remain_explicit(mode):
+    if mode == ImageGeometryMode.NATURAL_ASPECT:
+        with pytest.raises(ValidationError, match="exactly one authored dimension"):
+            ImageGeometrySettings(mode=mode, width_degrees=5.0, height_degrees=3.5)
+        with pytest.raises(ValidationError, match="exactly one authored dimension"):
+            ImageGeometrySettings(mode=mode, width_degrees=None, height_degrees=None)
+    else:
+        for width, height in ((None, 3.5), (5.0, None)):
+            with pytest.raises(ValidationError, match="requires both"):
+                ImageGeometrySettings(mode=mode, width_degrees=width, height_degrees=height)
+        assert ImageGeometrySettings(mode=mode, width_degrees=5.0, height_degrees=3.5)
+
+
 def test_load_project_file_migrates_v1_presentation_without_rewriting_assets(
     tmp_path,
     sample_project,

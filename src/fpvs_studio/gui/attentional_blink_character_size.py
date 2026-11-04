@@ -50,10 +50,13 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
         super().refresh()
         if not hasattr(self, "character_height_edit"):
             return
-        self.width_degrees_spin.hide()
-        width_label = self.form_layout.labelForField(self.width_degrees_spin)
-        assert width_label is not None
-        width_label.hide()
+        for control in (
+            self.geometry_mode_combo, self.width_degrees_spin, self.height_degrees_spin,
+        ):
+            control.hide()
+            label = self.form_layout.labelForField(control)
+            assert label is not None
+            label.hide()
         self.full_screen_preview_button.hide()
         self.preview_value_label.hide()
         self.configure_presentation_button.hide()

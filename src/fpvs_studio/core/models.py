@@ -345,6 +345,21 @@ class ImageGeometrySettings(FPVSBaseModel):
     width_degrees: float | None = DEFAULT_STIMULUS_WIDTH_DEGREES
     height_degrees: float | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def preserve_height_only_natural_aspect(cls, value: Any) -> Any:
+        # Project/config serializers omit None fields. A saved height-only rule
+        # must not gain the default width when its omitted width is loaded again.
+        if (
+            isinstance(value, Mapping)
+            and value.get("mode", ImageGeometryMode.NATURAL_ASPECT)
+            == ImageGeometryMode.NATURAL_ASPECT
+            and "width_degrees" not in value
+            and value.get("height_degrees") is not None
+        ):
+            return {**value, "width_degrees": None}
+        return value
+
     @field_validator("width_degrees", "height_degrees")
     @classmethod
     def validate_dimension(cls, value: float | None) -> float | None:

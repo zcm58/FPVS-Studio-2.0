@@ -207,6 +207,11 @@ Image roles compile one of four geometry modes:
 - `cover`: preserve source aspect ratio and crop centrally to fill the box
 - `natural_aspect`: author one dimension and derive the other from the source image
 
+Width and height are independent visual angles for the two-axis modes. Height-driven
+natural aspect remains height-driven when a project/config omits its null width during
+serialization; loading it must not introduce the legacy default width. Existing
+width-driven defaults and compiled frame schedules are unchanged.
+
 Word roles compile the fixed Studio experiment font, an opaque color, x/y position,
 and the unit used by text height and position. A fixed or balanced-randomized authored
 height rule is resolved before playback; each word event carries its resolved height.

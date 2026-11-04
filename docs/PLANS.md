@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Vertical image visual angle](exec-plans/completed/vertical-image-visual-angle.md):
+  Setup/preview expose width and height with explicit sizing modes; height-only
+  persistence repaired, and core/GUI focused plus safe precommit checks passed.
 - [macOS regression audit](exec-plans/completed/macos-regression-audit-20261104.md):
   repaired local-display readiness, engine compatibility, Finder metadata processing
   and cross-platform resolution checks; focused checks and safe precommit passed.

@@ -27,7 +27,9 @@ from fpvs_studio.core.enums import (
     StimulusModality,
     StimulusTransform,
 )
+from fpvs_studio.core.models import ImageGeometrySettings, ImageResolution
 from fpvs_studio.core.run_spec import FixationEvent, TriggerEvent
+from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.engines import psychopy_engine as psychopy_engine_module
 from fpvs_studio.engines import psychopy_macos_display as psychopy_macos_display_module
 from fpvs_studio.engines import psychopy_stimuli as psychopy_stimuli_module
@@ -1885,6 +1887,83 @@ def test_psychopy_engine_resolves_native_image_geometry_modes(
         )
     )
     assert _image_stims(captures)[0].size == (expected_width, expected_height)
+
+
+@pytest.mark.parametrize(("mode", "width", "height"), [
+    (ImageGeometryMode.NATURAL_ASPECT, 5.0, None),
+    (ImageGeometryMode.NATURAL_ASPECT, None, 3.5),
+    (ImageGeometryMode.EXACT_BOX, 5.0, 3.5),
+    (ImageGeometryMode.CONTAIN, 5.0, 3.5),
+    (ImageGeometryMode.COVER, 5.0, 3.5),
+])
+def test_authored_image_axes_survive_save_compile_and_render_without_changing_timing(
+    monkeypatch, sample_project, sample_project_root, mode, width, height,
+):
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.settings.fixation_task.accuracy_task_enabled = False
+    sample_project.settings.presentation.pre_stream_fixation_seconds = 0
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 1
+    for stimulus_set in sample_project.stimulus_sets:
+        stimulus_set.resolution = ImageResolution(width_px=256, height_px=128)
+        for path in (sample_project_root / stimulus_set.source_dir).glob("*.png"):
+            Image.new("RGB", (256, 128), color=(20, 40, 80)).save(path)
+    compile_options = {
+        "refresh_hz": 60.0, "project_root": sample_project_root,
+        "run_id": "image-axes", "random_seed": 42,
+    }
+    baseline = compile_run_spec(sample_project, **compile_options)
+    geometry = ImageGeometrySettings(mode=mode, width_degrees=width, height_degrees=height)
+    sample_project.settings.presentation.defaults.image_geometry = geometry
+    source_bytes = {
+        path: path.read_bytes() for path in (sample_project_root / "stimuli").rglob("*.png")
+    }
+    project_path = sample_project_root / "project.json"
+    save_project_file(sample_project, project_path)
+    restored = load_project_file(project_path)
+    assert restored.settings.presentation.defaults.image_geometry == geometry
+    run_spec = compile_run_spec(restored, **compile_options)
+    assert run_spec.model_dump(exclude={"presentation"}) == baseline.model_dump(
+        exclude={"presentation"},
+    )
+    for role in (run_spec.presentation.base, run_spec.presentation.oddball):
+        assert role.image_geometry.mode == mode
+        assert role.image_geometry.width_degrees == width
+        assert role.image_geometry.height_degrees == height
+
+    display = run_spec.display
+
+    def pixels(degrees):
+        return visual_angle_width_px(
+            degrees=degrees, viewing_distance_cm=display.viewing_distance_cm,
+            screen_width_cm=display.screen_width_cm, screen_width_px=display.screen_width_px,
+        )
+
+    if mode == ImageGeometryMode.NATURAL_ASPECT:
+        if width is not None:
+            expected_size = (pixels(width), round(pixels(width) / 2))
+        else:
+            expected_size = (round(pixels(height) * 2), pixels(height))
+    elif mode == ImageGeometryMode.CONTAIN:
+        scale = min(pixels(width) / 256, pixels(height) / 128)
+        expected_size = (round(256 * scale), round(128 * scale))
+    else:
+        expected_size = (pixels(width), pixels(height))
+
+    captures = {}
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, _build_fake_psychopy(captures, flip_times=[]))
+    try:
+        result = engine.run_condition(
+            run_spec, sample_project_root,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
+        )
+    finally:
+        engine.close_session()
+    assert not result.aborted
+    stimuli = _image_stims(captures)
+    assert stimuli and all(stim.size == expected_size for stim in stimuli)
+    assert {path: path.read_bytes() for path in source_bytes} == source_bytes
 
 
 def test_psychopy_engine_rejects_compiled_source_resolution_drift(

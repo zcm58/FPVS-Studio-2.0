@@ -146,7 +146,10 @@ def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(
     wizard.open_wizard(step_key="image_size", allow_step_jumps=True)
     QApplication.processEvents()
     editor = wizard.image_display_size_editor
-    assert not editor.width_degrees_spin.isVisible()
+    for control in (editor.geometry_mode_combo, editor.width_degrees_spin,
+                    editor.height_degrees_spin):
+        assert not control.isVisible()
+        assert not editor.form_layout.labelForField(control).isVisible()
     assert not editor.configure_presentation_button.isVisible()
     assert editor.viewing_distance_spin.isVisible()
     assert editor.screen_width_spin.isVisible()

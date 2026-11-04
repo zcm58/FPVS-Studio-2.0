@@ -18,6 +18,8 @@ from PySide6.QtWidgets import (
     QApplication,
     QLabel,
     QPushButton,
+    QStyle,
+    QStyleOptionComboBox,
     QWidget,
 )
 from tests.gui.helpers import (
@@ -30,17 +32,31 @@ from tests.gui.helpers import (
 )
 from tests.platform_adapters import set_module_platform
 
-from fpvs_studio.core.enums import DutyCycleMode, ImageGeometryMode, StimulusModality
+from fpvs_studio.core.enums import (
+    DutyCycleMode,
+    ImageGeometryMode,
+    StimulusModality,
+    StimulusTransform,
+)
 from fpvs_studio.core.models import (
+    ConditionPresentationSettings,
     ImageGeometrySettings,
     ProjectPresentationSettings,
     StimulusPresentationDefaults,
+    StimulusPresentationOverride,
+    TextHeightScheduleSettings,
+    TextPositionSettings,
 )
+from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui import runtime_settings_page
 from fpvs_studio.gui.components import studio_theme_stylesheet
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.runtime_settings_page import ImageSizePreview, ImageSizePreviewDialog
+from fpvs_studio.gui.runtime_settings_page import (
+    ImageDisplaySizeEditor,
+    ImageSizePreview,
+    ImageSizePreviewDialog,
+)
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.display_refresh import DisplayRefreshVerification
 
@@ -525,8 +541,11 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("mode", [
+    "natural_width", "natural_height", "exact_box", "contain", "cover",
+])
 def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
-    qtbot, controller: StudioController, tmp_path: Path, background,
+    qtbot, controller: StudioController, tmp_path: Path, background, mode,
 ):
     _document, window = _open_created_project(controller, qtbot, tmp_path, "Image size grouping")
     guide = window.setup_wizard_page
@@ -537,6 +556,9 @@ def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
     window.show_setup_wizard(step_key="image_size")
     QApplication.processEvents()
     editor = guide.image_display_size_editor
+    editor.geometry_mode_combo.setCurrentIndex(editor.geometry_mode_combo.findData(mode))
+    QApplication.processEvents()
+    assert window.size().toTuple() == (1120, 820)
     assert guide.image_size_step_surface.content.maximumWidth() == 1040
     assert editor.size_card.title_label.text() == "Stimulus size"
     assert editor.calibration_card.title_label.text() == "Display calibration"
@@ -544,7 +566,8 @@ def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
     assert editor.size_card.geometry().top() == editor.calibration_card.geometry().top()
     assert editor.size_card.geometry().bottom() == editor.calibration_card.geometry().bottom()
     for form, fields in (
-        (editor.form_layout, (editor.width_degrees_spin, editor.viewing_distance_spin)),
+        (editor.form_layout, (editor.geometry_mode_combo, editor.width_degrees_spin,
+         editor.height_degrees_spin, editor.viewing_distance_spin)),
         (editor.calibration_form_layout, (editor.screen_width_spin,
          editor.screen_width_px_spin, editor.screen_height_px_spin)),
     ):
@@ -552,16 +575,36 @@ def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
             label = form.labelForField(field)
             assert label.isVisible()
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
-            assert field.width() <= 220
+            if field is editor.geometry_mode_combo:
+                option = QStyleOptionComboBox()
+                option.initFrom(field)
+                option.currentText = field.currentText()
+                option.editable = field.isEditable()
+                option.frame = field.hasFrame()
+                contents = field.style().subControlRect(
+                    QStyle.ComplexControl.CC_ComboBox, option,
+                    QStyle.SubControl.SC_ComboBoxEditField, field,
+                )
+                assert contents.width() >= field.fontMetrics().horizontalAdvance(
+                    field.currentText(),
+                )
+            else:
+                assert field.width() <= 220
             assert label.mapTo(editor, label.rect().bottomLeft()).y() < (
                 field.mapTo(editor, field.rect().topLeft()).y()
             )
     assert editor.preview_value_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert editor.presentation_summary_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert editor.use_current_resolution_checkbox.isVisible()
+    for control in (editor.width_degrees_spin, editor.height_degrees_spin):
+        if not control.isEnabled():
+            assert control.value() == control.minimum()
+            assert control.specialValueText() == "From image"
+            assert control.text() == "From image"
     for button in (editor.full_screen_preview_button, editor.configure_presentation_button):
         assert button.width() >= button.sizeHint().width()
     _assert_visible_children_within_parent(guide.image_size_step_surface)
+    _assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
 def test_setup_wizard_blocks_impossible_sub_frame_base_rate(
@@ -735,6 +778,10 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert editor.screen_width_spin.value() == pytest.approx(52.0, abs=0.01)
     image_size_labels = "\n".join(label.text() for label in editor.findChildren(QLabel))
     assert "Image width (deg)" in image_size_labels
+    assert "Image height (deg)" in image_size_labels
+    assert "Image sizing" in image_size_labels
+    assert editor.geometry_mode_combo.currentData() == "natural_width"
+    assert not editor.height_degrees_spin.isEnabled()
     assert "Viewing distance (cm)" in image_size_labels
     assert "Screen width (cm)" in image_size_labels
     assert "Resolution width (px)" in image_size_labels
@@ -970,11 +1017,18 @@ def test_image_size_calibration_preserves_geometry_and_recovers_from_failed_edit
     QApplication.processEvents()
     _assert_visible_children_within_parent(controls)
     assert controls.width_degrees_spin.isEnabled() is not height_constrained
+    assert controls.height_degrees_spin.isEnabled()
+    assert controls.geometry_mode_combo.currentData() == (
+        "natural_height" if height_constrained else "exact_box"
+    )
     prefix = "preview_" if surface == "preview" else ""
     assert controls.width_degrees_spin.objectName() == f"{prefix}stimulus_width_degrees_spin"
+    assert controls.height_degrees_spin.objectName() == f"{prefix}stimulus_height_degrees_spin"
 
-    # The displayed one-decimal width must never round the authored 5.125-degree
-    # width merely because an unrelated calibration field changed.
+    if not height_constrained:
+        assert controls.width_degrees_spin.value() == 5.125
+    assert controls.height_degrees_spin.value() == 6.25
+    # Calibration must retain both precise authored axes and the chosen fit policy.
     controls.viewing_distance_spin.setValue(78.0)
     controls.screen_width_spin.setValue(60.25)
     controls.screen_width_px_spin.setValue(1600)
@@ -995,13 +1049,23 @@ def test_image_size_calibration_preserves_geometry_and_recovers_from_failed_edit
     assert controls.screen_height_px_spin.isEnabled()
 
     if not height_constrained:
+        controls.height_degrees_spin.setValue(6.5)
+        assert document.project.settings.presentation.defaults.image_geometry.width_degrees == 5.125
         controls.width_degrees_spin.setValue(7.5)
         assert document.project.settings.display.stimulus_width_degrees == 7.5
         updated = document.project.settings.presentation.defaults.image_geometry
         assert updated.width_degrees == 7.5
-        assert updated.height_degrees == 6.25
+        assert updated.height_degrees == 6.5
         assert updated.mode == ImageGeometryMode.EXACT_BOX
         assert editor.width_degrees_spin.value() == 7.5
+        assert editor.height_degrees_spin.value() == 6.5
+    else:
+        controls.height_degrees_spin.setValue(7.5)
+        updated = document.project.settings.presentation.defaults.image_geometry
+        assert updated.width_degrees is None
+        assert updated.height_degrees == 7.5
+        assert updated.mode == ImageGeometryMode.NATURAL_ASPECT
+        assert not editor.full_screen_preview_button.isEnabled()
 
     errors = []
     before_failure = document.project.model_copy(deep=True)
@@ -1036,6 +1100,8 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
 
     modal_labels = "\n".join(label.text() for label in dialog.findChildren(QLabel))
     assert "Image width (deg)" in modal_labels
+    assert "Image height (deg)" in modal_labels
+    assert "Image sizing" in modal_labels
     assert "Viewing distance (cm)" in modal_labels
     assert "Screen width (cm)" in modal_labels
     assert "Resolution width (px)" in modal_labels
@@ -1071,6 +1137,176 @@ def test_full_screen_image_size_preview_edits_sync_with_experiment_page(
     assert window.document.project.settings.display.use_current_screen_resolution is True
     assert not dialog.screen_width_px_spin.isEnabled()
     assert not editor.screen_width_px_spin.isEnabled()
+
+
+@pytest.mark.parametrize("surface", ["editor", "preview"])
+@pytest.mark.parametrize("mode", [
+    "natural_width", "natural_height", "exact_box", "contain", "cover",
+])
+def test_image_sizing_modes_and_axes_persist_without_changing_other_presentation(
+    qtbot, controller, tmp_path, surface, mode,
+):
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Independent image FOV")
+    condition_id = document.create_condition(name="Condition with independent image overrides")
+    override = ConditionPresentationSettings(common=StimulusPresentationOverride(
+        transform=StimulusTransform.MIRROR_HORIZONTAL,
+        image_geometry=ImageGeometrySettings(
+            mode=ImageGeometryMode.EXACT_BOX, width_degrees=2.25, height_degrees=3.75,
+        ),
+    ))
+    document.set_condition_presentation(condition_id, override)
+    presentation = ProjectPresentationSettings(
+        pre_stream_fixation_seconds=3.5,
+        defaults=StimulusPresentationDefaults(
+            image_geometry=ImageGeometrySettings(width_degrees=5.125),
+            transform=StimulusTransform.MIRROR_VERTICAL,
+            text_height=TextHeightScheduleSettings(values=[1.375]),
+            text_color="#F0E68C", text_position=TextPositionSettings(x=0.25, y=-0.5),
+        ),
+    )
+    document.set_project_presentation(presentation)
+    window.show_setup_wizard(step_key="image_size")
+    window.resize(1120, 820)
+    window.show()
+    editor = window.setup_wizard_page.image_display_size_editor
+    preview = ImageSizePreviewDialog(document, window)
+    qtbot.addWidget(preview)
+    controls = preview if surface == "preview" else editor
+    if surface == "preview":
+        preview.resize(1120, 820)
+        preview.show()
+    controls.geometry_mode_combo.setCurrentIndex(controls.geometry_mode_combo.findData(mode))
+    QApplication.processEvents()
+    geometry = document.project.settings.presentation.defaults.image_geometry
+    assert geometry.width_degrees == (None if mode == "natural_height" else 5.125)
+    assert geometry.height_degrees == (None if mode == "natural_width" else 5.125)
+    assert controls.width_degrees_spin.isEnabled() is (mode != "natural_height")
+    assert controls.height_degrees_spin.isEnabled() is (mode != "natural_width")
+    if mode != "natural_width":
+        controls.height_degrees_spin.setValue(6.5)
+        # Editing one axis must retain the other axis's precise authored value.
+        assert document.project.settings.presentation.defaults.image_geometry.width_degrees == (
+            None if mode == "natural_height" else 5.125
+        )
+    if mode != "natural_height":
+        controls.width_degrees_spin.setValue(7.5)
+        assert document.project.settings.display.stimulus_width_degrees == 7.5
+    expected = ImageGeometrySettings(
+        mode=ImageGeometryMode.NATURAL_ASPECT if mode.startswith("natural_") else mode,
+        width_degrees=None if mode == "natural_height" else 7.5,
+        height_degrees=None if mode == "natural_width" else 6.5,
+    )
+    controls.viewing_distance_spin.setValue(81.5)
+    QApplication.processEvents()
+    assert document.project.settings.presentation.defaults.image_geometry == expected
+    for peer in (editor, preview):
+        assert peer.geometry_mode_combo.currentData() == mode
+        assert peer.width_degrees_spin.isEnabled() is (mode != "natural_height")
+        assert peer.height_degrees_spin.isEnabled() is (mode != "natural_width")
+        for control in (peer.width_degrees_spin, peer.height_degrees_spin):
+            if not control.isEnabled():
+                assert control.value() == control.minimum()
+                assert control.specialValueText() == "From image"
+                assert control.text() == "From image"
+        if expected.height_degrees is not None:
+            assert peer.height_degrees_spin.value() == expected.height_degrees
+    unchanged_defaults = presentation.defaults.model_copy(update={"image_geometry": expected})
+    assert document.project.settings.presentation.defaults == unchanged_defaults
+    assert document.project.settings.presentation.pre_stream_fixation_seconds == 3.5
+    assert document.project.conditions[0].presentation == override
+    _assert_visible_children_within_parent(controls)
+    if surface == "preview":
+        assert preview.size().toTuple() == (1120, 820)
+        combo = preview.geometry_mode_combo
+        option = QStyleOptionComboBox()
+        option.initFrom(combo)
+        option.currentText = combo.currentText()
+        option.editable = combo.isEditable()
+        option.frame = combo.hasFrame()
+        contents = combo.style().subControlRect(
+            QStyle.ComplexControl.CC_ComboBox, option,
+            QStyle.SubControl.SC_ComboBoxEditField, combo,
+        )
+        assert contents.width() >= combo.fontMetrics().horizontalAdvance(combo.currentText())
+        label = preview.preview_value_label
+        assert label.isVisible() and label.wordWrap()
+        required = label.fontMetrics().boundingRect(
+            QRect(0, 0, max(1, label.contentsRect().width()), 10000),
+            Qt.TextFlag.TextWordWrap, label.text(),
+        )
+        assert label.contentsRect().height() >= required.height()
+    document.save()
+    reopened_document = ProjectDocument(
+        project_root=document.project_root, project=load_project_file(document.project_file_path),
+    )
+    reopened = ImageDisplaySizeEditor(reopened_document)
+    qtbot.addWidget(reopened)
+    assert reopened.geometry_mode_combo.currentData() == mode
+    assert reopened_document.project.settings.presentation == document.project.settings.presentation
+    assert reopened_document.project.conditions[0].presentation == override
+
+
+@pytest.mark.parametrize("surface", ["editor", "preview"])
+def test_changing_height_natural_to_box_preserves_precise_height_and_seeds_width(
+    qtbot, controller, tmp_path, surface,
+):
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Height to image box")
+    document.set_project_presentation(ProjectPresentationSettings(
+        defaults=StimulusPresentationDefaults(image_geometry=ImageGeometrySettings(
+            width_degrees=None, height_degrees=6.375,
+        )),
+    ))
+    window.show_setup_wizard(step_key="image_size")
+    controls = window.setup_wizard_page.image_display_size_editor
+    if surface == "preview":
+        controls = ImageSizePreviewDialog(document, window)
+        qtbot.addWidget(controls)
+    controls.geometry_mode_combo.setCurrentIndex(controls.geometry_mode_combo.findData("exact_box"))
+    assert document.project.settings.presentation.defaults.image_geometry == ImageGeometrySettings(
+        mode=ImageGeometryMode.EXACT_BOX, width_degrees=6.375, height_degrees=6.375,
+    )
+    assert document.project.settings.display.stimulus_width_degrees == 6.375
+
+
+@pytest.mark.parametrize("surface", ["editor", "preview"])
+@pytest.mark.parametrize("failure", ["zero_height", "mode_save"])
+def test_image_sizing_rejected_changes_restore_controls_and_saved_geometry(
+    qtbot, controller, tmp_path, monkeypatch, surface, failure,
+):
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Image geometry recovery")
+    document.set_project_presentation(ProjectPresentationSettings(
+        defaults=StimulusPresentationDefaults(image_geometry=ImageGeometrySettings(
+            mode=ImageGeometryMode.EXACT_BOX, width_degrees=5.125, height_degrees=6.375,
+        )),
+    ))
+    window.show_setup_wizard(step_key="image_size")
+    controls = window.setup_wizard_page.image_display_size_editor
+    if surface == "preview":
+        controls = ImageSizePreviewDialog(document, window)
+        qtbot.addWidget(controls)
+    before = document.project.model_copy(deep=True)
+    errors = []
+    monkeypatch.setattr(
+        runtime_settings_page, "_show_error_dialog",
+        lambda parent, title, error: errors.append((parent, title, str(error))),
+    )
+    if failure == "mode_save":
+        def reject_presentation(_presentation):
+            raise ValueError("Presentation rejected")
+
+        monkeypatch.setattr(document, "set_project_presentation", reject_presentation)
+        controls.geometry_mode_combo.setCurrentIndex(
+            controls.geometry_mode_combo.findData("natural_height"),
+        )
+    else:
+        controls.height_degrees_spin.setValue(0)
+    QApplication.processEvents()
+    assert len(errors) == 1
+    assert errors[0][:2] == (controls, "Image Size Error")
+    assert document.project == before
+    assert controls.geometry_mode_combo.currentData() == "exact_box"
+    assert controls.width_degrees_spin.value() == 5.125
+    assert controls.height_degrees_spin.value() == 6.375
 
 
 @pytest.mark.parametrize("dark", [False, True])
@@ -1189,6 +1425,10 @@ def test_character_size_next_explains_invalid_height_on_click(
     window.resize(1120, 820)
     window.show()
     QApplication.processEvents()
+    for control in (editor.geometry_mode_combo, editor.width_degrees_spin,
+                    editor.height_degrees_spin):
+        assert control.isHidden()
+        assert editor.form_layout.labelForField(control).isHidden()
     assert editor.size_card.geometry().top() == editor.calibration_card.geometry().top()
     assert editor.size_card.geometry().bottom() == editor.calibration_card.geometry().bottom()
     assert editor.size_card.mapTo(

@@ -41,7 +41,11 @@ from fpvs_studio.core.enums import (
     ImageGeometryMode,
 )
 from fpvs_studio.core.masking import is_masking_project
-from fpvs_studio.core.models import AttentionalBlinkStreamSettings, DisplayValidationReport
+from fpvs_studio.core.models import (
+    AttentionalBlinkStreamSettings,
+    DisplayValidationReport,
+    ImageGeometrySettings,
+)
 from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
     approved_monitor_refresh_rate,
@@ -50,6 +54,7 @@ from fpvs_studio.core.validation import (
 )
 from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.gui.components import (
+    FiniteDoubleSpinBox,
     SectionCard,
     apply_image_size_preview_dialog_theme,
     configure_setup_form,
@@ -838,15 +843,33 @@ class _ImageSizeControls:
         self._document = document
         self._parent = parent
         self._on_refresh = on_refresh
-        self.width_degrees_spin = _image_size_spin_box(
-            parent=parent,
-            object_name=f"{object_name_prefix}stimulus_width_degrees_spin",
-            minimum=0.1,
-            maximum=90.0,
-            decimals=1,
-            step=0.5,
-            suffix=" deg",
+        self.geometry_mode_combo = QComboBox(parent)
+        self.geometry_mode_combo.setObjectName(f"{object_name_prefix}image_geometry_mode_combo")
+        for label, key in (
+            ("Width, keep proportions", "natural_width"),
+            ("Height, keep proportions", "natural_height"),
+            ("Stretch to width and height", ImageGeometryMode.EXACT_BOX.value),
+            ("Fit within width and height", ImageGeometryMode.CONTAIN.value),
+            ("Crop to width and height", ImageGeometryMode.COVER.value),
+        ):
+            self.geometry_mode_combo.addItem(label, key)
+        self.geometry_mode_combo.setToolTip(
+            "Keep proportions sets one angle and derives the other from each image. "
+            "Stretch sets both angles exactly. Fit keeps the whole image within the box; "
+            "Crop fills the box and removes overflow."
         )
+        self.geometry_mode_combo.setAccessibleName("Image sizing")
+        self.width_degrees_spin = FiniteDoubleSpinBox(minimum=0.0, parent=parent)
+        self.height_degrees_spin = FiniteDoubleSpinBox(minimum=0.0, parent=parent)
+        for axis, spin in (
+            ("width", self.width_degrees_spin), ("height", self.height_degrees_spin),
+        ):
+            spin.setObjectName(f"{object_name_prefix}stimulus_{axis}_degrees_spin")
+            spin.setSuffix(" deg")
+            spin.setSingleStep(0.5)
+            spin.setKeyboardTracking(False)
+            spin.setSpecialValueText("From image")
+            spin.setAccessibleName(f"Image {axis} in visual degrees")
         self.viewing_distance_spin = _image_size_spin_box(
             parent=parent,
             object_name=f"{object_name_prefix}viewing_distance_cm_spin",
@@ -877,7 +900,9 @@ class _ImageSizeControls:
         self.screen_height_px_spin = _resolution_spin_box(
             parent=parent, object_name=f"{object_name_prefix}screen_height_px_spin",
         )
+        self.geometry_mode_combo.currentIndexChanged.connect(on_changed)
         self.width_degrees_spin.valueChanged.connect(on_changed)
+        self.height_degrees_spin.valueChanged.connect(on_changed)
         self.viewing_distance_spin.valueChanged.connect(on_changed)
         self.screen_width_spin.valueChanged.connect(on_changed)
         self.use_current_resolution_checkbox.toggled.connect(on_changed)
@@ -887,14 +912,26 @@ class _ImageSizeControls:
     def refresh(self) -> None:
         display = self._document.project.settings.display
         geometry = self._document.project.settings.presentation.defaults.image_geometry
-        width_is_authoritative = geometry.width_degrees is not None
+        sizing = geometry.mode.value
+        if geometry.mode == ImageGeometryMode.NATURAL_ASPECT:
+            sizing = "natural_width" if geometry.width_degrees is not None else "natural_height"
+        with QSignalBlocker(self.geometry_mode_combo):
+            self.geometry_mode_combo.setCurrentIndex(self.geometry_mode_combo.findData(sizing))
         with QSignalBlocker(self.width_degrees_spin):
-            self.width_degrees_spin.setValue(display.stimulus_width_degrees)
-        self.width_degrees_spin.setEnabled(width_is_authoritative)
+            self.width_degrees_spin.setValue(geometry.width_degrees or 0.0)
+        with QSignalBlocker(self.height_degrees_spin):
+            self.height_degrees_spin.setValue(geometry.height_degrees or 0.0)
+        self.width_degrees_spin.setEnabled(geometry.width_degrees is not None)
+        self.height_degrees_spin.setEnabled(geometry.height_degrees is not None)
         self.width_degrees_spin.setToolTip(
-            "Updates the authored presentation width."
-            if width_is_authoritative
-            else "Presentation is height-constrained. Use Configure Presentation to change it."
+            "Horizontal visual angle of the image or sizing box."
+            if geometry.width_degrees is not None
+            else "Width follows each source image's proportions. Change Image sizing to set it."
+        )
+        self.height_degrees_spin.setToolTip(
+            "Vertical visual angle of the image or sizing box."
+            if geometry.height_degrees is not None
+            else "Height follows each source image's proportions. Change Image sizing to set it."
         )
         with QSignalBlocker(self.viewing_distance_spin):
             self.viewing_distance_spin.setValue(display.viewing_distance_cm)
@@ -911,6 +948,11 @@ class _ImageSizeControls:
 
     def apply(self, sender: QObject | None) -> None:
         try:
+            if sender in (
+                self.geometry_mode_combo, self.width_degrees_spin, self.height_degrees_spin,
+            ):
+                self._apply_geometry(sender)
+                return
             updates = {
                 "viewing_distance_cm": self.viewing_distance_spin.value(),
                 "screen_width_cm": self.screen_width_spin.value(),
@@ -918,12 +960,40 @@ class _ImageSizeControls:
                 "screen_height_px": self.screen_height_px_spin.value(),
                 "use_current_screen_resolution": self.use_current_resolution_checkbox.isChecked(),
             }
-            if sender is None or sender is self.width_degrees_spin:
-                updates["stimulus_width_degrees"] = self.width_degrees_spin.value()
             self._document.update_display_settings(**updates)
         except Exception as error:
             _show_error_dialog(self._parent, "Image Size Error", error)
             self._on_refresh()
+
+    def _apply_geometry(self, sender: QObject | None) -> None:
+        presentation = self._document.project.settings.presentation.model_copy(deep=True)
+        geometry = presentation.defaults.image_geometry
+        width = geometry.width_degrees
+        height = geometry.height_degrees
+        mode = geometry.mode
+        if sender is self.geometry_mode_combo:
+            sizing = self.geometry_mode_combo.currentData()
+            reference = (
+                width or height or self._document.project.settings.display.stimulus_width_degrees
+            )
+            if sizing == "natural_width":
+                mode, width, height = ImageGeometryMode.NATURAL_ASPECT, width or reference, None
+            elif sizing == "natural_height":
+                mode, width, height = ImageGeometryMode.NATURAL_ASPECT, None, height or reference
+            else:
+                mode = ImageGeometryMode(sizing)
+                width, height = width or reference, height or reference
+        elif sender is self.width_degrees_spin and width is not None:
+            width = self.width_degrees_spin.value()
+        elif sender is self.height_degrees_spin and height is not None:
+            height = self.height_degrees_spin.value()
+        else:
+            self._on_refresh()
+            return
+        presentation.defaults.image_geometry = ImageGeometrySettings(
+            mode=mode, width_degrees=width, height_degrees=height,
+        )
+        self._document.set_project_presentation(presentation)
 
 
 class ImageSizePreviewDialog(QDialog):
@@ -950,7 +1020,9 @@ class ImageSizePreviewDialog(QDialog):
             on_changed=self._apply_image_display_settings,
             on_refresh=self.refresh,
         )
+        self.geometry_mode_combo = self._image_size_controls.geometry_mode_combo
         self.width_degrees_spin = self._image_size_controls.width_degrees_spin
+        self.height_degrees_spin = self._image_size_controls.height_degrees_spin
         self.viewing_distance_spin = self._image_size_controls.viewing_distance_spin
         self.screen_width_spin = self._image_size_controls.screen_width_spin
         self.use_current_resolution_checkbox = (
@@ -966,7 +1038,7 @@ class ImageSizePreviewDialog(QDialog):
 
         control_panel = QWidget(self)
         control_panel.setObjectName("image_size_preview_control_panel")
-        control_panel.setFixedWidth(300)
+        control_panel.setFixedWidth(340)
         control_panel_layout = QVBoxLayout(control_panel)
         control_panel_layout.setContentsMargins(18, 18, 18, 18)
         control_panel_layout.setSpacing(12)
@@ -977,11 +1049,14 @@ class ImageSizePreviewDialog(QDialog):
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setHorizontalSpacing(10)
         form_layout.setVerticalSpacing(10)
+        form_layout.addRow("Image sizing", self.geometry_mode_combo)
         form_layout.addRow("Image width (deg)", self.width_degrees_spin)
+        form_layout.addRow("Image height (deg)", self.height_degrees_spin)
         form_layout.addRow("Viewing distance (cm)", self.viewing_distance_spin)
         form_layout.addRow("Screen width (cm)", self.screen_width_spin)
         form_layout.addRow("Resolution width (px)", self.screen_width_px_spin)
         form_layout.addRow("Resolution height (px)", self.screen_height_px_spin)
+        configure_setup_form(form_layout, stacked=True)
         control_panel_layout.addLayout(form_layout)
 
         checkbox_row = QHBoxLayout()
@@ -1081,7 +1156,9 @@ class ImageDisplaySizeEditor(QWidget):
             on_changed=self._apply_image_display_settings,
             on_refresh=self.refresh,
         )
+        self.geometry_mode_combo = self._image_size_controls.geometry_mode_combo
         self.width_degrees_spin = self._image_size_controls.width_degrees_spin
+        self.height_degrees_spin = self._image_size_controls.height_degrees_spin
         self.viewing_distance_spin = self._image_size_controls.viewing_distance_spin
         self.screen_width_spin = self._image_size_controls.screen_width_spin
         self.use_current_resolution_checkbox = (
@@ -1126,7 +1203,9 @@ class ImageDisplaySizeEditor(QWidget):
         self.form_layout = QFormLayout()
         self.form_layout.setContentsMargins(0, 0, 0, 0)
         self.form_layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
+        self.form_layout.addRow("Image sizing", self.geometry_mode_combo)
         self.form_layout.addRow("Image width (deg)", self.width_degrees_spin)
+        self.form_layout.addRow("Image height (deg)", self.height_degrees_spin)
         self.form_layout.addRow("Viewing distance (cm)", self.viewing_distance_spin)
         configure_setup_form(self.form_layout, stacked=True)
         self.calibration_form_layout = QFormLayout()
@@ -1138,9 +1217,10 @@ class ImageDisplaySizeEditor(QWidget):
         self.calibration_form_layout.addRow("Resolution width (px)", self.screen_width_px_spin)
         self.calibration_form_layout.addRow("Resolution height (px)", self.screen_height_px_spin)
         configure_setup_form(self.calibration_form_layout, stacked=True)
-        for control in (self.width_degrees_spin, self.viewing_distance_spin,
-                        self.screen_width_spin, self.screen_width_px_spin,
-                        self.screen_height_px_spin):
+        for control in (
+            self.width_degrees_spin, self.height_degrees_spin, self.viewing_distance_spin,
+            self.screen_width_spin, self.screen_width_px_spin, self.screen_height_px_spin,
+        ):
             control.setMaximumWidth(220)
         self.preview_value_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
         self.preview_value_label.setProperty("setupMetricValue", "true")
@@ -1156,7 +1236,9 @@ class ImageDisplaySizeEditor(QWidget):
         self.size_card.body_layout.addLayout(actions)
         self.calibration_card.body_layout.addLayout(self.calibration_form_layout)
         self.calibration_card.body_layout.addWidget(self.use_current_resolution_checkbox)
-        QWidget.setTabOrder(self.width_degrees_spin, self.viewing_distance_spin)
+        QWidget.setTabOrder(self.geometry_mode_combo, self.width_degrees_spin)
+        QWidget.setTabOrder(self.width_degrees_spin, self.height_degrees_spin)
+        QWidget.setTabOrder(self.height_degrees_spin, self.viewing_distance_spin)
         QWidget.setTabOrder(self.viewing_distance_spin, self.screen_width_spin)
         QWidget.setTabOrder(self.screen_width_spin, self.screen_width_px_spin)
         QWidget.setTabOrder(self.screen_width_px_spin, self.screen_height_px_spin)
@@ -1178,10 +1260,10 @@ class ImageDisplaySizeEditor(QWidget):
         geometry = self._document.project.settings.presentation.defaults.image_geometry
         masking = is_masking_project(self._document.project)
         self.size_card.title_label.setText("Viewing geometry" if masking else "Stimulus size")
-        self.width_degrees_spin.setVisible(not masking)
-        width_label = self.form_layout.labelForField(self.width_degrees_spin)
-        if width_label is not None:
-            width_label.setVisible(not masking)
+        for control in (
+            self.geometry_mode_combo, self.width_degrees_spin, self.height_degrees_spin,
+        ):
+            _set_form_row_visible(self.form_layout, control, not masking)
         self.full_screen_preview_button.setVisible(not masking)
         self.configure_presentation_button.setVisible(not masking)
         height_driven_natural = (

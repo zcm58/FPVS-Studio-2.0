@@ -717,13 +717,18 @@ The authoring window is organized around two user-facing modes:
     projects retain requested-versus-realized approximation warnings; mixed image rates
     must all fit the selected refresh exactly. Current launches always use PsychoPy, fullscreen
     session playback, and the default display without exposing those as choices
-  - the Image Size step exposes calibrated display geometry and a concise summary of
-    the project presentation defaults,
+  - the Image Size step exposes Image sizing, horizontal image width and vertical image
+    height in visual degrees, calibrated display geometry and a concise summary of
+    the project presentation defaults. Width/Height, keep proportions authors one axis;
+    the other displays `From image`. Stretch sets both angles exactly, Fit preserves the
+    whole image inside the two-axis box, and Crop fills the box with a central crop.
+    Changing calibration never changes the authored geometry or per-condition overrides.
+    The existing natural-width default remains unchanged. Controls also include
     approximate viewing distance in cm, physical screen width in cm, intended test
     display resolution in pixels, and an optional current-primary-screen resolution
     mode; the full-screen preview includes a side control panel for live edits to those
-    same values, and source image resolution remains independent from on-screen playback
-    size; new projects default to the display geometry of 5.0 deg image
+    same values and sizing modes, and source image resolution remains independent from
+    on-screen playback size; new projects default to the display geometry of 5.0 deg image
     width, 80.0 cm viewing distance, 52.0 cm screen width, and 1920 x 1080 px
     resolution
   - new projects default the fixation cross appearance to the ACR-matched 27 px cross
