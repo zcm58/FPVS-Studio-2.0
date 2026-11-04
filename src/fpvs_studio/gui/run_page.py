@@ -1049,8 +1049,10 @@ class RunPage(QWidget):
         is_busy = self.is_launch_busy()
         if status_report is None:
             status_report = self._status_report()
-        launch_ready = status_report.badge_state == "ready" or (
-            status_report.status_label == "Validation Issues"
+        launch_ready = (
+            status_report.badge_state == "ready"
+            or status_report.status_label == "Check Local Display"
+            or status_report.status_label == "Validation Issues"
         )
         self.compile_button.setEnabled(not is_busy)
         self.launch_button.setEnabled(not is_busy and launch_ready)

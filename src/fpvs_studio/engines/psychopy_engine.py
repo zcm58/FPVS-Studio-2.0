@@ -239,14 +239,19 @@ class PsychoPyEngine(PresentationEngine):
         if window is None:
             return None
         if sys.platform == "darwin":
-            # PsychoPy exposes a NumPy viewport on Mac, rather than a list/tuple.
             # Report the realized backing pixels for the runtime mismatch guard.
             size = window.frameBufferSize
             return (int(size[0]), int(size[1]))
         size = getattr(window, "size", None)
-        if not isinstance(size, (list, tuple)) or len(size) < 2:
+        # PsychoPy's viewport is a NumPy array on Windows/Linux as well. Avoid a
+        # container-type check that silently bypasses runtime's resolution gate.
+        if size is None:
             return None
-        return (max(1, int(size[0])), max(1, int(size[1])))
+        try:
+            width, height = size
+            return (max(1, int(width)), max(1, int(height)))
+        except (TypeError, ValueError, OverflowError):
+            return None
 
     def show_transition_screen(
         self,

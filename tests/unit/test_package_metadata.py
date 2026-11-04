@@ -169,6 +169,32 @@ def test_mac_qt_constraint_preserves_windows_and_linux_dependency_range(platform
 
 
 @pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
+def test_mac_engine_requires_display_link_support_without_changing_other_platforms(
+    platform_name,
+) -> None:
+    environment = {**default_environment(), "sys_platform": platform_name}
+    requirements = [
+        Requirement(value)
+        for value in ast.literal_eval(f"[{_extract_list_assignment('engine')}]")
+    ]
+    selected = [
+        requirement for requirement in requirements
+        if requirement.name.lower() == "psychopy"
+        and (requirement.marker is None or requirement.marker.evaluate(environment))
+    ]
+    assert len(selected) == 1
+    versions = selected[0].specifier
+    assert "2026.1.0" in versions
+    assert "2026.2.5" in versions
+    assert "2027.0" not in versions
+    if platform_name == "darwin":
+        assert "2024.2.5" not in versions
+        assert "2025.2.4" not in versions
+    else:
+        assert str(versions) == "<2027.0,>=2024.2"
+
+
+@pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
 def test_mac_engine_binding_constraint_does_not_apply_to_other_platforms(platform_name) -> None:
     environment = {**default_environment(), "sys_platform": platform_name}
     requirements = [

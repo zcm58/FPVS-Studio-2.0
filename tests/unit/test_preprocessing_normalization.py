@@ -114,6 +114,59 @@ def test_normalization_writes_square_png_outputs_and_project_relative_paths(
         assert image.size == (512, 512)
 
 
+@pytest.mark.parametrize("metadata_name,metadata", [
+    (".DS_Store", b"\x00\x00\x00\x01Bud1"),
+    ("._a.jpg", b"\x00\x05\x16\x07\x00\x02\x00\x00" + bytes(18)),
+])
+def test_normalization_ignores_finder_metadata_and_retains_authored_dot_images(
+    tmp_path: Path, metadata_name: str, metadata: bytes,
+) -> None:
+    source_dir = tmp_path / "stimuli/original-images/base-set"
+    _write_image(source_dir / "a.jpg", (64, 96))
+    _write_image(source_dir / "._authored.png", (64, 96))
+    (source_dir / metadata_name).write_bytes(metadata)
+    original = {path.name: path.read_bytes() for path in source_dir.iterdir()}
+    stimulus_sets = [_stimulus_set("base-set", "stimuli/original-images/base-set")]
+
+    scan = scan_stimulus_sets_for_normalization(
+        project_root=tmp_path, stimulus_sets=stimulus_sets,
+    )
+    assert scan.can_normalize is True
+    assert scan.image_count == 2
+    assert scan.sets[0].unsupported_files == ()
+    result = normalize_stimulus_sets(
+        project_root=tmp_path, stimulus_sets=stimulus_sets, target_size=256,
+    )
+    assert result.processed_count == 2
+    assert result.sets[0].image_count == 2
+    outputs = list((tmp_path / result.sets[0].source_dir).iterdir())
+    assert len(outputs) == 2
+    assert any(path.name.startswith("._authored-") for path in outputs)
+    assert {path.name: path.read_bytes() for path in source_dir.iterdir()} == original
+
+
+def test_folder_optimizer_ignores_finder_metadata_without_reporting_image_failures(
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "raw-images"
+    _write_image(source_dir / "a.jpg", (64, 96))
+    _write_image(source_dir / "._authored.png", (64, 96))
+    (source_dir / ".DS_Store").write_bytes(b"\x00\x00\x00\x01Bud1")
+    (source_dir / "._a.jpg").write_bytes(
+        b"\x00\x05\x16\x07\x00\x02\x00\x00" + bytes(18),
+    )
+
+    result = optimize_image_folder_for_fpvs(
+        input_dir=source_dir, output_dir=tmp_path / "optimized", target_size=256,
+    )
+
+    assert result.processed_count == 2
+    assert result.failed_files == ()
+    assert result.skipped_files == ()
+    assert result.output_files[0].name.startswith("._authored-")
+    assert result.output_files[1].name.startswith("a-")
+
+
 def test_normalization_supports_256_outputs(tmp_path: Path) -> None:
     source_dir = tmp_path / "stimuli" / "original-images" / "base-set"
     _write_image(source_dir / "a.png", (64, 96))

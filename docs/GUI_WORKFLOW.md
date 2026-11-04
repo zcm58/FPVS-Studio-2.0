@@ -395,7 +395,11 @@ before runtime launch, plus `Show recording reminder ticker on Home` to hide/sho
 Home ticker without disabling launch confirmation. Windows/Linux and macOS source
 expose Experiment Test Mode for explicit
 no-hardware launches. Mac authoring skips first-run EEG setup; launch requires Test
-or AB Pilot mode and preserves authored recording settings. Before launching, a local
+or AB Pilot mode and preserves authored recording settings. If only the saved lab
+refresh prevents readiness and an approved refresh can fully resolve it, Home and
+Run offer **Check Local Display** and allow launch to reach local confirmation.
+Structural validation and the actual confirmed display's compilation/preflight still
+block invalid playback; Windows/Linux readiness is unchanged. Before launching, a local
 display dialog confirms viewing distance/physical width and native backing resolution/
 refresh before both Home and Run launches. A mismatch shows configured and detected
 pixel dimensions. **Update resolution and continue** explicitly saves the target

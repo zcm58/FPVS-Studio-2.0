@@ -14,9 +14,11 @@ from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
 from tests.gui.helpers import assert_visible_children_within_parent
 from tests.platform_adapters import set_module_platform
 
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.gui import (
     controller,
+    document_runtime,
     local_test_display_dialog,
     main_window,
     run_page,
@@ -28,6 +30,7 @@ from fpvs_studio.gui import (
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError
+from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.local_test_display_dialog import LocalTestDisplayDialog
 from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.run_page import ParticipantLaunchDetails, RunPage
@@ -366,3 +369,49 @@ def test_rejecting_mac_display_confirmation_preserves_saved_project(
     assert local_test_display_dialog.confirm_local_test_display(document, parent) is None
     assert project_path.read_bytes() == before
     assert document.project == sample_project
+
+
+@pytest.mark.parametrize("platform_name", ["darwin", "win32"])
+@pytest.mark.parametrize("problem", ["refresh_error", "timing_warning", "structural_error"])
+def test_launch_surfaces_allow_mac_display_check_without_bypassing_structure(
+    qtbot, monkeypatch, sample_project, sample_project_root, platform_name, problem,
+):
+    set_module_platform(monkeypatch, document_runtime, platform_name)
+    set_module_platform(monkeypatch, run_page, platform_name)
+    project = sample_project.model_copy(deep=True)
+    project.settings.display.preferred_refresh_hz = 60
+    project.settings.protocol.base_hz = 9 if problem == "timing_warning" else 12
+    if problem != "timing_warning":
+        project.conditions[0].duty_cycle_mode = DutyCycleMode.BLANK_50
+    if problem == "structural_error":
+        project.stimulus_sets[1].source_dir = project.stimulus_sets[0].source_dir
+    document = ProjectDocument(project_root=sample_project_root, project=project)
+    document.set_experiment_test_mode_enabled(True)
+    before = document.project.model_dump(mode="json")
+    home = HomePage(document, load_condition_template_profiles=lambda: [])
+    run = RunPage(document)
+    qtbot.addWidget(home)
+    qtbot.addWidget(run)
+    local_check = platform_name == "darwin" and problem != "structural_error"
+    assert home.launch_button.isEnabled() is local_check
+    assert run.launch_button.isEnabled() is (
+        local_check or problem != "timing_warning"
+    )
+    assert (home._status_report().status_label == "Check Local Display") is local_check
+    assert home._status_report() == run._status_report()
+    if local_check:
+        assert home.edit_setup_button.text() == "Edit Setup"
+        assert "confirm the local display" in home.launch_button.toolTip()
+        for size in ((760, 520), (1120, 720)):
+            home.resize(*size)
+            home.show()
+            QApplication.processEvents()
+            assert home.size().toTuple() == size
+            assert_visible_children_within_parent(home)
+            label = home.launch_status_summary
+            required = label.fontMetrics().boundingRect(
+                QRect(0, 0, label.contentsRect().width(), 10000),
+                Qt.TextFlag.TextWordWrap, label.text(),
+            )
+            assert label.contentsRect().height() >= required.height()
+    assert document.project.model_dump(mode="json") == before

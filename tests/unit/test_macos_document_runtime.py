@@ -7,6 +7,7 @@ import pytest
 from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.gui import document_runtime
 from fpvs_studio.gui.document_runtime import DocumentRuntimeMixin
 from fpvs_studio.gui.document_support import DocumentError
@@ -116,3 +117,58 @@ def test_production_cannot_use_preview_local_calibration(sample_project, sample_
     document = Document(sample_project, sample_project_root, test=False)
     with pytest.raises(DocumentError, match="requires Test or Pilot"):
         document.compile_session(refresh_hz=60, local_display=sample_project.settings.display)
+
+
+@pytest.mark.parametrize("platform_name", ["darwin", "win32", "linux"])
+@pytest.mark.parametrize("mode", ["test", "pilot", "production"])
+@pytest.mark.parametrize("structural_error", [False, True])
+def test_local_display_readiness_defers_only_refresh_dependent_errors(
+    monkeypatch, sample_project, sample_project_root, platform_name, mode, structural_error,
+):
+    set_module_platform(monkeypatch, document_runtime, platform_name)
+    sample_project.settings.protocol.base_hz = 12
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.BLANK_50
+    if structural_error:
+        sample_project.stimulus_sets[1].source_dir = sample_project.stimulus_sets[0].source_dir
+    before = sample_project.model_dump(mode="json")
+    document = Document(sample_project, sample_project_root, test=mode == "test")
+    document.attentional_blink_pilot_mode_enabled = mode == "pilot"
+    document.local_testing_enabled = mode != "production"
+    assert not document.validation_report(refresh_hz=60).is_valid
+    assert document.local_display_can_resolve_validation() is (
+        platform_name == "darwin" and mode != "production" and not structural_error
+    )
+    assert sample_project.model_dump(mode="json") == before
+    document.ensure_unused_session_seed_for_launch.assert_not_called()
+    document.session_plan_changed.emit.assert_not_called()
+    if structural_error:
+        with pytest.raises(DocumentError, match="same folder"):
+            document.compile_session(refresh_hz=120)
+
+
+@pytest.mark.parametrize("base_hz, resolvable", [(9, True), (7, False)])
+def test_local_display_readiness_requires_a_rate_without_timing_warnings(
+    monkeypatch, sample_project, sample_project_root, base_hz, resolvable,
+):
+    set_module_platform(monkeypatch, document_runtime, "darwin")
+    sample_project.settings.protocol.base_hz = base_hz
+    document = Document(sample_project, sample_project_root)
+    assert document.validation_report(refresh_hz=60).is_valid
+    assert document.local_display_can_resolve_validation() is resolvable
+
+
+def test_local_readiness_still_requires_confirmed_refresh_to_compile(
+    monkeypatch, sample_project, sample_project_root,
+):
+    set_module_platform(monkeypatch, document_runtime, "darwin")
+    sample_project.settings.protocol.base_hz = 12
+    sample_project.conditions[0].duty_cycle_mode = DutyCycleMode.BLANK_50
+    document = Document(sample_project, sample_project_root)
+    assert document.local_display_can_resolve_validation()
+    local = sample_project.settings.display.model_copy(deep=True)
+    with pytest.raises(DocumentError):
+        document.compile_session(refresh_hz=60, local_display=local)
+    plan = document.compile_session(refresh_hz=120, local_display=local)
+    assert plan == compile_session_plan(
+        sample_project, refresh_hz=120, project_root=sample_project_root,
+    )

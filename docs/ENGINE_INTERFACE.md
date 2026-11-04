@@ -17,6 +17,8 @@ as PsychoPy. Runtime owns flow and calls engines through
   persisted into `RunSpec`.
 - Engines may report the active session window size so runtime can block launches
   whose configured display resolution does not match the actual fullscreen display.
+  PsychoPy's NumPy dimensions are accepted on all platforms; Mac reports realized
+  backing pixels. The explicit use-current-resolution policy remains unchanged.
 - Engines expose a neutral refresh-measurement method. PsychoPy implements it with a
   temporary fullscreen probe window; measured values do not leak PsychoPy types across
   the engine boundary. Runtime combines that stability observation with the exact

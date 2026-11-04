@@ -301,12 +301,19 @@ def _launcher_readiness_report(
     conditions_ready = bool(ordered_conditions)
     assets_ready = _conditions_have_assigned_assets(document, ordered_conditions)
     preview_available = document.last_session_plan is not None
+    local_display_check = (
+        conditions_ready and assets_ready and bool(blocking_issues or timing_warnings)
+        and document.local_display_can_resolve_validation()
+    )
 
     if not conditions_ready:
         status_label = "Setup Required"
         badge_state = "error"
     elif not assets_ready:
         status_label = "Missing Required Assets"
+        badge_state = "warning"
+    elif local_display_check:
+        status_label = "Check Local Display"
         badge_state = "warning"
     elif blocking_issue_count > 0:
         status_label = "Validation Issues"
@@ -326,6 +333,8 @@ def _launcher_readiness_report(
             if any(condition_masking(document.project, item) for item in ordered_conditions)
             else "Finish the image sources in Design, or word lists in Conditions."
         )
+    elif local_display_check:
+        status_summary = "Launch to confirm the local display and validate its refresh rate."
     elif blocking_issue_count > 0:
         status_summary = (
             f"Validation at {refresh_hz:.2f} Hz reports {blocking_issue_count} blocking issue(s)."
@@ -349,7 +358,9 @@ def _launcher_readiness_report(
     else:
         readiness_items.append("Needs setup: Finish each condition's stimulus sources in Setup.")
 
-    if blocking_issue_count > 0:
+    if local_display_check:
+        readiness_items.append(f"Check local display: {status_summary}")
+    elif blocking_issue_count > 0:
         readiness_items.append(
             f"Warning: Validation ({refresh_hz:.2f} Hz): {blocking_issue_count} blocking issue(s)."
         )

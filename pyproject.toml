@@ -39,7 +39,9 @@ dependencies = [
 
 [project.optional-dependencies]
 engine = [
-  "psychopy>=2024.2,<2027.0",
+  "psychopy>=2024.2,<2027.0; sys_platform != 'darwin'",
+  # Mac refresh protection requires the display-link callback added in 2026.1.
+  "psychopy>=2026.1,<2027.0; sys_platform == 'darwin'",
   "sounddevice>=0.4,<0.6",
   # PyQt6 6.12.0 ships invalid type stubs; retain the compatible Mac engine binding.
   "PyQt6>=6.11,<6.12; sys_platform == 'darwin'",

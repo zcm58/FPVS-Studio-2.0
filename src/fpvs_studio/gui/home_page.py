@@ -644,8 +644,9 @@ class HomePage(QWidget):
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, report.status_label)
         is_ready = report.badge_state == "ready"
-        self.launch_button.setEnabled(is_ready)
-        self._set_setup_action_state(is_ready=is_ready)
+        local_display_check = report.status_label == "Check Local Display"
+        self.launch_button.setEnabled(is_ready or local_display_check)
+        self._set_setup_action_state(is_ready=is_ready or local_display_check)
         self.launch_status_summary.setText("")
         self.launch_status_summary.setToolTip("")
         self.launch_status_summary.setVisible(False)
@@ -653,7 +654,9 @@ class HomePage(QWidget):
             self.launch_button.setToolTip(self._normal_launch_tooltip)
             self.launch_button.setStatusTip(self._normal_launch_status_tip)
             return
-        blocker_text = _first_actionable_blocker(report)
+        blocker_text = (
+            report.status_summary if local_display_check else _first_actionable_blocker(report)
+        )
         self.launch_status_summary.setText(_home_blocker_summary_text(blocker_text))
         self.launch_status_summary.setToolTip(blocker_text)
         self.launch_status_summary.setVisible(True)
@@ -672,7 +675,9 @@ class HomePage(QWidget):
 
     def _open_setup_from_home(self) -> None:
         report = self._status_report()
-        is_ready = report.badge_state == "ready"
+        is_ready = (
+            report.badge_state == "ready" or report.status_label == "Check Local Display"
+        )
         action = self._edit_setup_action if is_ready else self._complete_setup_action
         if action is not None:
             action()

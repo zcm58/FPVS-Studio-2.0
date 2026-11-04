@@ -107,7 +107,10 @@ If setup fails, its window keeps the error visible. The complete log is
 invalid interpreter versions/architectures and failed packages stop setup. A damaged
 environment may be renamed before retrying; do not delete its Python base directory.
 
-Mac dependencies currently select PySide6 6.11.3 and the engine's PyQt6 6.11 line.
+Mac dependencies currently select PySide6 6.11.3, the engine's PyQt6 6.11 line and
+PsychoPy 2026.1 or later (below 2027). The display-link protection requires the
+callback interface present in [PsychoPy 2026.1](https://github.com/psychopy/psychopy/blob/2026.1.0/psychopy/visual/backends/pygletbackend.py).
+Rerunning Setup upgrades older installed engines to the declared compatible range.
 The PySide selection is a compatibility mitigation following an observed PySide6
 6.12.0 native wrapper/event-filter crash during Library bundle review; the original
 crash has not been deterministically reproduced or established as an upstream bug.
@@ -284,7 +287,8 @@ spelling when the source filesystem presents a canonically equivalent name, with
 renaming source files or normalizing word content. Ambiguous references fail with an
 actionable error.
 
-Image intake, owned folder discovery and bundle export omit only signature-recognized,
+Image intake, normalization, Image Resizer, owned folder discovery and bundle export
+omit only signature-recognized,
 unreferenced Finder metadata (`.DS_Store`/AppleDouble). Ordinary authored `._*` images
 remain included in the same sorted order. Explicit manifest/task image references are
 never silently removed: a reference to recognized metadata fails validation and must

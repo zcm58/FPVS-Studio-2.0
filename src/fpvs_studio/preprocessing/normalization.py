@@ -23,6 +23,7 @@ from fpvs_studio.core.paths import (
     stimulus_normalized_images_root,
     to_project_relative_posix,
 )
+from fpvs_studio.preprocessing.source_files import source_image_directory_files
 
 NORMALIZATION_INPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 COMPILER_READY_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
@@ -265,11 +266,7 @@ def optimize_image_folder_for_fpvs(
     if source_dir.resolve() == destination_dir.resolve(strict=False):
         raise ImageNormalizationError("Output folder must be different from the source folder.")
 
-    files = [
-        path
-        for path in sorted(source_dir.iterdir(), key=lambda item: item.name.lower())
-        if path.is_file()
-    ]
+    files = source_image_directory_files(source_dir, sort_key=lambda item: item.name.lower())
     if not files:
         raise ImageNormalizationError("Image source folder does not contain any files.")
 
@@ -353,9 +350,7 @@ def _scan_stimulus_set(
     resolutions: set[tuple[int, int]] = set()
     file_types: set[str] = set()
     image_count = 0
-    for path in sorted(source_dir.iterdir(), key=lambda item: item.name.lower()):
-        if not path.is_file():
-            continue
+    for path in source_image_directory_files(source_dir, sort_key=lambda item: item.name.lower()):
         suffix = path.suffix.lower()
         if suffix not in NORMALIZATION_INPUT_SUFFIXES:
             unsupported_files.append(path.name)
@@ -383,8 +378,10 @@ def _scan_stimulus_set(
 def _normalizable_image_paths(source_dir: Path) -> list[Path]:
     return [
         path
-        for path in sorted(source_dir.iterdir(), key=lambda item: item.name.lower())
-        if path.is_file() and path.suffix.lower() in NORMALIZATION_INPUT_SUFFIXES
+        for path in source_image_directory_files(
+            source_dir, sort_key=lambda item: item.name.lower(),
+        )
+        if path.suffix.lower() in NORMALIZATION_INPUT_SUFFIXES
     ]
 
 

@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [macOS regression audit](exec-plans/completed/macos-regression-audit-20261104.md):
+  repaired local-display readiness, engine compatibility, Finder metadata processing
+  and cross-platform resolution checks; focused checks and safe precommit passed.
 - [Studio 2.6.1 release](exec-plans/completed/release-2.6.1.md):
   merged Mac fixes and session-reporting repair published immutable/latest; source CI,
   visible packaged checks, public bytes/attestations and eight updater checks passed.

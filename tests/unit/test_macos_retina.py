@@ -14,6 +14,8 @@ from tests.unit.test_psychopy_engine import (
 from fpvs_studio.engines import psychopy_engine as engine_module
 from fpvs_studio.engines import psychopy_window
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
+from fpvs_studio.runtime.preflight import PreflightError
+from fpvs_studio.runtime.run_worker import _validate_configured_display_resolution
 
 
 def test_mac_window_uses_retina_pyglet(monkeypatch):
@@ -43,6 +45,29 @@ def test_mac_realized_display_size_accepts_numpy_viewport(monkeypatch):
     size = np.asarray((2880, 1800))
     engine._window = SimpleNamespace(size=size, frameBufferSize=size)
     assert engine.current_display_size_px() == (2880, 1800)
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+@pytest.mark.parametrize("matches", [True, False])
+def test_numpy_window_dimensions_enforce_configured_resolution_on_every_platform(
+    monkeypatch, sample_project, sample_project_root, platform, matches,
+):
+    set_module_platform(monkeypatch, engine_module, platform)
+    spec = _tiny_run_spec(sample_project, sample_project_root)
+    spec.display.use_current_screen_resolution = False
+    expected = (spec.display.screen_width_px, spec.display.screen_height_px)
+    actual = expected if matches else tuple(value // 2 for value in expected)
+    engine = PsychoPyEngine()
+    engine._window = SimpleNamespace(size=np.asarray(actual), frameBufferSize=np.asarray(actual))
+
+    assert engine.current_display_size_px() == actual
+    if matches:
+        _validate_configured_display_resolution(engine, spec)
+    else:
+        with pytest.raises(PreflightError, match="configured to be run on a display"):
+            _validate_configured_display_resolution(engine, spec)
+        spec.display.use_current_screen_resolution = True
+        _validate_configured_display_resolution(engine, spec)
 
 
 @pytest.mark.parametrize("actual", [(1440, 900), None])

@@ -13,7 +13,7 @@ from pydantic import ValidationError
 
 from fpvs_studio.core.compiler import CompileError, compile_session_plan
 from fpvs_studio.core.data_sharing import protocol_fingerprint
-from fpvs_studio.core.enums import EngineName
+from fpvs_studio.core.enums import EngineName, ValidationSeverity
 from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.models import (
     DisplaySettings,
@@ -25,6 +25,7 @@ from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.randomization import RandomizationSeeds
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.validation import (
+    APPROVED_MONITOR_REFRESH_RATES_HZ,
     ConditionFixationGuidance,
     condition_fixation_guidance,
     validate_project,
@@ -189,6 +190,26 @@ class DocumentRuntimeMixin:
         """Validate the current project at a specific compile refresh rate."""
 
         return validate_project(self._project, refresh_hz=refresh_hz)
+
+    def local_display_can_resolve_validation(self) -> bool:
+        """Allow Mac calibration only when refresh alone can resolve validation.
+
+        Readiness uses the saved lab rate, while Mac Test/Pilot confirms the local
+        rate at launch. These inexpensive model-only checks retain every structural
+        validator; the confirmed display still has to pass compilation/preflight.
+        """
+        if (sys.platform != "darwin" or getattr(sys, "frozen", False)
+                or not self.local_testing_enabled):
+            return False
+        for rate in APPROVED_MONITOR_REFRESH_RATES_HZ:
+            report = validate_project(self._project, refresh_hz=rate)
+            if report.is_valid and not any(
+                issue.severity == ValidationSeverity.WARNING
+                and issue.location == "settings.protocol.base_hz"
+                for issue in report.issues
+            ):
+                return True
+        return False
 
     def fixation_guidance(self, *, refresh_hz: float) -> list[ConditionFixationGuidance]:
         """Return condition-level fixation guidance at a specific refresh rate."""
