@@ -1,6 +1,6 @@
 # Studio 2.6.1 release
 
-Status: Active
+Status: Completed
 
 Date: 2026-11-03
 
@@ -53,8 +53,9 @@ sidecars, matching the preceding release. Mac remains source-only.
   tests. The 32 skips are Windows symlink/native POSIX and PsychoPy-version cases.
   Packaging focused passed 189 checks; dependency consistency passed.
 - Canonical staging build completed under `release-2.6.1`, with `-SkipInstall`
-  after refreshing editable metadata and `-SkipSmoke` while visible approval is
-  pending. No application installer has been executed.
+  after refreshing editable metadata and `-SkipSmoke` before visible approval.
+  The exact staged executables subsequently passed the approved smoke checks
+  below. No application installer has been executed.
 - Authenticated 2.6.0 installer bytes and its qualified complete 7,062-file bundle
   were checked. All 555 native input paths/hashes and 482 target DLL/PYD files
   match, as do the 22 normalized warnings. Only editable app metadata changed
@@ -64,21 +65,35 @@ sidecars, matching the preceding release. Mac remains source-only.
   all 267 Studio modules plus entry and all 22 updater modules plus entry match
   exact source code objects. Studio/updater metadata and the GUI-free updater
   diagnostic report 2.6.1. Full-only update JSON and both checksum sidecars validate.
-- GitHub draft `433297229` is staged with all four verified assets and exact
-  178-character notes. Repository release immutability remains enabled. Exact
-  draft asset inventory, remote sizes/SHA-256 digests and annotated source tag pass.
+- GitHub release `433297229` was published at `2026-11-04T02:45:57Z`
+  (2026-11-03 in America/Chicago) as
+  [v2.6.1](https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v2.6.1), latest,
+  stable and immutable. All four assets and exact 178-character notes were checked
+  before publication. The annotated tag retains the exact build source above;
+  subsequent release-record commits change documentation only.
 - [Source CI 41731234561](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41731234561)
   targets exact build source and completed successfully. Windows contracts, both
   native Mac CPUs, the Windows return check and both final Mac-origin round-trip
   jobs passed. Documentation CI passed separately. The complete observed job
   result is retained in `source-ci-checkpoint.json` under the evidence directory.
-- Bounded Studio and updater visible smoke checks remain pending the explicit
-  visible-environment approval required by AGENTS.md and the canonical runner.
-  Approval was requested in the chat; do not infer it from elapsed time or publish
-  before that smoke gate passes. Public downloads/attestations and live updater
-  acceptance follow publication and remain pending.
+- The user explicitly approved the bounded visible Windows smoke checks. The
+  canonical Studio runner passed against the exact staged executable, including
+  frozen metadata/version 2.6.1, packaged imports, synthetic online states and
+  layout checks. The existing updater's visible `--gui-smoke` passed standalone
+  repair and repair-after-failure states with network and installer execution
+  disabled. Neither payload was rebuilt to run these checks.
+- Independent unauthenticated public downloads match all four local asset sizes
+  and SHA-256 digests. GitHub release and individual asset attestations passed;
+  the locked annotated tag, immutable/latest/stable state and exact source were
+  independently verified. Results are retained in `public-download-audit.json`.
+- All eight live production updater metadata checks passed with authenticated
+  full-only update JSON: older/previous versions select the full installer,
+  current-version checks offer no update, explicit repair selects the installer,
+  and a newer installed version rejects downgrade. These checks neither read the
+  installed application nor execute/download an installer; the separate public
+  byte audit downloads assets without executing them.
 
-## Staged assets
+## Published assets
 
 | Asset | Bytes | SHA-256 |
 | --- | ---: | --- |
@@ -88,5 +103,6 @@ sidecars, matching the preceding release. Mac remains source-only.
 | `FPVS-Studio-Update-2.6.1.json.sha256` | 97 | `2f8813d0e0775073e850d0cf274150b7a37b138bc41f32ceaff7734cdaaecec3` |
 
 No production installation, real participant session, EEG marker activity or physical
-Mac acceptance is authorized by the release smoke workflow. Preserve the existing
-Mac acceptance limits and report skipped checks accurately.
+Mac acceptance was performed by the release smoke workflow. Physical display timing,
+hardware and broader installed-upgrade acceptance remain separate from these checks;
+the existing active Mac acceptance plan retains its limits.

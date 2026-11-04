@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.6.1 release](exec-plans/active/release-2.6.1.md) | Merged Mac fixes and electrode reporting repair; qualification, full installer and immutable GitHub publication |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
@@ -39,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Studio 2.6.1 release](exec-plans/completed/release-2.6.1.md):
+  merged Mac fixes and session-reporting repair published immutable/latest; source CI,
+  visible packaged checks, public bytes/attestations and eight updater checks passed.
 - [Reporting protocol and delivery audit](exec-plans/completed/reporting-protocol-audit-20261103.md):
   eleven additional current scopes connected, four proven sessions recovered,
   legacy electrode placeholder handling fixed and all eligible completed output reconciled.

@@ -75,8 +75,9 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
-The [2.6.1 release plan](exec-plans/active/release-2.6.1.md) tracks the merged Mac
-display/input/recovery and session-reporting fixes, build and publication checks.
+The [2.6.1 release record](exec-plans/completed/release-2.6.1.md) tracks the merged Mac
+display/input/recovery and session-reporting fixes, immutable published assets and
+successful visible packaged, public-download/attestation and updater checks.
 The [2.6.0 release record](exec-plans/completed/release-2.6.0.md) tracks the published
 Setup/session, theme and Mac-source feature release, immutable artifacts and successful
 public-download/attestation/updater checks.
