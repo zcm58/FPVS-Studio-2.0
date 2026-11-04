@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.7.0 release](exec-plans/active/release-2.7.0.md) | Unified participant workbook release; isolated build, visible acceptance and verified immutable publication in progress |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
@@ -39,6 +38,10 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Studio 2.7.0 release](exec-plans/completed/release-2.7.0.md):
+  unified participant workbook published immutable/latest; Windows checks,
+  visible smoke, public bytes/attestations and updater checks passed. Mac ARM
+  and dependent return checks await a hosted-runner capacity retry.
 - [Results workbook automatic sizing](exec-plans/completed/results-workbook-auto-fit.md):
   content-fitted columns/rows, readable long-value disclosure, 13 existing workbooks
   updated without data changes, and runtime/precommit checks passed.
