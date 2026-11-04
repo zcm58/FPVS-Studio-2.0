@@ -7,6 +7,8 @@ from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 
+from openpyxl import load_workbook
+
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import (
     FrameIntervalRecord,
@@ -24,6 +26,28 @@ PARTICIPANT_NUMBER = "0007"
 def _read_csv_rows(path: Path) -> list[dict[str, str]]:
     with path.open("r", encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
+
+
+def _read_participant_summary_rows(path: Path) -> list[dict[str, str]]:
+    """Read the preserved summary sheet with its displayed numeric formatting."""
+
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    try:
+        rows = workbook["Participant Summary"].iter_rows(values_only=True)
+        header = next(rows)
+        return [
+            {
+                str(name): (
+                    "" if value is None else f"{value:.2f}"
+                    if isinstance(value, (int, float)) and str(name).startswith("Mean ")
+                    else str(value)
+                )
+                for name, value in zip(header, row, strict=True)
+            }
+            for row in rows
+        ]
+    finally:
+        workbook.close()
 
 
 class StubEngine(PresentationEngine):

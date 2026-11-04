@@ -90,6 +90,9 @@ def test_settings_sections_fit_minimum_size(
             ancestor = ancestor.parentWidget()
 
     assert dialog.root_folder_setup_button.toolTip() == str(root_path)
+    assert not dialog.detailed_run_exports_checkbox.isChecked()
+    assert "participant_summary.xlsx" in dialog.detailed_run_exports_checkbox.toolTip()
+    assert "always saved" in dialog.detailed_run_exports_checkbox.toolTip()
     assert "saved immediately" in dialog.header.subtitle_label.text()
     for index in range(dialog.tabs.count()):
         dialog.tabs.setCurrentIndex(index)

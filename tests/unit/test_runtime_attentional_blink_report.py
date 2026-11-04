@@ -185,8 +185,13 @@ def test_completed_bursts_score_targets_and_export_chronology(tmp_path, mode):
         assert (
             directory / plan.ordered_entries()[0].run_id / ATTENTIONAL_BLINK_BURSTS_FILENAME
         ).is_file()
-    general_summary = (tmp_path / "logs" / "participant_summary.csv").read_text()
-    assert "t1_response" not in general_summary and "t2_response" not in general_summary
+    assert not (tmp_path / "logs" / "participant_summary.csv").exists()
+    workbook = load_workbook(tmp_path / "logs" / "participant_summary.xlsx", read_only=True)
+    try:
+        general_summary = str(list(workbook["Participant Summary"].iter_rows(values_only=True)))
+        assert "t1_response" not in general_summary and "t2_response" not in general_summary
+    finally:
+        workbook.close()
 
 
 def test_t2_abort_preserves_t1_with_separate_denominators(tmp_path):

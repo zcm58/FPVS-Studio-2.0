@@ -559,6 +559,45 @@ remains at 2.1 seconds. At 20 Hz verify 180 characters with unchanged onset time
 an incompatible rate must keep the draft invalid. Check the retained editor and
 expanded `1448x1086` layout for clipping. Local Qt execution remains opt-in.
 
+### Participant results workbook
+
+**View > Open Participant Results** refreshes the active project's
+`logs/participant_summary.xlsx` in a background worker and opens it with the system's
+spreadsheet application. The same command is discoverable through Find Action. It is
+the main entry point for demographics, fixation accuracy/response times and before/after
+task answers. No-data and refresh/open failures leave the project usable; an Excel lock
+asks the operator to close the workbook and retry.
+
+The workbook preserves the existing Participant Summary sheet and adds Demographics,
+Fixation by Condition, Fixation Responses and Task Answers. The answer sheet retains
+phase, recorded status, original prompts/options when available, response time in
+seconds and attempt identity.
+`Record Type` distinguishes question answers and other responses from task activity;
+answers appear first, and completed instruction/duration activity is not mislabeled
+as unanswered. Research tabs lead with measures/answers and keep participant/visit
+columns frozen. The workbook opens on condition fixation results when history exists.
+Fixation accuracy is a percentage and fixation mean response time is milliseconds.
+Fixation Responses shows individual target hit/miss response times in seconds and
+unmatched keypresses, including records captured during compact sessions.
+Historical compact post-task labels are recovered from retained original contexts and
+journals when available; missing original labels stay explicitly unavailable. Research
+sheets distinguish reserved test-participant IDs from Test Mode and Pilot Mode launch
+flags. The original Participant Summary inclusion rules remain unchanged. Detailed
+interpretation and source ownership belong to [runtime exports](RUNTIME_EXECUTION.md#exports).
+
+Fresh GUI preferences use compact output. Settings can opt into detailed run folders
+and timing/trigger/event CSVs; existing saved Full preferences stay effective. Both modes
+write the main workbook. Existing outputs are preserved, while the duplicate
+`participant_summary.csv` is no longer regenerated. Compact mode uses the workbook for
+question answers; explicit Rebuild responses remains available for the legacy
+post-condition CSV.
+
+Visible smoke path in an approved environment: run a compact session with before/after
+questions, choose Open Participant Results, inspect demographics and both time units,
+then repeat with a second visit. Verify no-data, background refresh, Excel-lock retry
+and open failure states; confirm Settings still enables detailed run folders. Registered
+GUI coverage uses fake refresh/open services and does not launch presentation hardware.
+
 ### Attentional Blink accuracy
 
 **View > T1 and T2 Accuracy...** loads the active AB project's saved burst
@@ -905,6 +944,9 @@ The authoring window is organized around two user-facing modes:
   - `Export Excel...` opens the native save dialog and writes the currently displayed
     summary to the selected `.xlsx` path in the background; cancelling makes no changes,
     and export errors leave the loaded results available
+- `View > Open Participant Results`
+  - refreshes the single participant workbook in a worker, then opens it; see
+    [Participant results workbook](#participant-results-workbook)
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
   - primary action is `Optimize Images for FPVS`
@@ -926,9 +968,15 @@ not a display-engine configuration step.
 Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
 completion or abort when the runtime summary includes an output directory. In compact
 summary export mode, the runtime summary has no run-folder output path, so those buttons
-stay hidden and completion text points users to the project `logs/` summary files.
-Participant summary files are refreshed after launch and before manual group-summary
-export, not as a blocking project-open prerequisite.
+stay hidden and completion text points users to `View > Open Participant Results`.
+The participant workbook is refreshed after launch and on explicit open, not as a
+blocking project-open prerequisite. Manual group-summary export calculates its rows
+directly from recorded condition history, without creating a duplicate participant CSV
+or refreshing the complete results workbook. A results-workbook lock or malformed raw
+task-answer file therefore does not block the separate fixation-only group export.
+Existing results can be consolidated separately through the guarded
+[maintenance CLI](RUNTIME_EXECUTION.md#existing-output-maintenance); normal opening
+does not archive or remove files.
 Launching an experiment opens a modal participant-information prompt. By default every
 project collects Participant Number, Age, Sex, Handedness, and colorblind status before
 runtime starts. The same dialog includes the optional
@@ -1266,9 +1314,10 @@ with a first row aggregating rows marked `Include In Analysis = Y` and participa
 remaining visible underneath for filtering/audit. The wired `Tutorials` action remains
 available internally but is hidden from the File menu. Settings shows the current app
 version from `pyproject.toml` during source-tree runs and from package metadata in
-bundled installs, and exposes the app-level run export mode. Full run export mode is the
-default and writes detailed `runs/` folders after launch; compact mode skips those
-folders and keeps only project-level summary logs. Settings also exposes default-on
+bundled installs, and exposes the app-level run export mode. Compact mode is the default
+for fresh GUI preferences, skips detailed run folders and writes the participant results
+workbook plus canonical project research logs. Existing saved mode choices remain in
+effect. Opting into Full writes detailed `runs/` folders after launch. Settings also exposes default-on
 `Enable Recording Reminder`, which reminds operators to start recording EEG data
 before eligible launches and requires trimmed, case-insensitive `Confirmed` before
 continuing. `Show recording reminder ticker on Home` controls the
@@ -1478,6 +1527,8 @@ The current GUI supports:
 - reviewing the active project's pooled fixation accuracy and reaction-time history from
   `View > Fixation Task Accuracy...` without modifying logs or scoring, with an optional
   Excel export written only to the user-selected destination
+- opening demographics, condition fixation measures and original before/after task
+  answers together through `View > Open Participant Results`
 - adding, duplicating and editing ordinary conditions
 - importing base and oddball image folders
 - authoring base and oddball word lists for word-based conditions

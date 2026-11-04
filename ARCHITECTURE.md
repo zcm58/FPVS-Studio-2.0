@@ -74,6 +74,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Guarded current-project Library replacement | `core/project_bundle_update.py`; ordinary imports never replace projects |
 | Runtime recording and evidence | `runtime/recording.py`, `runtime/acquisition_evidence.py` |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
+| Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
 | Mac source/display/input adapters | `scripts/macos-source.sh`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 
@@ -115,10 +116,10 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 
 ## Task Context Recipes
 
-Use the index's scope row for the governing guide and one relevant contract section.
-Search [optional topic recipes](docs/agent/task-recipes.md) by heading or symbol for
-less obvious entry points. `docs/PLANS.md` routes active work; completed plans explain
-history only. Use `docs/index.md` for the full document map.
+Use the task index for scope guidance and contracts. Search
+[optional topic recipes](docs/agent/task-recipes.md) for additional entry points.
+`docs/PLANS.md` routes active work; completed plans supply history.
+Use `docs/index.md` for the full map.
 
 ## Verification and Documentation Freshness
 

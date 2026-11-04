@@ -6,6 +6,7 @@ import csv
 import json
 
 import pytest
+from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.backward_counting import (
@@ -161,7 +162,14 @@ def test_six_variants_baseline_once_immediate_report_and_private_exports(tmp_pat
         exported = list(csv.DictReader(handle))
     assert len(exported) == 9
     assert exported[2]["backward_counting_steps_per_second"] == "0.2"
-    assert "backward_counting" not in (root / "logs" / "participant_summary.csv").read_text()
+    assert not (root / "logs" / "participant_summary.csv").exists()
+    workbook = load_workbook(root / "logs" / "participant_summary.xlsx", read_only=True)
+    try:
+        assert not any("backward_counting" in str(value)
+                       for row in workbook["Participant Summary"].iter_rows(values_only=True)
+                       for value in row)
+    finally:
+        workbook.close()
     if mode == "full":
         assert "backward_counting" not in (output / "session_summary.json").read_text()
         for entry in plan.ordered_entries():

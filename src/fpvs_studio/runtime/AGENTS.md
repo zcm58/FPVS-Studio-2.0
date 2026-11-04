@@ -46,7 +46,9 @@ flow, scoring, recovery and exports. Read the relevant section of
   operator association, receiver integrity and physical timing remain separate evidence.
 - Full exports write numbered visit folders under `runs/`; compact writes project logs
   without detailed run folders. Canonical filenames/schema compatibility are in the
-  runtime contract. Raw task answers stay out of general logs/summary workbooks.
+  runtime contract. Raw task answers stay out of application logs and generic summary
+  sheets; the dedicated Task Answers sheet/private participant-result records are
+  local research output and never enter authored bundles/configs or shared reports.
 - `attentional_blink_report.py` retains answered bursts after later aborts, separates
   SOA denominators and marks test/pilot identity. Never append through an unfinished
   journal line; preserve it for explicit repair. Native onset exports retain exact-grid

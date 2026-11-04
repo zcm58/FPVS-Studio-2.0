@@ -1074,7 +1074,7 @@ class RunPage(QWidget):
         output_line = (
             f"Output Dir: {summary.output_dir}"
             if summary.output_dir
-            else "Output: Compact summary logs"
+            else "Results: logs/participant_summary.xlsx"
         )
         self._last_run_output_dir = summary.output_dir
         self._refresh_run_output_actions()
@@ -1111,11 +1111,7 @@ class RunPage(QWidget):
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
                 f"{output_line}\n\n"
-                + (
-                    "Review run exports in the project runs folder."
-                    if summary.output_dir
-                    else "Review participant summary files in the project logs folder."
-                ),
+                + "Review saved results with View > Open Participant Results.",
             )
             return
         extra_lines = [
@@ -1128,15 +1124,9 @@ class RunPage(QWidget):
         QMessageBox.information(
             self,
             "Launch Complete",
-            (
-                "The experiment finished. "
-                "Review run exports in the project runs folder."
-            )
-            if summary.output_dir
-            else (
-                "The experiment finished. "
-                "Review participant summary files in the project logs folder."
-            ),
+            "The experiment finished. "
+            "Choose View > Open Participant Results for demographics, fixation accuracy, "
+            "reaction times and task answers.",
         )
 
     def _prompt_participant_number(self) -> str | ParticipantLaunchDetails | None:

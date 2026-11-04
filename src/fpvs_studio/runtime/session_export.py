@@ -60,6 +60,7 @@ from fpvs_studio.runtime.participant_history import (
     participant_session_history_identity,
 )
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
+from fpvs_studio.runtime.workbook_layout import autofit_workbook, autofit_worksheet
 
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 PARTICIPANT_SUMMARY_FILENAME = "participant_summary.csv"
@@ -1115,38 +1116,47 @@ def _append_attentional_blink_events(
         )
 
 
-def write_participant_summary(project_root: Path) -> Path:
-    """Write compact project-level participant/session summary CSV and XLSX files."""
+def write_participant_summary(project_root: Path, *, require_data: bool = False) -> Path:
+    """Write the project participant-results workbook without a duplicate CSV."""
 
     with project_reporting_lock(project_root):
-        return _write_participant_summary_unlocked(project_root)
+        return _write_participant_summary_unlocked(project_root, require_data=require_data)
 
 
-def _write_participant_summary_unlocked(project_root: Path) -> Path:
+def _write_participant_summary_unlocked(
+    project_root: Path, *, require_data: bool = False,
+) -> Path:
+    from fpvs_studio.runtime.participant_results import has_captured_participant_results
 
-    path = logs_dir(project_root) / PARTICIPANT_SUMMARY_FILENAME
     xlsx_path = logs_dir(project_root) / PARTICIPANT_SUMMARY_XLSX_FILENAME
     history_path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
     if history_path.is_file() and history_path.stat().st_size > 0:
         history_rows = _read_csv_dict_rows(history_path)
     else:
         history_rows = []
+    if require_data and not history_rows and not has_captured_participant_results(project_root):
+        task_path = logs_dir(project_root) / TASK_RESPONSES_FILENAME
+        if not task_path.is_file() or not _read_csv_dict_rows(task_path):
+            raise ValueError(
+                "No participant results are available. Run a participant session first.",
+            )
     participant_summary_rows = _participant_summary_rows(project_root, history_rows)
-    _write_csv(
-        path,
-        PARTICIPANT_SUMMARY_HEADER,
-        participant_summary_rows,
+    _write_participant_summary_xlsx(
+        xlsx_path, participant_summary_rows, project_root=project_root,
+        history_rows=history_rows,
     )
-    _write_participant_summary_xlsx(xlsx_path, participant_summary_rows)
-    return path
+    return xlsx_path
 
 
 def refresh_participant_summary_if_stale(project_root: Path) -> Path | None:
-    """Regenerate compact participant summaries when history is newer or outputs are missing."""
+    """Refresh the workbook when recorded results change or sheets are missing."""
+
+    from fpvs_studio.runtime.participant_results import participant_results_source_paths
 
     log_root = logs_dir(project_root)
     history_path = log_root / SESSION_CONDITION_HISTORY_FILENAME
-    if not history_path.is_file() or history_path.stat().st_size == 0:
+    sources = participant_results_source_paths(project_root)
+    if not history_path.is_file() and not sources:
         return None
 
     with project_reporting_lock(project_root):
@@ -1156,14 +1166,16 @@ def refresh_participant_summary_if_stale(project_root: Path) -> Path | None:
 def _refresh_participant_summary_if_stale_unlocked(
     project_root: Path, history_path: Path,
 ) -> Path | None:
+    from fpvs_studio.runtime.participant_results import participant_results_source_paths
+
     log_root = logs_dir(project_root)
 
-    history_mtime_ns = history_path.stat().st_mtime_ns
-    summary_paths = (
-        log_root / PARTICIPANT_SUMMARY_FILENAME,
-        log_root / PARTICIPANT_SUMMARY_XLSX_FILENAME,
-    )
-    if not any(_summary_output_is_stale(path, history_mtime_ns) for path in summary_paths):
+    sources = participant_results_source_paths(project_root)
+    if history_path.is_file():
+        sources.append(history_path)
+    source_mtime_ns = max((path.stat().st_mtime_ns for path in sources), default=0)
+    path = log_root / PARTICIPANT_SUMMARY_XLSX_FILENAME
+    if not _summary_output_is_stale(path, source_mtime_ns):
         return None
     return _write_participant_summary_unlocked(project_root)
 
@@ -1173,15 +1185,15 @@ def _summary_output_is_stale(path: Path, history_mtime_ns: int) -> bool:
         return True
     if path.stat().st_mtime_ns < history_mtime_ns:
         return True
-    if path.suffix == ".csv":
-        with path.open(encoding="utf-8", newline="") as handle:
-            return next(csv.reader(handle), []) != PARTICIPANT_SUMMARY_HEADER
     try:
         workbook = load_workbook(path, read_only=True)
         try:
             worksheet = workbook[PARTICIPANT_SUMMARY_XLSX_SHEET_NAME]
             header = list(next(worksheet.iter_rows(values_only=True), ()))
-            return header != PARTICIPANT_SUMMARY_HEADER
+            return header != PARTICIPANT_SUMMARY_HEADER or not {
+                "Demographics", "Fixation by Condition", "Fixation Responses", "Task Answers",
+                "Results Notes",
+            }.issubset(workbook.sheetnames)
         finally:
             workbook.close()
     except (OSError, ValueError, KeyError, BadZipFile):
@@ -1192,8 +1204,12 @@ def write_group_summary(project_root: Path, output_path: Path) -> Path:
     """Write a manual compact group-level summary workbook for the project."""
 
     with project_reporting_lock(project_root):
-        participant_summary_path = _write_participant_summary_unlocked(project_root)
-        participant_rows = _read_csv_dict_rows(participant_summary_path)
+        history_path = logs_dir(project_root) / SESSION_CONDITION_HISTORY_FILENAME
+        history_rows = _read_csv_dict_rows(history_path) if history_path.is_file() else []
+        participant_rows = [
+            dict(zip(PARTICIPANT_SUMMARY_HEADER, (str(value) for value in row), strict=True))
+            for row in _participant_summary_rows(project_root, history_rows)
+        ]
     if not participant_rows:
         raise ValueError(
             "No participant summary rows are available. Run at least one participant "
@@ -1491,7 +1507,10 @@ def _session_history_rows_aborted(rows: list[dict[str, str]]) -> bool:
     )
 
 
-def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> None:
+def _write_participant_summary_xlsx(
+    path: Path, rows: list[list[object]], *, project_root: Path | None = None,
+    history_rows: list[dict[str, str]] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     workbook = Workbook()
     worksheet = workbook.active
@@ -1518,6 +1537,16 @@ def _write_participant_summary_xlsx(path: Path, rows: list[list[object]]) -> Non
         integer_columns=_PARTICIPANT_SUMMARY_INTEGER_COLUMNS,
         float_columns=_PARTICIPANT_SUMMARY_FLOAT_COLUMNS,
     )
+    if project_root is not None:
+        from fpvs_studio.runtime.participant_results import add_participant_results_sheets
+
+        try:
+            add_participant_results_sheets(workbook, project_root, history_rows or [])
+        except Exception:
+            workbook.close()
+            raise
+    else:
+        autofit_workbook(workbook)
     _save_workbook_atomically(workbook, path)
 
 
@@ -1569,6 +1598,7 @@ def _write_group_summary_xlsx(
         integer_columns=_GROUP_SUMMARY_INTEGER_COLUMNS,
         float_columns=_GROUP_SUMMARY_FLOAT_COLUMNS,
     )
+    autofit_workbook(workbook)
     workbook.save(path)
 
 
@@ -1657,15 +1687,9 @@ def _format_summary_xlsx(
             elif header in float_columns:
                 cell.number_format = "0.00"
 
-    for column_index, cells in enumerate(worksheet.iter_cols(), start=1):
-        max_text_length = max(
-            (len(str(cell.value)) for cell in cells if cell.value is not None),
-            default=0,
-        )
-        worksheet.column_dimensions[get_column_letter(column_index)].width = min(
-            max_text_length + 2,
-            255,
-        )
+    for column_index in range(1, worksheet.max_column + 1):
+        worksheet.column_dimensions[get_column_letter(column_index)].alignment = centered
+    autofit_worksheet(worksheet)
 
 
 def _ensure_xlsx_path(path: Path) -> Path:

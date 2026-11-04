@@ -36,6 +36,7 @@ tests/gui/test_manage_projects_rename.py
 tests/gui/test_manage_projects_responsiveness.py
 tests/gui/test_masking_conditions.py
 tests/gui/test_masking_modifier_dialog.py
+tests/gui/test_participant_results_action.py
 tests/gui/test_post_questions_dialog.py
 tests/gui/test_presentation_settings_dialog.py
 tests/gui/test_project_config_import_export.py

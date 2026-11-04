@@ -507,17 +507,17 @@ class StudioController(QObject):
         self._apply_theme_mode(theme_mode)
 
     def load_run_export_mode(self) -> str:
-        """Load the app-level run export mode, falling back to detailed exports."""
+        """Load the saved export choice, using compact output for a fresh preference."""
 
         raw_export_mode = self._settings.value(
             _RUN_EXPORT_MODE_KEY,
-            EXPORT_MODE_FULL,
+            EXPORT_MODE_COMPACT,
             type=str,
         )
         if isinstance(raw_export_mode, str) and raw_export_mode in VALID_EXPORT_MODES:
             return raw_export_mode
-        self.save_run_export_mode(EXPORT_MODE_FULL)
-        return EXPORT_MODE_FULL
+        self.save_run_export_mode(EXPORT_MODE_COMPACT)
+        return EXPORT_MODE_COMPACT
 
     def save_run_export_mode(self, export_mode: str) -> None:
         """Persist the app-level run export mode."""

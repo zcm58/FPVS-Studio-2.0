@@ -145,6 +145,7 @@ def test_view_menu_order_and_action_load_active_project(
     assert [action.text() for action in window.view_menu.actions()] == [
         "Experiment Library...",
         "",
+        "Open Participant Results",
         "Fixation Task Accuracy..."
     ]
     assert [action.text() for action in window.tools_menu.actions()] == ["Image Resizer"]

@@ -13,6 +13,7 @@ from tests.unit.runtime_launcher_helpers import (
     PARTICIPANT_NUMBER,
     StubEngine,
     _read_csv_rows,
+    _read_participant_summary_rows,
 )
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -249,7 +250,7 @@ def test_session_export_captures_seed_and_runtime_logs(
     assert (session_output_dir / "responses.csv").is_file()
     assert (session_output_dir / "trigger_log.csv").is_file()
     assert (multi_condition_project_root / "logs" / "session_condition_history.csv").is_file()
-    assert (multi_condition_project_root / "logs" / "participant_summary.csv").is_file()
+    assert not (multi_condition_project_root / "logs" / "participant_summary.csv").exists()
     assert (multi_condition_project_root / "logs" / "participant_summary.xlsx").is_file()
     assert [run_result.run_id for run_result in exported_summary.run_results] == [
         entry.run_id for entry in session_plan.ordered_entries()
@@ -268,8 +269,8 @@ def test_session_export_captures_seed_and_runtime_logs(
     condition_history_rows = _read_csv_rows(
         multi_condition_project_root / "logs" / "session_condition_history.csv"
     )
-    participant_summary_rows = _read_csv_rows(
-        multi_condition_project_root / "logs" / "participant_summary.csv"
+    participant_summary_rows = _read_participant_summary_rows(
+        multi_condition_project_root / "logs" / "participant_summary.xlsx"
     )
 
     assert [row["run_id"] for row in conditions_rows] == [
@@ -409,16 +410,10 @@ def test_session_export_captures_seed_and_runtime_logs(
             assert cell.alignment.vertical == "center"
     for column_index in range(1, worksheet.max_column + 1):
         letter = worksheet.cell(row=1, column=column_index).column_letter
-        expected_width = min(
-            max(
-                len(str(worksheet.cell(row=row_index, column=column_index).value))
-                for row_index in range(1, worksheet.max_row + 1)
-                if worksheet.cell(row=row_index, column=column_index).value is not None
-            )
-            + 2,
-            255,
-        )
-        assert worksheet.column_dimensions[letter].width == expected_width
+        assert worksheet.column_dimensions[letter].bestFit
+        assert 8 <= worksheet.column_dimensions[letter].width <= 255
+    assert all(worksheet.row_dimensions[index].height >= 18
+               for index in range(1, worksheet.max_row + 1))
 
 
 def test_compact_session_export_updates_summary_logs_without_runs_folder(
@@ -460,14 +455,14 @@ def test_compact_session_export_updates_summary_logs_without_runs_folder(
     assert all(run_result.output_dir is None for run_result in summary.run_results)
     assert not (multi_condition_project_root / "runs").exists()
     assert (multi_condition_project_root / "logs" / "session_condition_history.csv").is_file()
-    assert (multi_condition_project_root / "logs" / "participant_summary.csv").is_file()
+    assert not (multi_condition_project_root / "logs" / "participant_summary.csv").exists()
     assert (multi_condition_project_root / "logs" / "participant_summary.xlsx").is_file()
 
     condition_history_rows = _read_csv_rows(
         multi_condition_project_root / "logs" / "session_condition_history.csv"
     )
-    participant_summary_rows = _read_csv_rows(
-        multi_condition_project_root / "logs" / "participant_summary.csv"
+    participant_summary_rows = _read_participant_summary_rows(
+        multi_condition_project_root / "logs" / "participant_summary.xlsx"
     )
 
     assert [row["run_id"] for row in condition_history_rows] == [
@@ -575,7 +570,7 @@ def test_participant_summary_backfills_run_seeds_from_session_plan_for_legacy_hi
 
     original_history = history_path.read_bytes()
     summary_path = write_participant_summary(multi_condition_project_root)
-    participant_summary_rows = _read_csv_rows(summary_path)
+    participant_summary_rows = _read_participant_summary_rows(summary_path)
     with history_path.open("r", encoding="utf-8", newline="") as handle:
         preserved_header = next(csv.reader(handle))
     preserved_history_rows = _read_csv_rows(history_path)
@@ -664,7 +659,7 @@ def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path)
             writer.writerow(row)
 
     summary_path = write_participant_summary(tmp_path)
-    participant_summary_rows = _read_csv_rows(summary_path)
+    participant_summary_rows = _read_participant_summary_rows(summary_path)
 
     assert [row["PID"] for row in participant_summary_rows] == ["1"]
     assert participant_summary_rows[0]["Session ID"] == "session-participant-1"
@@ -769,7 +764,7 @@ def test_refresh_participant_summary_if_stale_regenerates_newer_history(
     refreshed_path = refresh_participant_summary_if_stale(tmp_path)
 
     assert refreshed_path == summary_path
-    participant_summary_rows = _read_csv_rows(summary_path)
+    participant_summary_rows = _read_participant_summary_rows(summary_path)
     assert [row["PID"] for row in participant_summary_rows] == ["1", "2"]
     workbook = load_workbook(xlsx_path)
     worksheet = workbook["Participant Summary"]
@@ -890,4 +885,50 @@ def test_group_summary_export_uses_included_sessions_and_weighted_metrics(tmp_pa
         for cell in row:
             assert cell.alignment.horizontal == "center"
             assert cell.alignment.vertical == "center"
+
+
+def test_results_workbook_preserves_retired_csv_and_requires_data_on_request(tmp_path):
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    legacy_csv = log_root / "participant_summary.csv"
+    legacy_csv.write_bytes(b"user-owned historical export")
+    workbook_path = write_participant_summary(tmp_path)
+    assert workbook_path == log_root / "participant_summary.xlsx"
+    assert legacy_csv.read_bytes() == b"user-owned historical export"
+    with pytest.raises(ValueError, match="Run a participant session first"):
+        write_participant_summary(tmp_path, require_data=True)
+
+
+def test_group_summary_reads_history_without_requiring_task_workbook(tmp_path, monkeypatch):
+    log_root = tmp_path / "logs"
+    log_root.mkdir()
+    with (log_root / "session_condition_history.csv").open(
+        "w", encoding="utf-8", newline="",
+    ) as handle:
+        writer = csv.DictWriter(handle, fieldnames=SESSION_CONDITION_HISTORY_HEADER)
+        writer.writeheader()
+        writer.writerow({
+            "participant_number": "001", "participant_session_number": 1,
+            "session_id": "visit", "run_id": "condition", "run_seed": "11",
+            "total_targets": 10, "hit_count": 8, "mean_rt_ms": 250,
+        })
+    (log_root / "task_responses.csv").write_text("malformed,task\nanswer\n", encoding="utf-8")
+
+    def locked(*_args, **_kwargs):
+        raise PermissionError("Participant workbook is open in Excel")
+
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.session_export._write_participant_summary_xlsx", locked,
+    )
+    path = write_group_summary(tmp_path, tmp_path / "group.xlsx")
+    workbook = load_workbook(path)
+    try:
+        worksheet = workbook[GROUP_SUMMARY_XLSX_SHEET_NAME]
+        columns = {cell.value: cell.column for cell in worksheet[1]}
+        assert worksheet.cell(2, columns["Total Targets"]).value == 10
+        assert worksheet.cell(2, columns["Mean Accuracy Across All Conditions (%)"]).value == 80
+    finally:
+        workbook.close()
+    assert not (log_root / "participant_summary.csv").exists()
+    assert not (log_root / "participant_summary.xlsx").exists()
 

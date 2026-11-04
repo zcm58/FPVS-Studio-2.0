@@ -65,7 +65,7 @@ SessionPlan
   -> engine.close_session()
   -> runtime writes session artifacts when full export mode is enabled
   -> runtime appends logs/session_condition_history.csv
-  -> runtime regenerates logs/participant_summary.xlsx and logs/participant_summary.csv
+  -> runtime regenerates logs/participant_summary.xlsx (participant results workbook)
 ```
 
 The engine never receives `ProjectFile`. It only receives one compiled
@@ -839,26 +839,65 @@ Project-level reporting index:
   - used for compact reporting and for participant/seed-history lookup when detailed
     run folders are not written
 
-Compact participant summary:
+Participant results workbook:
 
 - `logs/participant_summary.xlsx`
-  - regenerated after each completed session export from the project-level condition
-    history
-  - also refreshed on project open or after launch when the condition history is newer
-    than either compact summary output
-  - one row per participant session
-  - excludes admin/test participant IDs `0` and `00`
-  - includes PID, age, sex, handedness, colorblind status, session ID/number, condition
-    display-order seed, image/stimulus display-order seeds, total targets, hits,
-    false alarms, aborted Y/N, include-in-analysis Y/N, weighted mean accuracy, and
-    weighted mean reaction time
-  - applies per-column filters, freezes the header row, centers cells, and sizes
-    columns to the exported text width
+  - the single automatic reader-facing Excel workbook in both export modes; the GUI
+    opens it through `View > Open Participant Results`
+  - refreshed after research commits and on demand from recorded history and original
+    participant-result sources, without consulting current editable questions
+  - `Participant Summary` preserves the existing headers and one row per participant
+    session, excluding admin/test participant IDs `0` and `00`; it includes demographics,
+    visit identity, display-order seeds, target/hit/false-alarm counts, abort/inclusion
+    flags, weighted fixation accuracy and mean reaction time
+  - `Demographics` makes participant/visit details directly accessible; test IDs are
+    retained with an explicit label
+  - research sheets distinguish `Test Participant` (reserved IDs `0`/`00`) from the
+    recorded `Test Mode` and `Pilot Mode` launch flags; unavailable historical flags
+    remain unavailable, and original Participant Summary inclusion rules are unchanged
+  - `Fixation by Condition` exposes condition-occurrence target/hit/miss/false-alarm
+    counts, accuracy (%) and mean reaction time (ms), with abort/inclusion context
+  - `Fixation Responses` retains individual target hit/miss outcomes and response
+    times (s), plus unmatched keypresses; missing historical detail stays unavailable
+  - `Task Answers` contains before/after task answers, original prompts and selected
+    option labels when retained, response time (s), validity/timeout/abort state,
+    correctness when defined, and stable run/task/question/repetition/attempt identity
+  - `Record Type` separates question answers, other task responses and task activity;
+    answers appear before instruction-keypress/duration activity, and completed
+    nonresponse activity is labeled `Completed` rather than `Unanswered`
+  - historical missing prompts or labels remain explicitly unavailable; current
+    project definitions never substitute for missing original evidence
+  - filters and frozen headers support inspection; participant IDs and other text stay
+    text, while numeric accuracy and time values retain their units in headers
+  - all populated cells, including headers and new results, use horizontal and vertical
+    centering with wrapped text each time the workbook is generated or refreshed;
+    column defaults use the same alignment for subsequently entered cells
+  - column widths and wrapped row heights are fitted to formatted contents on every
+    generation or refresh, including newly added results; exceptionally long values
+    remain intact and are also split into readable parts in a conditional `Full Text`
+    tab when one cell exceeds Excel's display limits
+  - research sheets lead with measures/answers and freeze participant/visit columns;
+    the workbook opens on Fixation by Condition when history exists, otherwise
+    Demographics, and Results Notes explains units and interpretation
   - weighted mean accuracy is total hits divided by total targets
   - weighted mean reaction time is the hit-weighted mean of condition-level mean RT,
     using each condition's hit count
 - `logs/participant_summary.csv`
-  - companion plain-CSV export with the same columns as the workbook
+  - historical derived duplicate; no longer generated automatically, and any existing
+    file is left untouched
+
+`runtime/participant_results.py` checkpoints original compiled before/after task
+definitions, recorded task answers and individual fixation responses in minimal
+private JSON under `logs/.participant-results/`, before later screens and during
+terminal finalization.
+These participant research records retain submitted partial answers and original
+meaning across project edits. They contain no frame/stimulus event arrays. Numbered
+visit retries are idempotent. Existing full-mode task CSVs/journals and archived plans,
+or compact raw task CSVs, supply historical answers. Retained typed post-condition
+contexts and their original journals additionally recover historical compact post-task
+wording and labels read-only. When no original evidence survives, labels remain
+unavailable. No source is rewritten during these joins, and source paths must resolve
+inside the active project root.
 
 Manual group summary:
 
@@ -866,8 +905,10 @@ Manual group summary:
   - created only when the user chooses `File > Export Group Summary...`
   - defaults to the project `logs/` folder when it already exists, but can be saved to
     any user-selected `.xlsx` path
-  - refreshes the participant summary before export so the workbook is based on the
-    current project-level condition history
+  - calculates participant rows from current project-level condition history in memory;
+    it does not require or recreate a participant CSV or refresh the complete results
+    workbook; an Excel lock or malformed raw task-answer source cannot block this
+    separate fixation-only export
   - writes one `Group Summary` sheet with a first aggregate row and participant/session
     rows underneath for filtering/audit
   - aggregate metrics include only rows marked `Include In Analysis = Y`
@@ -880,21 +921,69 @@ Manual group summary:
 Run export modes:
 
 - `Full runs folder`
-  - default app setting
+  - optional app setting; existing saved Full preferences remain in effect
   - writes the detailed `runs/P<participant>_session<NN>/` session folder and per-condition run
     folders
   - keeps the Run page `Open Run Folder` and `Copy Run Folder` actions available after
     launch
 - `Compact summaries only`
-  - app setting from `File > Settings...`
+  - default for fresh GUI preferences, configured in `File > Settings...`
   - skips detailed `runs/` session and run artifact folders
   - still appends `logs/session_condition_history.csv` and regenerates
-    `logs/participant_summary.xlsx` and `logs/participant_summary.csv`
+    `logs/participant_summary.xlsx`
   - when modular tasks collect responses, appends raw participant/session-keyed rows to
     `logs/task_responses.csv`; an opaque journal under
     `logs/.task-response-checkpoints/` protects partial responses during execution and
     is removed only after the compact CSV is finalized
   - returns no run-folder output path, so Run page folder actions stay hidden
+  - does not automatically generate `post_condition_responses.csv`; retained original
+    contexts/journals and the explicit Rebuild responses action remain available
+
+Ordinary compact sessions therefore maintain two shared CSV/Excel files, or three
+when tasks collect answers (the raw task CSV is research evidence). Category-specific
+AB/Masking reports remain separate. Full diagnostics retain their detailed CSV formats
+and legacy automatic post-condition CSV projection. The standalone runtime launch
+API keeps its existing full-output default. Changing preferences does not delete or
+rewrite historical exports.
+
+### Existing-output maintenance
+
+`scripts/consolidate_existing_results.py` is an explicit maintenance operation,
+separate from normal workbook refresh. Run it from the repository using the Studio
+Python environment and `PYTHONPATH=src`. Dry-run is the default:
+
+```powershell
+$env:PYTHONPATH = 'src'
+python scripts/consolidate_existing_results.py --root '<FPVS Studio Root>'
+python scripts/consolidate_existing_results.py --root '<FPVS Studio Root>' --apply
+```
+
+Discovery visits only direct child projects containing `project.json` beneath the
+named root. It never combines projects. The dry-run reports candidate counts/sizes;
+`--apply` obtains the project reporting lock and rejects active recording, redirected
+paths and source changes. Projects without existing participant outputs are untouched.
+
+The maintenance tool stages the native unified workbook and retains minimal original
+full-mode research records before retiring detailed CSVs. It compares workbook sheet
+row counts and content hashes before/after materialization and cleanup, excluding only
+the changed Source paths and row order. This proves later rebuilds retain the same
+research values. Historical ambiguity and unavailable labels remain explicit.
+
+Only recognized generated result filenames and provably covered summary backups are
+eligible for retirement. Canonical project-level history, raw task logs/journals,
+specialty reports and authoring inputs remain in place; unknown CSVs are preserved.
+Recognized detailed run CSVs are retained in the archive, including timing/trigger
+evidence. The tool rejects custom workbook sheets, unmatched summary content,
+formulas, external links and drawings for review.
+
+Before replacing the workbook or retiring files, it creates
+`logs/.output-archives/<timestamp>-<identity>.zip` in each project. Original relative
+paths and exact bytes are retained, including the previous workbook. `manifest.json`
+records source size/SHA-256/CSV row counts and verified workbook sheet row counts/hashes.
+ZIP integrity, entry sets and every archived hash are verified before cleanup. Changed
+sources or parity failures stop cleanup; failures restore removed originals and the
+prior workbook when safe. Archives are retained for recovery and never sent through
+authored bundles or data sharing.
 
 Per session, full export mode:
 
@@ -1015,7 +1104,7 @@ Numbered condition-history, task-response and AB-event commits are retry-safe un
 the project reporting lock. They identify an execution by participant, visit and
 session, plus run/response/event identity, rather than by the compiled session ID alone.
 Atomic table replacement preserves legacy unnumbered rows and prior row order.
-Derived participant CSV/XLSX generation happens after research commits; an unavailable
+Derived participant workbook generation happens after research commits; an unavailable
 workbook is reported as an export error without undoing completed results. Retrying
 the same numbered commit or regenerating summaries does not duplicate research rows.
 Workbook replacements preserve the previous file on write failure. Historical session
@@ -1026,8 +1115,11 @@ module and step repetition, retry attempt, raw value, RT, mouse details, validit
 timeout/abort state, and optional correctness/score. Participant-entered text that
 could be interpreted as a spreadsheet formula is apostrophe-prefixed in CSV while the
 JSON/JSONL research record retains the raw value. Raw task responses are deliberately
-absent from participant/group summaries, condition-history rows, project files,
-templates, configs, and portable project bundles.
+absent from the generic Participant Summary sheet, group summaries, condition-history
+rows, project files, templates, configs, and portable project bundles. The dedicated
+Task Answers sheet is participant research output and may contain sensitive answers;
+it and the private participant-result records stay local and outside authored
+bundles/configs and data-sharing payloads.
 
 Backward-counting modules additionally attach typed start/decrement/endpoint,
 interval completion and duration, estimated steps, remainder, rate and eligible
@@ -1320,9 +1412,11 @@ Older result/config formats remain readable and omitted source fields stay omitt
 
 Explicit Post-condition Questions retain their original compiled context and existing
 answer journals in both export modes. Runtime reconciles submitted answers after task
-exceptions, then derives project-root `post_condition_responses.csv` outside playback.
+exceptions. Full diagnostics also derives project-root `post_condition_responses.csv`
+outside playback; compact mode uses the Task Answers workbook sheet and leaves any
+older CSV untouched. Explicit Rebuild responses remains available in either mode.
 The CSV separates stream completion, question status and session finalization; locked
-views preserve prior data and can be rebuilt through the GUI. Original journals remain
-canonical and never enter authored bundles/configs or generic summaries. See
+views preserve prior data. Original journals remain canonical and never enter authored
+bundles/configs or generic summaries. See
 [Post-condition Questions](POST_CONDITION_QUESTIONS.md) for schema, identity, recovery,
 privacy and visible acceptance details.

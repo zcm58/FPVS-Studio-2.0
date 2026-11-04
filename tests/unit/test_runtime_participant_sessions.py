@@ -10,7 +10,11 @@ import pytest
 from openpyxl import load_workbook
 from pydantic import ValidationError
 from tests.platform_adapters import windows_runtime
-from tests.unit.runtime_launcher_helpers import StubEngine, _read_csv_rows
+from tests.unit.runtime_launcher_helpers import (
+    StubEngine,
+    _read_csv_rows,
+    _read_participant_summary_rows,
+)
 from tests.unit.test_runtime_participant_history import (
     _write_condition_history_rows,
     _write_session_summary,
@@ -221,7 +225,7 @@ def test_same_compiled_plan_produces_distinct_visits_and_preserves_first_session
     history = _read_csv_rows(root / "logs" / "session_condition_history.csv")
     assert {row["participant_session_number"] for row in history} == {"1", "2"}
     assert {row["manual_removed_electrodes"] for row in history} == {"A1", "B2"}
-    rows = _read_csv_rows(root / "logs" / "participant_summary.csv")
+    rows = _read_participant_summary_rows(root / "logs" / "participant_summary.xlsx")
     assert [(row["PID"], row["Session Number"]) for row in rows] == [("001", "1"), ("001", "2")]
     assert len(find_completed_sessions_for_participant(root, "001")) == 2
     fixation = load_fixation_cross_data(root)
@@ -353,12 +357,12 @@ def test_legacy_summary_upgrade_numbers_visits_without_rewriting_history(tmp_pat
         )
     before = path.read_bytes()
     summary = write_participant_summary(tmp_path)
-    rows = _read_csv_rows(summary)
+    rows = _read_participant_summary_rows(summary)
     assert {row["Session ID"]: row["Session Number"] for row in rows} == {"early": "1", "late": "2"}
     assert path.read_bytes() == before
     summary.write_text("PID,Session ID\n001,old\n", encoding="utf-8")
     assert refresh_participant_summary_if_stale(tmp_path) == summary
-    assert list(_read_csv_rows(summary)[0]) == PARTICIPANT_SUMMARY_HEADER
+    assert list(_read_participant_summary_rows(summary)[0]) == PARTICIPANT_SUMMARY_HEADER
     assert path.read_bytes() == before
 
 
@@ -427,7 +431,7 @@ def test_concurrent_export_upgrades_legacy_history_without_losing_rows(
             sum(row["participant_session_number"] == str(number) for row in history)
             == plan.total_runs
         )
-    rows = _read_csv_rows(root / "logs" / "participant_summary.csv")
+    rows = _read_participant_summary_rows(root / "logs" / "participant_summary.xlsx")
     assert sorted(int(row["Session Number"]) for row in rows) == [1, 2, 3, 4, 5]
 
 
@@ -484,7 +488,8 @@ def test_legacy_compact_reused_plan_is_separated_by_original_export_timestamp(
     assert resolve_next_participant_session_number(tmp_path, "001") == 3
     assert len(find_completed_sessions_for_participant(tmp_path, "001")) == 2
     assert [
-        row["Session Number"] for row in _read_csv_rows(write_participant_summary(tmp_path))
+        row["Session Number"]
+        for row in _read_participant_summary_rows(write_participant_summary(tmp_path))
     ] == [
         "1",
         "2",

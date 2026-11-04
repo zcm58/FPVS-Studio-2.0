@@ -36,6 +36,7 @@ from fpvs_studio.runtime.data_sharing import SharingCapture
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL
 from fpvs_studio.runtime.fixation import build_fixation_task_summary, score_fixation_responses
 from fpvs_studio.runtime.masking_report import write_masking_plan_checkpoint
+from fpvs_studio.runtime.participant_results import capture_participant_results
 from fpvs_studio.runtime.post_condition_responses import PostConditionResponseRecorder
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.recording import (
@@ -382,7 +383,8 @@ class RuntimeWorker:
         active_post_response_run: str | None = None
 
         def project_post_responses() -> None:
-            if post_responses is None or not post_responses.enabled:
+            if (not write_detailed_exports or post_responses is None
+                    or not post_responses.enabled):
                 return
             try:
                 post_responses.write_csv()
@@ -438,6 +440,7 @@ class RuntimeWorker:
                 runtime_metadata=_pick_session_runtime_metadata(results) or RuntimeMetadata(
                     engine_name=self._engine.engine_id,
                     recording=recording_snapshot(runtime_options),
+                    test_mode=bool((runtime_options or {}).get("experiment_test_mode", False)),
                     pilot_mode=bool((runtime_options or {}).get("pilot_mode", False)),
                 ),
                 realized_block_orders=[
@@ -461,6 +464,10 @@ class RuntimeWorker:
                 compact_run_paths.add(
                     write_compact_run_checkpoint(project_root, results[-1]),
                 )
+            capture_participant_results(
+                project_root, session_plan, session_result(results, None), finalized=False,
+                journal_paths=journal_paths, execution_id=recovery.execution_id,
+            )
 
         execution_error: Exception | None = None
         trigger_error: TriggerEmissionError | None = None
@@ -474,6 +481,10 @@ class RuntimeWorker:
                 project_root, session_plan, participant_number=participant_number,
                 participant_session_number=participant_session_number,
                 execution_id=recovery.execution_id, journal_paths=journal_paths,
+            )
+            capture_participant_results(
+                project_root, session_plan, session_result([], None), finalized=False,
+                journal_paths=journal_paths, execution_id=recovery.execution_id,
             )
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
@@ -907,6 +918,10 @@ class RuntimeWorker:
             )
             if not write_detailed_exports:
                 append_compact_task_responses(project_root, session_plan, session_summary)
+            capture_participant_results(
+                project_root, session_plan, session_summary, journal_paths=journal_paths,
+                execution_id=recovery.execution_id,
+            )
             blink_recorder.finish(
                 session_summary, output_dir=output_dir if write_detailed_exports else None,
             )

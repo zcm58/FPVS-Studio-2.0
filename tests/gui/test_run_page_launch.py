@@ -597,7 +597,7 @@ def test_run_page_participant_prompt_cancel_does_not_add_electrode_entry(
     ).manual_removed_electrodes == {}
 
 
-def test_run_page_compact_export_completion_points_to_logs(
+def test_run_page_compact_export_completion_points_to_results_workbook(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -632,14 +632,15 @@ def test_run_page_compact_export_completion_points_to_logs(
     open_folder_button = window.run_page.findChild(QPushButton, "run_open_folder_button")
     copy_folder_button = window.run_page.findChild(QPushButton, "run_copy_folder_button")
 
-    assert "Output: Compact summary logs" in summary_text
+    assert "Results: logs/participant_summary.xlsx" in summary_text
     assert open_folder_button is not None
     assert copy_folder_button is not None
     assert open_folder_button.isHidden()
     assert copy_folder_button.isHidden()
     assert messages == [
-        "The experiment finished. Review participant summary files in the project "
-        "logs folder."
+        "The experiment finished. "
+        "Choose View > Open Participant Results for demographics, fixation accuracy, "
+        "reaction times and task answers."
     ]
 
 

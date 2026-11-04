@@ -9,6 +9,7 @@ from unittest.mock import Mock
 
 import pytest
 from openpyxl import load_workbook
+from tests.unit.runtime_launcher_helpers import _read_participant_summary_rows
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import RunMode
@@ -467,8 +468,7 @@ def _make_summary_outputs_older_than_history(summary_path: Path, history_path: P
 
 
 def _read_summary_rows(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
-        return list(csv.DictReader(handle))
+    return _read_participant_summary_rows(path)
 
 
 @pytest.mark.parametrize("category", ["attentional_blink", "fpvs_oddball"])

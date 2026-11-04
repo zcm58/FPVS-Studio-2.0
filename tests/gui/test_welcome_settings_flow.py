@@ -1580,6 +1580,7 @@ def test_file_settings_action_persists_run_export_toggle_to_current_document(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
+    controller.save_run_export_mode(EXPORT_MODE_FULL)
     _, window = _open_created_project(controller, qtbot, tmp_path, "Export Mode Project")
     assert controller.load_run_export_mode() == EXPORT_MODE_FULL
     assert window.document.session_export_mode == EXPORT_MODE_FULL
@@ -1597,6 +1598,19 @@ def test_file_settings_action_persists_run_export_toggle_to_current_document(
 
     assert controller.load_run_export_mode() == EXPORT_MODE_COMPACT
     assert window.document.session_export_mode == EXPORT_MODE_COMPACT
+
+
+@pytest.mark.parametrize("saved_mode", [None, "invalid", EXPORT_MODE_COMPACT, EXPORT_MODE_FULL])
+def test_run_export_preference_defaults_to_compact_and_preserves_saved_choices(
+    controller: StudioController, saved_mode: str | None,
+) -> None:
+    if saved_mode is None:
+        controller._settings.remove("exports/run_export_mode")
+    else:
+        controller._settings.setValue("exports/run_export_mode", saved_mode)
+    expected = EXPORT_MODE_FULL if saved_mode == EXPORT_MODE_FULL else EXPORT_MODE_COMPACT
+    assert controller.load_run_export_mode() == expected
+    assert controller.detailed_run_exports_enabled() is (expected == EXPORT_MODE_FULL)
 
 
 def test_file_settings_action_persists_sophia_mode_toggle_to_current_document(

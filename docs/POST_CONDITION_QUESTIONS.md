@@ -48,8 +48,18 @@ option shuffles do not change their meaning.
 
 ## Readable CSV
 
-The active project owns `post_condition_responses.csv` directly in its folder,
-in both full and compact export modes. The GUI's Open Responses Folder action uses
+The main results entry point is `View > Open Participant Results`. Its Task Answers
+sheet includes both before- and after-condition answers with original wording when
+retained. See [runtime exports](RUNTIME_EXECUTION.md#exports) for the consolidated
+workbook, historical unavailable-label rules and private research records.
+Historical compact post-task wording and labels can be recovered read-only from the
+typed retained contexts and original journals below; loading never updates those sources
+or substitutes current editable questions.
+
+The active project can also own the legacy `post_condition_responses.csv` directly in
+its folder. Full diagnostics automatically derives it; compact mode preserves any
+existing CSV and generates it only through explicit Rebuild responses. Both modes retain
+the original context and answer journals required for rebuilding. The GUI's Open Responses Folder action uses
 that project folder independently of any detailed run folder. Open Responses Folder
 and Rebuild responses appear only while Advanced modifiers is expanded. The folder
 button's tooltip and accessible description expose the CSV filename and full path.
@@ -101,8 +111,9 @@ snapshots and original journals, without consulting today's editable questions.
 An unfinished final journal fragment preserves its valid prefix; malformed complete
 records are reported for review.
 
-Projection runs outside frame playback, after presentations and during orderly
-abort/error finalization. It uses the project reporting lock and existing atomic CSV
+In Full diagnostics, projection runs outside frame playback, after presentations and
+during orderly abort/error finalization; compact mode leaves CSV generation to the
+explicit Rebuild responses action. It uses the project reporting lock and existing atomic CSV
 writer. If Excel locks the CSV, the prior file remains intact and the durable answers
 and context remain available. Close the CSV in Excel, then use Rebuild responses to
 retry. A derived-view failure must not discard canonical answers or prevent ordinary
@@ -112,8 +123,9 @@ Paths resolve beneath the active project and reject escaped or redirected CSV
 targets. Changing the project display name does not move the file. Ordinary bundles
 and clean Library preparation keep their positive content inventories; root response
 CSVs and research logs are excluded. Legitimate stimulus CSVs remain eligible for
-ordinary bundles. Raw answers do not enter application logs, generic summaries or
-the authored project/config.
+ordinary bundles. Raw answers do not enter application logs, generic summary sheets or
+the authored project/config. The dedicated Task Answers workbook sheet is local
+participant research output, and remains outside authored bundles and shared reports.
 
 ## Visible acceptance
 

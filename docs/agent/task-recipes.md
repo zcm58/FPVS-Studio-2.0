@@ -88,6 +88,8 @@ same explicit profile isolation. Refer to the Qt smoke skill before execution.
 
 | Task | First source/test | Current contract |
 | --- | --- | --- |
+| Participant workbook, demographics, fixation and original task answers | `runtime/participant_results.py`, `runtime/session_export.py`; `tests/unit/test_participant_results.py` | [Exports](../RUNTIME_EXECUTION.md#exports), [GUI access](../GUI_WORKFLOW.md#participant-results-workbook) |
+| Existing-result consolidation and reversible cleanup | `scripts/consolidate_existing_results.py`; `tests/unit/test_results_consolidation.py` | [Maintenance](../RUNTIME_EXECUTION.md#existing-output-maintenance) |
 | Catalog/enrollment/startup lab code | `library/client.py`, `gui/library_access_dialog.py`, `gui/application.py` | [Service/access](../EXPERIMENT_LIBRARY.md#service-and-access-boundary) |
 | Current-project update, backups and rollback | `core/project_bundle_update.py`, `gui/project_update_controller.py`, `gui/project_version_dialog.py` | [Version checks](../EXPERIMENT_LIBRARY.md#project-version-checks) |
 | Update readiness | `data_sharing/project_updates.py`, `runtime/condition_recovery.py` | [Results update guard](../DATA_SHARING.md#library-project-updates) |

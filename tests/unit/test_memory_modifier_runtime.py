@@ -6,6 +6,7 @@ import csv
 import json
 
 import pytest
+from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
@@ -201,7 +202,14 @@ def test_memory_session_exports_keep_provenance_and_partial_data(
     assert rows[0]["image_memory_target_item_ids"].split(";") == TARGETS
     assert json.loads(rows[0]["image_memory_image_paths"])[TARGETS[0]].endswith("target-0.png")
     assert rows[0]["image_memory_targets_selected"] == ""
-    assert "image_memory" not in (root / "logs" / "participant_summary.csv").read_text()
+    assert not (root / "logs" / "participant_summary.csv").exists()
+    workbook = load_workbook(root / "logs" / "participant_summary.xlsx", read_only=True)
+    try:
+        assert not any("image_memory" in str(value)
+                       for row in workbook["Participant Summary"].iter_rows(values_only=True)
+                       for value in row)
+    finally:
+        workbook.close()
     if mode == "full":
         assert "image_memory" not in (output / "session_summary.json").read_text()
     else:

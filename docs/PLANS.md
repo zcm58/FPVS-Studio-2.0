@@ -38,6 +38,13 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Results workbook automatic sizing](exec-plans/completed/results-workbook-auto-fit.md):
+  content-fitted columns/rows, readable long-value disclosure, 13 existing workbooks
+  updated without data changes, and runtime/precommit checks passed.
+- [Participant output consolidation](exec-plans/completed/output-consolidation.md):
+  one results workbook per project, 13 existing projects consolidated and 8165 CSVs
+  plus two covered backup workbooks reversibly archived; parity and safe precommit
+  passed, with optional native GUI smoke unperformed.
 - [Vertical image visual angle](exec-plans/completed/vertical-image-visual-angle.md):
   Setup/preview expose width and height with explicit sizing modes; height-only
   persistence repaired, and core/GUI focused plus safe precommit checks passed.

@@ -824,20 +824,18 @@ class ProjectDocument(
             raise DocumentError(str(exc)) from exc
 
     def refresh_participant_summary_if_stale(self) -> Path | None:
-        """Refresh compact participant summaries when project logs are newer."""
+        """Refresh the participant results workbook when project records are newer."""
 
         try:
             return refresh_participant_summary_if_stale(self._project_root)
         except PermissionError as exc:
             raise DocumentError(
-                "Participant summary logs are out of date, but FPVS Studio could not "
-                "refresh them. Close participant_summary.xlsx if it is open in Excel "
-                "and try again."
+                "Participant results are out of date. Close participant_summary.xlsx "
+                "in Excel, then choose View > Open Participant Results."
             ) from exc
         except OSError as exc:
             raise DocumentError(
-                "Participant summary logs are out of date, but FPVS Studio could not "
-                f"refresh them: {exc}"
+                f"The participant results workbook could not be refreshed: {exc}"
             ) from exc
 
     def _apply_project_update(self, **updates: object) -> None:

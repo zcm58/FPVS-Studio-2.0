@@ -5,6 +5,11 @@ Status: Planned
 Proposal only. Not implemented and not approved as part of the current release.
 This proposal is separate from the completed Masking event-marker release.
 
+The completed [participant output consolidation](../completed/output-consolidation.md)
+implements a shared workbook/access workflow for demographics, fixation
+and original before/after answers. The filtered in-app response viewer, specialized
+Masking summaries and opt-in participant question styling below remain proposed.
+
 ## Outcome and workflow
 
 1. Add **View > Participant Responses...** for modular tasks. A read-only table

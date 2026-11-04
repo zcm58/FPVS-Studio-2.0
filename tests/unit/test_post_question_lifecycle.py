@@ -7,6 +7,7 @@ import json
 from uuid import uuid4
 
 import pytest
+from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -102,6 +103,22 @@ def _rows(path):
         return list(csv.DictReader(stream))
 
 
+def _response_rows(root):
+    """Explicitly derive the optional legacy CSV from its retained evidence."""
+
+    path = rebuild_post_condition_responses(root)
+    assert path == root / "post_condition_responses.csv"
+    return _rows(path)
+
+
+def _workbook_values(root, sheet):
+    workbook = load_workbook(root / "logs/participant_summary.xlsx", read_only=True)
+    try:
+        return [value for row in workbook[sheet].iter_rows(values_only=True) for value in row]
+    finally:
+        workbook.close()
+
+
 def _columns(row):
     answer = next(key for key in row if key.startswith(PROMPT))
     detail = next(key for key in row if key.startswith("Describe anything else."))
@@ -132,7 +149,8 @@ def test_repeated_presentations_keep_original_context_and_answers_after_completi
     assert all(response.repetition_index == 0 for run in summary.run_results
                for response in run.task_responses)
     path = sample_project_root / "post_condition_responses.csv"
-    rows = _rows(path)
+    assert path.exists() == (mode == "full")
+    rows = _response_rows(sample_project_root)
     assert len(rows) == 5
     answer, detail = _columns(rows[0])
     assert all(row[answer] == "No" and row[detail] == PRIVATE_ANSWER for row in rows)
@@ -145,9 +163,9 @@ def test_repeated_presentations_keep_original_context_and_answers_after_completi
     assert all(journal.is_file() for journal in journals)
     assert PRIVATE_ANSWER not in contexts[0].read_text(encoding="utf-8")
     assert PRIVATE_ANSWER not in caplog.text
-    assert PRIVATE_ANSWER not in (sample_project_root / "logs/participant_summary.csv").read_text(
-        encoding="utf-8",
-    )
+    assert not (sample_project_root / "logs/participant_summary.csv").exists()
+    assert PRIVATE_ANSWER not in _workbook_values(sample_project_root, "Participant Summary")
+    assert PRIVATE_ANSWER in _workbook_values(sample_project_root, "Task Answers")
     assert not list((sample_project_root / "logs/.condition-recovery").glob("*.plan.json"))
     project.conditions[0].name = "Renamed after collection"
     project.task_modules[0].steps[0].questions[0].prompt = "Edited after collection"
@@ -173,7 +191,7 @@ def test_question_abort_keeps_prior_no_answer_and_partial_original_journal(
     assert not run.aborted
     assert run.completed_frames == 1800
     assert run.task_flow_aborted and not run.task_flow_completed
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row[answer] == "No"
     assert row[f"Status: {answer}"] == "answered"
@@ -195,7 +213,7 @@ def test_mid_questionnaire_exception_reconciles_submitted_answers_into_raw_expor
                                 refresh_hz=60)
     with pytest.raises(RuntimeError, match="Later questionnaire screen failed"):
         _execute(sample_project_root, plan, QuestionEngine({}, failure="question_error"), mode=mode)
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row[answer] == "No"
     assert row[f"Status: {detail}"] == "interrupted"
@@ -230,7 +248,7 @@ def test_earlier_post_activity_failure_has_a_not_presented_question_row(
             _execute(sample_project_root, plan, engine, mode=mode)
     else:
         assert _execute(sample_project_root, plan, engine, mode=mode).aborted
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row[answer] == row[detail] == ""
     assert row[f"Status: {answer}"] == row[f"Status: {detail}"] == "not_presented"
@@ -249,12 +267,13 @@ def test_locked_derived_csv_warns_without_losing_original_answers(
         patch.setattr(PostConditionResponseRecorder, "write_csv", locked)
         summary = _execute(sample_project_root, plan, QuestionEngine({}), mode=mode)
     assert not summary.aborted
-    assert any("Close post_condition_responses.csv in Excel" in warning
-               and "Rebuild responses" in warning for warning in summary.warnings)
+    csv_warning = any("Close post_condition_responses.csv in Excel" in warning
+                      and "Rebuild responses" in warning for warning in summary.warnings)
+    assert csv_warning == (mode == "full")
+    assert PRIVATE_ANSWER in _workbook_values(sample_project_root, "Task Answers")
     _, journals = _journal_paths(sample_project_root)
     assert sum(len(read_task_response_journal(path)) for path in journals) == 2
-    rebuild_post_condition_responses(sample_project_root)
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row[answer] == "No" and row[detail] == PRIVATE_ANSWER
 
@@ -269,9 +288,23 @@ def test_compact_retained_journals_use_distinct_execution_identity_without_visit
     contexts, journals = _journal_paths(sample_project_root)
     assert len(contexts) == len(journals) == 2
     assert sum(len(read_task_response_journal(path)) for path in journals) == 4
-    rows = _rows(sample_project_root / "post_condition_responses.csv")
+    rows = _response_rows(sample_project_root)
     assert len(rows) == 2
     assert len({row["Execution ID"] for row in rows}) == 2
+
+
+def test_compact_preserves_existing_legacy_csv_until_explicit_rebuild(
+    sample_project, sample_project_root,
+):
+    plan = compile_session_plan(_question_project(sample_project), project_root=sample_project_root,
+                                refresh_hz=60)
+    _execute(sample_project_root, plan, QuestionEngine({}))
+    assert len(_response_rows(sample_project_root)) == 1
+    path = sample_project_root / "post_condition_responses.csv"
+    previous = path.read_bytes()
+    _execute(sample_project_root, plan, QuestionEngine({}), visit=2)
+    assert path.read_bytes() == previous
+    assert len(_response_rows(sample_project_root)) == 2
 
 
 def test_context_initialization_failure_prevents_participant_screens(
@@ -303,7 +336,7 @@ def test_module_context_failure_prevents_question_screen_and_keeps_completed_str
         _execute(sample_project_root, plan, QuestionEngine(captures))
     assert len(captures["run_ids"]) == 1
     assert "task_steps" not in captures
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row[f"Status: {answer}"] == row[f"Status: {detail}"] == "not_presented"
     assert row["FPVS stream completed"] == "Yes"
@@ -317,7 +350,7 @@ def test_start_gate_abort_records_no_completed_stream_and_not_presented_question
     summary = _execute(sample_project_root, plan, QuestionEngine({"abort_on_transition": True}))
     assert summary.aborted
     assert not summary.run_results
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row["FPVS stream completed"] == "No"
     assert row[f"Status: {answer}"] == row[f"Status: {detail}"] == "not_presented"
@@ -333,7 +366,7 @@ def test_later_export_failure_retains_completed_answers_and_records_session_erro
     monkeypatch.setattr("fpvs_studio.runtime.run_worker.write_participant_summary", unavailable)
     with pytest.raises(PermissionError, match="Generic report is locked"):
         _execute(sample_project_root, plan, QuestionEngine({}))
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer, detail = _columns(row)
     assert row[answer] == "No" and row[detail] == PRIVATE_ANSWER
     assert row["FPVS stream completed"] == "Yes"
@@ -359,7 +392,7 @@ def test_rating_engine_selection_projects_its_canonical_numeric_value(
     record, = summary.run_results[0].task_responses
     assert record.selected_option_ids == ["rating-3"]
     assert record.numeric_value == 3
-    row, = _rows(sample_project_root / "post_condition_responses.csv")
+    row, = _response_rows(sample_project_root)
     answer = next(key for key in row if key.startswith("Confidence?"))
     assert row[answer] == "3.0"
     assert row[f"Status: {answer}"] == "answered"
@@ -372,6 +405,7 @@ def test_missing_completed_journal_preserves_prior_view_until_original_evidence_
                                 refresh_hz=60)
     _execute(sample_project_root, plan, QuestionEngine({}))
     path = sample_project_root / "post_condition_responses.csv"
+    assert rebuild_post_condition_responses(sample_project_root) == path
     before = path.read_bytes()
     _, journals = _journal_paths(sample_project_root)
     journal, = journals

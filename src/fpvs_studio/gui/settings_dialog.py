@@ -66,7 +66,7 @@ class AppSettingsDialog(QDialog):
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
         on_manage_condition_templates: Callable[[], object] | None = None,
         on_show_library: Callable[[], None] | None = None,
-        detailed_run_exports_enabled: bool = True,
+        detailed_run_exports_enabled: bool = False,
         on_detailed_run_exports_changed: Callable[[bool], None] | None = None,
         biosemi_recording_confirmation_required: bool = True,
         on_biosemi_recording_confirmation_required_changed: Callable[[bool], None]
@@ -222,10 +222,15 @@ class AppSettingsDialog(QDialog):
         participant_layout.setSpacing(8)
         participant_layout.addWidget(_section_title("Participant runs", participant))
         self.detailed_run_exports_checkbox = QCheckBox(
-            "Save detailed runs folder after each participant run",
+            "Save detailed timing and trigger CSVs",
             self,
         )
         self.detailed_run_exports_checkbox.setObjectName("detailed_run_exports_checkbox")
+        self.detailed_run_exports_checkbox.setToolTip(
+            "Participant results are always saved in logs/participant_summary.xlsx. "
+            "Enable this to also save detailed run folders with timing, event, "
+            "response and trigger CSVs."
+        )
         self.detailed_run_exports_checkbox.setChecked(detailed_run_exports_enabled)
         self.detailed_run_exports_checkbox.toggled.connect(
             self._set_detailed_run_exports_enabled

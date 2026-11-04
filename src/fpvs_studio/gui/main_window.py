@@ -86,7 +86,10 @@ from fpvs_studio.runtime.condition_recovery import (
     build_recovery_session_plan,
     build_replacement_session_plan,
 )
-from fpvs_studio.runtime.session_export import GROUP_SUMMARY_XLSX_FILENAME
+from fpvs_studio.runtime.session_export import (
+    GROUP_SUMMARY_XLSX_FILENAME,
+    write_participant_summary,
+)
 
 __all__ = [
     "ParticipantNumberDialog",
@@ -179,6 +182,8 @@ class StudioMainWindow(QMainWindow):
         self._auto_workspace_return_size: tuple[int, int] | None = None
         self._auto_workspace_size: tuple[int, int] | None = None
         self._active_bundle_export_task: BackgroundTask | None = None
+        self._participant_results_task: BackgroundTask | None = None
+        self._participant_results_notice: QMessageBox | None = None
         self._bundle_export_previous_widget: QWidget | None = None
         self._bundle_export_progress_bridge: ProgressSignalBridge | None = None
         self._bundle_export_completed_result: _BundleExportTaskResult | None = None
@@ -676,6 +681,12 @@ class StudioMainWindow(QMainWindow):
         self.fixation_cross_data_action = QAction(accuracy_label, self)
         self.fixation_cross_data_action.setObjectName("fixation_cross_data_action")
         self.fixation_cross_data_action.triggered.connect(self.show_task_accuracy)
+        self.participant_results_action = QAction("Open Participant Results", self)
+        self.participant_results_action.setObjectName("participant_results_action")
+        self.participant_results_action.setToolTip(
+            "Open demographics, fixation accuracy and reaction times, and task answers in Excel."
+        )
+        self.participant_results_action.triggered.connect(self.open_participant_results)
         self.home_action = QAction("Home", self)
         self.home_action.triggered.connect(self._return_home_from_palette)
         self.setup_action = QAction("Complete Setup", self)
@@ -707,6 +718,10 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.export_group_summary_action, "File / Export", "export excel results"),
             ActionEntry(
                 self.fixation_cross_data_action, "View", "results accuracy responses t1 t2",
+            ),
+            ActionEntry(
+                self.participant_results_action, "View",
+                "results excel demographics fixation accuracy reaction time before after answers",
             ),
             ActionEntry(self.data_sharing_action, "View", "reporting comparison consent"),
             ActionEntry(
@@ -805,6 +820,7 @@ class StudioMainWindow(QMainWindow):
         self.file_menu.addAction(self.about_action)
         self.view_menu.addAction(self.library_action)
         self.view_menu.addSeparator()
+        self.view_menu.addAction(self.participant_results_action)
         self.view_menu.addAction(self.fixation_cross_data_action)
         self.view_menu.addAction(self.data_sharing_action)
         self.view_menu.addAction(self.interrupted_sessions_action)
@@ -815,6 +831,76 @@ class StudioMainWindow(QMainWindow):
             self.show_attentional_blink_data()
         else:
             self.show_fixation_cross_data()
+
+    def open_participant_results(self) -> None:
+        """Refresh the project workbook away from the GUI thread, then open it."""
+
+        if self._participant_results_task is not None:
+            return
+        root = self.document.project_root
+        task = BackgroundTask(
+            parent_widget=self,
+            callback=lambda: write_participant_summary(root, require_data=True),
+        )
+        self._participant_results_task = task
+        self.participant_results_action.setEnabled(False)
+        task.succeeded.connect(self._on_participant_results_ready)
+        task.failed.connect(self._on_participant_results_failed)
+        task.finished.connect(self._on_participant_results_finished)
+        task.start()
+
+    @Slot(object)
+    def _on_participant_results_ready(self, result: object) -> None:
+        if not self.isVisible() or update_lifecycle().is_shutting_down:
+            return
+        if not isinstance(result, Path):
+            self._on_participant_results_failed(
+                ValueError("The results workbook was not returned.")
+            )
+            return
+        if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(result))):
+            self._show_participant_results_notice(
+                "Open Participant Results",
+                "Choose an application for Excel workbooks, or open this file manually:\n\n"
+                f"{result}",
+                warning=True,
+            )
+
+    @Slot(object)
+    def _on_participant_results_failed(self, error: object) -> None:
+        if not self.isVisible() or update_lifecycle().is_shutting_down:
+            return
+        LOGGER.warning("Participant results could not be opened: %s", error)
+        message = str(error)
+        if isinstance(error, PermissionError):
+            message = (
+                "Close participant_summary.xlsx in Excel, then choose "
+                "View > Open Participant Results again."
+            )
+        self._show_participant_results_notice("Participant Results", message, warning=True)
+
+    @Slot()
+    def _on_participant_results_finished(self) -> None:
+        self._participant_results_task = None
+        self.participant_results_action.setEnabled(
+            self._active_bundle_export_task is None and not self._bundle_import_processing_active
+        )
+
+    def _show_participant_results_notice(
+        self, title: str, text: str, *, warning: bool = False,
+    ) -> None:
+        if self._participant_results_notice is not None:
+            self._participant_results_notice.close()
+        notice = QMessageBox(self)
+        notice.setObjectName("participant_results_notice")
+        notice.setWindowTitle(title)
+        notice.setTextFormat(Qt.TextFormat.PlainText)
+        notice.setIcon(QMessageBox.Icon.Warning if warning else QMessageBox.Icon.Information)
+        notice.setText(text)
+        notice.setStandardButtons(QMessageBox.StandardButton.Close)
+        notice.setWindowModality(Qt.WindowModality.NonModal)
+        self._participant_results_notice = notice
+        notice.show()
 
     def show_attentional_blink_data(self) -> None:
         dialog = self._attentional_blink_data_dialog
@@ -1293,7 +1379,7 @@ class StudioMainWindow(QMainWindow):
         output_line = (
             f"Output Dir: {summary.output_dir}"
             if summary.output_dir
-            else "Output: Compact summary logs"
+            else "Results: logs/participant_summary.xlsx"
         )
         participant_value = summary.participant_number or participant_number
         session_label = f"Session {summary.participant_session_number}"
@@ -1311,11 +1397,7 @@ class StudioMainWindow(QMainWindow):
                 "Completed Conditions: "
                 f"{summary.completed_condition_count}/{summary.total_condition_count}\n"
                 f"{output_line}\n\n"
-                + (
-                    "Review run exports in the project runs folder."
-                    if summary.output_dir
-                    else "Review participant summary files in the project logs folder."
-                ),
+                + "Review saved results with View > Open Participant Results.",
             )
             self.statusBar().showMessage(
                 (
@@ -1329,11 +1411,9 @@ class StudioMainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Launch Complete",
-            session_line + "The experiment finished. " + (
-                "Review run exports in the project runs folder."
-                if summary.output_dir
-                else "Review participant summary files in the project logs folder."
-            ),
+            session_line + "The experiment finished. "
+            "Choose View > Open Participant Results for demographics, fixation accuracy, "
+            "reaction times and task answers.",
         )
         self.statusBar().showMessage(
             (
@@ -1504,6 +1584,7 @@ class StudioMainWindow(QMainWindow):
             self.library_action,
             self.project_update_action,
             self.fixation_cross_data_action,
+            self.participant_results_action,
             self.interrupted_sessions_action,
             self.data_sharing_action,
             self.image_resizer_action,

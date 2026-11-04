@@ -275,6 +275,9 @@ manual_smoke = [
 [scopes.runtime]
 checks = []
 tests = [
+  "tests/unit/test_workbook_layout.py",
+  "tests/unit/test_results_consolidation.py",
+  "tests/unit/test_participant_results.py",
   "tests/unit/test_post_question_lifecycle.py",
   "tests/unit/test_post_condition_responses.py",
   "tests/unit/test_saved_condition_order.py",
@@ -310,7 +313,7 @@ tests = [
   "tests/unit/test_memory_modifier_runtime.py",
 ]
 full_tests = []
-include = ["tests/unit/test_post_question_lifecycle.py", "tests/unit/test_post_condition_responses.py", "tests/unit/test_saved_condition_order.py", "tests/unit/test_saved_order_integrations.py", "src/fpvs_studio/core/randomization.py", "tests/unit/test_randomization_integrations.py", "src/fpvs_studio/core/session_ordering.py", "tests/unit/test_condition_presentations.py", "tests/unit/test_condition_presentation_integrations.py", "tests/unit/test_condition_duration_integrations.py", "tests/unit/test_condition_duration_preflight.py", "src/fpvs_studio/runtime/**", "tests/unit/test_condition_recovery.py", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py", "tests/unit/test_attentional_blink*_runtime.py", "tests/unit/test_windows_image_paths.py"]
+include = ["scripts/consolidate_existing_results.py", "tests/unit/test_workbook_layout.py", "tests/unit/test_results_consolidation.py", "tests/unit/test_participant_results.py", "tests/unit/test_post_question_lifecycle.py", "tests/unit/test_post_condition_responses.py", "tests/unit/test_saved_condition_order.py", "tests/unit/test_saved_order_integrations.py", "src/fpvs_studio/core/randomization.py", "tests/unit/test_randomization_integrations.py", "src/fpvs_studio/core/session_ordering.py", "tests/unit/test_condition_presentations.py", "tests/unit/test_condition_presentation_integrations.py", "tests/unit/test_condition_duration_integrations.py", "tests/unit/test_condition_duration_preflight.py", "src/fpvs_studio/runtime/**", "tests/unit/test_condition_recovery.py", "src/fpvs_studio/core/execution.py", "tests/unit/test_runtime_*.py", "tests/unit/test_attentional_blink*_runtime.py", "tests/unit/test_windows_image_paths.py"]
 manual_smoke = []
 
 [scopes.engine]
