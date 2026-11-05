@@ -255,6 +255,39 @@ def test_triggerbox_reports_open_and_missing_dependency_errors(monkeypatch) -> N
         BrainProductsTriggerBoxBackend().connect()
 
 
+def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypatch) -> None:
+    serial_module = _FakeSerialModule()
+    original_open = serial_module.Serial
+    failure = OSError(
+        "could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)"
+    )
+
+    def occupied(**kwargs):
+        serial_module.open_calls.append(kwargs)
+        raise failure
+
+    monkeypatch.setattr(serial_module, "Serial", occupied)
+    backend = BrainProductsTriggerBoxBackend("COM4", serial_module=serial_module)
+    with pytest.raises(BrainProductsTriggerBoxError) as caught:
+        backend.connect()
+    assert "Access to COM4 was denied" in str(caught.value)
+    assert "one program at a time" in str(caught.value)
+    assert "Close TriggerBox Configuration/Test IO" in str(caught.value)
+    assert "Detect" in str(caught.value)
+    assert caught.value.__cause__ is failure
+    assert len(serial_module.open_calls) == 1
+    assert serial_module.port.writes == []
+    assert backend._worker is None
+
+    monkeypatch.setattr(serial_module, "Serial", original_open)
+    try:
+        backend.connect()
+        assert serial_module.open_calls[-1]["port"] == "COM4"
+        assert serial_module.port.writes == [b"\x00"]
+    finally:
+        backend.close()
+
+
 @pytest.mark.parametrize("result", [0, 2])
 def test_triggerbox_failed_initial_zero_closes_port(result: int) -> None:
     serial_module = _FakeSerialModule()

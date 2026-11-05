@@ -12,6 +12,25 @@ import pytest
 from fpvs_studio.triggers import serial_port_access as access
 
 
+@pytest.mark.parametrize("error", [
+    PermissionError(13, "Access is denied."),
+    OSError("could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)"),
+    "could not open port 'COM4': PermissionError(13, 'Zugriff verweigert', None, 5)",
+    "[WinError 5] Access is denied.",
+])
+def test_recognizes_native_and_pyserial_access_denied_errors(error):
+    assert access.is_serial_access_denied(error)
+
+
+@pytest.mark.parametrize("error", [
+    FileNotFoundError(2, "The system cannot find the file specified."),
+    "could not open port 'COM4': FileNotFoundError(2, 'Missing', None, 2)",
+    "[WinError 50] Not supported", "Invalid baudrate", "close failed",
+])
+def test_other_serial_failures_are_not_reported_as_access_denied(error):
+    assert not access.is_serial_access_denied(error)
+
+
 def _metadata(monkeypatch, ports):
     calls = []
 

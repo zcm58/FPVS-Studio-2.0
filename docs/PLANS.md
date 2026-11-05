@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [TriggerBox occupied-port recovery](exec-plans/completed/triggerbox-occupied-port-recovery.md):
+  explicit manual COM access checks and actionable denied-access guidance; safe
+  regression checks passed, with visible GUI and physical hardware checks unperformed.
 - [Studio 2.7.1 release](exec-plans/completed/release-2.7.1.md):
   USB TriggerBox and launch-setting fixes published immutable/latest; 2.7.0
   source/dependency freshness, full CI, packaged checks and public updater verification passed.

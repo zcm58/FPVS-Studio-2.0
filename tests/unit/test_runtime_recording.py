@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -40,6 +41,7 @@ from fpvs_studio.runtime.recording import (
 )
 from fpvs_studio.runtime.run_worker import RuntimeWorker, _build_and_connect_trigger_backend
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
+from fpvs_studio.triggers import brainproducts_backend
 from fpvs_studio.triggers.null_backend import NullBackend
 
 
@@ -560,6 +562,34 @@ def test_triggerbox_factory_uses_project_endpoint_and_fixed_protocol(monkeypatch
     assert snapshot.brainproducts_amplifier == "actichamp"
     assert snapshot.brainproducts_sampling_rate_hz == 100
     assert snapshot.acquisition_profile is None
+
+
+def test_triggerbox_occupied_com4_aborts_before_presentation_with_recovery(execution, monkeypatch):
+    root, plan = execution
+    failure = OSError(
+        "could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)"
+    )
+    serial_module = SimpleNamespace(
+        Serial=Mock(side_effect=failure), EIGHTBITS=8, PARITY_NONE="N", STOPBITS_ONE=1,
+    )
+    monkeypatch.setattr(brainproducts_backend, "_load_serial_module", lambda: serial_module)
+    captures = {}
+    with pytest.raises(PreflightError) as caught:
+        _execute(
+            root, plan, RuntimeWorker(StubEngine(captures)),
+            recording_backend="brainproducts_triggerbox", brainproducts_serial_port="COM4",
+            brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+        )
+
+    assert "Access to COM4 was denied" in str(caught.value)
+    assert "Close TriggerBox Configuration/Test IO" in str(caught.value)
+    assert str(failure) in str(caught.value)
+    serial_module.Serial.assert_called_once()
+    assert serial_module.Serial.call_args.kwargs["port"] == "COM4"
+    assert captures.get("open_count", 0) == 0
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted"
+    assert all(not run.attempted_events for run in evidence.runs)
 
 
 def test_parallel_factory_uses_explicit_address_without_serial_configuration(monkeypatch):

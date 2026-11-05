@@ -1114,16 +1114,21 @@ remain available in tooltips. Edits and dismissal invalidate pending results; ma
 entry and Apply remain usable after errors. Computer-default setup hides these
 project-only port controls and never writes a BioSemi COM preference.
 TriggerBox discovery starts when its setup is first shown and reads device metadata
-without opening ports. Detect refreshes the list and checks recognized candidates by
-opening and closing them at 2,000,000 baud / 8N1 without sending or reading bytes.
+without opening ports. Detect refreshes the list and checks recognized candidates plus
+the explicit manual/custom COM selection by opening and closing them at 2,000,000
+baud / 8N1 without sending or reading bytes. A manually selected port is checked even
+with generic or absent driver metadata and is labelled as identity not verified;
+unrelated generic ports are not probed. The selection is captured before worker dispatch.
 Both operations use an app-owned worker. A single match fills the default COM3; custom
 ports and manual edits survive discovery. Multiple matches require a choice;
 empty/error states retain manual entry. Access failures keep candidates visible and
 expose their errors; successful access applies only to the checked port at that moment.
 Metadata-only status says a port is listed, not that the hardware is connected;
 access success says "when checked". Details explain persistent unplugged rev.02 ports
-and distinguish port access from amplifier/Recorder readiness. Unavailable-port
-details prompt checking USB/drivers and closing Configuration/Test IO or other owners.
+and distinguish port access from amplifier/Recorder readiness. Denied-access status
+visibly instructs closing TriggerBox Configuration/Test IO and pressing Detect again.
+Details explain that only one program can own the port and manual selection cannot
+release it; the raw OS error is retained. Other failures retain USB/driver guidance.
 Cancel/Apply cancels outstanding discovery without waiting on the GUI thread; late
 results cannot modify the accepted or dismissed draft. Full detected names and access
 errors are available in tooltips. Detection and access checks do not establish marker
@@ -1150,6 +1155,9 @@ registered for a safe visible environment and is not run by ordinary local check
 Visible TriggerBox acceptance: inspect Recording Setup at `700x640` in both themes.
 Exercise Detect with no device, one device and synthetic multiple/error results;
 enter a manual port while a scan is pending and confirm it survives completion.
+Check a manual COM4 with generic metadata: simulate access denied, verify the visible
+close-and-retry action, then release the port and Detect again. No trigger bytes should
+be sent by Detect. An edit during the check must not inherit the old port's success.
 Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
 Switch devices, Cancel and reopen to check staged fields. With lab equipment,
 confirm normal-run saved markers separately from port discovery and check that

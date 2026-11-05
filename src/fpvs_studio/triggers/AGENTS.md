@@ -18,7 +18,8 @@
 - Keep unavailable hardware behavior explicit; do not add silent fallbacks that hide
   failed trigger emission.
 - Automatic TriggerBox discovery reads named COM-port metadata only. Explicit Detect
-  may open and close recognized candidates on the app-owned worker to check access;
+  may open and close recognized candidates and an explicitly selected manual COM port
+  on the app-owned worker to check access; manual ports do not imply device identity;
   never issue probe reads, marker writes or explicit reset/flush calls. Close constructed
   connections on failure/cancellation, stop between candidates, and retain manual
   selection. Metadata and successful port access do not prove identity or marker receipt.
@@ -26,7 +27,9 @@
   open/close checks. BioSemi checks only the user-selected port at the project's
   configured baudrate (normally 115200); never probe every generic serial port or
   infer BioSemi identity from an openable port. TriggerBox retains its named-candidate
-  filter and fixed baudrate while reusing the access helper.
+  filter (plus the explicit manual selection) and fixed baudrate while reusing the
+  access helper. Denied access means the port may be owned by another program; report
+  exclusive ownership and retry guidance without claiming a specific owner was found.
 - ActiveThree reuses BioSemi's serial byte protocol. Brain Products TriggerBox rev.02/
   Plus uses a distinct adapter/identity at fixed 2,000,000 baud. Its connection-owned
   worker clears a latched event after the configured pulse; sends never sleep or queue.

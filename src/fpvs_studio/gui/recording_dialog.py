@@ -45,6 +45,7 @@ from fpvs_studio.triggers.brainproducts_discovery import (
     discover_triggerbox_ports,
 )
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
+from fpvs_studio.triggers.serial_port_access import is_serial_access_denied
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -242,7 +243,8 @@ class RecordingSetupDialog(QDialog):
         self.detect_ports_button.setAutoDefault(False)
         self.detect_ports_button.setAccessibleName("Detect TriggerBox COM ports")
         self.detect_ports_button.setToolTip(
-            "Refresh TriggerBox ports and check access by opening and closing recognized ports. "
+            "Refresh TriggerBox ports and check access by opening and closing recognized ports "
+            "and your manually selected COM port. "
             "No marker bytes are sent.",
         )
         mark_secondary_action(self.detect_ports_button)
@@ -406,6 +408,9 @@ class RecordingSetupDialog(QDialog):
     def _start_port_detection(self, *, check_access: bool) -> None:
         if self._port_detection_job is not None or self._discovery_dismissed:
             return
+        selected_port = (
+            self.brainproducts_port_edit.text().strip() or None
+        ) if check_access and self._manual_port_override else None
         self._detection_started = True
         for index, candidate in enumerate(self._port_detection_candidates or ()):
             self.brainproducts_port_combo.setItemData(
@@ -422,8 +427,12 @@ class RecordingSetupDialog(QDialog):
         try:
             lifecycle = update_lifecycle()
             self._port_detection_job = lifecycle.start_task(
-                lambda _progress, cancel: discover_triggerbox_ports(
-                    check_access=check_access, cancel_event=cancel,
+                lambda _progress, cancel: (
+                    discover_triggerbox_ports(
+                        check_access=True, cancel_event=cancel, selected_port=selected_port,
+                    ) if check_access else discover_triggerbox_ports(
+                        check_access=False, cancel_event=cancel,
+                    )
                 ),
             )
         except RuntimeError as exc:
@@ -479,10 +488,17 @@ class RecordingSetupDialog(QDialog):
         if candidate.accessible is True:
             details += "\nPort accessible when checked; access may change before launch."
         elif candidate.accessible is False:
-            details += (
-                "\nPort unavailable. Check the USB connection and driver; close "
-                "TriggerBox Configuration/Test IO or other apps using this port."
-            )
+            if is_serial_access_denied(candidate.access_error):
+                details += (
+                    "\nAccess denied. Another application may have this port open. "
+                    "Only one application can use this COM port at a time. Close TriggerBox "
+                    "Configuration/Test IO or other apps using it, then Detect again. "
+                    "Selecting a port manually cannot release it from another application."
+                )
+            else:
+                details += (
+                    "\nPort unavailable. Check the USB connection and driver, then Detect again."
+                )
             if candidate.access_error:
                 details += f"\n{candidate.access_error}"
         details += (
@@ -508,11 +524,17 @@ class RecordingSetupDialog(QDialog):
                 if selected.accessible is True:
                     text = f"{selected.port}: Port accessible when checked."
                 elif selected.accessible is False:
-                    text = f"{selected.port}: Port unavailable. See details."
+                    if is_serial_access_denied(selected.access_error):
+                        text = (
+                            f"{selected.port}: Access denied. Close TriggerBox "
+                            "Configuration/Test IO, then Detect again."
+                        )
+                    else:
+                        text = f"{selected.port}: Port unavailable. See details."
                 else:
                     text = f"{selected.port}: Access was not checked."
             elif port:
-                text = "Selected port was not checked. Choose a detected port or enter one."
+                text = "Selected port was not checked. Click Detect to check it."
             else:
                 accessible = sum(item.accessible is True for item in candidates)
                 unavailable = sum(item.accessible is False for item in candidates)
@@ -525,11 +547,15 @@ class RecordingSetupDialog(QDialog):
         if len(candidates) == 1:
             text = f"TriggerBox port listed: {candidates[0].port}. Access not checked."
             if self._manual_port_override and port != candidates[0].port:
-                text += " Manual port retained."
+                text += " Manual port retained. Detect can check it."
         elif candidates:
             text = "Several TriggerBox ports listed. Choose a port or enter one."
         else:
-            text = "No TriggerBox ports listed. Connect it and retry, or enter its COM port."
+            text = (
+                "No TriggerBox ports listed. Click Detect to check the manual COM port."
+                if self._manual_port_override and port else
+                "No TriggerBox ports listed. Connect it and retry, or enter its COM port."
+            )
         self.detection_status_label.setText(text)
 
     def _cancel_port_detection(self, _result: int) -> None:

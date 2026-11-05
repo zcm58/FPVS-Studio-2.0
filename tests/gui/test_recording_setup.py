@@ -526,14 +526,19 @@ def test_triggerbox_detection_starts_once_on_first_visible_selection(
     explicit_cancel = Event()
     assert port_detection_jobs[1].callback(None, explicit_cancel) == ()
     assert discovery.call_args.kwargs == {
-        "check_access": True, "cancel_event": explicit_cancel,
+        "check_access": True, "cancel_event": explicit_cancel, "selected_port": None,
     }
     assert "opening and closing" in dialog.detect_ports_button.toolTip()
+    assert "manually selected COM port" in dialog.detect_ports_button.toolTip()
 
 
-@pytest.mark.parametrize("accessible", [True, False])
+@pytest.mark.parametrize("accessible, error, status", [
+    (True, "", "Port accessible"),
+    (False, "[WinError 5] Access is denied: COM9", "Access denied"),
+    (False, "[WinError 2] The system cannot find the file specified: COM9", "Port unavailable"),
+])
 def test_triggerbox_detect_reports_access_without_changing_port_values(
-    qtbot, port_detection_jobs, accessible,
+    qtbot, port_detection_jobs, accessible, error, status,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration())
     qtbot.addWidget(dialog)
@@ -545,23 +550,28 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
     assert "does not prove" in dialog.detection_status_label.toolTip()
     assert "Disable Recorder Debouncing" in dialog.guidance_label.toolTip()
     dialog.detect_ports_button.click()
-    error = "[WinError 5] Access is denied: COM9" if not accessible else ""
     port_detection_jobs[1].finish(candidates=(TriggerBoxPortCandidate(
         "COM9", candidate.description, accessible=accessible, access_error=error,
     ),))
 
-    state = "accessible" if accessible else "unavailable"
-    assert f"COM9: Port {state}" in dialog.detection_status_label.text()
+    assert f"COM9: {status}" in dialog.detection_status_label.text()
     assert dialog.brainproducts_port_combo.itemText(0) == "COM9"
     assert dialog.brainproducts_port_edit.text() == "COM9"
     details = dialog.brainproducts_port_combo.itemData(0, Qt.ItemDataRole.ToolTipRole)
     assert candidate.description in details
-    assert f"Port {state}" in details
+    assert status in details
     assert "does not verify the amplifier" in details
     if accessible:
         assert "when checked" in dialog.detection_status_label.text()
-    else:
+    elif status == "Access denied":
         assert "Configuration/Test IO" in details
+        assert "Only one application" in details
+        assert "Selecting a port manually cannot release it" in details
+        assert "then Detect again" in dialog.detection_status_label.text()
+    else:
+        assert "USB connection and driver" in details
+        assert "Access denied" not in details
+        assert "Configuration/Test IO" not in details
     if error:
         assert error in details
         assert error in dialog.detection_status_label.toolTip()
@@ -607,21 +617,35 @@ def test_triggerbox_access_results_keep_unavailable_candidates_selectable(
 
 
 def test_triggerbox_checked_results_do_not_verify_a_manual_edit_during_scan(
-    qtbot, port_detection_jobs,
+    qtbot, port_detection_jobs, monkeypatch,
 ):
+    discovery = Mock(return_value=())
+    monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
     dialog = RecordingSetupDialog(_triggerbox_configuration(brainproducts_serial_port="COM42"))
     qtbot.addWidget(dialog)
     dialog.show()
+    initial_cancel = Event()
+    port_detection_jobs[0].callback(None, initial_cancel)
+    discovery.assert_called_once_with(check_access=False, cancel_event=initial_cancel)
     port_detection_jobs[0].finish(candidates=(TriggerBoxPortCandidate("COM9", "TriggerBox Plus"),))
     dialog.detect_ports_button.click()
     dialog.brainproducts_port_edit.setText("COM77")
     dialog.brainproducts_port_edit.textEdited.emit("COM77")
+    explicit_cancel = Event()
+    port_detection_jobs[1].callback(None, explicit_cancel)
+    assert discovery.call_args.kwargs == {
+        "check_access": True, "cancel_event": explicit_cancel, "selected_port": "COM42",
+    }
     port_detection_jobs[1].finish(candidates=(
         TriggerBoxPortCandidate("COM9", "TriggerBox Plus", accessible=True),
+        TriggerBoxPortCandidate(
+            "COM42", "Manually selected port (device identity not verified)", accessible=True,
+        ),
     ))
 
     assert dialog.brainproducts_port_edit.text() == "COM77"
     assert "Selected port was not checked" in dialog.detection_status_label.text()
+    assert "Click Detect to check it" in dialog.detection_status_label.text()
     assert "Port accessible" not in dialog.detection_status_label.text()
     dialog.brainproducts_port_edit.setText("COM9")
     dialog.brainproducts_port_edit.textEdited.emit("COM9")
@@ -629,6 +653,68 @@ def test_triggerbox_checked_results_do_not_verify_a_manual_edit_during_scan(
     dialog.brainproducts_port_edit.setText("COM88")
     dialog.brainproducts_port_edit.textEdited.emit("COM88")
     assert "Selected port was not checked" in dialog.detection_status_label.text()
+
+
+def test_triggerbox_manual_port_access_denied_can_retry_without_changing_selection(
+    qtbot, port_detection_jobs, monkeypatch,
+):
+    discovery = Mock(return_value=())
+    monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
+    dialog = RecordingSetupDialog(_triggerbox_configuration())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    port_detection_jobs[0].finish()
+    dialog.brainproducts_port_edit.setText(" COM4 ")
+    dialog.brainproducts_port_edit.textEdited.emit(" COM4 ")
+    assert "Click Detect to check the manual COM port" in dialog.detection_status_label.text()
+    dialog.detect_ports_button.click()
+    cancel = Event()
+    port_detection_jobs[1].callback(None, cancel)
+    assert discovery.call_args.kwargs == {
+        "check_access": True, "cancel_event": cancel, "selected_port": "COM4",
+    }
+    description = "Manually selected port (device identity not verified)"
+    error = "could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)"
+    port_detection_jobs[1].finish(candidates=(
+        TriggerBoxPortCandidate("COM4", description, accessible=False, access_error=error),
+    ))
+    assert dialog.detection_status_label.text() == (
+        "COM4: Access denied. Close TriggerBox Configuration/Test IO, then Detect again."
+    )
+    assert description in dialog.detection_status_label.toolTip()
+    assert error in dialog.detection_status_label.accessibleDescription()
+    assert dialog.brainproducts_port_edit.text() == " COM4 "
+    assert dialog.detect_ports_button.isEnabled()
+    assert dialog.apply_button.isEnabled()
+    dialog.detect_ports_button.click()
+    assert "Access denied" not in dialog.detection_status_label.text()
+    assert dialog.detection_status_label.toolTip() == ""
+    port_detection_jobs[2].callback(None, cancel)
+    assert discovery.call_args.kwargs["selected_port"] == "COM4"
+    port_detection_jobs[2].finish(candidates=(
+        TriggerBoxPortCandidate("COM4", description, accessible=True),
+    ))
+    assert dialog.detection_status_label.text() == "COM4: Port accessible when checked."
+    assert "Access denied" not in dialog.detection_status_label.toolTip()
+    assert dialog.brainproducts_port_edit.text() == " COM4 "
+    dialog.apply_button.click()
+    assert dialog.configuration["brainproducts_serial_port"] == "COM4"
+
+
+def test_triggerbox_blank_manual_port_is_not_sent_to_access_check(
+    qtbot, port_detection_jobs, monkeypatch,
+):
+    discovery = Mock(return_value=())
+    monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
+    dialog = RecordingSetupDialog(_triggerbox_configuration(brainproducts_serial_port="COM42"))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    port_detection_jobs[0].finish()
+    dialog.brainproducts_port_edit.setText(" ")
+    dialog.brainproducts_port_edit.textEdited.emit(" ")
+    dialog.detect_ports_button.click()
+    port_detection_jobs[1].callback(None, Event())
+    assert discovery.call_args.kwargs["selected_port"] is None
 
 
 @pytest.mark.parametrize("accept", [False, True])
@@ -774,6 +860,7 @@ def test_triggerbox_empty_and_failed_detection_allow_manual_port_and_retry(
     dialog.show()
     port_detection_jobs[0].finish()
     assert "No TriggerBox" in dialog.detection_status_label.text()
+    assert "Click Detect to check the manual COM port" in dialog.detection_status_label.text()
     assert dialog.brainproducts_port_edit.text() == "COM123"
     assert dialog.detect_ports_button.isEnabled()
     dialog.detect_ports_button.click()
@@ -811,14 +898,15 @@ def test_triggerbox_cancel_cancels_discovery_and_ignores_late_result(
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("state", [
-    "busy", "empty", "multiple", "error", "unique", "checking", "accessible",
-    "unavailable", "multiple_access",
+    "busy", "empty", "manual_empty", "multiple", "error", "unique", "checking", "accessible",
+    "unavailable", "denied", "multiple_access",
 ])
 def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths(
     qtbot, port_detection_jobs, background, state,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration(
         brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=100,
+        brainproducts_serial_port="COM1234567890" if state == "manual_empty" else "COM3",
     ))
     qtbot.addWidget(dialog)
     palette = dialog.palette()
@@ -827,8 +915,11 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     dialog.show()
     description = "Brain Products GmbH TriggerBox rev. 02 VirtualSerial Port (COM1234567890)"
     candidate = TriggerBoxPortCandidate("COM1234567890", description)
-    access_error = "[WinError 5] Unable to open the TriggerBox port; it may be in use. " * 8
-    if state == "empty":
+    access_error = (
+        "[WinError 2] The system cannot find the file specified. " if state == "unavailable"
+        else "could not open port: PermissionError(13, 'Access is denied.', None, 5) "
+    ) * 8
+    if state in ("empty", "manual_empty"):
         port_detection_jobs[0].finish()
     elif state == "multiple":
         port_detection_jobs[0].finish(candidates=(
@@ -840,7 +931,7 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
         assert dialog.detection_status_label.toolTip() == error
     elif state == "unique":
         port_detection_jobs[0].finish(candidates=(candidate,))
-    elif state in ("checking", "accessible", "unavailable", "multiple_access"):
+    elif state in ("checking", "accessible", "unavailable", "denied", "multiple_access"):
         initial_candidates = (candidate,)
         if state == "multiple_access":
             initial_candidates += (TriggerBoxPortCandidate("COM12", "TriggerBox Plus"),)
@@ -848,8 +939,8 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
         dialog.detect_ports_button.click()
         if state != "checking":
             checked_candidates = (TriggerBoxPortCandidate(
-                candidate.port, description, accessible=state != "unavailable",
-                access_error=access_error if state == "unavailable" else "",
+                candidate.port, description, accessible=state not in ("unavailable", "denied"),
+                access_error=access_error if state in ("unavailable", "denied") else "",
             ),)
             if state == "multiple_access":
                 checked_candidates += (TriggerBoxPortCandidate(
@@ -864,13 +955,13 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     assert dialog.pulse_requirement_label.wordWrap()
     assert dialog.detection_status_label.textFormat() == Qt.TextFormat.PlainText
     _assert_labels_fit(dialog)
-    if state in ("multiple", "unique", "accessible", "unavailable", "multiple_access"):
+    if state in ("multiple", "unique", "accessible", "unavailable", "denied", "multiple_access"):
         assert description in dialog.detection_status_label.toolTip()
         assert "can remain listed when unplugged" in dialog.detection_status_label.toolTip()
         assert description in dialog.brainproducts_port_combo.itemData(
             0, Qt.ItemDataRole.ToolTipRole,
         )
-    if state in ("unavailable", "multiple_access"):
+    if state in ("unavailable", "denied", "multiple_access"):
         assert access_error in dialog.detection_status_label.toolTip()
         assert access_error in dialog.detection_status_label.accessibleDescription()
 

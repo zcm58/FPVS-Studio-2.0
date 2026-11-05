@@ -32,6 +32,20 @@ class SerialPortAccessResult:
     access_error: str = ""
 
 
+def is_serial_access_denied(error: BaseException | str) -> bool:
+    """Recognize denied access, without claiming which process owns a port.
+
+    On Windows pyserial embeds repr(PermissionError) inside SerialException text,
+    losing its errno. Match the numeric form too, independent of localized wording.
+    """
+
+    return (
+        isinstance(error, PermissionError)
+        or getattr(error, "winerror", None) == 5
+        or re.search(r"\bPermissionError\(13\s*,|\[WinError 5\]", str(error)) is not None
+    )
+
+
 def enumerate_serial_ports(*, cancel_event: Event | None = None) -> tuple[SerialPortInfo, ...]:
     """List named driver ports without opening them or identifying vendor hardware."""
 

@@ -290,6 +290,56 @@ def test_failed_port_is_closed_and_does_not_hide_other_candidates(monkeypatch):
     assert all(connection.close_attempted for connection in connections)
 
 
+def test_explicit_manual_port_is_checked_when_driver_name_is_generic_and_can_retry(monkeypatch):
+    error = "could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)"
+    open_errors = {"COM4": OSError(error)}
+    module, connections = _fake_serial_module(open_errors=open_errors)
+    _fake_ports(monkeypatch, [
+        SimpleNamespace(device="COM4", description="USB Serial Device (COM4)"),
+        SimpleNamespace(device="COM5", description="Unrelated USB Serial Device"),
+    ], serial_module=module)
+
+    failed, = discovery.discover_triggerbox_ports(check_access=True, selected_port=" com4 ")
+    assert failed.port == "COM4"
+    assert failed.accessible is False
+    assert failed.access_error == error
+    assert "identity not verified" in failed.description
+    assert [connection.port for connection in connections] == ["COM4"]
+    assert connections[0].close_attempted
+
+    open_errors.clear()  # The other program releases COM4 before the operator retries.
+    ready, = discovery.discover_triggerbox_ports(check_access=True, selected_port="COM4")
+    assert ready.accessible is True and not ready.access_error
+    assert [connection.port for connection in connections] == ["COM4", "COM4"]
+    assert all(connection.close_attempted for connection in connections)
+
+
+def test_explicit_manual_named_candidate_is_checked_once(monkeypatch):
+    module, connections = _fake_serial_module()
+    _fake_ports(monkeypatch, [SimpleNamespace(device="COM4", description="TriggerBox Plus")],
+                serial_module=module)
+
+    candidate, = discovery.discover_triggerbox_ports(check_access=True, selected_port="com4")
+
+    assert candidate.description == "TriggerBox Plus"
+    assert len(connections) == 1
+
+
+def test_automatic_discovery_does_not_probe_or_identify_manual_port(monkeypatch):
+    calls = _fake_ports(monkeypatch, [])
+
+    assert discovery.discover_triggerbox_ports(selected_port="COM4") == ()
+    assert calls == ["serial.tools.list_ports", "comports"]
+
+
+@pytest.mark.parametrize("port", ["", " ", "COM0", "COM4 invalid", "/dev/ttyUSB0"])
+def test_invalid_manual_com_port_is_not_opened(monkeypatch, port):
+    _fake_ports(monkeypatch, [])
+
+    with pytest.raises(ValueError, match="COM port"):
+        discovery.discover_triggerbox_ports(check_access=True, selected_port=port)
+
+
 @pytest.mark.parametrize("open_error", [None, OSError("Open denied")])
 def test_close_failure_is_reported_instead_of_claiming_access(monkeypatch, open_error):
     module, connections = _fake_serial_module(

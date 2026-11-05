@@ -413,6 +413,12 @@ control BrainVision Recorder. Install the vendor driver, select the actual COM
 port, close Configuration/Test IO or other programs owning that port, and start
 recording in Recorder. On Plus, set lower-eight-bit switches to PC. Configure all
 eight Recorder bits as high-active Stimulus inputs so codes remain 1–255.
+Windows serial ports are exclusive: the TriggerBox utility and Studio cannot own
+the same COM port simultaneously. `PermissionError(13, ..., 5)` / Windows error 5
+means access was denied, commonly because another program has the port open. Runtime
+keeps launch blocked and explains closing Configuration/Test IO, checking access with
+Detect, and retrying. It preserves the original error without asserting which process
+holds the port. Selecting COM4 manually cannot release another program's handle.
 Disable Recorder's Debouncing for Studio-generated markers unless its effect has
 been deliberately validated: it can discard real closely spaced markers, as the
 vendor [trigger guide, page 6](https://www.brainproducts.com/download/communication-with-the-trigger-port-a-beginners-guide/)
@@ -426,8 +432,10 @@ driver-name spellings are recognized. One candidate fills the default port; an e
 custom port or a manual edit is retained. Multiple candidates require selection or
 manual entry. No match or enumeration failure leaves manual entry available.
 
-Pressing Detect also checks access to recognized candidates at 2,000,000 baud / 8N1
-without flow control. It opens and closes each candidate without issuing probe reads,
+Pressing Detect also checks access to recognized candidates and the explicit manual/custom
+COM selection at 2,000,000 baud / 8N1 without flow control. Generic or missing metadata
+does not exclude that explicit selection; it is labelled as identity not verified.
+Other generic ports are not checked. It opens and closes each candidate without issuing probe reads,
 marker writes or explicit reset/flush calls. Constructed ports are closed on
 errors/cancellation, and cancellation stops between metadata records and access candidates.
 Failed candidates remain visible with their access errors; success establishes port

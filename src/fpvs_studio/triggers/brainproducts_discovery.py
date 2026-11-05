@@ -25,7 +25,7 @@ class TriggerBoxDiscoveryError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class TriggerBoxPortCandidate:
-    """A metadata match with optional access results, never marker-receipt proof."""
+    """A named or manually selected port with access results, never marker proof."""
 
     port: str
     description: str
@@ -34,15 +34,21 @@ class TriggerBoxPortCandidate:
 
 
 def discover_triggerbox_ports(
-    *, check_access: bool = False, cancel_event: Event | None = None,
+    *, check_access: bool = False, selected_port: str | None = None,
+    cancel_event: Event | None = None,
 ) -> tuple[TriggerBoxPortCandidate, ...]:
-    """Find named TriggerBox ports, optionally opening/closing recognized candidates.
+    """Find named TriggerBox ports and optionally check access and a manual selection.
 
     Driver metadata identifies candidates only. In particular, a rev.02 port can
     remain listed after disconnection. Unrecognized devices remain manual choices.
-    Default discovery reads metadata only. Explicit access checks never send bytes.
+    Default discovery reads metadata only. Explicit access checks also include a
+    manually selected COM port, without asserting identity, and never send bytes.
     """
     _check_cancelled(cancel_event)
+    if check_access and selected_port is not None:
+        selected_port = selected_port.strip().upper()
+        if _COM_PORT.fullmatch(selected_port) is None:
+            raise ValueError("Enter a valid COM port, such as COM4, before checking access.")
     try:
         list_ports = importlib.import_module("serial.tools.list_ports")
     except ImportError as exc:
@@ -76,6 +82,10 @@ def discover_triggerbox_ports(
             continue
         port = device.upper()
         candidates.setdefault(port, TriggerBoxPortCandidate(port, matched_name))
+    if check_access and selected_port is not None:
+        candidates.setdefault(selected_port, TriggerBoxPortCandidate(
+            selected_port, "Manually selected port (device identity not verified)",
+        ))
     ordered = tuple(
         candidates[port] for port in sorted(candidates, key=lambda port: int(port[3:]))
     )
