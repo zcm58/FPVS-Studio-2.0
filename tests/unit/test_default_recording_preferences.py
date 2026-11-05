@@ -1,4 +1,4 @@
-"""Execute default-hardware preference flows without importing or constructing Qt."""
+"""Execute hardware preferences and session test mode without constructing Qt."""
 
 from __future__ import annotations
 
@@ -64,6 +64,7 @@ def _bind_controller(controller, **namespace):
     names = {
         "load_default_recording_configuration", "save_default_recording_configuration",
         "ensure_default_recording_configured", "ensure_fpvs_root_configured",
+        "experiment_test_mode_enabled", "set_experiment_test_mode_enabled",
     }
     methods = [node for node in owner.body if isinstance(node, ast.FunctionDef)
                and node.name in names]
@@ -75,6 +76,7 @@ def _bind_controller(controller, **namespace):
         *methods,
     ], type_ignores=[])
     namespace.setdefault("sys", platform_sys("win32"))
+    namespace.setdefault("experiment_test_mode_available", lambda: True)
     namespace.update({
         "_DEFAULT_RECORDING_CONFIGURATION_KEY": _KEY,
         "ProjectRecordingSettings": ProjectRecordingSettings,
@@ -90,6 +92,7 @@ def _bind_controller(controller, **namespace):
 def _controller(settings=None, *, dialog_factory=None, main_window=True, **namespace):
     controller = SimpleNamespace(
         _settings=settings if settings is not None else _Settings(),
+        _experiment_test_mode_enabled=False,
         _app=SimpleNamespace(quit=Mock()),
         main_window=SimpleNamespace(document=Mock()) if main_window else None,
         welcome_window=object(),
@@ -112,6 +115,54 @@ def _dialog(backend="serial", *, accepted=True):
         DialogCode=SimpleNamespace(Accepted=1),
         exec=Mock(return_value=int(accepted)),
     )
+
+
+@pytest.mark.parametrize("key", [
+    "launch/experiment_test_mode", "launch/linux_development_test_mode",
+])
+def test_saved_test_mode_cannot_enable_current_session(key):
+    settings = _Settings({key: True})
+    controller = _controller(settings)
+
+    assert controller.experiment_test_mode_enabled() is False
+    assert settings.mutations == []
+
+
+def test_test_mode_changes_live_document_without_persisting_or_enabling_next_session():
+    settings = _Settings()
+    controller = _controller(settings)
+    document = controller.main_window.document
+
+    controller.set_experiment_test_mode_enabled(True)
+
+    assert controller.experiment_test_mode_enabled() is True
+    document.set_experiment_test_mode_enabled.assert_called_once_with(True)
+    assert settings.values == {}
+    assert settings.mutations == []
+    assert settings.sync_calls == 0
+    assert _controller(settings).experiment_test_mode_enabled() is False
+
+    document.set_experiment_test_mode_enabled.reset_mock()
+    controller.set_experiment_test_mode_enabled(False)
+
+    assert controller.experiment_test_mode_enabled() is False
+    document.set_experiment_test_mode_enabled.assert_called_once_with(False)
+    assert settings.mutations == []
+
+
+def test_unavailable_test_mode_is_disabled_and_cannot_be_enabled():
+    available = Mock(return_value=True)
+    controller = _controller(experiment_test_mode_available=available)
+    controller.set_experiment_test_mode_enabled(True)
+    available.return_value = False
+    controller.main_window.document.set_experiment_test_mode_enabled.reset_mock()
+
+    assert controller.experiment_test_mode_enabled() is False
+    with pytest.raises(ValueError, match="requires a supported source installation"):
+        controller.set_experiment_test_mode_enabled(True)
+
+    controller.main_window.document.set_experiment_test_mode_enabled.assert_not_called()
+    assert controller._settings.mutations == []
 
 
 def test_unset_default_does_not_reuse_obsolete_global_preferences():

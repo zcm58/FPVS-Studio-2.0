@@ -1538,6 +1538,7 @@ def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
     checkbox = dialog.findChild(QCheckBox, "experiment_test_mode_checkbox")
     assert checkbox is not None
     assert checkbox.text() == "Enable experiment test mode"
+    assert "Starts off each time FPVS Studio opens" in checkbox.toolTip()
     assert "logged null-trigger output" in checkbox.toolTip()
     refresh_policy = (
         "verifies the local display" if controller_module.sys.platform == "darwin"
@@ -1672,7 +1673,7 @@ def test_file_settings_action_persists_sophia_ticker_toggle_to_current_document(
 
 @pytest.mark.parametrize("platform", ["win32", "linux"])
 @pytest.mark.parametrize("frozen", [False, True])
-def test_file_settings_action_persists_experiment_test_mode(
+def test_file_settings_action_enables_test_mode_only_for_current_app_session(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1705,41 +1706,61 @@ def test_file_settings_action_persists_experiment_test_mode(
     assert window.document.experiment_test_mode_enabled is True
     assert window.document.require_biosemi_recording_confirmation is False
 
-    assert controller._settings.value(
-        controller_module._EXPERIMENT_TEST_MODE_KEY, False, type=bool
-    ) is True
+    assert not controller._settings.contains(controller_module._EXPERIMENT_TEST_MODE_KEY)
+
+    def _reopened_settings_exec(dialog: AppSettingsDialog) -> int:
+        checkbox = dialog.findChild(QCheckBox, "experiment_test_mode_checkbox")
+        assert checkbox is not None and checkbox.isChecked()
+        return int(dialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", _reopened_settings_exec)
+    window.settings_action.trigger()
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Another Test Mode Project")
+    assert window.document.experiment_test_mode_enabled is True
+    restarted = StudioController(controller._app)
+    try:
+        assert restarted.experiment_test_mode_enabled() is False
+    finally:
+        restarted.deleteLater()
     controller.set_experiment_test_mode_enabled(False)
     assert controller.experiment_test_mode_enabled() is False
     assert window.document.experiment_test_mode_enabled is False
     assert window.document.require_biosemi_recording_confirmation is True
 
 
-def test_experiment_test_mode_migrates_legacy_preference_and_is_ignored_when_unavailable(
+@pytest.mark.parametrize("saved_key", [
+    controller_module._EXPERIMENT_TEST_MODE_KEY,
+    controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY,
+])
+def test_experiment_test_mode_starts_off_with_current_or_legacy_saved_preference(
+    controller: StudioController, monkeypatch, saved_key,
+) -> None:
+    controller._settings.setValue(saved_key, True)
+    controller._settings.sync()
+    monkeypatch.setattr(controller_module, "experiment_test_mode_available", lambda: True)
+    restarted = StudioController(controller._app)
+    try:
+        assert restarted.experiment_test_mode_enabled() is False
+        assert not restarted._settings.contains(controller_module._EXPERIMENT_TEST_MODE_KEY)
+        assert not restarted._settings.contains(
+            controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY,
+        )
+    finally:
+        restarted.deleteLater()
+
+
+def test_experiment_test_mode_is_ignored_when_unavailable(
     controller: StudioController,
     monkeypatch,
 ) -> None:
-    controller._settings.setValue(
-        controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY,
-        True,
-    )
-    controller._settings.remove(controller_module._EXPERIMENT_TEST_MODE_KEY)
-    controller._settings.sync()
     monkeypatch.setattr(
         controller_module,
         "experiment_test_mode_available",
         lambda: True,
     )
 
+    controller.set_experiment_test_mode_enabled(True)
     assert controller.experiment_test_mode_enabled() is True
-
-    controller.set_experiment_test_mode_enabled(False)
-    assert controller.experiment_test_mode_enabled() is False
-    assert not controller._settings.contains(
-        controller_module._LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY
-    )
-
-    controller._settings.setValue(controller_module._EXPERIMENT_TEST_MODE_KEY, True)
-    controller._settings.sync()
     monkeypatch.setattr(
         controller_module,
         "experiment_test_mode_available",

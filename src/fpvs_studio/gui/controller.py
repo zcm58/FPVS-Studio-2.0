@@ -214,6 +214,10 @@ class StudioController(QObject):
             _SETTINGS_ORGANIZATION,
             _SETTINGS_APPLICATION,
         )
+        self._experiment_test_mode_enabled = False
+        self._settings.remove(_EXPERIMENT_TEST_MODE_KEY)
+        self._settings.remove(_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
+        self._settings.sync()
         self._apply_theme_mode(self.load_theme_mode())
         self._developer_mode = DeveloperMode(self._settings)
         self._fpvs_root_dir: Path | None = None
@@ -665,37 +669,19 @@ class StudioController(QObject):
             self.main_window.document.set_show_sophia_mode_ticker(enabled)
 
     def experiment_test_mode_enabled(self) -> bool:
-        """Return the explicit no-hardware launch preference for local testing."""
+        """Return the explicit local-testing choice for this app session only."""
 
-        if not experiment_test_mode_available():
-            return False
-        if self._settings.contains(_EXPERIMENT_TEST_MODE_KEY):
-            return bool(
-                self._settings.value(
-                    _EXPERIMENT_TEST_MODE_KEY,
-                    False,
-                    type=bool,
-                )
-            )
-        return bool(
-            self._settings.value(
-                _LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY,
-                False,
-                type=bool,
-            )
-        )
+        return experiment_test_mode_available() and self._experiment_test_mode_enabled
 
     def set_experiment_test_mode_enabled(self, enabled: bool) -> None:
-        """Persist the cross-platform local test launch preference."""
+        """Enable local testing for this app session and update the open document."""
 
         enabled = bool(enabled)
         if enabled and not experiment_test_mode_available():
             raise ValueError(
                 "Experiment test mode requires a supported source installation."
             )
-        self._settings.setValue(_EXPERIMENT_TEST_MODE_KEY, enabled)
-        self._settings.remove(_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
-        self._settings.sync()
+        self._experiment_test_mode_enabled = enabled
         if self.main_window is not None:
             self.main_window.document.set_experiment_test_mode_enabled(enabled)
 

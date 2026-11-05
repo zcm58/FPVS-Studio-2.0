@@ -12,6 +12,7 @@ Windows/Linux use the presentation worker; macOS source uses a child process's m
 thread for Cocoa playback and refresh probes. Test/Pilot explicitly selects null
 triggers; normal Windows/Linux launches retain hardware and display preflight.
 Mac tests retain refresh verification and transient calibration; EEG is excluded.
+Test Mode defaults off at startup.
 
 Guided Setup keeps Timing (step 3) separate from a two-column Display & Session
 step (step 4). GUI retains timing drafts across that transition; core still owns

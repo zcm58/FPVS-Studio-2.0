@@ -290,6 +290,7 @@ class AppSettingsDialog(QDialog):
                 else "bypasses connected-display refresh verification"
             )
             self.experiment_test_mode_checkbox.setToolTip(
+                "For this app session only. Starts off each time FPVS Studio opens. "
                 "Uses logged null-trigger output, skips the recording reminder, "
                 f"{refresh_policy}, and replaces participant "
                 "collection with an explicit test-launch acknowledgement. Fullscreen "

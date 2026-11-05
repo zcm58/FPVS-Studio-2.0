@@ -1330,6 +1330,11 @@ continuing. `Show recording reminder ticker on Home` controls the
 installed builds on Windows
 and Linux, Settings also exposes Experiment Test Mode with a detailed tooltip that
 names every skipped hardware/participant check and every timing behavior that remains.
+Experiment Test Mode starts off each time FPVS Studio opens, including after an older
+version saved it as enabled. Enabling it applies only to the current app session;
+reopening Settings or switching projects preserves that session's choice. Restarting
+Studio requires enabling it again. The controller clears the obsolete saved keys at
+startup and keeps the current choice in memory.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. `Check for Updates` delegates to the
