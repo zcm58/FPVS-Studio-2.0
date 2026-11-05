@@ -107,7 +107,7 @@ def test_pycharm_does_not_follow_ide_directory_outside_checkout(tmp_path):
 
 def test_requirement_entrypoints_keep_versions_in_shared_metadata():
     for filename, expected in (
-        ("requirements.txt", "-e .[dev]"),
+        ("requirements.txt", "-e .[dev,engine]"),
         ("requirements-macos.txt", "-e .[dev,engine]"),
     ):
         lines = [line.strip() for line in (ROOT / filename).read_text().splitlines()

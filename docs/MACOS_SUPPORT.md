@@ -62,7 +62,7 @@ does not change system Python or shell startup files. An existing environment wi
 the wrong Python version/CPU or an incomplete interpreter is reported and preserved.
 
 `pyproject.toml` remains the only dependency version list. `requirements-macos.txt`
-includes its `dev,engine` extras; the primary Windows `requirements.txt` keeps `dev`.
+and the primary Windows `requirements.txt` both include its `dev,engine` extras.
 Setup installs with pip, runs `pip check`, checks GUI imports without opening an app,
 and verifies engine metadata. Successful installation does not guarantee every GUI,
 presentation or service workflow is bug-free; those acceptance gates remain above.

@@ -23,8 +23,8 @@ installs it under `.fpvs-macos/`; system Python and shell profiles are not modif
 for required Apple/admin prompts, the CI matrix, test-only scope, local calibration and
 portable Windows handoff. No Developer ID is needed for source.
 
-`pyproject.toml` owns dependency versions. `requirements.txt` keeps the primary
-developer entry point; `requirements-macos.txt` selects `dev,engine` without copying
+`pyproject.toml` owns dependency versions. `requirements.txt` and
+`requirements-macos.txt` both select `dev,engine`, including PsychoPy, without copying
 versions. The optional `Open in PyCharm Mac.command` registers/reuses one SDK in the
 selected IDE's standard Mac profile while PyCharm is closed, binds this project and
 prepares its run configuration. Changed XML is backed up under `.fpvs-macos/`; other
@@ -36,14 +36,13 @@ PowerShell:
 ```powershell
 py -3.10 -m venv .venv3.10
 .\.venv3.10\Scripts\python -m pip install -U 'pip>=26.2'
-.\.venv3.10\Scripts\python -m pip install -e '.[dev]'
+.\.venv3.10\Scripts\python -m pip install -r requirements.txt
 ```
 
-Install the optional PsychoPy engine extra when you want to exercise the launch
-path:
+For development that does not run experiments, install only the dev extra:
 
 ```powershell
-.\.venv3.10\Scripts\python -m pip install -e '.[dev,engine]'
+.\.venv3.10\Scripts\python -m pip install -e '.[dev]'
 ```
 
 Install the packaging extra when you want to build the Windows executable:
@@ -59,8 +58,8 @@ Notes:
 - repo wrapper scripts resolve the local Python from `.venv3.10` first and `.venv`
   second, so agents can use the scripts even when a checkout was prepared with the
   shorter environment name
-- PsychoPy remains optional at install time and is still confined to
-  `src/fpvs_studio/engines/`
+- PsychoPy is included by both requirements files; it remains optional for direct
+  installs without the engine extra and is confined to `src/fpvs_studio/engines/`
 - the dev extra includes `pytest`, `pytest-qt`, and `pytest-timeout` for GUI
   verification, and `pytest-xdist` for parallel non-Qt checks
 - the packaging extra includes PyInstaller for local executable builds
