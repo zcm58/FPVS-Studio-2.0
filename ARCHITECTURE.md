@@ -31,7 +31,7 @@ Core owns randomized block membership and occurrence identity; see the
 | `src/fpvs_studio/core/` | Editable models, validation, compilation, portable contracts and project services |
 | `src/fpvs_studio/data_sharing/` | Consent, protected credentials, durable outbox, delivery and comparisons |
 | `src/fpvs_studio/developer/` | Gated maintainer publishing and catalog services |
-| `src/fpvs_studio/engines/` | Presentation interface, PsychoPy rendering and graphics lifetime |
+| `src/fpvs_studio/engines/` | PsychoPy presentation, response pointers and graphics lifetime |
 | `src/fpvs_studio/gui/` | PySide6 views, document/controller bindings, components and worker lifecycle |
 | `src/fpvs_studio/library/` | Catalog, enrollment, verified downloads, submissions and update discovery |
 | `src/fpvs_studio/preprocessing/` | Image inspection/intake, normalization, derived assets and manifests |

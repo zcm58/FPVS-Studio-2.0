@@ -70,6 +70,7 @@ from fpvs_studio.engines.psychopy_stimuli import (
     prepare_condition_resources,
     should_draw_stimulus,
 )
+from fpvs_studio.engines.psychopy_task_cursor import create_task_cursor
 from fpvs_studio.engines.psychopy_tasks import render_task_step
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import (
@@ -82,6 +83,7 @@ from fpvs_studio.engines.psychopy_triggers import build_trigger_lookup, emit_tri
 from fpvs_studio.engines.psychopy_window import (
     build_refresh_probe_window_kwargs,
     build_window_kwargs,
+    close_presentation_window,
     create_fixation_stim,
     validate_macos_framebuffer,
 )
@@ -181,7 +183,7 @@ class PsychoPyEngine(PresentationEngine):
                 if graphics_lifetime is not None:
                     graphics_lifetime.retire()
                 try:
-                    probe_window.close()
+                    close_presentation_window(probe_window)
                 finally:
                     if restore_presentation is not None:
                         restore_presentation()
@@ -922,6 +924,11 @@ class PsychoPyEngine(PresentationEngine):
                 step=step,
                 is_aborted=lambda: self._aborted,
                 set_aborted=self.abort,
+                cursor_factory=(
+                    create_task_cursor
+                    if sys.platform == "win32" and getattr(window, "winType", None) == "pyglet"
+                    else None
+                ),
             )
         except BaseException as error:
             release_failed_graphics_frames(error)
@@ -992,7 +999,7 @@ class PsychoPyEngine(PresentationEngine):
                 graphics_lifetime.retire()
             try:
                 if window is not None:
-                    window.close()
+                    close_presentation_window(window)
             finally:
                 if restore_presentation is not None:
                     restore_presentation()

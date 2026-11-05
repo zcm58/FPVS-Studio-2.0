@@ -13,6 +13,25 @@ from fpvs_studio.core.run_spec import RunSpec
 LOGGER = logging.getLogger(__name__)
 
 
+def close_presentation_window(window: Any) -> None:
+    """Restore the pointer while the native handle still exists, then close it."""
+
+    cursor_error: Exception | None = None
+    try:
+        # PsychoPy restores visibility after backend.close(), which can fail
+        # first (for example while restoring gamma). Do not leave its hidden
+        # fullscreen pointer state behind when that teardown is interrupted.
+        window.mouseVisible = True
+    except Exception as error:
+        cursor_error = error
+        LOGGER.exception("Presentation pointer restoration failed before window close.")
+    # A cursor error must never prevent native window cleanup. If both fail,
+    # retain the close error; the cursor error is recorded above.
+    window.close()
+    if cursor_error is not None:
+        raise cursor_error
+
+
 def _detect_fullscreen_size_px(display_index: int) -> tuple[int, int] | None:
     """Return the selected Pyglet screen size without making it a launch gate."""
 

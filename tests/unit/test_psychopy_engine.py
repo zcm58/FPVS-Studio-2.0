@@ -34,6 +34,7 @@ from fpvs_studio.engines import psychopy_engine as psychopy_engine_module
 from fpvs_studio.engines import psychopy_macos_display as psychopy_macos_display_module
 from fpvs_studio.engines import psychopy_stimuli as psychopy_stimuli_module
 from fpvs_studio.engines import psychopy_window as psychopy_window_module
+from fpvs_studio.engines.base import ResolvedTaskStep, TaskEngineInput
 from fpvs_studio.engines.graphics_readiness import (
     BudgetObservationStatus,
     GraphicsReadinessStatus,
@@ -125,6 +126,34 @@ class _FakeWindow:
     def getActualFrameRate(self, **kwargs) -> float | None:  # noqa: N802
         self.actual_frame_rate_kwargs = kwargs
         return self.actual_frame_rate
+
+
+class _CursorCloseWindow(_FakeWindow):
+    """Simulate a native close that can fail before restoring its hidden pointer."""
+
+    def __init__(self, *, cursor_error=None, close_error=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._mouse_visible = False
+        self.cursor_error = cursor_error
+        self.close_error = close_error
+        self.close_events: list[tuple[str, bool]] = []
+
+    @property
+    def mouseVisible(self) -> bool:  # noqa: N802
+        return self._mouse_visible
+
+    @mouseVisible.setter
+    def mouseVisible(self, visible: bool) -> None:  # noqa: N802
+        self.close_events.append(("cursor", visible))
+        if self.cursor_error is not None:
+            raise self.cursor_error
+        self._mouse_visible = visible
+
+    def close(self) -> None:
+        self.close_events.append(("close", self._mouse_visible))
+        if self.close_error is not None:
+            raise self.close_error
+        super().close()
 
 
 class _FakeClock:
@@ -474,6 +503,108 @@ def test_measure_refresh_hz_rejects_unstable_measurement_and_closes_window(monke
     window = captures["window"]
     assert isinstance(window, _FakeWindow)
     assert window.closed is True
+
+
+@pytest.mark.parametrize("endpoint", ["session", "refresh_probe"])
+@pytest.mark.parametrize("failure", [None, "cursor", "close", "both"])
+def test_presentation_exit_restores_cursor_before_native_close(
+    monkeypatch, caplog, endpoint, failure,
+) -> None:
+    cursor_error = (
+        OSError("native cursor restoration failed") if failure in {"cursor", "both"} else None
+    )
+    close_error = RuntimeError("native close failed") if failure in {"close", "both"} else None
+    window = _CursorCloseWindow(cursor_error=cursor_error, close_error=close_error)
+    captures: dict[str, object] = {"window": window}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    fake_psychopy.visual.Window = lambda **kwargs: window
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    def exit_presentation():
+        if endpoint == "refresh_probe":
+            return engine.measure_refresh_hz()
+        # No response screen has run: fullscreen setup alone can hide the pointer.
+        engine.open_session(runtime_options={"fullscreen": True})
+        engine.close_session()
+        return None
+
+    expected_error = close_error or cursor_error
+    if expected_error is None:
+        result = exit_presentation()
+        assert result == (60.0 if endpoint == "refresh_probe" else None)
+    else:
+        with pytest.raises(type(expected_error)) as caught:
+            exit_presentation()
+        assert caught.value is expected_error
+
+    assert window.close_events == [("cursor", True), ("close", cursor_error is None)]
+    assert window.mouseVisible is (cursor_error is None)
+    assert window.closed is (close_error is None)
+    assert engine._window is None
+    if cursor_error is not None:
+        assert any(
+            record.exc_info and record.exc_info[1] is cursor_error for record in caplog.records
+        )
+
+
+def test_failed_refresh_measurement_restores_cursor_before_native_close(monkeypatch) -> None:
+    window = _CursorCloseWindow(actual_frame_rate=None)
+    captures: dict[str, object] = {"window": window}
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    fake_psychopy.visual.Window = lambda **kwargs: window
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with pytest.raises(RuntimeError, match="could not obtain a stable"):
+        engine.measure_refresh_hz()
+
+    assert window.close_events == [("cursor", True), ("close", True)]
+    assert window.mouseVisible
+    assert window.closed
+
+
+@pytest.mark.parametrize(
+    ("platform_name", "window_type", "software_cursor"),
+    [("win32", "pyglet", True), ("win32", "glfw", False), ("darwin", "pyglet", False)],
+)
+def test_engine_selects_software_cursor_for_windows_pyglet_response_screens(
+    monkeypatch, tmp_path, platform_name, window_type, software_cursor,
+) -> None:
+    captures: dict[str, object] = {}
+    engine = PsychoPyEngine()
+    fake_psychopy = _build_fake_psychopy(captures, flip_times=[])
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy, platform_name=platform_name)
+    engine.open_session(runtime_options={"fullscreen": False})
+    window = captures["window"]
+    window.winType = window_type
+    engine._event = SimpleNamespace()
+    renderer_calls = []
+    expected_result = TaskEngineInput(selected_item_ids=("target",))
+
+    def capture_renderer(**kwargs):
+        renderer_calls.append(kwargs)
+        return expected_result
+
+    def cursor_factory(window):
+        raise AssertionError("The fake renderer must not import or create native cursor resources.")
+
+    monkeypatch.setattr(psychopy_engine_module, "render_task_step", capture_renderer)
+    monkeypatch.setattr(psychopy_engine_module, "create_task_cursor", cursor_factory)
+    try:
+        result = engine.render_task_step(
+            ResolvedTaskStep(
+                task_id="recognition", step_id="select", kind="choice_grid",
+                response_kind="single_choice",
+            ),
+            tmp_path,
+        )
+    finally:
+        engine.close_session()
+
+    assert result is expected_result
+    assert len(renderer_calls) == 1
+    assert renderer_calls[0]["cursor_factory"] is (cursor_factory if software_cursor else None)
 
 
 def _tiny_run_spec(sample_project, sample_project_root):

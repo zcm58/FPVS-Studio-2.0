@@ -25,6 +25,7 @@ from fpvs_studio.engines.psychopy_stimuli import (
     ConditionResourcePreparationError,
     release_stimuli,
 )
+from fpvs_studio.engines.psychopy_task_cursor import TaskCursor
 
 _TEXT_RESPONSE_KINDS = frozenset({"short_text", "long_text", "numeric"})
 _CHOICE_RESPONSE_KINDS = frozenset({"single_choice", "multiple_choice", "rating"})
@@ -123,6 +124,7 @@ def render_task_step(
     step: ResolvedTaskStep,
     is_aborted: Any,
     set_aborted: Any,
+    cursor_factory: Callable[[Any], TaskCursor] | None = None,
 ) -> TaskEngineInput:
     """Render one modular task step and collect a neutral response."""
 
@@ -141,6 +143,7 @@ def render_task_step(
             visual=visual, core=core, event=event, window=window, keyboard=keyboard,
             step=step, item_stimuli=item_stimuli, screen_stimuli=screen_stimuli,
             is_aborted=is_aborted, set_aborted=set_aborted,
+            cursor_factory=cursor_factory,
         )
     except BaseException:
         failed = True
@@ -166,6 +169,7 @@ def _render_prepared_task_step(
     screen_stimuli: _TaskScreenStimuli,
     is_aborted: Any,
     set_aborted: Any,
+    cursor_factory: Callable[[Any], TaskCursor] | None = None,
 ) -> TaskEngineInput:
     """Run one screen while its caller owns prepared items on every exit path."""
 
@@ -185,6 +189,7 @@ def _render_prepared_task_step(
     previous_mouse_visible = None
     previous_background = None
     mouse_presses = None
+    task_cursor = None
     mouse = None
     previous_buttons: tuple[int, ...] = (0, 0, 0)
     failed = False
@@ -192,6 +197,8 @@ def _render_prepared_task_step(
         previous_mouse_visible = getattr(window, "mouseVisible", None)
         mouse_response_kinds = _CHOICE_RESPONSE_KINDS | _EDITABLE_TEXT_RESPONSE_KINDS
         if step.response_kind in mouse_response_kinds:
+            if cursor_factory is not None:
+                task_cursor = cursor_factory(window)
             window.mouseVisible = True
             if getattr(window, "winType", None) == "pyglet":
                 mouse_presses = _TaskMousePresses(window)
@@ -440,7 +447,7 @@ def _render_prepared_task_step(
         _restore_task_input_state(
             window=window, keyboard=keyboard, step=step, text_box=text_box,
             previous_background=previous_background, previous_mouse_visible=previous_mouse_visible,
-            mouse_presses=mouse_presses, failed=failed,
+            mouse_presses=mouse_presses, task_cursor=task_cursor, failed=failed,
         )
 
 
@@ -448,6 +455,7 @@ def _restore_task_input_state(
     *, window: Any, keyboard: Any, step: ResolvedTaskStep, text_box: Any | None,
     previous_background: tuple[Any, Any] | None, previous_mouse_visible: Any, failed: bool,
     mouse_presses: _TaskMousePresses | None = None,
+    task_cursor: TaskCursor | None = None,
 ) -> None:
     """Attempt every restoration without replacing a setup or rendering exception."""
 
@@ -470,6 +478,8 @@ def _restore_task_input_state(
             ("text editing", lambda: setattr(text_box, "editable", False)
              if hasattr(text_box, "editable") else None),
         ])
+    if task_cursor is not None:
+        operations.append(("software cursor", task_cursor.close))
     if previous_mouse_visible is not None:
         operations.append(("mouse visibility", lambda: setattr(
             window, "mouseVisible", previous_mouse_visible,

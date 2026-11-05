@@ -390,6 +390,165 @@ def test_four_recognition_repeats_each_enable_cursor_and_accept_a_short_click(tm
     assert screen.cursor_changes == [True, False] * 4
 
 
+@pytest.mark.parametrize("modality", ["image", "text"])
+@pytest.mark.parametrize("initially_visible", [False, True])
+def test_recognition_feedback_cycles_restore_cursor_for_each_response(
+    tmp_path, modality, initially_visible,
+):
+    screen = _CursorScreen(initially_visible=initially_visible)
+    items = tuple(
+        ResolvedTaskItem(
+            f"{role}-{index}",
+            text=f"{role.title()} {index}" if modality == "text" else None,
+            image_path=(
+                f"stimuli/task-assets/recognition/{role}-{index}.png"
+                if modality == "image" else None
+            ),
+            position_px=((index - 1.5) * 200, -120 if role == "target" else 120),
+            size_px=(100, 100), selectable=role == "target",
+        )
+        for role in ("target", "foil")
+        for index in range(4)
+    )
+    recognition = replace(_recognition_step(), items=items)
+    feedback = ResolvedTaskStep(
+        task_id=recognition.task_id, step_id="recognition-feedback",
+        kind="timed_feedback", response_kind="none", duration_s=1.0,
+        body="Response recorded", show_footer=False,
+    )
+
+    for repeat_index, item in enumerate(items[:4]):
+        response_start = len(screen.visible_frames)
+        screen.actions = [None, ("click", item.position_px, 1)]
+        result = screen.render(
+            tmp_path, step=replace(recognition, repeat_index=repeat_index),
+        )
+        assert result.selected_item_ids == (item.item_id,)
+        assert not result.aborted
+        assert screen.visible_frames[response_start:] == [True, True]
+        assert screen.native_cursor_visible is initially_visible
+        assert screen.winHandle.handlers == []
+        assert screen.callbacks == []
+
+        feedback_start = len(screen.visible_frames)
+        # A click during feedback must not survive as a response to the next grid.
+        screen.actions = [("click", item.position_px, 1)] + [None] * 10
+        feedback_result = screen.render(tmp_path, step=feedback)
+        assert not feedback_result.aborted
+        assert feedback_result.selected_item_ids == ()
+        assert feedback_result.reaction_time_s == pytest.approx(1.0)
+        assert screen.visible_frames[feedback_start:] == [initially_visible] * 11
+        assert screen.native_cursor_visible is initially_visible
+        assert len(screen.winHandle.added) == len(screen.winHandle.removed) == repeat_index + 1
+        assert screen.winHandle.handlers == []
+        assert screen.callbacks == []
+
+    assert screen.visible_frames == ([True, True] + [initially_visible] * 11) * 4
+    assert screen.cursor_changes == [True, initially_visible, initially_visible] * 4
+
+
+@pytest.mark.parametrize("initially_visible", [False, True])
+@pytest.mark.parametrize("exit_kind", ["submit", "escape", "display_error", "input_error"])
+def test_software_cursor_lifetime_covers_response_and_failed_input_setup(
+    tmp_path, initially_visible, exit_kind,
+):
+    screen = _CursorScreen(initially_visible=initially_visible)
+    original_cursor, software_cursor = object(), object()
+    screen.winHandle._mouse_cursor = original_cursor
+    software_frames = []
+    cursor_events = []
+    native_flip = screen.flip
+
+    def flip():
+        software_frames.append(screen.winHandle._mouse_cursor is software_cursor)
+        native_flip()
+
+    def create_cursor(window):
+        assert window is screen
+        cursor_events.append("install")
+        screen.winHandle._mouse_cursor = software_cursor
+
+        def close():
+            cursor_events.append("restore")
+            screen.winHandle._mouse_cursor = original_cursor
+
+        return SimpleNamespace(close=close)
+
+    screen.flip = flip
+    screen.actions = [None, ("click", (-200, -120), 1)]
+    if exit_kind in {"escape", "display_error"}:
+        screen.actions = [None, "escape" if exit_kind == "escape" else "error"]
+    elif exit_kind == "input_error":
+        def fail_setup(**handlers):
+            raise RuntimeError("native input setup failed")
+
+        screen.winHandle.push_handlers = fail_setup
+
+    def render():
+        return render_task_step(
+            visual=screen.visual, core=screen.core, event=screen.event, window=screen,
+            keyboard=screen.keyboard, project_root=tmp_path, step=_recognition_step(),
+            is_aborted=lambda: False, set_aborted=lambda: None, cursor_factory=create_cursor,
+        )
+
+    if exit_kind in {"display_error", "input_error"}:
+        with pytest.raises(RuntimeError, match="display failed|native input setup failed"):
+            render()
+    else:
+        result = render()
+        assert result.aborted is (exit_kind == "escape")
+        if exit_kind == "submit":
+            assert result.selected_item_ids == ("pen-target",)
+
+    assert cursor_events == ["install", "restore"]
+    assert software_frames == ([] if exit_kind == "input_error" else [True, True])
+    assert screen.winHandle._mouse_cursor is original_cursor
+    assert screen.mouseVisible is initially_visible
+    assert screen.winHandle.handlers == []
+
+
+@pytest.mark.parametrize("cleanup_failure", ["cursor", "mouse_events", "both"])
+def test_software_cursor_cleanup_failure_does_not_skip_other_input_restoration(
+    tmp_path, cleanup_failure,
+):
+    screen = _CursorScreen()
+    original_cursor, software_cursor = object(), object()
+    screen.winHandle._mouse_cursor = original_cursor
+    screen.actions = [None, ("click", (-200, -120), 1)]
+    cursor_error = OSError("software cursor cleanup failed")
+    mouse_error = RuntimeError("mouse handler cleanup failed")
+    native_remove = screen.winHandle.remove_handlers
+
+    def remove_handlers(**handlers):
+        native_remove(**handlers)
+        if cleanup_failure in {"mouse_events", "both"}:
+            raise mouse_error
+
+    def create_cursor(window):
+        screen.winHandle._mouse_cursor = software_cursor
+
+        def close():
+            screen.winHandle._mouse_cursor = original_cursor
+            if cleanup_failure in {"cursor", "both"}:
+                raise cursor_error
+
+        return SimpleNamespace(close=close)
+
+    screen.winHandle.remove_handlers = remove_handlers
+    expected_error = mouse_error if cleanup_failure in {"mouse_events", "both"} else cursor_error
+    with pytest.raises(type(expected_error)) as caught:
+        render_task_step(
+            visual=screen.visual, core=screen.core, event=screen.event, window=screen,
+            keyboard=screen.keyboard, project_root=tmp_path, step=_recognition_step(),
+            is_aborted=lambda: False, set_aborted=lambda: None, cursor_factory=create_cursor,
+        )
+
+    assert caught.value is expected_error
+    assert screen.winHandle.handlers == []
+    assert screen.winHandle._mouse_cursor is original_cursor
+    assert not screen.mouseVisible
+
+
 @pytest.mark.parametrize("initially_visible", [False, True])
 def test_mouse_setup_failure_restores_native_cursor_without_opening_a_screen(
     tmp_path, initially_visible,

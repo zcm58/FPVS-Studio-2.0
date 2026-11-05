@@ -118,6 +118,7 @@ as PsychoPy. Runtime owns flow and calls engines through
   - `src/fpvs_studio/engines/psychopy_loader.py`
   - `src/fpvs_studio/engines/psychopy_graphics_lifetime.py`
   - `src/fpvs_studio/engines/psychopy_tasks.py`
+  - `src/fpvs_studio/engines/psychopy_task_cursor.py`
   - `src/fpvs_studio/engines/psychopy_text_screens.py`
   - `src/fpvs_studio/engines/psychopy_stimuli.py`
   - `src/fpvs_studio/engines/psychopy_timing.py`
@@ -249,11 +250,26 @@ frame and for overflowing lines, using the actual rendered content width. The na
 containment check retains ownership of vertical bounds; image/shape and ordinary
 centered text tests are unchanged. Missing aligned-text metrics fail explicitly.
 
-Cursor visibility is engine-owned: every mouse-response screen enables the native
-pointer and restores its prior visibility on completion, Escape, rendering errors,
-and input-setup failures. Projects do not store a cursor setting. Regression checks
-exercise visibility throughout repeated recognition screens as well as queued clicks;
-they do not establish Windows cursor rendering or fullscreen focus on a lab machine.
+Cursor presentation is engine-owned. Windows/Pyglet mouse-response screens use a
+high-contrast `ImageMouseCursor` drawn into the presented frame, covering both local
+and remote viewers without depending on a hardware cursor overlay. Pyglet retains
+ownership of pointer coordinates, motion, scaling, focus/leave handling and native
+cursor bookkeeping; click capture and hit testing are unchanged. Other platform and
+backend paths retain their native pointer behavior. Projects store no cursor setting.
+
+Each response screen restores its previous cursor and visibility on completion,
+Escape, rendering errors and input-setup failures. The pointer's owned texture is
+created and released on the presentation thread, with cursor restoration and texture
+cleanup attempted independently. Unsupported software-cursor setup fails explicitly.
+Timed feedback and FPVS playback do not install a software response cursor.
+Regression checks cover repeated recognition/feedback transitions and queued clicks.
+Visible acceptance requires an actual moving pointer and aligned clicks; neither
+`mouseVisible=True` nor Windows `CURSOR_SHOWING` proves that the participant sees it.
+Session and refresh-probe teardown explicitly restores visibility before closing the
+native window, including after setup, measurement or graphics-cleanup errors. This
+avoids relying on PsychoPy's restoration after backend teardown, which can fail first.
+Window close is still attempted if pointer restoration fails; that failure is logged
+and propagated when close succeeds.
 The native capture repair first shipped in Studio 2.5.0; Library compatibility guards
 are documented in [Experiment Library](EXPERIMENT_LIBRARY.md).
 
