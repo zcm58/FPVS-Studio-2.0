@@ -30,6 +30,10 @@
   filter (plus the explicit manual selection) and fixed baudrate while reusing the
   access helper. Denied access means the port may be owned by another program; report
   exclusive ownership and retry guidance without claiming a specific owner was found.
+- `brainproducts_errors.py` shares concise recovery wording between setup and launch.
+  Preserve native/serialized Windows reasons and raw diagnostics. No named port does
+  not prove a missing driver; a running utility or denied access does not identify
+  the handle owner. Keep connection, write/reset failure and timing evidence distinct.
 - ActiveThree reuses BioSemi's serial byte protocol. Brain Products TriggerBox rev.02/
   Plus uses a distinct adapter/identity at fixed 2,000,000 baud. Its connection-owned
   worker clears a latched event after the configured pulse; sends never sleep or queue.

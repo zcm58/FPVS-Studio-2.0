@@ -38,7 +38,7 @@ Core owns randomized block membership and occurrence identity; see the
 | `src/fpvs_studio/runtime/` | Launch, preflight, participant/task/session flow, scoring, recovery and exports |
 | `src/fpvs_studio/support/` | Diagnostics, reviewed reports, local drafts and automatic crash outbox |
 | `src/fpvs_studio/tools/` | Reserved native utility namespace; Image Resizer currently uses GUI/preprocessing |
-| `src/fpvs_studio/triggers/` | Serial/parallel/UDP adapters, discovery, manual COM access and transport evidence |
+| `src/fpvs_studio/triggers/` | Serial/parallel/UDP adapters, discovery, COM access/recovery guidance and transport evidence |
 | `src/fpvs_studio/updates/` | Independent updater protocol, verified downloads, bounded cache and install handoff |
 
 `src/fpvs_studio/updater_main.py` is the separate updater entry. Its windows live in

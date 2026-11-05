@@ -168,6 +168,81 @@ def test_mentioning_triggerbox_does_not_hide_unrelated_export_permission_failure
     assert "file or folder" in explanation.summary
 
 
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+@pytest.mark.parametrize("summary,advice,cause", [
+    ("TriggerBox port COM4 is busy or access was denied.",
+     "Close TriggerBox Configuration/Test IO, then retry Detect.",
+     PermissionError(errno.EACCES, "Access is denied")),
+    ("TriggerBox port COM4 was not found.",
+     "Reconnect TriggerBox and confirm its COM port in Device Manager.",
+     FileNotFoundError(errno.ENOENT, "Cannot find the file specified")),
+    ("TriggerBox serial settings on COM4 were rejected.",
+     "Confirm the TriggerBox COM port and vendor driver, then retry.",
+     ValueError("Cannot configure port")),
+    ("TriggerBox communication on COM4 failed.",
+     "Reconnect TriggerBox and check the USB cable before retrying.",
+     OSError("WriteFile failed")),
+    ("TriggerBox port COM4 did not respond in time.",
+     "Reconnect TriggerBox, then retry Detect.", TimeoutError("The operation timed out")),
+    ("TriggerBox could not open COM4.",
+     "Confirm the selected port and reconnect TriggerBox before retrying.",
+     OSError("Unknown serial failure")),
+    ("TriggerBox timed out while sending a marker.",
+     "Reconnect TriggerBox and check any saved EEG markers before retrying.",
+     TimeoutError("Write timeout")),
+    ("TriggerBox timed out while clearing the trigger signal.",
+     "Reconnect TriggerBox and check any saved EEG markers before retrying.",
+     TimeoutError("Write timeout")),
+    ("TriggerBox did not accept the full marker byte.",
+     "Reconnect TriggerBox and check any saved EEG markers before retrying.",
+     OSError("serial write returned 0, expected 1")),
+    ("TriggerBox did not accept the zero reset byte.",
+     "Reconnect TriggerBox and check any saved EEG markers before retrying.",
+     OSError("serial write returned 0, expected 1")),
+])
+def test_specific_triggerbox_failure_preserves_summary_and_recovery(form, summary, advice, cause):
+    from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxError
+
+    hardware = BrainProductsTriggerBoxError(f"{summary} {advice} Details: {cause}")
+    hardware.__cause__ = cause
+    wrapper = RuntimeError("Trigger preflight failed before launch")
+    wrapper.__cause__ = hardware
+    serialized = f"Trigger preflight failed: BrainProductsTriggerBoxError: {hardware}"
+
+    explanation = explain_error(
+        "Launch Error", serialized if form == "message" else str(wrapper),
+        error=wrapper if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+
+    assert explanation.summary == summary
+    assert explanation.advice == advice
+    assert "Details:" not in explanation.description
+    assert "folder" not in explanation.description
+    assert "online service" not in explanation.description
+
+
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+@pytest.mark.parametrize("message", [
+    "TriggerBox could not export the session workbook.",
+    "TriggerBox could not open C:/exports/session.xlsx.",
+])
+def test_triggerbox_export_wording_keeps_file_permission_guidance(form, message):
+    cause = PermissionError(errno.EACCES, "Access is denied")
+    error = RuntimeError(message)
+    error.__cause__ = cause
+    serialized = f"{message} Details: PermissionError: [WinError 5] Access is denied"
+
+    explanation = explain_error(
+        "Export Error", serialized if form == "message" else "Unable to export",
+        error=error if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+
+    assert "file or folder" in explanation.summary
+    assert "TriggerBox" not in explanation.description
+
+
 @pytest.mark.parametrize("wrapped", [False, True])
 def test_parallel_driver_failure_prompts_for_external_driver_setup(wrapped):
     from fpvs_studio.triggers.parallel_backend import ParallelPortDriverUnavailableError

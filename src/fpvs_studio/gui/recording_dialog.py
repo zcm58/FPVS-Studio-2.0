@@ -41,11 +41,15 @@ from fpvs_studio.runtime.recording import (
     validate_recording_configuration,
 )
 from fpvs_studio.triggers.brainproducts_discovery import (
+    TriggerBoxDiscoveryError,
     TriggerBoxPortCandidate,
     discover_triggerbox_ports,
 )
+from fpvs_studio.triggers.brainproducts_errors import (
+    triggerbox_failure_reason,
+    triggerbox_port_error_message,
+)
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
-from fpvs_studio.triggers.serial_port_access import is_serial_access_denied
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -457,10 +461,15 @@ class RecordingSetupDialog(QDialog):
         if result.error is not None:
             _LOGGER.warning("TriggerBox port detection failed: %s", result.error)
             self.detection_status_label.setText(
-                "Port detection failed. Retry or enter the COM port.",
+                str(result.error).partition("Details:")[0].strip()
+                if isinstance(result.error, TriggerBoxDiscoveryError) else
+                "Unable to list TriggerBox ports. Retry or check Device Manager.",
             )
-            self.detection_status_label.setToolTip(str(result.error))
-            self.detection_status_label.setAccessibleDescription(str(result.error))
+            details = str(result.error)
+            if result.error.__cause__ is not None:
+                details += f"\n{result.error.__cause__}"
+            self.detection_status_label.setToolTip(details)
+            self.detection_status_label.setAccessibleDescription(details)
             return
         candidates = cast(tuple[TriggerBoxPortCandidate, ...], result.value)
         self._port_detection_candidates = candidates
@@ -492,16 +501,11 @@ class RecordingSetupDialog(QDialog):
         if candidate.accessible is True:
             details += "\nPort accessible when checked; access may change before launch."
         elif candidate.accessible is False:
-            if is_serial_access_denied(candidate.access_error):
+            details += f"\n{triggerbox_port_error_message(candidate.port, candidate.access_error)}"
+            if triggerbox_failure_reason(candidate.access_error) == "busy":
                 details += (
-                    "\nAccess denied. Another application may have this port open. "
-                    "Only one application can use this COM port at a time. Close TriggerBox "
-                    "Configuration/Test IO or other apps using it, then Detect again. "
+                    "\nOnly one application can use this COM port at a time. "
                     "Selecting a port manually cannot release it from another application."
-                )
-            else:
-                details += (
-                    "\nPort unavailable. Check the USB connection and driver, then Detect again."
                 )
             if candidate.access_error:
                 details += f"\n{candidate.access_error}"
@@ -528,13 +532,7 @@ class RecordingSetupDialog(QDialog):
                 if selected.accessible is True:
                     text = f"{selected.port}: Port accessible when checked."
                 elif selected.accessible is False:
-                    if is_serial_access_denied(selected.access_error):
-                        text = (
-                            f"{selected.port}: Access denied. Close TriggerBox "
-                            "Configuration/Test IO, then Detect again."
-                        )
-                    else:
-                        text = f"{selected.port}: Port unavailable. See details."
+                    text = triggerbox_port_error_message(selected.port, selected.access_error)
                 else:
                     text = f"{selected.port}: Access was not checked."
             elif port:
@@ -556,9 +554,12 @@ class RecordingSetupDialog(QDialog):
             text = "Several TriggerBox ports listed. Choose a port or enter one."
         else:
             text = (
-                "No TriggerBox ports listed. Click Detect to check the manual COM port."
+                "No TriggerBox port listed. Connect it; install TriggerBox software/drivers "
+                "if needed. "
+            ) + (
+                "Detect can check your entered COM port."
                 if self._keep_triggerbox_port and port else
-                "No TriggerBox ports listed. Connect it and retry, or enter its COM port."
+                "Detect again or enter its actual COM port."
             )
         self.detection_status_label.setText(text)
 
@@ -658,6 +659,11 @@ class RecordingSetupDialog(QDialog):
             detail = UNICORN_VALIDATION_NOTE
         elif brainproducts:
             guidance = (
+                "Install TriggerBox software/drivers on this PC. Close Configuration/Test IO "
+                "before launch; keep it closed during experiments. "
+                "Start recording in BrainVision Recorder and keep "
+                "it recording. Test and Pilot modes never send markers."
+                if triggerbox else
                 "Start recording in BrainVision Recorder before launch. "
                 "Verify received markers and timing on your equipment. "
                 "Test and Pilot modes never send markers."
@@ -671,6 +677,9 @@ class RecordingSetupDialog(QDialog):
                 "Enable high-active Stimulus inputs in Recorder. Confirm received codes, "
                 "repeated markers and physical timing before collecting study data."
                 if parallel else
+                "The TriggerBox software package supplies the USB serial driver. The driver "
+                "remains available when Configuration/Test IO is closed; Studio opens the "
+                "COM port directly. "
                 "Connect the TriggerBox USB port to this computer and use the vendor's "
                 "amplifier-specific output cable. For TriggerBox Plus, set the lower "
                 "eight output switches to PC. In BrainVision Recorder, enable the lower "
@@ -679,7 +688,9 @@ class RecordingSetupDialog(QDialog):
                 "closely spaced markers. Recorder and the amplifier "
                 "own EEG acquisition; Studio cannot check that they are recording. "
                 "Choose pulse width for the amplifier sample rate and confirm all codes, "
-                "repeated markers and timing in an actual recording before collecting study data."
+                "repeated markers and timing in an actual recording before collecting study data. "
+                "TriggerBox Plus USB specification: delay/jitter <1 ms. Studio applies no fixed "
+                "timing correction; verify physical timing on your equipment."
             )
         else:
             guidance = (

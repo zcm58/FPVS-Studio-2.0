@@ -48,12 +48,15 @@ def discover_triggerbox_ports(
     if check_access and selected_port is not None:
         selected_port = selected_port.strip().upper()
         if _COM_PORT.fullmatch(selected_port) is None:
-            raise ValueError("Enter a valid COM port, such as COM4, before checking access.")
+            raise TriggerBoxDiscoveryError(
+                "Enter a valid COM port, such as COM4, before checking access.",
+            )
     try:
         list_ports = importlib.import_module("serial.tools.list_ports")
     except ImportError as exc:
         raise TriggerBoxDiscoveryError(
-            "pyserial is required to detect TriggerBox COM ports."
+            "Studio serial support is missing. Repair or reinstall FPVS Studio, then Detect "
+            "again. Details: pyserial is required to detect TriggerBox COM ports."
         ) from exc
     try:
         ports = []
@@ -63,7 +66,10 @@ def discover_triggerbox_ports(
     except InterruptedError:
         raise
     except Exception as exc:
-        raise TriggerBoxDiscoveryError("Unable to enumerate serial ports.") from exc
+        raise TriggerBoxDiscoveryError(
+            "Windows could not list serial ports. Check Device Manager, then retry Detect "
+            f"or enter the COM port. Details: Unable to enumerate serial ports: {exc}"
+        ) from exc
     _check_cancelled(cancel_event)
 
     candidates: dict[str, TriggerBoxPortCandidate] = {}
@@ -95,7 +101,8 @@ def discover_triggerbox_ports(
         serial_module = importlib.import_module("serial")
     except ImportError as exc:
         raise TriggerBoxDiscoveryError(
-            "pyserial is required to check TriggerBox COM ports."
+            "Studio serial support is missing. Repair or reinstall FPVS Studio, then Detect "
+            "again. Details: pyserial is required to check TriggerBox COM ports."
         ) from exc
     return tuple(
         _check_port_access(candidate, serial_module, cancel_event) for candidate in ordered

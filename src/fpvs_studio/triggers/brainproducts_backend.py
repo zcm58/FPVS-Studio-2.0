@@ -10,8 +10,11 @@ from typing import Any
 
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 from fpvs_studio.triggers.base import TriggerBackend
+from fpvs_studio.triggers.brainproducts_errors import (
+    triggerbox_failure_reason,
+    triggerbox_port_error_message,
+)
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
-from fpvs_studio.triggers.serial_port_access import is_serial_access_denied
 
 
 class BrainProductsTriggerBoxError(RuntimeError):
@@ -84,20 +87,9 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
                     xonxoff=False,
                 )
             except Exception as exc:
-                if is_serial_access_denied(exc):
-                    raise BrainProductsTriggerBoxError(
-                        f"Access to {self._port} was denied. TriggerBox can be used by only "
-                        "one program at a time; another program may have this port open. "
-                        "Close TriggerBox Configuration/Test IO and any other program using "
-                        f"{self._port}, then use Detect in Recording Setup and retry launch. "
-                        "Selecting the port manually cannot release it. "
-                        f"Details: Unable to open Brain Products TriggerBox on {self._port!r}: "
-                        f"{exc}"
-                    ) from exc
                 raise BrainProductsTriggerBoxError(
-                    f"TriggerBox could not connect on {self._port}. Check the USB cable and "
-                    "driver, and close Configuration/Test IO or any other program using this "
-                    f"port. Details: Unable to open Brain Products TriggerBox on {self._port!r}: "
+                    f"{triggerbox_port_error_message(self._port, exc)} "
+                    f"Details: Unable to open Brain Products TriggerBox on {self._port!r}: "
                     f"{exc}"
                 ) from exc
             try:
@@ -340,12 +332,24 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
         try:
             bytes_written = connection.write(bytes([code]))
         except Exception as exc:
+            reason = triggerbox_failure_reason(exc)
+            if reason == "timeout":
+                problem = (
+                    "TriggerBox timed out while clearing the trigger signal."
+                    if code == 0 else "TriggerBox timed out while sending a marker."
+                )
+            elif reason == "device_io":
+                problem += " USB communication failed."
             raise BrainProductsTriggerBoxError(
                 f"{problem} Reconnect TriggerBox and check any saved EEG markers before "
                 f"retrying. Details: Unable to {action} code {code} on TriggerBox "
                 f"{self._port!r}: {exc}"
             ) from exc
         if bytes_written != 1:
+            problem = (
+                "TriggerBox did not accept the zero reset byte."
+                if code == 0 else "TriggerBox did not accept the full marker byte."
+            )
             raise BrainProductsTriggerBoxError(
                 f"{problem} Reconnect TriggerBox and check any saved EEG markers before "
                 f"retrying. Details: Unable to {action} code {code} on TriggerBox {self._port!r}: "
@@ -356,7 +360,7 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
 def _load_serial_module() -> ModuleType:
     try:
         return importlib.import_module("serial")
-    except ModuleNotFoundError as exc:
+    except ImportError as exc:
         raise BrainProductsTriggerBoxError(
             "TriggerBox cannot connect because its serial support is missing. Repair or "
             "reinstall FPVS Studio before retrying. Details: pyserial is required for Brain "

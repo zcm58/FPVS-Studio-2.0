@@ -581,7 +581,7 @@ def test_triggerbox_occupied_com4_aborts_before_presentation_with_recovery(execu
             brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
         )
 
-    assert "Access to COM4 was denied" in str(caught.value)
+    assert "COM4 is busy or access was denied" in str(caught.value)
     assert "Close TriggerBox Configuration/Test IO" in str(caught.value)
     assert str(failure) in str(caught.value)
     serial_module.Serial.assert_called_once()

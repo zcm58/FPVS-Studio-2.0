@@ -48,8 +48,18 @@ def explain_error(
         str(triggerbox_cause) if triggerbox_cause is not None else "\n".join((message, details))
     )
     actionable = re.search(
-        r"TriggerBox (?:could not|did not|cannot|can no longer|is still closing|"
-        r"is not connected|port [^\r\n]*? could not be closed|cleanup did not finish)|"
+        r"TriggerBox (?:"
+        r"port [^\r\n]*? (?:is busy or access was denied|was not found|"
+        r"did not respond in time|could not be closed)|"
+        r"serial settings on [^\r\n]*? were rejected|communication on [^\r\n]*? failed|"
+        r"could not (?:connect on \S+|open (?i:COM)[1-9]\d*|send a marker|clear the trigger signal|"
+        r"start its automatic trigger reset|finish shutting down)|"
+        r"did not (?:clear the last trigger in time|accept the full marker byte|"
+        r"accept the zero reset byte)|"
+        r"timed out while (?:sending a marker|clearing the trigger signal)|"
+        r"cannot connect because its serial support is missing|"
+        r"can no longer clear trigger signals automatically|is still closing|"
+        r"is not connected|cleanup did not finish)[.,]|"
         r"Two triggers are too close together\.",
         source,
     )

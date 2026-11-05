@@ -409,9 +409,12 @@ not store this project port, and runtime preflight still checks the saved select
 
 Brain Products support uses USB TriggerBox rev.02 or TriggerBox Plus with the
 amplifier-specific output cable. It does not connect directly to an amplifier or
-control BrainVision Recorder. Install the vendor driver, select the actual COM
-port, close Configuration/Test IO or other programs owning that port, and start
-recording in Recorder. On Plus, set lower-eight-bit switches to PC. Configure all
+control BrainVision Recorder. Install the TriggerBox software package on the stimulus
+PC to install its USB serial driver and setup/testing utilities. Select the actual
+COM port, close Configuration/Test IO and keep those utilities closed throughout the
+experiment. The installed driver remains available after they close; Studio talks
+directly to the port. Keep BrainVision Recorder open and saving EEG. On Plus, set
+lower-eight-bit switches to PC. Configure all
 eight Recorder bits as high-active Stimulus inputs so codes remain 1–255.
 Windows serial ports are exclusive: the TriggerBox utility and Studio cannot own
 the same COM port simultaneously. `PermissionError(13, ..., 5)` / Windows error 5
@@ -419,12 +422,41 @@ means access was denied, commonly because another program has the port open. Run
 keeps launch blocked and explains closing Configuration/Test IO, checking access with
 Detect, and retrying. It preserves the original error without asserting which process
 holds the port. Selecting COM4 manually cannot release another program's handle.
+`triggers/brainproducts_errors.py` shares concise connection recovery between Detect
+and launch. It recognizes native and pyserial-serialized errors and keeps the raw
+cause in diagnostic details. Common cases are:
+
+| Observed failure | Recovery shown |
+| --- | --- |
+| Access denied or busy | Close TriggerBox Configuration/Test IO or other port users, then retry |
+| COM port not found | Reconnect USB, check its current COM number in Device Manager; install/repair the vendor driver if absent |
+| Required settings rejected | Select the actual TriggerBox port and check the vendor driver; Plus requires 2,000,000 baud |
+| Device communication failure or timeout | Check USB/power, reconnect and retry |
+| Port close failed | Restart Studio before retrying; retain the original error in details |
+| Studio serial support missing | Repair/reinstall Studio; this is distinct from the vendor USB driver |
+| Marker or reset write timed out / short write | Abort without resending; reconnect and inspect saved markers |
+| Reset worker stopped or pulse/low interval overlaps | Retain existing restart/marker-review or amplifier-safe spacing guidance |
+
+No listed port does not establish a missing driver or missing vendor application.
+Discovery does not inspect installed applications or identify port-owning processes.
+Likewise a process being open would not prove it owns the handle. The successful
+Test IO-to-Recorder test reported for the COM4 incident supports a working driver and
+downstream route, while the simultaneous Studio access denial is consistent with
+exclusive port ownership. Configuration and test utilities must release it first.
 Disable Recorder's Debouncing for Studio-generated markers unless its effect has
 been deliberately validated: it can discard real closely spaced markers, as the
 vendor [trigger guide, page 6](https://www.brainproducts.com/download/communication-with-the-trigger-port-a-beginners-guide/)
 explains.
 See the vendor [programming examples](https://www.brainproducts.com/download/triggerbox-programming-examples/)
 and [setup diagram](https://www.brainproducts.com/download/how-to-set-up-the-triggerbox-plus/).
+
+Timing guidance: the operator reported BrainVision staff advising a constant 1 ms
+delay in this pathway during training on 2026-11-05. This is attributed training
+guidance, not a supplied measurement or Studio qualification. The current
+[TriggerBox Plus specifications](https://www.brainproducts.com/solutions/triggerbox/)
+state USB delay <1 ms and jitter <1 ms. Neither establishes a universal fixed
+display-to-EEG offset. Studio does not add, subtract or compensate a fixed 1 ms;
+verify physical timing for the actual PC/display/TriggerBox/amplifier configuration.
 
 Recording Setup automatically enumerates explicitly named TriggerBox COM ports on an
 app-owned worker without opening them. Both `VirtualSerial` and `Virtual Serial`

@@ -39,6 +39,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [TriggerBox setup and error guidance](exec-plans/completed/triggerbox-setup-and-error-guidance.md):
+  installed-driver/closed-utility guidance and specific serial recovery messages;
+  safe precommit and post-integration checks passed, with GUI/hardware checks unperformed.
 - [TriggerBox occupied-port recovery](exec-plans/completed/triggerbox-occupied-port-recovery.md):
   explicit manual COM access checks and actionable denied-access guidance; safe
   regression checks passed, with visible GUI and physical hardware checks unperformed.

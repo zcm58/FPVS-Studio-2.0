@@ -14,6 +14,10 @@ from fpvs_studio.triggers.brainproducts_backend import (
     BrainProductsTriggerBoxBackend,
     BrainProductsTriggerBoxError,
 )
+from fpvs_studio.triggers.brainproducts_errors import (
+    triggerbox_failure_reason,
+    triggerbox_port_error_message,
+)
 
 
 class _FakePort:
@@ -241,9 +245,9 @@ def test_triggerbox_reports_open_and_missing_dependency_errors(monkeypatch) -> N
     with pytest.raises(BrainProductsTriggerBoxError, match="Unable to open.*COM3") as caught:
         backend.connect()
     message = str(caught.value)
-    assert message.startswith("TriggerBox could not connect on COM3.")
-    assert "USB cable and driver" in message
-    assert "close Configuration/Test IO" in message
+    assert message.startswith("TriggerBox could not open COM3.")
+    assert "Check USB" in message
+    assert "Device Manager" in message
     assert "Details:" in message and "open failed" in message
     backend.close()
 
@@ -270,10 +274,9 @@ def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypa
     backend = BrainProductsTriggerBoxBackend("COM4", serial_module=serial_module)
     with pytest.raises(BrainProductsTriggerBoxError) as caught:
         backend.connect()
-    assert "Access to COM4 was denied" in str(caught.value)
-    assert "one program at a time" in str(caught.value)
+    assert "COM4 is busy or access was denied" in str(caught.value)
     assert "Close TriggerBox Configuration/Test IO" in str(caught.value)
-    assert "Detect" in str(caught.value)
+    assert "retry" in str(caught.value)
     assert caught.value.__cause__ is failure
     assert len(serial_module.open_calls) == 1
     assert serial_module.port.writes == []
@@ -286,6 +289,91 @@ def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypa
         assert serial_module.port.writes == [b"\x00"]
     finally:
         backend.close()
+
+
+@pytest.mark.parametrize("failure, expected, action", [
+    (FileNotFoundError(2, "Missing"), "TriggerBox port COM4 was not found.", "Device Manager"),
+    (OSError("could not open port 'COM4': FileNotFoundError(2, 'Absent', None, 3)"),
+     "TriggerBox port COM4 was not found.", "driver if absent"),
+    (PermissionError(13, "Denied"), "TriggerBox port COM4 is busy or access was denied.",
+     "Close TriggerBox Configuration/Test IO"),
+    (OSError("[WinError 32] Sharing violation"),
+     "TriggerBox port COM4 is busy or access was denied.", "other port users"),
+    (ValueError("Not a valid baudrate"), "TriggerBox serial settings on COM4 were rejected.",
+     "2,000,000 baud"),
+    (OSError("Cannot configure port: OSError(22, 'Driver error', None, 31)"),
+     "TriggerBox serial settings on COM4 were rejected.", "vendor driver"),
+    (OSError("could not open port 'COM4': OSError(22, 'Device unavailable', None, 1167)"),
+     "TriggerBox communication on COM4 failed.", "USB/power"),
+    (OSError("[WinError 21] Not ready"), "TriggerBox communication on COM4 failed.",
+     "reconnect"),
+    (TimeoutError("Timed out"), "TriggerBox port COM4 did not respond in time.", "USB/power"),
+    (OSError("[WinError 121] Timeout"), "TriggerBox port COM4 did not respond in time.", "retry"),
+    (OSError(22, "Unspecified error"), "TriggerBox could not open COM4.", "Device Manager"),
+])
+def test_connection_failure_has_specific_recovery_and_retains_details(
+    monkeypatch, failure, expected, action,
+) -> None:
+    serial_module = _FakeSerialModule()
+
+    def reject(**kwargs):
+        serial_module.open_calls.append(kwargs)
+        raise failure
+
+    monkeypatch.setattr(serial_module, "Serial", reject)
+    backend = BrainProductsTriggerBoxBackend("COM4", serial_module=serial_module)
+    with pytest.raises(BrainProductsTriggerBoxError) as caught:
+        backend.connect()
+    message = str(caught.value)
+    assert message.startswith(expected)
+    assert action in message.partition("Details:")[0]
+    assert str(failure) in message.partition("Details:")[2]
+    assert caught.value.__cause__ is failure
+    assert len(serial_module.open_calls) == 1
+    assert serial_module.port.writes == []
+    assert backend._worker is None
+
+
+@pytest.mark.parametrize("code", [0, 55])
+def test_write_timeout_names_the_failed_operation_and_does_not_resend(monkeypatch, code):
+    serial_module = _FakeSerialModule()
+    backend = BrainProductsTriggerBoxBackend("COM4", serial_module=serial_module)
+    failure = type("SerialTimeoutException", (OSError,), {})("Write timeout")
+    calls = []
+
+    def timeout(payload):
+        calls.append(payload)
+        raise failure
+
+    monkeypatch.setattr(serial_module.port, "write", timeout)
+    with pytest.raises(BrainProductsTriggerBoxError) as caught:
+        backend._write(serial_module.port, code, action="reset" if code == 0 else "send")
+    message = str(caught.value)
+    assert "TriggerBox timed out while" in message
+    assert ("clearing the trigger signal" if code == 0 else "sending a marker") in message
+    assert "saved EEG markers" in message
+    assert caught.value.__cause__ is failure
+    assert calls == [bytes([code])]
+
+
+@pytest.mark.parametrize("failure, reason", [
+    (PermissionError(13, "Permission denied"), "busy"),
+    (FileNotFoundError(2, "Missing"), "missing"),
+    (OSError(5, "Input/output error"), "device_io"),
+    (OSError(16, "Device or resource busy"), "busy"),
+    (OSError("[WinError 1117] I/O device error"), "device_io"),
+    (OSError("Cannot configure port: PermissionError(13, 'Denied', None, 5)"), "configuration"),
+    (OSError("could not open: PermissionError(13, 'Zugriff verweigert', None, 5)"), "busy"),
+    (OSError("Unable to close the port: [WinError 5] Denied"), "close"),
+    (OSError("[WinError 2] Missing. Closing the port also failed: close failed"), "close"),
+    (OSError(22, "Unknown error"), "unknown"),
+])
+def test_detection_and_launch_show_same_recovery_for_native_or_serialized_errors(failure, reason):
+    assert triggerbox_failure_reason(failure) == reason
+    assert triggerbox_failure_reason(str(failure)) == reason
+    assert triggerbox_port_error_message("COM3", failure) == triggerbox_port_error_message(
+        "COM3", str(failure),
+    )
 
 
 @pytest.mark.parametrize("result", [0, 2])
@@ -365,7 +453,10 @@ def test_triggerbox_sync_write_failure_is_explicit_and_cleanup_still_closes(
 
     with pytest.raises(BrainProductsTriggerBoxError, match="send trigger code 55") as caught:
         backend.send(55)
-    assert str(caught.value).startswith("TriggerBox could not send a marker.")
+    assert str(caught.value).startswith(
+        "TriggerBox did not accept the full marker byte." if short_write
+        else "TriggerBox could not send a marker."
+    )
     assert "Reconnect TriggerBox and check any saved EEG markers before retrying." in str(
         caught.value
     )
@@ -395,7 +486,10 @@ def test_triggerbox_async_reset_failure_surfaces_on_send_reset_and_close(short_w
             BrainProductsTriggerBoxError, match="reset trigger lines code 0"
         ) as caught:
             action()
-        assert str(caught.value).startswith("TriggerBox could not clear the trigger signal.")
+        assert str(caught.value).startswith(
+            "TriggerBox did not accept the zero reset byte." if short_write
+            else "TriggerBox could not clear the trigger signal."
+        )
         assert "check any saved EEG markers before retrying" in str(caught.value)
 
     assert worker is not None and not worker.is_alive()

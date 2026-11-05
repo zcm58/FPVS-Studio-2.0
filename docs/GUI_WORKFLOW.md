@@ -1137,18 +1137,23 @@ states retain manual entry. Access failures keep candidates visible and
 expose their errors; successful access applies only to the checked port at that moment.
 Metadata-only status says a port is listed, not that the hardware is connected;
 access success says "when checked". Details explain persistent unplugged rev.02 ports
-and distinguish port access from amplifier/Recorder readiness. Denied-access status
-visibly instructs closing TriggerBox Configuration/Test IO and pressing Detect again.
-Details explain that only one program can own the port and manual selection cannot
-release it; the raw OS error is retained. Other failures retain USB/driver guidance.
+and distinguish port access from amplifier/Recorder readiness. Detection and launch
+share concise recovery messages for denied/busy, missing, configuration-rejected,
+device-I/O, timeout, close and unknown failures. Details explain exclusive ownership
+without claiming a specific process owns the handle. Raw errors stay in tooltips or
+Show Details. Missing Studio serial support prompts repairing Studio; missing port
+metadata suggests connection/driver checks without claiming the vendor driver is absent.
 Cancel/Apply cancels outstanding discovery without waiting on the GUI thread; late
 results cannot modify the accepted or dismissed draft. Full detected names and access
 errors are available in tooltips. Detection and access checks do not establish marker
 receipt or recording readiness; marker testing remains a separate manual task.
 The amplifier/rate dropdowns use the vendor table and show the minimum pulse. Invalid
 pulse settings disable Apply; runtime rechecks them and compiled marker spacing.
-TriggerBox uses its own port and fixed vendor baudrate; its guidance describes
-Recorder startup, and tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
+TriggerBox uses its own port and fixed vendor baudrate. Visible guidance requires
+installing TriggerBox software/drivers on the stimulus PC, closing Configuration/Test IO
+before launch and throughout experiments, and keeping BrainVision Recorder recording.
+The installed driver remains available when the utilities close; Studio opens the COM
+port directly. Tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
 Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
 and advises disabling Recorder Debouncing unless validated for the intended markers.
 Normal launches use the BrainVision Recording Reminder described above. Home identifies
@@ -1168,9 +1173,11 @@ registered for a safe visible environment and is not run by ordinary local check
 Visible TriggerBox acceptance: inspect Recording Setup at `700x640` in both themes.
 Exercise Detect with no device, one device and synthetic multiple/error results;
 enter a manual port while a scan is pending and confirm it survives completion.
-Check a manual COM4 with generic metadata: simulate access denied, verify the visible
-close-and-retry action, then release the port and Detect again. No trigger bytes should
-be sent by Detect. An edit during the check must not inherit the old port's success.
+Check manual COM3/COM4 with generic metadata: simulate access denied, verify the visible
+close-and-retry action, then release the port and Detect again. Also exercise missing
+ports, rejected serial settings, disconnected-device I/O, timeout, close failure and
+missing Studio serial support. No trigger bytes should be sent by Detect. An edit
+during the check must not inherit the old port's success.
 Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
 Apply COM3 or COM4 with actiCHamp, reopen Recording Setup or Change Default, and
 confirm the saved port stays selected when discovery lists a different port.

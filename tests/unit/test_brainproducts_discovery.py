@@ -336,7 +336,7 @@ def test_automatic_discovery_does_not_probe_or_identify_manual_port(monkeypatch)
 def test_invalid_manual_com_port_is_not_opened(monkeypatch, port):
     _fake_ports(monkeypatch, [])
 
-    with pytest.raises(ValueError, match="COM port"):
+    with pytest.raises(discovery.TriggerBoxDiscoveryError, match="COM port"):
         discovery.discover_triggerbox_ports(check_access=True, selected_port=port)
 
 
