@@ -38,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [TriggerBox USB edge cases](exec-plans/completed/triggerbox-usb-edge-cases.md):
+  discovery cancellation, cleanup evidence and plain-language errors repaired;
+  Recorder 1/2 guidance added. Further testing deferred at the user's request.
 - [Studio 2.7.0 release](exec-plans/completed/release-2.7.0.md):
   unified participant workbook published immutable/latest; Windows checks,
   visible smoke, public bytes/attestations and updater checks passed. Mac ARM

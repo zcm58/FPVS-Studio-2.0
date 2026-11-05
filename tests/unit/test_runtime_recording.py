@@ -368,23 +368,46 @@ def test_evidence_survives_finalization_and_keeps_actual_attempt_order(
     assert backend.closed
 
 
-def test_failed_send_is_evidence_not_a_success(execution, monkeypatch):
+@pytest.mark.parametrize("backend_name", ["unicorn_udp", "brainproducts_triggerbox"])
+def test_failed_send_is_evidence_not_a_success(execution, monkeypatch, backend_name):
     root, plan = execution
-    _fake_output(monkeypatch, FakeUnicorn(fail_send=True))
-    summary = _execute(root, plan, RuntimeWorker(StubEngine({})))
+    backend = (FakeTriggerBox if backend_name == "brainproducts_triggerbox" else FakeUnicorn)(
+        fail_send=True,
+    )
+    adapter_name = (
+        "BrainProductsTriggerBoxBackend" if backend_name == "brainproducts_triggerbox"
+        else "UnicornUDPBackend"
+    )
+    monkeypatch.setattr(triggers, adapter_name, lambda *_args, **_kwargs: backend)
+    summary = _execute(
+        root, plan, RuntimeWorker(StubEngine({})), recording_backend=backend_name,
+        brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+    )
     evidence = _evidence(root)
     assert summary.aborted and evidence.state == "aborted"
     assert [attempt.status for attempt in evidence.runs[0].attempted_events] == ["sent", "error"]
     assert evidence.runs[0].attempted_events[-1].message == "would block"
+    assert all(
+        attempt.backend_name == backend_name for attempt in evidence.runs[0].attempted_events
+    )
     assert all(run.state == "not_started" for run in evidence.runs[1:])
+    assert backend.closed
 
 
 @pytest.mark.parametrize("failure", ["connect", "cleanup", "presentation", "export"])
-def test_partial_evidence_survives_failure(execution, monkeypatch, failure):
+@pytest.mark.parametrize("backend_name", ["unicorn_udp", "brainproducts_triggerbox"])
+def test_partial_evidence_survives_failure(execution, monkeypatch, failure, backend_name):
     root, plan = execution
-    backend = FakeUnicorn(fail_connect=failure == "connect", fail_close=failure == "cleanup")
-    _fake_output(monkeypatch, backend)
-    engine = StubEngine({})
+    backend = (FakeTriggerBox if backend_name == "brainproducts_triggerbox" else FakeUnicorn)(
+        fail_connect=failure == "connect", fail_close=failure == "cleanup",
+    )
+    adapter_name = (
+        "BrainProductsTriggerBoxBackend" if backend_name == "brainproducts_triggerbox"
+        else "UnicornUDPBackend"
+    )
+    monkeypatch.setattr(triggers, adapter_name, lambda *_args, **_kwargs: backend)
+    captures = {}
+    engine = StubEngine(captures)
     if failure == "presentation":
         original = engine.run_condition
 
@@ -402,10 +425,17 @@ def test_partial_evidence_survives_failure(execution, monkeypatch, failure):
         "connect": "socket unavailable", "cleanup": "socket cleanup failed",
         "presentation": "presentation failed", "export": "workbook locked",
     }[failure]):
-        _execute(root, plan, RuntimeWorker(engine))
+        _execute(
+            root, plan, RuntimeWorker(engine), recording_backend=backend_name,
+            brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+        )
     evidence = _evidence(root)
     assert evidence.state == "interrupted"
     assert bool(evidence.runs[0].attempted_events) == (failure != "connect")
+    assert evidence.recording.effective_backend == backend_name
+    if failure == "connect":
+        assert captures.get("open_count", 0) == 0
+        assert backend.count == 0
     if failure == "export":
         assert evidence.export_error == "workbook locked"
     assert backend.closed

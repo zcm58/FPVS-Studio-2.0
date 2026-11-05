@@ -41,6 +41,45 @@ def explain_error(
             "driver are installed and running. Close any other app using the parallel port, "
             "then retry. Studio does not install drivers.",
         )
+    triggerbox_cause = next(
+        (cause for cause in causes if type(cause).__name__ == "BrainProductsTriggerBoxError"), None,
+    )
+    source = (
+        str(triggerbox_cause) if triggerbox_cause is not None else "\n".join((message, details))
+    )
+    actionable = re.search(
+        r"TriggerBox (?:could not|did not|cannot|can no longer|is still closing|"
+        r"is not connected|port [^\r\n]*? could not be closed|cleanup did not finish)|"
+        r"Two triggers are too close together\.",
+        source,
+    )
+    if triggerbox_cause is not None or actionable is not None or (
+        "brainproductstriggerboxerror" in text
+        or "unable to open brain products triggerbox" in text
+        or "triggerbox" in text and any(phrase in text for phrase in (
+            "trigger preflight failed", "trigger output failed",
+        ))
+    ):
+        if actionable is not None:
+            plain = source[actionable.start():].partition("Details:")[0].splitlines()[0].strip()
+            summary, separator, advice = plain.partition(". ")
+            return ErrorExplanation(
+                summary + "." if separator else summary,
+                advice or "Open Show Details for the failed operation before retrying.",
+            )
+        if "unable to open brain products triggerbox" in text:
+            return ErrorExplanation(
+                "FPVS Studio couldn't connect to the USB TriggerBox.",
+                "Check the USB cable, installed TriggerBox driver and COM port in Settings > "
+                "Recording. Close TriggerBox Configuration/Test IO and other apps using the "
+                "port, then retry.",
+            )
+        return ErrorExplanation(
+            "TriggerBox could not finish sending or clearing its trigger signals.",
+            "Restart FPVS Studio and reconnect TriggerBox before retrying. Check any saved "
+            "EEG markers because the last marker or its reset may be incomplete. "
+            "Open Show Details for the failed operation.",
+        )
     operating_errors = [cause for cause in causes if isinstance(cause, OSError)]
     if any(
         cause.errno == errno.ENOSPC or getattr(cause, "winerror", None) == 112

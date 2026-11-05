@@ -1120,6 +1120,10 @@ Both operations use an app-owned worker. A single match fills the default COM3; 
 ports and manual edits survive discovery. Multiple matches require a choice;
 empty/error states retain manual entry. Access failures keep candidates visible and
 expose their errors; successful access applies only to the checked port at that moment.
+Metadata-only status says a port is listed, not that the hardware is connected;
+access success says "when checked". Details explain persistent unplugged rev.02 ports
+and distinguish port access from amplifier/Recorder readiness. Unavailable-port
+details prompt checking USB/drivers and closing Configuration/Test IO or other owners.
 Cancel/Apply cancels outstanding discovery without waiting on the GUI thread; late
 results cannot modify the accepted or dismissed draft. Full detected names and access
 errors are available in tooltips. Detection and access checks do not establish marker
@@ -1129,7 +1133,8 @@ pulse settings disable Apply; runtime rechecks them and compiled marker spacing.
 TriggerBox uses its own port and fixed vendor baudrate; its guidance describes
 Recorder startup, and tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
 Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
-or Recording Reminder confirmation. Home identifies the selected device independently of
+and advises disabling Recorder Debouncing unless validated for the intended markers.
+It has no Recording Reminder confirmation. Home identifies the selected device independently of
 ActiveThree's shared serial transport. Test/Pilot remains no-output for all choices.
 The [runtime contract](RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
 owns pulse/low-interval scheduling, errors and hardware acceptance.

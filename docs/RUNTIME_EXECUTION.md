@@ -413,6 +413,10 @@ control BrainVision Recorder. Install the vendor driver, select the actual COM
 port, close Configuration/Test IO or other programs owning that port, and start
 recording in Recorder. On Plus, set lower-eight-bit switches to PC. Configure all
 eight Recorder bits as high-active Stimulus inputs so codes remain 1–255.
+Disable Recorder's Debouncing for Studio-generated markers unless its effect has
+been deliberately validated: it can discard real closely spaced markers, as the
+vendor [trigger guide, page 6](https://www.brainproducts.com/download/communication-with-the-trigger-port-a-beginners-guide/)
+explains.
 See the vendor [programming examples](https://www.brainproducts.com/download/triggerbox-programming-examples/)
 and [setup diagram](https://www.brainproducts.com/download/how-to-set-up-the-triggerbox-plus/).
 
@@ -425,11 +429,13 @@ manual entry. No match or enumeration failure leaves manual entry available.
 Pressing Detect also checks access to recognized candidates at 2,000,000 baud / 8N1
 without flow control. It opens and closes each candidate without issuing probe reads,
 marker writes or explicit reset/flush calls. Constructed ports are closed on
-errors/cancellation, and cancellation stops further candidates. Failed candidates remain
-visible with their access errors; success establishes port access at that moment only. Metadata is not
+errors/cancellation, and cancellation stops between metadata records and access candidates.
+Failed candidates remain visible with their access errors; success establishes port
+access at that moment only. Metadata is not
 connection proof: the rev.02 virtual port can remain listed when unplugged. Opening a
 port does not establish TriggerBox identity or marker receipt, and an unavailable port
 may belong to another application. There is no marker test in this workflow.
+See the vendor's [rev.02/Plus interface comparison](https://www.brainproducts.com/support-resources/differences-between-triggerbox-plus-and-rev-02/).
 The access check requests inactive RTS/DTR before opening, although the OS/driver may
 change control lines during serial-port initialization. Both models use the same serial
 settings, so detection never changes saved baudrate or pulse width. Runtime still
@@ -438,12 +444,17 @@ performs its separate prelaunch serial-open check.
 The dedicated adapter always opens at 2,000,000 baud, 8N1, without flow control.
 `brainproducts_serial_port` defaults to COM3 and must be nonblank text;
 `brainproducts_pulse_width_ms` is a strict integer 1–1000, default 10 ms. It writes
-zero on connect, writes the event byte synchronously in the existing flip callback,
+zero on connect, submits the event byte in the existing flip callback,
 then uses one connection-owned worker to reset to zero after the pulse. The adapter
 requires a low interval of the same duration before the next event. Send never
 sleeps, retries or queues events. Reset/close finish the final pulse outside timed
 presentation; runtime also drains it between conditions before tasks/feedback.
 Code zero is electrical idle, never a normal logged event; 255 remains a valid event.
+Windows pySerial's nonblocking write can return success while OS transmission is
+pending; `sent` records successful submission, not completed USB transfer or EEG
+receipt. Pulse/low-interval deadlines follow software submission and do not establish
+physical edge timing. Cleanup preserves all reported reset, worker-stop and port-close
+errors together so a primary trigger failure cannot hide a failure to release the port.
 
 The saved optional `brainproducts_amplifier` selects `actichamp` (including Plus),
 `brainamp`, or `liveamp`; `brainproducts_sampling_rate_hz` records the positive integer
@@ -481,6 +492,34 @@ frame 0 by 666.667 ms. A 10 ms pulse plus its required 10 ms low interval fits a
 these gaps. The reset worker is independent of display flips, so the pulse need not
 equal a display-frame duration. This establishes planned compatibility, not measured
 USB, amplifier, recorded-marker or screen-light timing.
+
+#### Recorder 1 and Recorder 2 workflow
+
+Studio sends markers; BrainVision Recorder owns EEG acquisition and saving. Connect
+the Studio computer's USB to TriggerBox, its amplifier-specific output cable to
+actiCHamp **Trigger In**, and actiCHamp's USB to the Recorder computer. Studio opens
+the TriggerBox COM port; Recorder receives markers with the amplifier data rather
+than opening that port. Close Test IO/Configuration before using Studio. Separate
+computers fit this wiring; using one computer still needs local acquisition and
+presentation timing qualification.
+
+In Recorder 1, configure **Amplifier > Digital Port Settings** as described above.
+Recorder 2 supports actiCHamp (Plus) and configures amplifier/marker settings in its
+Workspace Editor; preserve the same eight-bit codes and onset-edge interpretation.
+Its exact control labels must be checked in the installed version's manual, rather
+than assuming Recorder 1 menu names. See the vendor's
+[Recorder 2 workflow](https://pressrelease.brainproducts.com/brainvision-recorder-2/)
+and [downloads/licensing](https://www.brainproducts.com/downloads/recorder/).
+
+Select actiCHamp and the same actual EEG sampling rate in Studio. Start **saving a
+recording** in Recorder before a normal Studio launch, then stop Recorder after the
+experiment. Monitoring traces alone is not proof a recording is being saved. Studio
+does not start/stop either Recorder or check its recording state. Test/Pilot sends
+no markers, so use a short normal run for receipt validation. Inspect saved distinct
+and repeated codes, counts/order and timing; Recorder 2 uses
+[BVRF](https://www.brainproducts.com/support-resources/brainvision-recording-format/),
+so do not require a legacy `.vmrk` file as its recording evidence. Remote control
+would require a separate integration; USB trigger output does not provide it.
 
 ### Unicorn Recorder UDP: receiver validation pending
 

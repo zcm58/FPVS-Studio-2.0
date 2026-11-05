@@ -177,8 +177,10 @@ def test_triggerbox_rejects_overlap_without_queueing() -> None:
         backend.connect()
         with backend._condition:
             backend.send(55)
-            with pytest.raises(BrainProductsTriggerBoxError, match="overlaps"):
+            with pytest.raises(BrainProductsTriggerBoxError, match="overlaps") as caught:
                 backend.send(55)
+            assert str(caught.value).startswith("Two triggers are too close together.")
+            assert "amplifier's minimum at the chosen sampling rate" in str(caught.value)
             assert serial_module.port.writes == [b"\x00", b"\x37"]
         backend.reset()
         assert serial_module.port.writes == [b"\x00", b"\x37", b"\x00", b"\x00"]
@@ -197,8 +199,10 @@ def test_triggerbox_repeats_require_a_complete_low_interval(monkeypatch) -> None
             backend.send(55)
             clock.advance(0.011, backend)
             serial_module.port.wait_for_attempts(3)
-            with pytest.raises(BrainProductsTriggerBoxError, match="low interval"):
+            with pytest.raises(BrainProductsTriggerBoxError, match="low interval") as caught:
                 backend.send(55)
+            assert str(caught.value).startswith("Two triggers are too close together.")
+            assert "amplifier's minimum at the chosen sampling rate" in str(caught.value)
             clock.advance(0.011, backend)
             backend.send(55)
             clock.advance(0.011, backend)
@@ -234,8 +238,13 @@ def test_triggerbox_reports_open_and_missing_dependency_errors(monkeypatch) -> N
     serial_module = _FakeSerialModule()
     serial_module.fail_open = True
     backend = BrainProductsTriggerBoxBackend(serial_module=serial_module)
-    with pytest.raises(BrainProductsTriggerBoxError, match="Unable to open.*COM3"):
+    with pytest.raises(BrainProductsTriggerBoxError, match="Unable to open.*COM3") as caught:
         backend.connect()
+    message = str(caught.value)
+    assert message.startswith("TriggerBox could not connect on COM3.")
+    assert "USB cable and driver" in message
+    assert "close Configuration/Test IO" in message
+    assert "Details:" in message and "open failed" in message
     backend.close()
 
     def missing_serial(_name: str) -> object:
@@ -321,8 +330,13 @@ def test_triggerbox_sync_write_failure_is_explicit_and_cleanup_still_closes(
     backend = BrainProductsTriggerBoxBackend(serial_module=serial_module)
     backend.connect()
 
-    with pytest.raises(BrainProductsTriggerBoxError, match="send trigger code 55"):
+    with pytest.raises(BrainProductsTriggerBoxError, match="send trigger code 55") as caught:
         backend.send(55)
+    assert str(caught.value).startswith("TriggerBox could not send a marker.")
+    assert "Reconnect TriggerBox and check any saved EEG markers before retrying." in str(
+        caught.value
+    )
+    assert "Details:" in str(caught.value) and "COM3" in str(caught.value)
     with pytest.raises(BrainProductsTriggerBoxError, match="send trigger code 55"):
         backend.close()
 
@@ -344,8 +358,12 @@ def test_triggerbox_async_reset_failure_surfaces_on_send_reset_and_close(short_w
     serial_module.port.wait_for_attempts(3)
 
     for action in (lambda: backend.send(55), backend.reset, backend.close):
-        with pytest.raises(BrainProductsTriggerBoxError, match="reset trigger lines code 0"):
+        with pytest.raises(
+            BrainProductsTriggerBoxError, match="reset trigger lines code 0"
+        ) as caught:
             action()
+        assert str(caught.value).startswith("TriggerBox could not clear the trigger signal.")
+        assert "check any saved EEG markers before retrying" in str(caught.value)
 
     assert worker is not None and not worker.is_alive()
     assert serial_module.port.closed is True
@@ -381,3 +399,24 @@ def test_triggerbox_close_error_and_disconnected_send_are_explicit() -> None:
     with pytest.raises(BrainProductsTriggerBoxError, match="not connected"):
         backend.send(55)
     backend.close()
+
+
+def test_triggerbox_close_retains_send_and_cleanup_failures() -> None:
+    serial_module = _FakeSerialModule()
+    serial_module.port.fail_at.update((2, 3))
+    serial_module.port.fail_close = True
+    backend = BrainProductsTriggerBoxBackend(serial_module=serial_module)
+    backend.connect()
+
+    with pytest.raises(BrainProductsTriggerBoxError, match="send trigger code 55"):
+        backend.send(55)
+    with pytest.raises(BrainProductsTriggerBoxError) as caught:
+        backend.close()
+
+    assert "send trigger code 55" in str(caught.value)
+    assert str(caught.value).startswith("TriggerBox cleanup did not finish.")
+    assert "Restart FPVS Studio and reconnect TriggerBox before retrying." in str(caught.value)
+    assert "clear trigger lines during close" in str(caught.value)
+    assert "close failed" in str(caught.value)
+    assert serial_module.port.closed is True
+    assert backend._worker is None

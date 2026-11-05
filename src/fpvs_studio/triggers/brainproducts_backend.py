@@ -37,7 +37,9 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
             or isinstance(pulse_width_ms, bool)
             or not 1 <= pulse_width_ms <= 1000
         ):
-            raise ValueError("TriggerBox pulse width must be an integer from 1 to 1000 ms.")
+            raise ValueError(
+                "Enter a whole number from 1 to 1000 ms for the TriggerBox pulse width."
+            )
         self._port = resolve_serial_port(port)
         self._pulse_s = pulse_width_ms / 1000.0
         self._serial_module = serial_module
@@ -82,7 +84,10 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
                 )
             except Exception as exc:
                 raise BrainProductsTriggerBoxError(
-                    f"Unable to open Brain Products TriggerBox on {self._port!r}: {exc}"
+                    f"TriggerBox could not connect on {self._port}. Check the USB cable and "
+                    "driver, and close Configuration/Test IO or any other program using this "
+                    f"port. Details: Unable to open Brain Products TriggerBox on {self._port!r}: "
+                    f"{exc}"
                 ) from exc
             try:
                 self._write(connection, 0, action="initialize zero idle")
@@ -91,7 +96,8 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
                     connection.close()
                 except Exception as close_exc:
                     raise BrainProductsTriggerBoxError(
-                        f"{exc} Closing the TriggerBox port also failed: {close_exc}"
+                        f"{exc} Closing the TriggerBox port also failed. Restart FPVS Studio "
+                        f"before retrying. Details: {close_exc}"
                     ) from exc
                 raise
             self._connection = connection
@@ -113,11 +119,15 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
                     connection.close()
                 except Exception as close_exc:
                     raise BrainProductsTriggerBoxError(
+                        "TriggerBox could not start its automatic trigger reset, and its port "
+                        "could not be closed. Restart FPVS Studio before retrying. Details: "
                         f"Unable to start TriggerBox reset worker: {exc}. "
                         f"Closing the port also failed: {close_exc}"
                     ) from exc
                 raise BrainProductsTriggerBoxError(
-                    f"Unable to start TriggerBox reset worker: {exc}"
+                    "TriggerBox could not start its automatic trigger reset. Restart FPVS "
+                    "Studio before retrying. Details: Unable to start TriggerBox reset worker: "
+                    f"{exc}"
                 ) from exc
             self._wait_until_ready()
 
@@ -147,24 +157,29 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
         label: str | None = None,
         time_s: float | None = None,
     ) -> None:
-        """Submit one synchronous byte; never wait, retry or queue an event."""
+        """Submit one byte without waiting for OS completion or queueing an event."""
 
         del frame_index, label, time_s
         with self._condition:
             connection = self._require_connection()
             self._raise_failure()
             if self._stopping:
-                raise BrainProductsTriggerBoxError("TriggerBox backend is closing.")
+                raise BrainProductsTriggerBoxError(
+                    "TriggerBox is still closing. Wait for it to finish before trying again."
+                )
             self._require_worker()
             if self._reset_at is not None:
                 raise BrainProductsTriggerBoxError(
-                    "TriggerBox pulse overlaps the previous event; increase marker spacing "
-                    "or reduce the configured pulse width."
+                    "Two triggers are too close together. Increase their spacing, or shorten "
+                    "the pulse only if it meets your amplifier's minimum at the chosen sampling "
+                    "rate. Details: TriggerBox pulse overlaps the previous event."
                 )
             if time.monotonic() < self._ready_at:
                 raise BrainProductsTriggerBoxError(
-                    "TriggerBox low interval is shorter than the configured pulse width; "
-                    "increase marker spacing or reduce the configured pulse width."
+                    "Two triggers are too close together. Increase their spacing, or shorten "
+                    "the pulse only if it meets your amplifier's minimum at the chosen sampling "
+                    "rate. Details: TriggerBox low interval is shorter than the configured "
+                    "pulse width."
                 )
             try:
                 self._write(connection, code, action="send trigger")
@@ -186,7 +201,9 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     self._failure = BrainProductsTriggerBoxError(
-                        "TriggerBox reset worker did not finish the pending pulse."
+                        "TriggerBox did not clear the last trigger in time. Reconnect TriggerBox "
+                        "and check any saved EEG markers before retrying. Details: TriggerBox "
+                        "reset worker did not finish the pending pulse."
                     )
                     raise self._failure
                 self._condition.wait(timeout=remaining)
@@ -206,11 +223,11 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
         with self._condition:
             if self._connection is None:
                 return
-        error: Exception | None = None
+        errors: list[Exception] = []
         try:
             self.reset()
         except Exception as exc:
-            error = exc
+            errors.append(exc)
         with self._condition:
             self._stopping = True
             self._condition.notify_all()
@@ -218,13 +235,20 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
         if worker is not None:
             try:
                 worker.join(timeout=1.0)
-                if worker.is_alive() and error is None:
-                    error = BrainProductsTriggerBoxError("TriggerBox reset worker did not stop.")
-            except Exception as exc:
-                if error is None:
-                    error = BrainProductsTriggerBoxError(
-                        f"Unable to join TriggerBox reset worker: {exc}"
+                if worker.is_alive():
+                    errors.append(
+                        BrainProductsTriggerBoxError(
+                            "TriggerBox could not finish shutting down. Restart FPVS Studio "
+                            "before retrying. Details: TriggerBox reset worker did not stop."
+                        )
                     )
+            except Exception as exc:
+                errors.append(
+                    BrainProductsTriggerBoxError(
+                        "TriggerBox could not finish shutting down. Restart FPVS Studio before "
+                        f"retrying. Details: Unable to join TriggerBox reset worker: {exc}"
+                    )
+                )
         with self._condition:
             connection = self._connection
             self._connection = None
@@ -234,17 +258,24 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
             try:
                 self._write(connection, 0, action="clear trigger lines during close")
             except Exception as exc:
-                if error is None:
-                    error = exc
+                errors.append(exc)
             try:
                 connection.close()
             except Exception as exc:
-                if error is None:
-                    error = BrainProductsTriggerBoxError(
-                        f"Unable to close TriggerBox port {self._port!r}: {exc}"
+                errors.append(
+                    BrainProductsTriggerBoxError(
+                        f"TriggerBox port {self._port} could not be closed. Restart FPVS Studio "
+                        "before retrying. Details: Unable to close TriggerBox port "
+                        f"{self._port!r}: {exc}"
                     )
-        if error is not None:
-            raise error
+                )
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BrainProductsTriggerBoxError(
+                "TriggerBox cleanup did not finish. Restart FPVS Studio and reconnect "
+                "TriggerBox before retrying. Details: " + " ".join(str(error) for error in errors)
+            ) from errors[0]
 
     def _reset_loop(self) -> None:
         with self._condition:
@@ -275,24 +306,38 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
 
     def _require_connection(self) -> Any:
         if self._connection is None:
-            raise BrainProductsTriggerBoxError("TriggerBox backend is not connected.")
+            raise BrainProductsTriggerBoxError(
+                "TriggerBox is not connected. Check the USB cable and selected port, then "
+                "reconnect before retrying."
+            )
         return self._connection
 
     def _require_worker(self) -> None:
         if self._worker is None or not self._worker.is_alive():
-            self._failure = BrainProductsTriggerBoxError("TriggerBox reset worker has stopped.")
+            self._failure = BrainProductsTriggerBoxError(
+                "TriggerBox can no longer clear trigger signals automatically. Restart FPVS "
+                "Studio and check any saved EEG markers before retrying. Details: TriggerBox "
+                "reset worker has stopped."
+            )
             raise self._failure
 
     def _write(self, connection: Any, code: int, *, action: str) -> None:
+        problem = (
+            "TriggerBox could not clear the trigger signal."
+            if code == 0 else "TriggerBox could not send a marker."
+        )
         try:
             bytes_written = connection.write(bytes([code]))
         except Exception as exc:
             raise BrainProductsTriggerBoxError(
-                f"Unable to {action} code {code} on TriggerBox {self._port!r}: {exc}"
+                f"{problem} Reconnect TriggerBox and check any saved EEG markers before "
+                f"retrying. Details: Unable to {action} code {code} on TriggerBox "
+                f"{self._port!r}: {exc}"
             ) from exc
         if bytes_written != 1:
             raise BrainProductsTriggerBoxError(
-                f"Unable to {action} code {code} on TriggerBox {self._port!r}: "
+                f"{problem} Reconnect TriggerBox and check any saved EEG markers before "
+                f"retrying. Details: Unable to {action} code {code} on TriggerBox {self._port!r}: "
                 f"serial write returned {bytes_written!r}, expected 1."
             )
 
@@ -302,5 +347,7 @@ def _load_serial_module() -> ModuleType:
         return importlib.import_module("serial")
     except ModuleNotFoundError as exc:
         raise BrainProductsTriggerBoxError(
-            "pyserial is required for Brain Products TriggerBox output but is not installed."
+            "TriggerBox cannot connect because its serial support is missing. Repair or "
+            "reinstall FPVS Studio before retrying. Details: pyserial is required for Brain "
+            "Products TriggerBox output but is not installed."
         ) from exc

@@ -149,6 +149,9 @@ requests occur on dialog opening, collection, editing, draft saving, or exportin
 Common permission, missing-file, file-in-use, disk-space, archive, connection,
 dependency and compatibility errors have plain-language explanations and next
 steps. Unknown errors describe the failed action without guessing its cause.
+USB TriggerBox failures retain their connection, marker/reset or cleanup explanation
+before generic file/network rules, including chained Windows access errors and
+serialized launch failures. Technical driver details stay in **Show Details...**.
 **Show Details...** retains the original message and chained traceback. Studio's
 application-owned `gui/error_dialogs.py` decorates critical message boxes and
 simple warning errors, including static Qt message boxes. Warning confirmations

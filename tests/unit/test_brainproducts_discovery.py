@@ -183,6 +183,23 @@ def test_enumeration_failure_is_an_explicit_error(
     assert error.value.__cause__ is failure
 
 
+def test_cancelled_enumeration_stops_between_driver_records(monkeypatch):
+    cancel = Event()
+
+    def records():
+        yield SimpleNamespace(device="COM2", description="TriggerBox")
+        cancel.set()
+        yield SimpleNamespace(device="COM9", description="TriggerBox")
+        pytest.fail("Enumeration continued after cancellation")
+
+    monkeypatch.setattr(
+        discovery.importlib, "import_module", lambda _: SimpleNamespace(comports=records),
+    )
+
+    with pytest.raises(InterruptedError, match="cancelled"):
+        discovery.discover_triggerbox_ports(check_access=True, cancel_event=cancel)
+
+
 def _fake_serial_module(
     *, open_errors=None, close_errors=None, on_open=None, on_close=None, configuration_error=None,
 ):

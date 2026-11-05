@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent, widget_message_box
 
 from fpvs_studio.gui.error_dialogs import REPORT_BUTTON_TEXT, ErrorDialogReporter
+from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxError
 from fpvs_studio.triggers.parallel_backend import (
     ParallelPortDriverUnavailableError,
     ParallelPortError,
@@ -194,6 +195,45 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
     qtbot.waitExposed(box)
     qtbot.keyClick(box, Qt.Key.Key_Escape)
     qtbot.waitUntil(lambda: not box.isVisible())
+    assert requests == []
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("serialized", [False, True])
+def test_triggerbox_error_keeps_plain_guidance_and_fits(qtbot, popups, background, serialized):
+    reporter, requests = popups
+    message = (
+        "TriggerBox could not connect on COM1234567890. Check the USB cable and driver, "
+        "and close Configuration/Test IO or any other program using this port. "
+        "Details: [WinError 5] Access is denied"
+    )
+    hardware_error = BrainProductsTriggerBoxError(message)
+    hardware_error.__cause__ = PermissionError(errno.EACCES, "Access is denied")
+    box = widget_message_box(
+        QMessageBox.Icon.Critical, "Launch Error", message, QMessageBox.StandardButton.Ok,
+    )
+    qtbot.addWidget(box)
+    palette = box.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    box.setPalette(palette)
+    reporter.decorate(box, error=None if serialized else hardware_error)
+    assert box.text() == "TriggerBox could not connect on COM1234567890."
+    assert "close Configuration/Test IO" in box.informativeText()
+    assert "file or folder" not in box.text()
+    assert "WinError 5" not in box.informativeText()
+    assert message in box.detailedText()
+    box.resize(580, box.sizeHint().height())
+    box.show()
+    QApplication.processEvents()
+    assert_visible_children_within_parent(box)
+    assert box.width() <= box.screen().availableGeometry().width()
+    for label in box.findChildren(QLabel):
+        if label.isVisible() and label.text():
+            if label.wordWrap():
+                assert label.height() >= label.heightForWidth(label.width())
+            else:
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+    box.close()
     assert requests == []
 
 

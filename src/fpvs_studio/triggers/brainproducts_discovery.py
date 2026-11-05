@@ -50,7 +50,12 @@ def discover_triggerbox_ports(
             "pyserial is required to detect TriggerBox COM ports."
         ) from exc
     try:
-        ports = list(list_ports.comports())
+        ports = []
+        for info in list_ports.comports():
+            _check_cancelled(cancel_event)
+            ports.append(info)
+    except InterruptedError:
+        raise
     except Exception as exc:
         raise TriggerBoxDiscoveryError("Unable to enumerate serial ports.") from exc
     _check_cancelled(cancel_event)

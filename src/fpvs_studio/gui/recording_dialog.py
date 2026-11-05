@@ -477,11 +477,19 @@ class RecordingSetupDialog(QDialog):
     def _port_candidate_details(candidate: TriggerBoxPortCandidate) -> str:
         details = candidate.description
         if candidate.accessible is True:
-            details += "\nPort accessible."
+            details += "\nPort accessible when checked; access may change before launch."
         elif candidate.accessible is False:
-            details += "\nPort unavailable."
+            details += (
+                "\nPort unavailable. Check the USB connection and driver; close "
+                "TriggerBox Configuration/Test IO or other apps using this port."
+            )
             if candidate.access_error:
                 details += f"\n{candidate.access_error}"
+        details += (
+            "\nA listed port does not prove the TriggerBox is plugged in; rev.02 ports "
+            "can remain listed when unplugged. Port access does not verify the amplifier "
+            "connection, recording or marker receipt."
+        )
         return details
 
     def _refresh_port_detection_status(self) -> None:
@@ -498,7 +506,7 @@ class RecordingSetupDialog(QDialog):
         if self._port_access_checked and candidates:
             if selected is not None:
                 if selected.accessible is True:
-                    text = f"{selected.port}: Port accessible."
+                    text = f"{selected.port}: Port accessible when checked."
                 elif selected.accessible is False:
                     text = f"{selected.port}: Port unavailable. See details."
                 else:
@@ -515,13 +523,13 @@ class RecordingSetupDialog(QDialog):
             self.detection_status_label.setText(text)
             return
         if len(candidates) == 1:
-            text = f"Detected TriggerBox on {candidates[0].port}."
+            text = f"TriggerBox port listed: {candidates[0].port}. Access not checked."
             if self._manual_port_override and port != candidates[0].port:
                 text += " Manual port retained."
         elif candidates:
-            text = "Several TriggerBoxes found. Choose a port or enter one."
+            text = "Several TriggerBox ports listed. Choose a port or enter one."
         else:
-            text = "No TriggerBox found. Connect it and retry, or enter its COM port."
+            text = "No TriggerBox ports listed. Connect it and retry, or enter its COM port."
         self.detection_status_label.setText(text)
 
     def _cancel_port_detection(self, _result: int) -> None:
@@ -636,7 +644,9 @@ class RecordingSetupDialog(QDialog):
                 "Connect the TriggerBox USB port to this computer and use the vendor's "
                 "amplifier-specific output cable. For TriggerBox Plus, set the lower "
                 "eight output switches to PC. In BrainVision Recorder, enable the lower "
-                "eight bits as high-active Stimulus inputs. Recorder and the amplifier "
+                "eight bits as high-active Stimulus inputs. Disable Recorder Debouncing "
+                "for Studio markers unless its effect has been validated; it can suppress "
+                "closely spaced markers. Recorder and the amplifier "
                 "own EEG acquisition; Studio cannot check that they are recording. "
                 "Choose pulse width for the amplifier sample rate and confirm all codes, "
                 "repeated markers and timing in an actual recording before collecting study data."

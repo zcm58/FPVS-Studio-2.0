@@ -540,7 +540,10 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
     dialog.show()
     candidate = TriggerBoxPortCandidate("COM9", "TriggerBox Plus")
     port_detection_jobs[0].finish(candidates=(candidate,))
-    assert "Detected TriggerBox on COM9" in dialog.detection_status_label.text()
+    assert "TriggerBox port listed: COM9" in dialog.detection_status_label.text()
+    assert "Access not checked" in dialog.detection_status_label.text()
+    assert "does not prove" in dialog.detection_status_label.toolTip()
+    assert "Disable Recorder Debouncing" in dialog.guidance_label.toolTip()
     dialog.detect_ports_button.click()
     error = "[WinError 5] Access is denied: COM9" if not accessible else ""
     port_detection_jobs[1].finish(candidates=(TriggerBoxPortCandidate(
@@ -554,6 +557,11 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
     details = dialog.brainproducts_port_combo.itemData(0, Qt.ItemDataRole.ToolTipRole)
     assert candidate.description in details
     assert f"Port {state}" in details
+    assert "does not verify the amplifier" in details
+    if accessible:
+        assert "when checked" in dialog.detection_status_label.text()
+    else:
+        assert "Configuration/Test IO" in details
     if error:
         assert error in details
         assert error in dialog.detection_status_label.toolTip()
@@ -858,6 +866,7 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     _assert_labels_fit(dialog)
     if state in ("multiple", "unique", "accessible", "unavailable", "multiple_access"):
         assert description in dialog.detection_status_label.toolTip()
+        assert "can remain listed when unplugged" in dialog.detection_status_label.toolTip()
         assert description in dialog.brainproducts_port_combo.itemData(
             0, Qt.ItemDataRole.ToolTipRole,
         )
