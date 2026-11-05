@@ -428,13 +428,14 @@ and [setup diagram](https://www.brainproducts.com/download/how-to-set-up-the-tri
 
 Recording Setup automatically enumerates explicitly named TriggerBox COM ports on an
 app-owned worker without opening them. Both `VirtualSerial` and `Virtual Serial`
-driver-name spellings are recognized. One candidate fills the default port; an explicit
-custom port or a manual edit is retained. Multiple candidates require selection or
-manual entry. No match or enumeration failure leaves manual entry available.
+driver-name spellings are recognized. One candidate can fill the first-time placeholder.
+A saved port or manual edit is retained. Multiple candidates require selection or
+manual entry during first-time setup. No match or enumeration failure leaves manual
+entry available.
 
-Pressing Detect also checks access to recognized candidates and the explicit manual/custom
-COM selection at 2,000,000 baud / 8N1 without flow control. Generic or missing metadata
-does not exclude that explicit selection; it is labelled as identity not verified.
+Pressing Detect also checks access to recognized candidates and the saved or manually selected
+COM port at 2,000,000 baud / 8N1 without flow control. Generic or missing metadata
+does not exclude that selection; it is labelled as identity not verified.
 Other generic ports are not checked. It opens and closes each candidate without issuing probe reads,
 marker writes or explicit reset/flush calls. Constructed ports are closed on
 errors/cancellation, and cancellation stops between metadata records and access candidates.
@@ -522,8 +523,9 @@ and [downloads/licensing](https://www.brainproducts.com/downloads/recorder/).
 Select actiCHamp and the same actual EEG sampling rate in Studio. Start **saving a
 recording** in Recorder before a normal Studio launch, then stop Recorder after the
 experiment. Monitoring traces alone is not proof a recording is being saved. Studio
-does not start/stop either Recorder or check its recording state. Test/Pilot sends
-no markers, so use a short normal run for receipt validation. Inspect saved distinct
+asks the operator to confirm before a normal BrainVision launch. This is a manual
+check. Studio does not start/stop either Recorder or read its recording state.
+Test/Pilot sends no markers, so use a short normal run for receipt validation. Inspect saved distinct
 and repeated codes, counts/order and timing; Recorder 2 uses
 [BVRF](https://www.brainproducts.com/support-resources/brainvision-recording-format/),
 so do not require a legacy `.vmrk` file as its recording evidence. Remote control

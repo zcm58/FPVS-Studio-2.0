@@ -152,8 +152,12 @@ class RecordingSetupDialog(QDialog):
         self._discovery_dismissed = False
         self._port_detection_candidates: tuple[TriggerBoxPortCandidate, ...] | None = None
         self._port_access_checked = False
-        self._manual_port_override = (
+        # First-time setup uses COM3 as a placeholder. Once timing has been saved,
+        # COM3 is a selected port just like any other value.
+        self._keep_triggerbox_port = (
             configuration.get("brainproducts_serial_port", "COM3") != "COM3"
+            or (configuration.get("brainproducts_amplifier") is not None
+                and configuration.get("brainproducts_sampling_rate_hz") is not None)
         )
         # Inactive invalid edits remain visible when returning to that device, but
         # cannot corrupt an otherwise valid recording choice when applying another.
@@ -399,7 +403,7 @@ class RecordingSetupDialog(QDialog):
             self._start_port_detection(check_access=False)
 
     def _manual_port_edited(self, _value: object = None) -> None:
-        self._manual_port_override = True
+        self._keep_triggerbox_port = True
         self._refresh_port_detection_status()
 
     def _detect_ports(self) -> None:
@@ -410,7 +414,7 @@ class RecordingSetupDialog(QDialog):
             return
         selected_port = (
             self.brainproducts_port_edit.text().strip() or None
-        ) if check_access and self._manual_port_override else None
+        ) if check_access and self._keep_triggerbox_port else None
         self._detection_started = True
         for index, candidate in enumerate(self._port_detection_candidates or ()):
             self.brainproducts_port_combo.setItemData(
@@ -471,7 +475,7 @@ class RecordingSetupDialog(QDialog):
                 Qt.ItemDataRole.ToolTipRole,
             )
         port = previous
-        if not self._manual_port_override:
+        if not self._keep_triggerbox_port:
             if len(candidates) == 1:
                 port = candidates[0].port
             elif len(candidates) > 1:
@@ -546,14 +550,14 @@ class RecordingSetupDialog(QDialog):
             return
         if len(candidates) == 1:
             text = f"TriggerBox port listed: {candidates[0].port}. Access not checked."
-            if self._manual_port_override and port != candidates[0].port:
-                text += " Manual port retained. Detect can check it."
+            if self._keep_triggerbox_port and port != candidates[0].port:
+                text += " Selected port retained. Detect can check it."
         elif candidates:
             text = "Several TriggerBox ports listed. Choose a port or enter one."
         else:
             text = (
                 "No TriggerBox ports listed. Click Detect to check the manual COM port."
-                if self._manual_port_override and port else
+                if self._keep_triggerbox_port and port else
                 "No TriggerBox ports listed. Connect it and retry, or enter its COM port."
             )
         self.detection_status_label.setText(text)

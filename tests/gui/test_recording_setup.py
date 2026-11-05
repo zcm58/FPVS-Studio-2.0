@@ -109,6 +109,12 @@ def _parallel_configuration(**overrides):
     }
 
 
+def _unconfigured_triggerbox(**overrides):
+    return _triggerbox_configuration(**{
+        "brainproducts_amplifier": None, "brainproducts_sampling_rate_hz": None, **overrides,
+    })
+
+
 def _assert_labels_fit(widget) -> None:
     assert_visible_children_within_parent(widget)
     for label in widget.findChildren(QLabel):
@@ -540,7 +546,7 @@ def test_triggerbox_detection_starts_once_on_first_visible_selection(
 def test_triggerbox_detect_reports_access_without_changing_port_values(
     qtbot, port_detection_jobs, accessible, error, status,
 ):
-    dialog = RecordingSetupDialog(_triggerbox_configuration())
+    dialog = RecordingSetupDialog(_unconfigured_triggerbox())
     qtbot.addWidget(dialog)
     dialog.show()
     candidate = TriggerBoxPortCandidate("COM9", "TriggerBox Plus")
@@ -549,6 +555,7 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
     assert "Access not checked" in dialog.detection_status_label.text()
     assert "does not prove" in dialog.detection_status_label.toolTip()
     assert "Disable Recorder Debouncing" in dialog.guidance_label.toolTip()
+    _select_triggerbox_timing(dialog)
     dialog.detect_ports_button.click()
     port_detection_jobs[1].finish(candidates=(TriggerBoxPortCandidate(
         "COM9", candidate.description, accessible=accessible, access_error=error,
@@ -584,13 +591,14 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
 def test_triggerbox_access_results_keep_unavailable_candidates_selectable(
     qtbot, port_detection_jobs,
 ):
-    dialog = RecordingSetupDialog(_triggerbox_configuration())
+    dialog = RecordingSetupDialog(_unconfigured_triggerbox())
     qtbot.addWidget(dialog)
     dialog.show()
     port_detection_jobs[0].finish(candidates=(
         TriggerBoxPortCandidate("COM9", "TriggerBox Plus"),
         TriggerBoxPortCandidate("COM12", "TriggerBox Virtual Serial Port"),
     ))
+    _select_triggerbox_timing(dialog)
     dialog.detect_ports_button.click()
     port_detection_jobs[1].finish(candidates=(
         TriggerBoxPortCandidate("COM9", "TriggerBox Plus", accessible=True),
@@ -736,7 +744,7 @@ def test_triggerbox_accept_or_cancel_ignores_late_access_results(
     assert job.cancelled
     job.finish(candidates=(TriggerBoxPortCandidate("COM12", "TriggerBox Plus", accessible=True),))
 
-    assert dialog.brainproducts_port_edit.text() == "COM9"
+    assert dialog.brainproducts_port_edit.text() == "COM3"
     assert dialog.detection_status_label.text() == previous_status
     assert dialog.configuration == accepted_configuration
     assert dialog.result() == int(
@@ -766,10 +774,10 @@ def test_triggerbox_retry_discards_previous_access_annotations(
     dialog = RecordingSetupDialog(_triggerbox_configuration())
     qtbot.addWidget(dialog)
     dialog.show()
-    port_detection_jobs[0].finish(candidates=(TriggerBoxPortCandidate("COM9", "TriggerBox Plus"),))
+    port_detection_jobs[0].finish(candidates=(TriggerBoxPortCandidate("COM3", "TriggerBox Plus"),))
     dialog.detect_ports_button.click()
     port_detection_jobs[1].finish(candidates=(
-        TriggerBoxPortCandidate("COM9", "TriggerBox Plus", accessible=True),
+        TriggerBoxPortCandidate("COM3", "TriggerBox Plus", accessible=True),
     ))
     assert "Port accessible" in dialog.brainproducts_port_combo.itemData(
         0, Qt.ItemDataRole.ToolTipRole,
@@ -793,8 +801,8 @@ def test_triggerbox_retry_discards_previous_access_annotations(
     ) == "TriggerBox Plus"
 
 
-@pytest.mark.parametrize("initial_port", ["COM3", "COM123"])
-def test_triggerbox_unique_detection_preserves_explicit_custom_port(
+@pytest.mark.parametrize("initial_port", ["COM3", "COM4", "COM123"])
+def test_triggerbox_unique_detection_preserves_saved_port(
     qtbot, port_detection_jobs, initial_port,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration(brainproducts_serial_port=initial_port))
@@ -803,8 +811,7 @@ def test_triggerbox_unique_detection_preserves_explicit_custom_port(
     assert len(port_detection_jobs) == 1
     candidate = TriggerBoxPortCandidate("COM9", "TriggerBox Plus")
     port_detection_jobs[0].finish(candidates=(candidate,))
-    expected = "COM9" if initial_port == "COM3" else initial_port
-    assert dialog.brainproducts_port_edit.text() == expected
+    assert dialog.brainproducts_port_edit.text() == initial_port
     assert dialog.brainproducts_port_combo.itemText(0) == "COM9"
     assert dialog.brainproducts_port_combo.itemData(0, Qt.ItemDataRole.ToolTipRole) == (
         candidate.description
@@ -834,13 +841,14 @@ def test_triggerbox_detection_preserves_operator_edit_during_scan(qtbot, port_de
 def test_triggerbox_multiple_candidates_never_choose_arbitrary_first(
     qtbot, port_detection_jobs, initial_port, expected_port, first_candidate_port,
 ):
-    dialog = RecordingSetupDialog(_triggerbox_configuration(brainproducts_serial_port=initial_port))
+    dialog = RecordingSetupDialog(_unconfigured_triggerbox(brainproducts_serial_port=initial_port))
     qtbot.addWidget(dialog)
     dialog.show()
     port_detection_jobs[0].finish(candidates=(
         TriggerBoxPortCandidate(first_candidate_port, "TriggerBox Plus"),
         TriggerBoxPortCandidate("COM12", "TriggerBox VirtualSerial Port"),
     ))
+    _select_triggerbox_timing(dialog)
     assert dialog.brainproducts_port_combo.count() == 2
     assert dialog.brainproducts_port_edit.text() == expected_port
     assert "Choose a port" in dialog.detection_status_label.text()
@@ -1136,6 +1144,64 @@ def test_project_device_reopen_and_switch_ignore_obsolete_global_choice(
     assert (
         ProjectDocument.open_existing(second.project_root).validate_recording_launch() == "serial"
     )
+
+
+@pytest.mark.parametrize("port", ["COM3", "COM4"])
+@pytest.mark.parametrize("computer_default", [False, True])
+def test_actichamp_port_apply_and_reopen_keeps_saved_port_during_detection(
+    qtbot, controller, tmp_path, monkeypatch, port_detection_jobs, port, computer_default,
+):
+    ini_path = str(tmp_path / "recording.ini")
+    controller._settings = QSettings(ini_path, QSettings.Format.IniFormat)
+    document, _window = open_created_project(controller, qtbot, tmp_path, "actiCHamp recording")
+    other_port = "COM4" if port == "COM3" else "COM3"
+    original = _triggerbox_configuration(brainproducts_serial_port=other_port)
+    settings = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, default_recording_configuration=original,
+        on_default_recording_configuration_changed=controller.save_default_recording_configuration,
+        recording_configuration=original,
+        on_recording_configuration_changed=controller.save_recording_configuration,
+    )
+    qtbot.addWidget(settings)
+
+    def apply_port(child):
+        child.brainproducts_port_edit.setText(port)
+        child.accept()
+        return child.result()
+
+    monkeypatch.setattr(RecordingSetupDialog, "exec", apply_port)
+    button = (settings.default_recording_setup_button if computer_default
+              else settings.recording_setup_button)
+    button.click()
+    if computer_default:
+        controller._settings = QSettings(ini_path, QSettings.Format.IniFormat)
+        saved = controller.load_default_recording_configuration()
+    else:
+        saved = ProjectDocument.open_existing(document.project_root).recording_configuration
+    assert saved is not None
+    assert saved["brainproducts_serial_port"] == port
+
+    reopened = RecordingSetupDialog(saved, computer_default=computer_default)
+    qtbot.addWidget(reopened)
+    reopened.show()
+    other_candidate = TriggerBoxPortCandidate(other_port, "TriggerBox Plus")
+    port_detection_jobs[0].finish(candidates=(other_candidate,))
+    assert reopened.brainproducts_port_edit.text() == port
+    discovery = Mock(return_value=())
+    monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
+    reopened.detect_ports_button.click()
+    cancel = Event()
+    port_detection_jobs[1].callback(None, cancel)
+    discovery.assert_called_once_with(check_access=True, cancel_event=cancel, selected_port=port)
+    port_detection_jobs[1].finish(candidates=(
+        TriggerBoxPortCandidate(other_port, "TriggerBox Plus", accessible=True),
+        TriggerBoxPortCandidate("COM9", "TriggerBox VirtualSerial Port", accessible=True),
+    ))
+    QApplication.processEvents()
+    assert reopened.brainproducts_port_edit.text() == port
+    assert reopened.apply_button.isEnabled()
+    assert (reopened.width(), reopened.height()) == (700, 640)
+    _assert_labels_fit(reopened)
 
 
 @pytest.mark.parametrize("entrypoint", ["home", "run"])

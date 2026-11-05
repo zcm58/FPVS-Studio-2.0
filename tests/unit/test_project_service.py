@@ -216,6 +216,13 @@ def test_project_scaffolding_applies_sinusoidal_profile_background(tmp_path) -> 
         "brainproducts_pulse_width_ms": 20,
         "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 100,
     },
+    *[
+        {
+            "recording_backend": "brainproducts_triggerbox", "brainproducts_serial_port": port,
+            "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 500,
+        }
+        for port in ("COM3", "COM4")
+    ],
     {
         "recording_backend": "brainproducts_parallel", "brainproducts_parallel_address": 0xD010,
         "brainproducts_pulse_width_ms": 20, "brainproducts_sampling_rate_hz": 100,
@@ -233,7 +240,8 @@ def test_recording_device_save_changes_only_recording_and_failure_keeps_file(
     original = json.loads(path.read_text())
     setting = ProjectRecordingSettings(**configuration)
     if setting.recording_backend == "brainproducts_triggerbox":
-        assert setting.brainproducts_serial_port == "COM18"
+        expected_port = configuration["brainproducts_serial_port"].strip()
+        assert setting.brainproducts_serial_port == expected_port
     save_project_recording_settings(scaffold.project_root, setting)
     expected = dict(original)
     expected["settings"]["recording"] = setting.model_dump()

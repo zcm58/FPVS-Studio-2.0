@@ -41,6 +41,7 @@ from fpvs_studio.gui.components import (
     StatusBadgeLabel,
     apply_dialog_theme,
     mark_launch_action,
+    mark_primary_action,
     mark_secondary_action,
 )
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
@@ -492,6 +493,61 @@ class BioSemiRecordingConfirmationDialog(QDialog):
         )
 
 
+class BrainVisionRecordingReminderDialog(QDialog):
+    """Ask the operator to confirm the recording before a BrainVision launch."""
+
+    def __init__(self, parent: QWidget | None = None, *, uses_usb: bool) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("BrainVision Recording Reminder")
+        self.setModal(True)
+        self.setMinimumSize(480, 170)
+        self.resize(520, 180)
+
+        message = (
+            "Make sure BrainVision Recorder is open and saving a recording on the "
+            "recording PC before continuing."
+        )
+        if uses_usb:
+            message += (
+                "\n\nClose TriggerBox Test IO and Configuration on this PC so Studio "
+                "can use the COM port."
+            )
+        self.prompt_label = QLabel(message, self)
+        self.prompt_label.setWordWrap(True)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.continue_button = buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.continue_button.setText("Continue")
+        self.continue_button.setAutoDefault(False)
+        mark_primary_action(self.continue_button)
+        self.cancel_button = buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        self.cancel_button.setDefault(True)
+        self.cancel_button.setFocus()
+        mark_secondary_action(self.cancel_button)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 18, 24, 18)
+        layout.setSpacing(16)
+        layout.addWidget(self.prompt_label, stretch=1)
+        layout.addWidget(buttons)
+        apply_dialog_theme(self)
+
+
+def confirm_brainvision_recording(parent: QWidget, backend: str) -> bool:
+    """Prompt only for an effective BrainVision backend, after launch validation."""
+    if backend not in ("brainproducts_triggerbox", "brainproducts_parallel"):
+        return True
+    dialog = BrainVisionRecordingReminderDialog(
+        parent, uses_usb=backend == "brainproducts_triggerbox",
+    )
+    return dialog.exec() == int(QDialog.DialogCode.Accepted)
+
+
 class TestModeLaunchConfirmationDialog(QDialog):
     """Require explicit acknowledgement of experiment test-mode limitations."""
 
@@ -923,7 +979,7 @@ class RunPage(QWidget):
         *, local_display: DisplaySettings | None = None,
     ) -> None:
         try:
-            self._document.validate_recording_launch()
+            backend = self._document.validate_recording_launch()
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
             return
@@ -951,6 +1007,8 @@ class RunPage(QWidget):
             )
         except Exception as error:
             _show_runtime_error_dialog(self, "Launch Blocked", error)
+            return
+        if not confirm_brainvision_recording(self, backend):
             return
         if session_plan is not None:
             self._set_summary(

@@ -70,6 +70,7 @@ from fpvs_studio.gui.run_page import (
     ParticipantSessionCheckTask,
     TestModeLaunchConfirmationDialog,
     TestModeLaunchSelection,
+    confirm_brainvision_recording,
 )
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.update_dialog import UpdateDialog
@@ -1088,7 +1089,7 @@ class StudioMainWindow(QMainWindow):
     ) -> None:
         participant_number = participant_details.participant_number
         try:
-            self.document.validate_recording_launch()
+            backend = self.document.validate_recording_launch()
             if not self.document.experiment_test_mode_enabled:
                 self.document.update_manual_removed_electrodes(
                     participant_number, participant_details.manual_removed_electrodes,
@@ -1111,6 +1112,8 @@ class StudioMainWindow(QMainWindow):
             self.document.require_biosemi_recording_confirmation
             and not self._confirm_biosemi_recording_started()
         ):
+            return
+        if not confirm_brainvision_recording(self, backend):
             return
 
         def _launch() -> LaunchTaskResult:
@@ -1173,7 +1176,7 @@ class StudioMainWindow(QMainWindow):
                     "Enable Allow repeat participant sessions in Setup > Project to save "
                     "the re-run as a new visit. The interrupted visit will be preserved."
                 )
-            self.document.validate_recording_launch()
+            backend = self.document.validate_recording_launch()
         except Exception as error:
             _show_error_dialog(self, "Re-run Blocked", error)
             return
@@ -1233,6 +1236,8 @@ class StudioMainWindow(QMainWindow):
             return
         if (self.document.require_biosemi_recording_confirmation
                 and not self._confirm_biosemi_recording_started()):
+            return
+        if not confirm_brainvision_recording(self, backend):
             return
 
         def launch() -> LaunchTaskResult:

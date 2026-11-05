@@ -194,15 +194,16 @@ def test_invalid_default_is_explicit_and_is_not_replaced(raw):
 
 @pytest.mark.parametrize("backend", _BACKENDS)
 @pytest.mark.parametrize("main_window", [False, True])
+@pytest.mark.parametrize("port", [" COM3 ", " COM4 "])
 def test_default_roundtrip_serializes_the_model_and_updates_only_after_success(
-    backend, main_window,
+    backend, main_window, port,
 ):
     settings = _Settings()
     controller = _controller(settings, main_window=main_window)
     configuration = {
         "recording_backend": backend,
         "unicorn_udp_port": 4321,
-        "brainproducts_serial_port": " COM18 ",
+        "brainproducts_serial_port": port,
         "brainproducts_parallel_address": 0xD010,
         "brainproducts_pulse_width_ms": 20,
     }
@@ -219,7 +220,8 @@ def test_default_roundtrip_serializes_the_model_and_updates_only_after_success(
 
     assert isinstance(settings.values[_KEY], str)
     assert json.loads(settings.values[_KEY]) == expected
-    assert controller.load_default_recording_configuration() == expected
+    reopened = _controller(_Settings(settings.values), main_window=False)
+    assert reopened.load_default_recording_configuration() == expected
     assert settings.sync_calls == 1
     if main_window:
         controller.main_window.document.set_default_recording_configuration.assert_called_once_with(

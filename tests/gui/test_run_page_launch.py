@@ -38,11 +38,12 @@ from fpvs_studio.core.serialization import (
     save_project_file,
 )
 from fpvs_studio.core.session_plan import SessionPlan
-from fpvs_studio.gui import run_page
+from fpvs_studio.gui import document_runtime, main_window, run_page
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
     BioSemiRecordingConfirmationDialog,
+    BrainVisionRecordingReminderDialog,
     ParticipantLaunchDetails,
     ParticipantNumberDialog,
     ParticipantSessionCheckTask,
@@ -337,6 +338,106 @@ def test_recording_reminder_requires_confirmed_and_fits(
         assert continue_button.isEnabled() is True
     qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
     assert dialog.result() == dialog.DialogCode.Accepted
+
+
+@pytest.mark.parametrize("size", [(480, 170), (520, 180)])
+@pytest.mark.parametrize("dark", [False, True])
+@pytest.mark.parametrize("uses_usb", [False, True])
+def test_brainvision_recording_reminder_copy_actions_and_fit(qtbot, size, dark, uses_usb):
+    dialog = BrainVisionRecordingReminderDialog(uses_usb=uses_usb)
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202124" if dark else "#f4f7fb"))
+    dialog.setPalette(palette)
+    run_page.apply_dialog_theme(dialog)
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert dialog.isModal()
+    assert (dialog.width(), dialog.height()) == size
+    assert dialog.windowTitle() == "BrainVision Recording Reminder"
+    assert dialog.cancel_button.isDefault()
+    assert dialog.continue_button.text() == "Continue"
+    prompt = dialog.prompt_label
+    assert "BrainVision Recorder is open and saving a recording" in prompt.text()
+    assert ("Close TriggerBox Test IO and Configuration on this PC" in prompt.text()) is uses_usb
+    assert prompt.height() >= prompt.heightForWidth(prompt.width())
+    for button in (dialog.cancel_button, dialog.continue_button):
+        assert button.width() >= button.sizeHint().width()
+    _assert_visible_children_within_parent(dialog)
+
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    assert not dialog.isVisible()
+    assert dialog.result() == dialog.DialogCode.Rejected
+    dialog.show()
+    qtbot.mouseClick(dialog.continue_button, Qt.MouseButton.LeftButton)
+    assert dialog.result() == dialog.DialogCode.Accepted
+
+
+@pytest.mark.parametrize("surface", ["home", "run"])
+@pytest.mark.parametrize(
+    ("backend", "test_mode", "accepted"),
+    [
+        ("brainproducts_triggerbox", False, True),
+        ("brainproducts_triggerbox", False, False),
+        ("brainproducts_parallel", False, True),
+        ("brainproducts_parallel", False, False),
+        ("brainproducts_triggerbox", True, False),
+    ],
+)
+def test_brainvision_reminder_gates_launch_on_both_surfaces(
+    qtbot, controller, tmp_path, monkeypatch, surface, backend, test_mode, accepted,
+):
+    for module in (document_runtime, main_window, run_page):
+        set_module_platform(monkeypatch, module, "win32")
+    document, window = _open_created_project(controller, qtbot, tmp_path, "BrainVision recording")
+    _prepare_compile_ready_project(window, tmp_path / "brainvision-assets")
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+    configuration = {
+        "recording_backend": backend,
+        "brainproducts_amplifier": "actichamp",
+        "brainproducts_sampling_rate_hz": 500,
+    }
+    if backend == "brainproducts_parallel":
+        configuration["brainproducts_parallel_address"] = 0x378
+    document.set_recording_configuration(configuration)
+    document.set_experiment_test_mode_enabled(test_mode)
+    page = window if surface == "home" else window.run_page
+    events = []
+    monkeypatch.setattr(main_window, "ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(run_page, "ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(document, "next_participant_session_number", lambda _number: 1)
+    monkeypatch.setattr(
+        page, "_collect_launch_participant_details",
+        lambda: ParticipantLaunchDetails(participant_number="0" if test_mode else "0007"),
+    )
+
+    def confirm(dialog):
+        events.append("reminder")
+        assert ("COM port" in dialog.prompt_label.text()) is (backend == "brainproducts_triggerbox")
+        return int(dialog.DialogCode.Accepted if accepted else dialog.DialogCode.Rejected)
+
+    def launch(plan, **kwargs):
+        events.append("launch")
+        return SessionExecutionSummary(
+            project_id=plan.project_id, session_id=plan.session_id,
+            engine_name="stub", run_mode=RunMode.SESSION,
+            participant_number=kwargs["participant_number"],
+            participant_session_number=kwargs["participant_session_number"],
+            total_condition_count=plan.total_runs, completed_condition_count=plan.total_runs,
+        )
+
+    monkeypatch.setattr(BrainVisionRecordingReminderDialog, "exec", confirm)
+    monkeypatch.setattr(document, "launch_compiled_session", launch)
+    page.launch_session()
+    if test_mode:
+        assert events == ["launch"]
+    elif accepted:
+        assert events == ["reminder", "launch"]
+    else:
+        assert events == ["reminder"]
+    assert not window.is_launch_busy()
 
 
 @pytest.mark.parametrize("platform_name", ["win32", "darwin"])

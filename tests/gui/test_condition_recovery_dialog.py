@@ -176,6 +176,40 @@ def test_busy_window_does_not_start_recovery_launch():
     main_window.StudioMainWindow._launch_recovered_condition(window, _record())
 
 
+def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
+    participant_dialog = Mock()
+    participant_dialog.DialogCode.Accepted = 1
+    participant_dialog.exec.return_value = 1
+    monkeypatch.setattr(
+        main_window, "ParticipantNumberDialog", Mock(return_value=participant_dialog),
+    )
+    confirm = Mock(return_value=False)
+    monkeypatch.setattr(main_window, "confirm_brainvision_recording", confirm)
+    task = Mock()
+    monkeypatch.setattr(main_window, "ProgressTask", task)
+    document = SimpleNamespace(
+        local_testing_enabled=False,
+        require_biosemi_recording_confirmation=False,
+        project=SimpleNamespace(
+            settings=SimpleNamespace(allow_repeated_participant_sessions=True),
+            manual_removed_electrodes={},
+        ),
+        validate_recording_launch=Mock(return_value="brainproducts_triggerbox"),
+        update_manual_removed_electrodes=Mock(),
+        save=Mock(),
+    )
+    window = SimpleNamespace(
+        isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
+        flush_pending_edits=lambda: True,
+        _bundle_import_processing_active=False, _project_update_reload_failed=False,
+    )
+
+    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+
+    confirm.assert_called_once_with(window, "brainproducts_triggerbox")
+    task.assert_not_called()
+
+
 def test_current_setup_replacement_cancel_does_not_compile_or_launch(monkeypatch):
     document = SimpleNamespace(
         local_testing_enabled=False,

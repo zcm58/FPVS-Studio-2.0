@@ -1099,6 +1099,17 @@ Test/Pilot uses null output and skips Recorder checks. Runtime validation remain
 authority if callers bypass the GUI; see
 [Runtime execution](RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
 
+On a normal Brain Products / BrainVision launch from Home, Run, or a condition
+re-run, **BrainVision Recording Reminder** asks the operator to confirm Recorder
+is saving on the recording PC. For USB, it also asks the operator to close
+TriggerBox Test IO and Configuration on the Studio PC to free the COM port.
+**Continue** starts the usual launch checks. **Cancel** (the default) and Escape
+return without starting presentation or reserving a visit. Experiment Test Mode
+and Pilot Study Mode skip the reminder. The dialog is `480x170` minimum and
+`520x180` by default. In a visible Windows smoke check, verify both layouts,
+both BrainVision transports, Cancel/Escape, and the Test Mode bypass. Check
+Continue with a stubbed launch or a prepared recording setup.
+
 Recording setup has a `700x640` minimum/default size.
 BioSemi ActiveTwo and ActiveThree share the existing project serial settings and
 Recording Reminder prompt. Their selector defaults unset ports to COM3 and lists available driver
@@ -1115,13 +1126,14 @@ entry and Apply remain usable after errors. Computer-default setup hides these
 project-only port controls and never writes a BioSemi COM preference.
 TriggerBox discovery starts when its setup is first shown and reads device metadata
 without opening ports. Detect refreshes the list and checks recognized candidates plus
-the explicit manual/custom COM selection by opening and closing them at 2,000,000
-baud / 8N1 without sending or reading bytes. A manually selected port is checked even
+the saved or manually selected COM port by opening and closing them at 2,000,000
+baud / 8N1 without sending or reading bytes. The selected port is checked even
 with generic or absent driver metadata and is labelled as identity not verified;
 unrelated generic ports are not probed. The selection is captured before worker dispatch.
-Both operations use an app-owned worker. A single match fills the default COM3; custom
-ports and manual edits survive discovery. Multiple matches require a choice;
-empty/error states retain manual entry. Access failures keep candidates visible and
+Both operations use an app-owned worker. A single match can fill the COM3 placeholder
+in first-time setup. Saved ports, including COM3 and COM4, and manual edits survive
+discovery. Multiple matches require a choice during first-time setup. Empty/error
+states retain manual entry. Access failures keep candidates visible and
 expose their errors; successful access applies only to the checked port at that moment.
 Metadata-only status says a port is listed, not that the hardware is connected;
 access success says "when checked". Details explain persistent unplugged rev.02 ports
@@ -1139,8 +1151,9 @@ TriggerBox uses its own port and fixed vendor baudrate; its guidance describes
 Recorder startup, and tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
 Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
 and advises disabling Recorder Debouncing unless validated for the intended markers.
-It has no Recording Reminder confirmation. Home identifies the selected device independently of
-ActiveThree's shared serial transport. Test/Pilot remains no-output for all choices.
+Normal launches use the BrainVision Recording Reminder described above. Home identifies
+the selected device independently of ActiveThree's shared serial transport.
+Test/Pilot remains no-output for all choices.
 The [runtime contract](RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
 owns pulse/low-interval scheduling, errors and hardware acceptance.
 The additional Settings tab preserves the existing parent size budgets documented
@@ -1159,6 +1172,8 @@ Check a manual COM4 with generic metadata: simulate access denied, verify the vi
 close-and-retry action, then release the port and Detect again. No trigger bytes should
 be sent by Detect. An edit during the check must not inherit the old port's success.
 Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
+Apply COM3 or COM4 with actiCHamp, reopen Recording Setup or Change Default, and
+confirm the saved port stays selected when discovery lists a different port.
 Switch devices, Cancel and reopen to check staged fields. With lab equipment,
 confirm normal-run saved markers separately from port discovery and check that
 Test/Pilot sends none.
