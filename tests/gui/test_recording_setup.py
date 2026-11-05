@@ -550,7 +550,7 @@ def test_triggerbox_detection_starts_once_on_first_visible_selection(
 
 @pytest.mark.parametrize("accessible, error, action", [
     (True, "", "Port accessible when checked"),
-    (False, "[WinError 5] Access is denied: COM9", "Close TriggerBox Configuration/Test IO"),
+    (False, "[WinError 5] Access is denied: COM9", "Please close the TriggerBox software"),
     (False, "[WinError 2] The system cannot find the file specified: COM9", "check Device Manager"),
     (False, "Cannot configure port: PermissionError(13, 'Incorrect function.', None, 1)",
      "2,000,000 baud required"),
@@ -592,13 +592,13 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
     assert "does not verify the amplifier" in details
     if accessible:
         assert "when checked" in dialog.detection_status_label.text()
-    elif "Close TriggerBox" in action:
+    elif "TriggerBox software" in action:
         assert "Configuration/Test IO" in details
         assert "Only one application" in details
         assert "Selecting a port manually cannot release it" in details
-        assert "then retry" in dialog.detection_status_label.text()
+        assert "if it is open, then try again" in dialog.detection_status_label.text()
     else:
-        assert "busy or access was denied" not in details
+        assert "occupied or access was denied" not in details
         assert "Configuration/Test IO" not in details
         assert "Only one application" not in details
     if error:

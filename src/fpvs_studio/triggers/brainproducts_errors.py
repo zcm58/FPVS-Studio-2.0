@@ -65,8 +65,8 @@ def triggerbox_port_error_message(port: str, error: BaseException | str) -> str:
         )
     if reason == "busy":
         return (
-            f"TriggerBox port {port} is busy or access was denied. Close TriggerBox "
-            "Configuration/Test IO or other port users, then retry."
+            f"The {port} port is occupied or access was denied. Please close the TriggerBox "
+            "software (Configuration/Test IO) if it is open, then try again."
         )
     if reason == "missing":
         return (

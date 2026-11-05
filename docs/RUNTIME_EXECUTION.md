@@ -428,7 +428,7 @@ cause in diagnostic details. Common cases are:
 
 | Observed failure | Recovery shown |
 | --- | --- |
-| Access denied or busy | Close TriggerBox Configuration/Test IO or other port users, then retry |
+| Access denied or busy | Names the occupied/access-denied COM port; close the TriggerBox software (Configuration/Test IO) if it is open, then try again |
 | COM port not found | Reconnect USB, check its current COM number in Device Manager; install/repair the vendor driver if absent |
 | Required settings rejected | Select the actual TriggerBox port and check the vendor driver; Plus requires 2,000,000 baud |
 | Device communication failure or timeout | Check USB/power, reconnect and retry |

@@ -170,6 +170,9 @@ def test_mentioning_triggerbox_does_not_hide_unrelated_export_permission_failure
 
 @pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
 @pytest.mark.parametrize("summary,advice,cause", [
+    ("The COM4 port is occupied or access was denied.",
+     "Please close the TriggerBox software (Configuration/Test IO) if it is open, then try again.",
+     PermissionError(errno.EACCES, "Access is denied")),
     ("TriggerBox port COM4 is busy or access was denied.",
      "Close TriggerBox Configuration/Test IO, then retry Detect.",
      PermissionError(errno.EACCES, "Access is denied")),

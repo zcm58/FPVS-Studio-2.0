@@ -48,6 +48,7 @@ def explain_error(
         str(triggerbox_cause) if triggerbox_cause is not None else "\n".join((message, details))
     )
     actionable = re.search(
+        r"The (?i:COM)[1-9]\d* port is occupied or access was denied\.|"
         r"TriggerBox (?:"
         r"port [^\r\n]*? (?:is busy or access was denied|was not found|"
         r"did not respond in time|could not be closed)|"

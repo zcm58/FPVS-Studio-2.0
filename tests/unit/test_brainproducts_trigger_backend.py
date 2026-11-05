@@ -274,9 +274,9 @@ def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypa
     backend = BrainProductsTriggerBoxBackend("COM4", serial_module=serial_module)
     with pytest.raises(BrainProductsTriggerBoxError) as caught:
         backend.connect()
-    assert "COM4 is busy or access was denied" in str(caught.value)
-    assert "Close TriggerBox Configuration/Test IO" in str(caught.value)
-    assert "retry" in str(caught.value)
+    assert "The COM4 port is occupied or access was denied." in str(caught.value)
+    assert "Please close the TriggerBox software (Configuration/Test IO)" in str(caught.value)
+    assert "if it is open, then try again." in str(caught.value)
     assert caught.value.__cause__ is failure
     assert len(serial_module.open_calls) == 1
     assert serial_module.port.writes == []
@@ -295,10 +295,10 @@ def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypa
     (FileNotFoundError(2, "Missing"), "TriggerBox port COM4 was not found.", "Device Manager"),
     (OSError("could not open port 'COM4': FileNotFoundError(2, 'Absent', None, 3)"),
      "TriggerBox port COM4 was not found.", "driver if absent"),
-    (PermissionError(13, "Denied"), "TriggerBox port COM4 is busy or access was denied.",
-     "Close TriggerBox Configuration/Test IO"),
+    (PermissionError(13, "Denied"), "The COM4 port is occupied or access was denied.",
+     "Please close the TriggerBox software (Configuration/Test IO) if it is open"),
     (OSError("[WinError 32] Sharing violation"),
-     "TriggerBox port COM4 is busy or access was denied.", "other port users"),
+     "The COM4 port is occupied or access was denied.", "then try again"),
     (ValueError("Not a valid baudrate"), "TriggerBox serial settings on COM4 were rejected.",
      "2,000,000 baud"),
     (OSError("Cannot configure port: OSError(22, 'Driver error', None, 31)"),
