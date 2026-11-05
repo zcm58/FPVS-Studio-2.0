@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.7.1 release](exec-plans/active/release-2.7.1.md) | Windows packaging, verification and publication of USB TriggerBox and launch-setting fixes |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
@@ -39,6 +38,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Studio 2.7.1 release](exec-plans/completed/release-2.7.1.md):
+  USB TriggerBox and launch-setting fixes published immutable/latest; 2.7.0
+  source/dependency freshness, full CI, packaged checks and public updater verification passed.
 - [TriggerBox USB edge cases](exec-plans/completed/triggerbox-usb-edge-cases.md):
   discovery cancellation, cleanup evidence and plain-language errors repaired;
   Recorder 1/2 guidance added. Further testing deferred at the user's request.
