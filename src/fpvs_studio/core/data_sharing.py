@@ -340,7 +340,9 @@ def protocol_fingerprint(
             raise InterruptedError("Protocol verification cancelled.")
 
     check_cancelled()
-    payload = project.model_dump(mode="json", exclude={"meta", "manual_removed_electrodes"})
+    payload = project.model_dump(
+        mode="json", exclude={"meta", "manual_removed_electrodes", "demographics_questions"},
+    )
     payload["template_id"] = project.meta.template_id
     settings = payload["settings"]
     for field in ("recording", "allow_repeated_participant_sessions", "condition_profile_id"):

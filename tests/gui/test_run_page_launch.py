@@ -30,6 +30,7 @@ from tests.gui.helpers import (
 )
 from tests.platform_adapters import set_module_platform
 
+from fpvs_studio.core.demographics import DemographicsQuestion
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
 from fpvs_studio.core.project_service import create_project
@@ -87,17 +88,115 @@ def test_participant_dialog_collects_and_prefills_manual_removed_electrodes(
     assert dialog.manual_removed_electrodes == ("FT7", "P9", "OZ")
     _assert_visible_children_within_parent(dialog)
 
-    dialog.age_edit.setText("30")
-    dialog.sex_combo.setCurrentIndex(dialog.sex_combo.findData("Female"))
-    dialog.handedness_combo.setCurrentIndex(
-        dialog.handedness_combo.findData("Right handed")
-    )
-    dialog.colorblind_combo.setCurrentIndex(dialog.colorblind_combo.findData(False))
+    dialog.findChild(QLineEdit, "participant_age_edit").setText("30")
+    sex = dialog.findChild(QComboBox, "participant_sex_combo")
+    sex.setCurrentIndex(sex.findData("Female"))
+    handedness = dialog.findChild(QComboBox, "participant_handedness_combo")
+    handedness.setCurrentIndex(handedness.findData("Right handed"))
+    colorblind = dialog.findChild(QComboBox, "participant_colorblind_combo")
+    colorblind.setCurrentIndex(colorblind.findData(False))
     dialog.accept()
 
     assert dialog.participant_number == "0007"
     assert dialog.manual_removed_electrodes == ("FT7", "P9", "OZ")
     assert dialog.participant_metadata.manual_removed_electrodes == ["FT7", "P9", "OZ"]
+
+
+def test_configured_demographics_form_fits_and_collects_answers_in_order(qtbot):
+    prompt = "Which research site did you visit before joining this experiment in the laboratory?"
+    long_option = "The behavioral testing laboratory on the north side of the university campus"
+    questions = [
+        DemographicsQuestion(
+            id="site", prompt=prompt, kind="choice", options=[long_option, "Other"],
+        ),
+        DemographicsQuestion(id="glasses", prompt="Are you wearing glasses?", kind="yes_no"),
+        DemographicsQuestion(id="language", prompt="First language", kind="text"),
+    ]
+    dialog = ParticipantNumberDialog(demographics_questions=questions)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert dialog.size().toTuple() == (600, 360)
+    _assert_visible_children_within_parent(dialog)
+    assert not dialog.demographics_scroll.verticalScrollBar().isVisible()
+    site_prompt = dialog.findChild(QLabel, "participant_site_prompt")
+    assert site_prompt.text() == prompt
+    assert prompt in site_prompt.toolTip()
+    assert site_prompt.heightForWidth(site_prompt.width()) <= site_prompt.height()
+    site = dialog.findChild(QComboBox, "participant_site_combo")
+    glasses = dialog.findChild(QComboBox, "participant_glasses_combo")
+    language = dialog.findChild(QLineEdit, "participant_language_edit")
+    assert site.y() < glasses.y() < language.y()
+    assert dialog.findChild(QLineEdit, "participant_age_edit") is None
+
+    dialog.participant_number_edit.setText("0042")
+    site.setCurrentIndex(site.findData(long_option))
+    glasses.setCurrentIndex(glasses.findData(False))
+    language.setText("Polish")
+    assert long_option in site.toolTip()
+    dialog.accept()
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
+    metadata = dialog.participant_details.participant_metadata
+    assert [answer.prompt for answer in metadata.demographics_answers] == [
+        question.prompt for question in questions
+    ]
+    assert [answer.answer for answer in metadata.demographics_answers] == [
+        long_option, False, "Polish",
+    ]
+
+
+def test_empty_demographics_form_needs_only_participant_number(qtbot):
+    dialog = ParticipantNumberDialog(demographics_questions=[])
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.demographics_scroll.isHidden()
+    assert dialog.manual_removed_electrodes_edit.isVisible()
+    _assert_visible_children_within_parent(dialog)
+
+    dialog.participant_number_edit.setText("0042")
+    dialog.accept()
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
+    assert dialog.participant_details.participant_metadata.demographics_answers == []
+
+
+def test_long_demographics_form_reveals_unanswered_question(qtbot):
+    questions = [
+        DemographicsQuestion(id=f"custom-{index}", prompt=f"Question {index}", kind="text")
+        for index in range(1, 13)
+    ]
+    dialog = ParticipantNumberDialog(demographics_questions=questions)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == (600, 360)
+    assert dialog.demographics_scroll.verticalScrollBar().isVisible()
+    assert dialog.demographics_scroll.horizontalScrollBar().maximum() == 0
+
+    dialog.participant_number_edit.setText("0042")
+    for question in questions[:-1]:
+        dialog.findChild(QLineEdit, f"participant_{question.id}_edit").setText("Answer")
+    dialog.accept()
+    QApplication.processEvents()
+
+    assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert dialog.demographics_error.isVisible()
+    assert "Question 12" in dialog.demographics_error.text()
+    assert dialog.demographics_error.heightForWidth(
+        dialog.demographics_error.width(),
+    ) <= dialog.demographics_error.height()
+    field = dialog.findChild(QLineEdit, "participant_custom-12_edit")
+    assert dialog.focusWidget() is field
+    viewport = dialog.demographics_scroll.viewport()
+    assert viewport.rect().contains(field.mapTo(viewport, field.rect().center()))
+    _assert_visible_children_within_parent(dialog.demographics_scroll.widget())
+    assert dialog.rect().contains(dialog.button_box.geometry())
+
+    field.setText("Last answer")
+    assert dialog.demographics_error.isHidden()
+    dialog.accept()
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
 
 
 def test_background_color_control_is_run_tab_presets_only(

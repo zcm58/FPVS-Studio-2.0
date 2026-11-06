@@ -30,6 +30,7 @@ from pydantic import (
 
 from fpvs_studio import __version__
 from fpvs_studio.core.condition_modifiers import ConditionModifier
+from fpvs_studio.core.demographics import DemographicsQuestions, default_demographics_questions
 from fpvs_studio.core.display_geometry import visual_angle_width_cm, visual_angle_width_px
 from fpvs_studio.core.enums import (
     DutyCycleMode,
@@ -158,6 +159,14 @@ class ProjectConfigProject(FPVSBaseModel):
     template_id: str
     description: str = ""
     allow_repeated_participant_sessions: bool = False
+    demographics_questions: DemographicsQuestions | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_demographics(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.demographics_questions is None:
+            payload.pop("demographics_questions", None)
+        return payload
 
     @field_validator("project_id")
     @classmethod
@@ -845,6 +854,10 @@ def export_project_config(
             allow_repeated_participant_sessions=(
                 project.settings.allow_repeated_participant_sessions
             ),
+            demographics_questions=(
+                project.demographics_questions
+                if project.demographics_questions != default_demographics_questions() else None
+            ),
         ),
         conditions=[
             ProjectConfigCondition(
@@ -1124,6 +1137,10 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
             name=config.project.name,
             template_id=config.project.template_id,
             description=config.project.description,
+        ),
+        demographics_questions=(
+            default_demographics_questions() if config.project.demographics_questions is None
+            else config.project.demographics_questions
         ),
         settings=ProjectSettings(
             recording=config.recording,

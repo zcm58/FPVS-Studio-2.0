@@ -5,6 +5,7 @@ and serialization shape, not scoring flow control or presentation behavior."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, Literal
 
@@ -20,6 +21,14 @@ from pydantic import (
 )
 
 from fpvs_studio.core.brainproducts import BrainProductsAmplifier
+from fpvs_studio.core.demographics import (
+    STUDIO_HANDEDNESS_OPTIONS,
+    STUDIO_SEX_OPTIONS,
+    DemographicsAnswer,
+    DemographicsQuestion,
+    DemographicsValue,
+    default_demographics_questions,
+)
 from fpvs_studio.core.enums import RunMode, SchemaVersion
 from fpvs_studio.core.models import (
     FPVSBaseModel,
@@ -44,10 +53,8 @@ FixationRtScoringSource = Literal[
 TriggerStatus = Literal["scheduled", "sent", "error", "skipped_disabled", "failed", "skipped"]
 TaskAbortStage = Literal["pre_condition", "post_condition"]
 
-PARTICIPANT_SEX_VALUES = frozenset({"Female", "Male"})
-PARTICIPANT_HANDEDNESS_VALUES = frozenset(
-    {"Right handed", "Left handed", "Ambidextrous"}
-)
+PARTICIPANT_SEX_VALUES = frozenset(STUDIO_SEX_OPTIONS)
+PARTICIPANT_HANDEDNESS_VALUES = frozenset(STUDIO_HANDEDNESS_OPTIONS)
 _LEGACY_HANDEDNESS_VALUES = {
     "Right": "Right handed",
     "Left": "Left handed",
@@ -73,6 +80,14 @@ class ParticipantMetadata(FPVSBaseModel):
     handedness: str | None = Field(default=None, max_length=64)
     colorblind: StrictBool | None = None
     manual_removed_electrodes: list[str] | None = None
+    demographics_answers: list[DemographicsAnswer] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def serialize_demographics(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if not self.demographics_answers:
+            payload.pop("demographics_answers", None)
+        return payload
 
     @field_validator("manual_removed_electrodes")
     @classmethod
@@ -116,7 +131,32 @@ class ParticipantMetadata(FPVSBaseModel):
             and self.handedness is None
             and self.colorblind is None
             and self.manual_removed_electrodes is None
+            and not self.demographics_answers
         )
+
+
+def collect_demographics(
+    questions: Sequence[DemographicsQuestion],
+    answers: Mapping[str, DemographicsValue | None],
+    *,
+    manual_removed_electrodes: Sequence[str] = (),
+) -> ParticipantMetadata:
+    """Snapshot the configured answers and project unchanged Studio questions to fixed fields."""
+    defaults = {question.id: question for question in default_demographics_questions()}
+    snapshots: list[DemographicsAnswer] = []
+    studio_fields: dict[str, DemographicsValue] = {}
+    for question in questions:
+        answer = question.validate_answer(answers.get(question.id))
+        snapshots.append(DemographicsAnswer(
+            question_id=question.id, prompt=question.prompt, answer=answer,
+        ))
+        if question == defaults.get(question.id):
+            studio_fields[question.id] = answer
+    return ParticipantMetadata.model_validate({
+        **studio_fields,
+        "manual_removed_electrodes": list(manual_removed_electrodes),
+        "demographics_answers": snapshots,
+    })
 
 
 class RecordingSnapshot(FPVSBaseModel):

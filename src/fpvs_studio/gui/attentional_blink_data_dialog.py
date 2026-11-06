@@ -252,7 +252,9 @@ class AttentionalBlinkDataDialog(QDialog):
                 f"Session ID: {burst.session_id}\nRun ID: {burst.run_id}\n"
                 + "\n".join(
                     f"{key.replace('_', ' ').capitalize()}: {value}"
-                    for key, value in burst.participant_metadata.model_dump().items()
+                    for key, value in burst.participant_metadata.model_dump(
+                        exclude={"demographics_answers"},
+                    ).items()
                     if value is not None
                 )
             )

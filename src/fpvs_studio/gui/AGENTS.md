@@ -6,9 +6,10 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
 
 ## Workflow and Ownership
 
-- Preserve Home as the launch surface and guided Setup for detailed editing. The eight
-  steps are Project, Conditions, Timing, Display & Session, Image Size (Character Size
-  for native AB), Fixation, Response, Review, fitting `1120x820` without required scroll.
+- Preserve Home as the launch surface and guided Setup for detailed editing. The nine
+  steps are Project, Demographics, Conditions, Timing, Display & Session, Image Size
+  (Character Size for native AB), Fixation, Response, and Review. All fit `1120x820`
+  without required scroll.
   All step content shares a top anchor and 24 px vertical insets. Use the current
   [layout map](../../../docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy) for widths
   and column groupings rather than introducing per-page positioning rules.
@@ -21,6 +22,8 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   presentations only within fixed block headers; Alt+Up/Down supports keyboard moves.
   New ordinary GUI projects opt into blocks; existing pooled designs change only on
   explicit editor Save. Keep AB/masking group workflows and occurrence timing intact.
+  Demographics owns the ordered questionnaire. Participant Information binds the
+  saved questions and captures answers separately from participant number and electrodes.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
   offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
   reviewed bundle import.

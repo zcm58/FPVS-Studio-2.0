@@ -27,19 +27,17 @@ from openpyxl import load_workbook
 from fpvs_studio.core.paths import resolve_project_relative_path, to_project_relative_posix
 from fpvs_studio.core.serialization import replace_file_atomically
 from fpvs_studio.runtime import session_export
+from fpvs_studio.runtime.participant_results import DEMOGRAPHIC_ANSWERS_SHEET_NAME
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
 
 _WORKBOOK = "logs/participant_summary.xlsx"
 LOGGER = logging.getLogger(__name__)
 _ARCHIVES = "logs/.output-archives"
-_GENERATED_SHEETS = {
-    "Participant Summary", "Demographics", "Fixation by Condition", "Fixation Responses",
-    "Task Answers", "Results Notes", "Full Text",
-}
 _REQUIRED_SHEETS = {
-    "Participant Summary", "Demographics", "Fixation by Condition", "Fixation Responses",
-    "Task Answers", "Results Notes",
+    "Participant Summary", "Demographics", DEMOGRAPHIC_ANSWERS_SHEET_NAME,
+    "Fixation by Condition", "Fixation Responses", "Task Answers", "Results Notes",
 }
+_GENERATED_SHEETS = _REQUIRED_SHEETS | {"Full Text"}
 _DETAILED_CSV_NAMES = {
     "participant_metadata.csv", "conditions.csv", "events.csv", "fixation_events.csv",
     "responses.csv", "frame_intervals.csv", "trigger_log.csv", "task_responses.csv",

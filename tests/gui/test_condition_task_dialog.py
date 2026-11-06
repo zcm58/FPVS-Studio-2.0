@@ -1198,7 +1198,7 @@ def test_task_participant_preview_caches_and_invalidates_image_rendering(
     assert preview._scaled_option_pixmaps == {}
 
 
-def test_conditions_step_opens_modifier_dialog_and_remains_eight_step_sized(
+def test_conditions_step_opens_modifier_dialog_and_remains_nine_step_sized(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -1228,6 +1228,6 @@ def test_conditions_step_opens_modifier_dialog_and_remains_eight_step_sized(
     assert step.task_summary_label.text() == "No modifiers"
     qtbot.mouseClick(step.task_button, Qt.MouseButton.LeftButton)
     assert captures == [condition_id]
-    assert len(window.setup_wizard_page.progress_step_labels) == 8
+    assert len(window.setup_wizard_page.progress_step_labels) == 9
     _assert_widget_within_parent(step.task_button)
     _assert_widget_within_parent(step.task_summary_label)

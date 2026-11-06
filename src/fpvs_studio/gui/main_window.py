@@ -1232,6 +1232,7 @@ class StudioMainWindow(QMainWindow):
                 return
         dialog = ParticipantNumberDialog(
             self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
+            demographics_questions=self.document.project.demographics_questions,
         )
         dialog.setWindowTitle("Re-run Condition — Confirm Participant Details")
         dialog.participant_number_edit.setText(record.participant_number)
@@ -1284,6 +1285,7 @@ class StudioMainWindow(QMainWindow):
     def _prompt_participant_number(self) -> ParticipantLaunchDetails | None:
         dialog = ParticipantNumberDialog(
             self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
+            demographics_questions=self.document.project.demographics_questions,
         )
         if self.document.attentional_blink_pilot_mode_enabled:
             dialog.setWindowTitle("Pilot Study — Participant Details (No EEG Hardware)")

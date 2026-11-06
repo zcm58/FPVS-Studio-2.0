@@ -65,6 +65,7 @@ from fpvs_studio.gui.condition_setup_step import (
     is_guided_trigger_code,
 )
 from fpvs_studio.gui.condition_timing_table import ConditionTimingTable
+from fpvs_studio.gui.demographics_setup_step import DemographicsSetupStep
 from fpvs_studio.gui.design_system import PAGE_MARGIN_X
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_stimuli import condition_image_set_requires_normalization
@@ -88,6 +89,7 @@ from fpvs_studio.support.error_explanations import describe_error
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
+    ("demographics", "Demographics"),
     ("conditions", "Conditions"),
     ("experiment", "Timing"),
     ("session", "Display & Session"),
@@ -232,6 +234,7 @@ class SetupWizardPage(QWidget):
         self._refresh_timer.timeout.connect(self.refresh)
 
         self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
+        self.demographics_setup_step = DemographicsSetupStep(document, self)
         self.condition_setup_step = ConditionSetupStep(
             document, self, load_fpvs_root_dir=load_fpvs_root_dir,
         )
@@ -596,6 +599,13 @@ class SetupWizardPage(QWidget):
             max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
+        self.demographics_step_surface = _SetupStepSurface(
+            self.demographics_setup_step,
+            object_name="setup_wizard_demographics_surface",
+            max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
+            expand_vertical=True,
+            parent=self,
+        )
         self.conditions_step_surface = _SetupStepSurface(
             self.condition_setup_step,
             object_name="setup_wizard_conditions_surface",
@@ -695,6 +705,7 @@ class SetupWizardPage(QWidget):
             parent=self,
         )
         self.step_stack.addWidget(self.project_step_surface)
+        self.step_stack.addWidget(self.demographics_step_surface)
         self.step_stack.addWidget(self.conditions_step_surface)
         self.step_stack.addWidget(self.experiment_step_surface)
         self.step_stack.addWidget(self.display_session_step_surface)
@@ -1117,6 +1128,7 @@ class SetupWizardPage(QWidget):
         self._refresh_progress_steps()
         page_titles = {
             "project": "Set up your experiment",
+            "demographics": "Configure demographics",
             "conditions": "Configure your conditions",
             "experiment": "Set your timing",
             "session": "Configure display and session",
@@ -1616,9 +1628,7 @@ class SetupWizardPage(QWidget):
             self.image_display_size_editor, AttentionalBlinkCharacterSizeEditor,
         ):
             return not self.image_display_size_editor.validation_message()
-        if step_key in {"image_size", "fixation"}:
-            return True
-        if step_key == "response":
+        if step_key in {"demographics", "image_size", "fixation", "response"}:
             return True
         if step_key == "review":
             return self.is_launch_ready()

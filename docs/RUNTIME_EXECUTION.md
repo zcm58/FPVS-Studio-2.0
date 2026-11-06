@@ -1043,19 +1043,20 @@ preserving existing rows and column values.
 
 Launch-time participant metadata:
 
-- the GUI launch prompt collects Participant Number, Age, Sex, Handedness, and
-  colorblind status by default for every project
-- Sex accepts only `Female` or `Male`; Handedness accepts only `Right handed`,
-  `Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
-  participant answer
+- the GUI collects Participant Number and the ordered project demographics
+  questionnaire. Every configured answer is required for interactive launches that
+  collect participant details
 - Participant Number remains the required participant identity; each visit also has
   its own participant session number
-- when colorblind status is `Yes`, runtime uses the accessible fixation color preset
-  of white `#FFFFFF` to vermillion `#D55E00` for both the participant tutorial and
-  condition playback while leaving the authored project settings unchanged
-- Age, Sex, Handedness, and colorblind status are stored in `SessionExecutionSummary`,
-  each `RunExecutionSummary`, the session-level `participant_metadata.csv`, and
-  project-level `logs/session_condition_history.csv`
+- an answer of `Yes` to the Studio default colorblindness question selects the
+  accessible fixation preset of white `#FFFFFF` to vermillion `#D55E00` for both
+  the participant tutorial and condition playback
+- each visit captures the question ID, prompt and typed answer in presentation order
+  in `ParticipantMetadata`. Full execution summaries and private participant-result
+  records retain the snapshots. Both export modes show them in the participant workbook
+- unchanged Studio questions also populate the corresponding fixed fields in
+  execution summaries, full-mode `participant_metadata.csv`, and
+  `logs/session_condition_history.csv`. Reordering preserves this mapping
 
 Project-level reporting index:
 
@@ -1080,6 +1081,9 @@ Participant results workbook:
     flags, weighted fixation accuracy and mean reaction time
   - `Demographics` makes participant/visit details directly accessible; test IDs are
     retained with an explicit label
+  - `Demographic Answers` contains one row per captured question, including visit,
+    original position, wording and answer. Older visits still appear in the fixed
+    `Demographics` sheet when only standard fields were recorded
   - research sheets distinguish `Test Participant` (reserved IDs `0`/`00`) from the
     recorded `Test Mode` and `Pilot Mode` launch flags; unavailable historical flags
     remain unavailable, and original Participant Summary inclusion rules are unchanged

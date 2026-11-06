@@ -11,6 +11,7 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QLabel,
+    QLineEdit,
     QListWidget,
     QMessageBox,
     QPushButton,
@@ -28,6 +29,7 @@ from tests.gui.helpers import (
     _prepare_compile_ready_project,
 )
 
+from fpvs_studio.core.demographics import DemographicsQuestion
 from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
@@ -37,6 +39,7 @@ from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
     ParticipantLaunchDetails,
+    ParticipantNumberDialog,
     TestModeLaunchConfirmationDialog,
     TestModeLaunchSelection,
 )
@@ -956,8 +959,8 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     _assert_visible_children_within_parent(launch_panel)
 
 
-def test_pilot_collects_standard_demographics_on_both_launch_surfaces(qtbot, tmp_path, monkeypatch):
-    from fpvs_studio.core.execution import ParticipantMetadata
+@pytest.mark.parametrize("pilot", [False, True])
+def test_configured_demographics_reach_both_launch_surfaces(qtbot, tmp_path, monkeypatch, pilot):
     from fpvs_studio.core.project_service import build_starter_project
     from fpvs_studio.gui.main_window import StudioMainWindow
     from fpvs_studio.gui.run_page import RunPage
@@ -965,15 +968,12 @@ def test_pilot_collects_standard_demographics_on_both_launch_surfaces(qtbot, tmp
     project = build_starter_project(
         "Pilot", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK
     )
+    project.demographics_questions = [
+        DemographicsQuestion(id="language", prompt="First language", kind="text"),
+    ]
     document = ProjectDocument(project_root=tmp_path, project=project)
-    document.set_experiment_test_mode_enabled(True)
-    document.set_attentional_blink_pilot_mode_enabled(True)
-    details = ParticipantLaunchDetails(
-        participant_number="0042",
-        participant_metadata=ParticipantMetadata(
-            age=23, sex="Female", handedness="Right handed", colorblind=False
-        ),
-    )
+    document.set_experiment_test_mode_enabled(pilot)
+    document.set_attentional_blink_pilot_mode_enabled(pilot)
     window = StudioMainWindow(
         document=document,
         on_request_new_project=lambda: None,
@@ -985,12 +985,23 @@ def test_pilot_collects_standard_demographics_on_both_launch_surfaces(qtbot, tmp
         on_load_condition_template_profiles=lambda: [],
         on_manage_condition_templates=lambda: [],
     )
+
+    def _enter_participant_details(dialog):
+        qtbot.addWidget(dialog)
+        assert ("Pilot Study" in dialog.windowTitle()) is pilot
+        dialog.participant_number_edit.setText("0042")
+        dialog.findChild(QLineEdit, "participant_language_edit").setText("Polish")
+        dialog.accept()
+        return dialog.result()
+
+    monkeypatch.setattr(ParticipantNumberDialog, "exec", _enter_participant_details)
     for surface in (window, RunPage(document=document)):
         qtbot.addWidget(surface)
-        monkeypatch.setattr(surface, "_prompt_participant_number", lambda: details)
         monkeypatch.setattr(
             surface,
             "_confirm_test_mode_launch",
-            lambda: pytest.fail("Pilot must collect demographics"),
+            lambda: pytest.fail("This launch must collect demographics"),
         )
-        assert surface._collect_launch_participant_details() == details
+        details = surface._collect_launch_participant_details()
+        assert details.participant_number == "0042"
+        assert details.participant_metadata.demographics_answers[0].answer == "Polish"

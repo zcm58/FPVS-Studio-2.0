@@ -5,6 +5,7 @@ from __future__ import annotations
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from html import escape
 
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QIntValidator, QShowEvent
@@ -24,12 +25,18 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressDialog,
     QPushButton,
+    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
-from fpvs_studio.core.execution import PARTICIPANT_SEX_VALUES, ParticipantMetadata
+from fpvs_studio.core.demographics import (
+    DemographicsQuestion,
+    DemographicsResponseError,
+    default_demographics_questions,
+)
+from fpvs_studio.core.execution import ParticipantMetadata, collect_demographics
 from fpvs_studio.core.models import DisplaySettings, normalize_manual_removed_electrodes
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
@@ -219,6 +226,7 @@ class ParticipantNumberDialog(QDialog):
         parent: QWidget | None = None,
         *,
         manual_removed_electrodes: Mapping[str, Sequence[str]] | None = None,
+        demographics_questions: Sequence[DemographicsQuestion] | None = None,
     ) -> None:
         super().__init__(parent)
         self._saved_manual_removed_electrodes = {
@@ -229,9 +237,16 @@ class ParticipantNumberDialog(QDialog):
         self.setModal(True)
         self.setMinimumSize(600, 360)
         self.resize(600, 360)
+        prompt_width = 200
 
-        self.prompt_label = QLabel("Please enter the participant details.", self)
-        self.prompt_label.setObjectName("participant_number_prompt_label")
+        self._demographics_questions = tuple(
+            question.model_copy(deep=True)
+            for question in (
+                default_demographics_questions()
+                if demographics_questions is None else demographics_questions
+            )
+        )
+        self._demographics_fields: dict[str, QLineEdit | QComboBox] = {}
 
         self.participant_number_edit = QLineEdit(self)
         self.participant_number_edit.setObjectName("participant_number_edit")
@@ -239,29 +254,42 @@ class ParticipantNumberDialog(QDialog):
         self.participant_number_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
         self.participant_number_edit.setFocus()
 
-        self.age_edit = QLineEdit(self)
-        self.age_edit.setObjectName("participant_age_edit")
-        self.age_edit.setPlaceholderText("Whole number from 1 to 120")
-        self.age_edit.setValidator(QIntValidator(1, 120, self.age_edit))
-        self.age_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        self.demographics_scroll = QScrollArea(self)
+        self.demographics_scroll.setWidgetResizable(True)
+        self.demographics_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.demographics_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.demographics_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        questions_widget = QWidget()
+        questions_form = QFormLayout(questions_widget)
+        questions_form.setContentsMargins(0, 0, 0, 0)
+        questions_form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
+        questions_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        for question in self._demographics_questions:
+            label = QLabel(question.prompt, questions_widget)
+            label.setObjectName(f"participant_{question.id}_prompt")
+            label.setTextFormat(Qt.TextFormat.PlainText)
+            label.setWordWrap(True)
+            label.setFixedWidth(prompt_width)
+            label.setToolTip(f"<p>{escape(question.prompt)}</p>")
+            field = self._build_demographics_field(question, questions_widget)
+            self._demographics_fields[question.id] = field
+            questions_form.addRow(label, field)
+        self.demographics_scroll.setWidget(questions_widget)
+        self.demographics_scroll.setVisible(bool(self._demographics_questions))
 
-        self.sex_combo = QComboBox(self)
-        self.sex_combo.setObjectName("participant_sex_combo")
-        self.sex_combo.addItem("Select sex...", None)
-        for value in sorted(PARTICIPANT_SEX_VALUES):
-            self.sex_combo.addItem(value, value)
-
-        self.handedness_combo = QComboBox(self)
-        self.handedness_combo.setObjectName("participant_handedness_combo")
-        self.handedness_combo.addItem("Select handedness...", None)
-        for value in ["Right handed", "Left handed", "Ambidextrous"]:
-            self.handedness_combo.addItem(value, value)
-
-        self.colorblind_combo = QComboBox(self)
-        self.colorblind_combo.setObjectName("participant_colorblind_combo")
-        self.colorblind_combo.addItem("Select yes or no...", None)
-        self.colorblind_combo.addItem("No", False)
-        self.colorblind_combo.addItem("Yes", True)
+        self.demographics_error = QLabel(self)
+        self.demographics_error.setObjectName("participant_demographics_error")
+        self.demographics_error.setTextFormat(Qt.TextFormat.PlainText)
+        self.demographics_error.setWordWrap(True)
+        self.demographics_error.setMinimumWidth(1)
+        self.demographics_error.hide()
+        for field in self._demographics_fields.values():
+            if isinstance(field, QLineEdit):
+                field.textChanged.connect(self.demographics_error.hide)
+            else:
+                field.currentIndexChanged.connect(self.demographics_error.hide)
 
         self.manual_removed_electrodes_edit = QLineEdit(self)
         self.manual_removed_electrodes_edit.setObjectName(
@@ -285,12 +313,12 @@ class ParticipantNumberDialog(QDialog):
             Qt.LayoutDirection.LeftToRight
         )
 
-        form_layout = QFormLayout()
-        form_layout.addRow("Participant Number", self.participant_number_edit)
-        form_layout.addRow("Age", self.age_edit)
-        form_layout.addRow("Sex", self.sex_combo)
-        form_layout.addRow("Handedness", self.handedness_combo)
-        form_layout.addRow("Are you colorblind?", self.colorblind_combo)
+        identity_form = QFormLayout()
+        identity_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        participant_number_label = QLabel("Participant Number", self)
+        participant_number_label.setFixedWidth(prompt_width)
+        participant_number_label.setBuddy(self.participant_number_edit)
+        identity_form.addRow(participant_number_label, self.participant_number_edit)
         self.manual_removed_electrodes_label = QLabel(
             "Manually Removed Electrodes",
             self,
@@ -301,8 +329,6 @@ class ParticipantNumberDialog(QDialog):
         self.manual_removed_electrodes_label.setBuddy(
             self.manual_removed_electrodes_edit
         )
-        form_layout.addRow(self.manual_removed_electrodes_label)
-        form_layout.addRow(self.manual_removed_electrodes_edit)
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -313,13 +339,52 @@ class ParticipantNumberDialog(QDialog):
         self.button_box.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addWidget(self.prompt_label)
-        layout.addLayout(form_layout)
+        layout.addLayout(identity_form)
+        layout.addWidget(self.demographics_scroll, 1)
+        layout.addWidget(self.demographics_error)
+        layout.addWidget(self.manual_removed_electrodes_label)
+        layout.addWidget(self.manual_removed_electrodes_edit)
         layout.addWidget(self.button_box)
+        apply_dialog_theme(self)
 
         self.participant_number_edit.textChanged.connect(
             self._prefill_manual_removed_electrodes
         )
+
+    @staticmethod
+    def _build_demographics_field(
+        question: DemographicsQuestion, parent: QWidget,
+    ) -> QLineEdit | QComboBox:
+        if question.kind in ("age", "text"):
+            edit = QLineEdit(parent)
+            edit.setObjectName(f"participant_{question.id}_edit")
+            edit.setAccessibleName(question.prompt)
+            if question.kind == "age":
+                edit.setPlaceholderText("Whole number from 1 to 120")
+                validator = QIntValidator(1, 120, edit)
+                edit.setValidator(validator)
+                edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+            return edit
+
+        combo = QComboBox(parent)
+        combo.setObjectName(f"participant_{question.id}_combo")
+        combo.setAccessibleName(question.prompt)
+        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        combo.setMinimumContentsLength(14)
+        combo.addItem("Select an answer…", None)
+        if question.kind == "yes_no":
+            combo.addItem("No", False)
+            combo.addItem("Yes", True)
+        else:
+            for option in question.options:
+                combo.addItem(option, option)
+                combo.setItemData(
+                    combo.count() - 1, f"<p>{escape(option)}</p>", Qt.ItemDataRole.ToolTipRole,
+                )
+        combo.currentTextChanged.connect(
+            lambda current: combo.setToolTip(f"<p>{escape(current)}</p>"),
+        )
+        return combo
 
     @property
     def participant_number(self) -> str:
@@ -331,12 +396,13 @@ class ParticipantNumberDialog(QDialog):
     def participant_metadata(self) -> ParticipantMetadata:
         """Return validated launch-time participant metadata."""
 
-        return ParticipantMetadata(
-            age=int(self.age_edit.text().strip()),
-            sex=self.sex_combo.currentData(),
-            handedness=self.handedness_combo.currentData(),
-            colorblind=self.colorblind_combo.currentData(),
-            manual_removed_electrodes=list(self.manual_removed_electrodes),
+        return collect_demographics(
+            self._demographics_questions,
+            {
+                question_id: field.text() if isinstance(field, QLineEdit) else field.currentData()
+                for question_id, field in self._demographics_fields.items()
+            },
+            manual_removed_electrodes=self.manual_removed_electrodes,
         )
 
     @property
@@ -382,54 +448,24 @@ class ParticipantNumberDialog(QDialog):
             self.participant_number_edit.setFocus()
             self.participant_number_edit.selectAll()
             return
-        age_text = self.age_edit.text().strip()
-        if not age_text:
-            QMessageBox.warning(
-                self,
-                "Age Required",
-                "Enter the participant age to launch the session.",
-            )
-            self.age_edit.setFocus()
-            return
-        if not age_text.isdigit() or int(age_text) < 1 or int(age_text) > 120:
-            QMessageBox.warning(
-                self,
-                "Invalid Age",
-                "Participant age must be a whole number from 1 to 120.",
-            )
-            self.age_edit.setFocus()
-            self.age_edit.selectAll()
-            return
-        if self.sex_combo.currentData() is None:
-            QMessageBox.warning(
-                self,
-                "Sex Required",
-                "Select the participant sex to launch the session.",
-            )
-            self.sex_combo.setFocus()
-            return
-        if self.handedness_combo.currentData() is None:
-            QMessageBox.warning(
-                self,
-                "Handedness Required",
-                "Select the participant handedness to launch the session.",
-            )
-            self.handedness_combo.setFocus()
-            return
-        if self.colorblind_combo.currentData() is None:
-            QMessageBox.warning(
-                self,
-                "Colorblind Status Required",
-                "Select whether the participant is colorblind to launch the session.",
-            )
-            self.colorblind_combo.setFocus()
+        try:
+            _ = self.participant_metadata
+        except DemographicsResponseError as error:
+            field = self._demographics_fields[error.question_id]
+            self.demographics_error.setText(str(error))
+            self.demographics_error.setToolTip(f"<p>{escape(str(error))}</p>")
+            self.demographics_error.show()
+            layout = self.layout()
+            assert layout is not None
+            layout.activate()
+            field.setFocus()
+            self.demographics_scroll.ensureWidgetVisible(field)
             return
         signals_were_blocked = self.participant_number_edit.blockSignals(True)
         try:
             self.participant_number_edit.setText(participant_number)
         finally:
             self.participant_number_edit.blockSignals(signals_were_blocked)
-        self.age_edit.setText(age_text)
         super().accept()
 
 
@@ -1194,6 +1230,7 @@ class RunPage(QWidget):
         dialog = ParticipantNumberDialog(
             self,
             manual_removed_electrodes=self._document.project.manual_removed_electrodes,
+            demographics_questions=self._document.project.demographics_questions,
         )
         if self._document.attentional_blink_pilot_mode_enabled:
             dialog.setWindowTitle("Pilot Study — Participant Details (No EEG Hardware)")

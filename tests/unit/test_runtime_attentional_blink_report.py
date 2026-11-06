@@ -10,8 +10,9 @@ from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.demographics import DemographicsAnswer
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.execution import AttentionalBlinkOnsetRecord
+from fpvs_studio.core.execution import AttentionalBlinkOnsetRecord, ParticipantMetadata
 from fpvs_studio.core.project_service import build_starter_project
 from fpvs_studio.core.task_models import (
     TaskOption,
@@ -28,6 +29,7 @@ from fpvs_studio.runtime.attentional_blink_report import (
     load_attentional_blink_data,
     write_attentional_blink_accuracy_xlsx,
 )
+from fpvs_studio.runtime.participant_results import DEMOGRAPHIC_ANSWERS_SHEET_NAME
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.task_runner import _score_response
 
@@ -106,13 +108,16 @@ class RecallEngine(StubEngine):
         )
 
 
-def _execute(tmp_path, plan, engine, *, mode="compact", participant="0042", visit=1):
+def _execute(
+    tmp_path, plan, engine, *, mode="compact", participant="0042", visit=1, metadata=None,
+):
     return RuntimeWorker(engine).execute_session(
         tmp_path,
         plan,
         tmp_path / "runs" / f"session{visit}",
         participant_number=participant,
         participant_session_number=visit,
+        participant_metadata=metadata,
         runtime_options={
             "export_mode": mode, "serial_enabled": False, "experiment_test_mode": True,
             "verify_refresh_rate": participant not in {"0", "00"},
@@ -125,7 +130,13 @@ def _execute(tmp_path, plan, engine, *, mode="compact", participant="0042", visi
 def test_completed_bursts_score_targets_and_export_chronology(tmp_path, mode):
     plan = _plan()
     engine = RecallEngine()
-    result = _execute(tmp_path, plan, engine, mode=mode)
+    answer = DemographicsAnswer(
+        question_id="preferred-language", prompt="Preferred language?", answer="French",
+    )
+    result = _execute(
+        tmp_path, plan, engine, mode=mode,
+        metadata=ParticipantMetadata(demographics_answers=[answer]),
+    )
     assert not result.aborted
     transitions = engine._captures["transitions"]
     assert len(transitions) == 6
@@ -172,6 +183,9 @@ def test_completed_bursts_score_targets_and_export_chronology(tmp_path, mode):
     ) as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == 6
+    assert "participant_demographics_answers" not in rows[0]
+    journal = tmp_path / "logs" / ATTENTIONAL_BLINK_JOURNAL_FILENAME
+    assert answer.prompt not in journal.read_text(encoding="utf-8")
     assert all(
         row["participant_number"] == "0042" and row["participant_session_number"] == "1"
         for row in rows
@@ -182,6 +196,7 @@ def test_completed_bursts_score_targets_and_export_chronology(tmp_path, mode):
         directory = tmp_path / "runs" / "session1"
         payload = json.loads((directory / "attentional_blink_bursts_v1.json").read_text())
         assert len(payload["bursts"]) == 6
+        assert "demographics_answers" not in payload["bursts"][0]["participant_metadata"]
         assert (
             directory / plan.ordered_entries()[0].run_id / ATTENTIONAL_BLINK_BURSTS_FILENAME
         ).is_file()
@@ -190,6 +205,10 @@ def test_completed_bursts_score_targets_and_export_chronology(tmp_path, mode):
     try:
         general_summary = str(list(workbook["Participant Summary"].iter_rows(values_only=True)))
         assert "t1_response" not in general_summary and "t2_response" not in general_summary
+        header, row = workbook[DEMOGRAPHIC_ANSWERS_SHEET_NAME].values
+        recorded = dict(zip(header, row, strict=True))
+        assert (recorded["PID"], recorded["Session Number"]) == ("0042", 1)
+        assert (recorded["Question"], recorded["Answer"]) == (answer.prompt, answer.answer)
     finally:
         workbook.close()
 

@@ -11,6 +11,7 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.utils import get_column_letter
 
 from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.demographics import DemographicsAnswer
 from fpvs_studio.core.execution import (
     FixationResponseRecord,
     ParticipantMetadata,
@@ -30,6 +31,7 @@ from fpvs_studio.core.task_models import (
     TaskStepSpec,
 )
 from fpvs_studio.runtime.participant_results import (
+    DEMOGRAPHIC_ANSWERS_SHEET_NAME,
     add_participant_results_sheets,
     capture_participant_results,
     freeze_legacy_participant_results,
@@ -42,6 +44,7 @@ from fpvs_studio.runtime.session_export import (
     append_compact_task_responses,
     append_session_condition_history,
     append_task_response_checkpoint,
+    refresh_participant_summary_if_stale,
     write_participant_summary,
     write_session_artifacts,
 )
@@ -219,6 +222,9 @@ def test_pending_capture_recovers_partial_journal_before_any_history(tmp_path, r
     response = summary.run_results[0].task_responses[0]
     journal = tmp_path / "logs/.task-response-checkpoints/partial.jsonl"
     empty = summary.model_copy(update={"run_results": []})
+    empty.participant_metadata.demographics_answers = [
+        DemographicsAnswer(question_id="vision", prompt="Corrected vision?", answer=False),
+    ]
     assert not has_captured_participant_results(tmp_path)
     capture = capture_participant_results(tmp_path, plan, empty, finalized=False,
                                         journal_paths={response.run_id: journal})
@@ -231,7 +237,86 @@ def test_pending_capture_recovers_partial_journal_before_any_history(tmp_path, r
     demographic, = _rows(workbook, "Demographics")
     assert demographic["Age"] == 30
     assert demographic["Session Aborted"] == "Not finalized"
+    demographic_answer, = _rows(workbook, DEMOGRAPHIC_ANSWERS_SHEET_NAME)
+    assert demographic_answer["Answer"] is False
+    assert demographic_answer["Session Aborted"] == "Not finalized"
     assert set(participant_results_source_paths(tmp_path)) == {capture, journal}
+
+
+def test_demographic_answers_keep_original_question_order_and_visit_identity(tmp_path, results):
+    plan, first = results
+    first.participant_metadata.demographics_answers = [
+        DemographicsAnswer(question_id="comments", prompt="=Original wording", answer="=1+2"),
+        DemographicsAnswer(question_id="age", prompt="Age", answer=30),
+    ]
+    output = tmp_path / "runs/first"
+    write_session_artifacts(output, plan, first)
+    full_history = _history(plan, first, output_dir="runs/first")
+    assert [
+        row["Answer"] for row in _rows(
+            _workbook(tmp_path, [full_history]), DEMOGRAPHIC_ANSWERS_SHEET_NAME,
+        )
+    ] == ["=1+2", 30]
+    first_capture = capture_participant_results(tmp_path, plan, first)
+    saved_capture = first_capture.read_bytes()
+
+    second = first.model_copy(deep=True)
+    second.run_results = []
+    second.participant_metadata.demographics_answers = [
+        DemographicsAnswer(question_id="comments", prompt="Revised wording", answer="New answer"),
+    ]
+    with pytest.raises(ValueError, match="Original demographic answers cannot be replaced"):
+        capture_participant_results(tmp_path, plan, second)
+    assert first_capture.read_bytes() == saved_capture
+    second.participant_session_number = 2
+    capture_participant_results(tmp_path, plan, second)
+
+    history = [
+        full_history,
+        _history(plan, first, participant_session_number="3", participant_age="41"),
+    ]
+    path = tmp_path / "results.xlsx"
+    _workbook(tmp_path, history).save(path)
+    workbook = load_workbook(path)
+    try:
+        sheet = workbook[DEMOGRAPHIC_ANSWERS_SHEET_NAME]
+        answers = _rows(workbook, DEMOGRAPHIC_ANSWERS_SHEET_NAME)
+        assert len(answers) == 3
+        assert [row["PID"] for row in answers] == ["009"] * 3
+        assert [
+            (row["Question Position"], row["Question ID"], row["Question"], row["Answer"])
+            for row in answers if row["Session Number"] == 1
+        ] == [(1, "comments", "=Original wording", "=1+2"), (2, "age", "Age", 30)]
+        assert [row["Question"] for row in answers if row["Session Number"] == 2] == [
+            "Revised wording",
+        ]
+        for row in sheet.iter_rows(min_row=2, min_col=3, max_col=4):
+            assert row[0].data_type == "s"
+            if isinstance(row[1].value, str):
+                assert row[1].data_type == "s"
+        assert any(row["Session Number"] == 3 and row["Age"] == 41
+                   for row in _rows(workbook, "Demographics"))
+    finally:
+        workbook.close()
+
+
+def test_refresh_adds_demographic_answers_to_an_older_workbook(tmp_path, results):
+    plan, summary = results
+    capture_participant_results(tmp_path, plan, summary)
+    path = write_participant_summary(tmp_path)
+    workbook = load_workbook(path)
+    del workbook[DEMOGRAPHIC_ANSWERS_SHEET_NAME]
+    workbook.save(path)
+    workbook.close()
+
+    assert refresh_participant_summary_if_stale(tmp_path) == path
+    updated = load_workbook(path)
+    try:
+        assert _rows(updated, DEMOGRAPHIC_ANSWERS_SHEET_NAME) == []
+        demographic, = _rows(updated, "Demographics")
+        assert demographic["Age"] == 30
+    finally:
+        updated.close()
 
 
 def test_aborted_test_visit_and_missing_rt_are_retained(tmp_path, results):
@@ -589,6 +674,7 @@ def test_longer_appended_answers_refit_columns_and_wrapped_rows(tmp_path, result
             )
         assert sheet.row_dimensions[new_row].height > 36
         assert sheet.row_dimensions[new_row].height <= 409
-        assert len(after.sheetnames) == 6
+        assert DEMOGRAPHIC_ANSWERS_SHEET_NAME in after.sheetnames
+        assert len(after.sheetnames) == 7
     finally:
         after.close()

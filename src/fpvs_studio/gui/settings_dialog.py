@@ -310,9 +310,10 @@ class AppSettingsDialog(QDialog):
                 pilot = self.attentional_blink_pilot_mode_checkbox
                 pilot.setObjectName("attentional_blink_pilot_mode_checkbox")
                 pilot.setToolTip(
-                    "Collects full participant demographics and saves T1/T2 accuracy without "
-                    "EEG hardware. Skips the recording reminder and graphics-memory checks; "
-                    f"{refresh_policy}. Fullscreen playback and timing records remain enabled. "
+                    "Uses the project's demographics questionnaire and saves T1/T2 accuracy "
+                    "without EEG hardware. It skips the recording reminder and graphics-memory "
+                    f"checks and {refresh_policy}. Fullscreen playback and timing records "
+                    "remain enabled. "
                     "Takes precedence over Test Mode for attentional-blink studies only."
                 )
                 pilot.setChecked(attentional_blink_pilot_mode_enabled)

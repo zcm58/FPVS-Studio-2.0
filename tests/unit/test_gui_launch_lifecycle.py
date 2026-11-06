@@ -40,17 +40,20 @@ def wizard_steps():
     return ast.literal_eval(declaration.value)
 
 
-def test_setup_has_combined_display_and_session_after_timing(wizard_steps):
+def test_setup_places_demographics_after_project_and_combines_display_and_session(wizard_steps):
     assert wizard_steps == (
-        ("project", "Project"), ("conditions", "Conditions"), ("experiment", "Timing"),
+        ("project", "Project"), ("demographics", "Demographics"),
+        ("conditions", "Conditions"), ("experiment", "Timing"),
         ("session", "Display & Session"), ("image_size", "Image Size"),
         ("fixation", "Fixation"), ("response", "Response"), ("review", "Review"),
     )
 
 
-@pytest.mark.parametrize("alias,index", [("experiment", 2), ("timing", 2), ("display", 3),
-                                        ("runtime", 3), ("session", 3), ("display_session", 3)])
-def test_setup_shortcuts_open_the_matching_timing_or_display_step(wizard_steps, alias, index):
+@pytest.mark.parametrize("alias,key", [
+    ("experiment", "experiment"), ("timing", "experiment"), ("display", "session"),
+    ("runtime", "session"), ("session", "session"), ("display_session", "session"),
+])
+def test_setup_shortcuts_open_the_matching_timing_or_display_step(wizard_steps, alias, key):
     wizard = SimpleNamespace(_active_step_index=0, _step_jump_enabled=False, refresh=Mock(),
                              flush_pending_edits=Mock(return_value=True))
     wizard._select_step = lambda selected: setattr(wizard, "_active_step_index", selected)
@@ -59,14 +62,15 @@ def test_setup_shortcuts_open_the_matching_timing_or_display_step(wizard_steps, 
         _WIZARD_STEPS=wizard_steps,
     )
     wizard.open_wizard(step_key=alias)
-    assert wizard._active_step_index == index
-    wizard.flush_pending_edits.assert_called_once_with(defer_timing=index == 3)
+    assert wizard_steps[wizard._active_step_index][0] == key
+    wizard.flush_pending_edits.assert_called_once_with(defer_timing=key == "session")
 
 
-@pytest.mark.parametrize("start_index,deferred", [(2, True), (3, False)])
+@pytest.mark.parametrize("start_key,deferred", [("experiment", True), ("session", False)])
 def test_next_keeps_timing_drafts_until_display_choices_are_accepted(
-    wizard_steps, start_index, deferred,
+    wizard_steps, start_key, deferred,
 ):
+    start_index = [key for key, _ in wizard_steps].index(start_key)
     wizard = SimpleNamespace(
         _active_step_index=start_index, _next_navigation_busy=lambda: False,
         _document=SimpleNamespace(project=SimpleNamespace(settings=SimpleNamespace(
@@ -181,8 +185,10 @@ def test_saved_order_validation_belongs_to_session_after_timing(wizard_steps):
         presentation_count_blocker=Mock(return_value=""),
         saved_order_blocker=Mock(return_value=order_message),
     )
+    step_keys = [key for key, _ in wizard_steps]
+    session_index = step_keys.index("session")
     wizard = SimpleNamespace(
-        _active_step_index=3, condition_timing_table=table,
+        _active_step_index=session_index, condition_timing_table=table,
         runtime_settings_editor=SimpleNamespace(
             timing_is_compatible=lambda: True, timing_blocker=lambda: "",
         ),
@@ -191,33 +197,34 @@ def test_saved_order_validation_belongs_to_session_after_timing(wizard_steps):
         wizard, "setup_wizard_page.py", "SetupWizardPage",
         ["_step_valid", "_current_step_blocker"], _WIZARD_STEPS=wizard_steps,
     )
-    assert wizard._step_valid(2)
+    assert wizard._step_valid(step_keys.index("experiment"))
     table.presentation_count_blocker.assert_called_once_with(include_saved_order=False)
-    assert not wizard._step_valid(3)
+    assert not wizard._step_valid(session_index)
     assert wizard._current_step_blocker() == order_message
 
 
 
-@pytest.mark.parametrize("order_conflict,expected_index", [(True, 3), (False, 2)])
+@pytest.mark.parametrize("order_conflict,expected_key", [(True, "session"), (False, "experiment")])
 def test_failed_timing_flush_routes_order_repair_to_its_single_session_entry(
-    order_conflict, expected_index,
+    wizard_steps, order_conflict, expected_key,
 ):
     table = SimpleNamespace(
         apply_pending_edits=Mock(return_value=False),
         saved_order_blocker=Mock(return_value="Edit condition order" if order_conflict else ""),
     )
+    step_keys = [key for key, _ in wizard_steps]
     wizard = SimpleNamespace(
-        _active_step_index=3, _next_navigation_busy=lambda: False,
+        _active_step_index=step_keys.index("session"), _next_navigation_busy=lambda: False,
         condition_timing_table=table,
         session_structure_editor=SimpleNamespace(randomization_editor=SimpleNamespace(
             apply_pending_edits=lambda: True,
         )),
-        _step_index_for_key=lambda key: {"session": 3, "experiment": 2}[key],
+        _step_index_for_key=step_keys.index,
         refresh=Mock(),
     )
     _bind_methods(wizard, "setup_wizard_page.py", "SetupWizardPage", ["flush_pending_edits"])
     assert not wizard.flush_pending_edits()
-    assert wizard._active_step_index == expected_index
+    assert step_keys[wizard._active_step_index] == expected_key
     wizard.refresh.assert_called_once()
 
 

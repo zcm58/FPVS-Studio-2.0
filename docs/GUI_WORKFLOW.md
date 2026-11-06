@@ -154,8 +154,8 @@ and the HTTP contract. Qt jobs remain app-owned and never block the GUI thread.
 
 ## Frameless Setup layout and copy
 
-The eight-step wizard uses one task heading and a shared top anchor: content starts
-24 px below the stepper and retains a 24 px bottom inset. Project, Conditions,
+The nine-step wizard uses one task heading and a shared top anchor. Content starts
+24 px below the stepper and retains a 24 px bottom inset. Project, Demographics, Conditions,
 ordinary Timing, Display & Session, ordinary image geometry, Fixation, Response and
 Review use a workspace capped at 1040 px. Native AB Timing remains 880 px and Character
 Size remains 760 px. Conditions and the ordinary timing table use the available height;
@@ -215,7 +215,7 @@ Review summarizes the native AB character height and digit/letter stream, withou
 image-geometry wording.
 See [Frontend](FRONTEND.md#setup-text-hierarchy) for the descriptive-text policy.
 
-Timing is step 3 and Display & Session is step 4. Next from Timing keeps
+Timing is step 4 and Display & Session is step 5. Next from Timing keeps
 staged timing edits until the combined step is accepted, so a new frequency can be paired
 with its required refresh rate. Back from the combined step preserves those drafts. Its
 Next confirms the selected refresh target and applies the pending timing through
@@ -230,6 +230,25 @@ acceptance requires the repository's approved environment and is not implied by 
 Mixed image presentation frequencies must all fit the selected refresh using whole
 frames; Setup and compilation identify incompatible conditions without changing
 authored frequencies. The canonical rule is in [Run timing](RUNSPEC.md#timing-model).
+
+### Demographics setup
+
+Open **Setup > Demographics**, between Project and Conditions. New and existing
+projects start with Age, Sex, Handedness, and “Are you colorblind?” unless a
+questionnaire has been saved. Add or edit a question to choose single-line text,
+age (1–120), multiple choice, or yes/no. Use **Move up** and **Move down** to set
+the order in Participant Information. An empty list leaves participant number and
+electrode review. **Restore defaults** replaces the list with the original four
+questions in Studio order. Save Setup to persist the list in `project.json`.
+Project bundles and `.fpvsconfig` setup handoffs carry the authored questions.
+
+In an approved visible session, open Setup at `1120x820` and use Next from Project
+to reach Demographics. Add a long question, edit its choices, move it above a default,
+and remove a question. Save and reopen, then check the order in Participant Information
+at `600x360` from Home and Run. Verify a missing answer keeps the dialog open, an empty
+list needs only the participant number, and restoring defaults brings back all four
+questions. Complete a compact session with a custom answer and inspect **Demographic
+Answers** in **View > Open Participant Results**.
 
 ## Launch
 
@@ -478,7 +497,7 @@ Registered coverage: `test_hidden_page_refresh.py`, `test_manage_projects_respon
 Run GUI focused and repo precommit checks without Qt. In an approved visible session:
 
 1. Edit several Setup fields, then return Home and revisit Run; confirm current names,
-   summaries and readiness. Check all eight Setup steps at `1120x820`.
+   summaries and readiness. Check all nine Setup steps at `1120x820`.
 2. Verify saved AB settings survive guided Setup without opening its retained editor.
    Separate AB-editor tests cover rate/SOA drafts, character pools, errors and preview.
 3. Open Manage Projects at `860x520` in both themes with many projects. Check loading,
@@ -523,7 +542,7 @@ recall tracking; Session uses the same persisted burst count.
 Character Size edits native text height. Timing validates exact
 frame compatibility. The post-condition questionnaire button reuses the condition
 task editor. See [Experiment Categories](EXPERIMENT_CATEGORIES.md) for the current contract.
-This editor source remains outside the current eight-step guided Setup. Setup has
+This editor source remains outside the current nine-step guided Setup. Setup has
 no Design section and preserves saved AB settings; an AB authoring replacement is
 deferred. The details and editor acceptance cases below describe the retained editor.
 
@@ -568,8 +587,9 @@ the main entry point for demographics, fixation accuracy/response times and befo
 task answers. No-data and refresh/open failures leave the project usable; an Excel lock
 asks the operator to close the workbook and retry.
 
-The workbook preserves the existing Participant Summary sheet and adds Demographics,
-Fixation by Condition, Fixation Responses and Task Answers. The answer sheet retains
+The workbook includes Participant Summary, Demographics, Demographic Answers,
+Fixation by Condition, Fixation Responses and Task Answers. Demographic Answers shows
+each visit's questionnaire in its recorded order. The Task Answers sheet retains
 phase, recorded status, original prompts/options when available, response time in
 seconds and attempt identity.
 `Record Type` distinguishes question answers and other responses from task activity;
@@ -661,7 +681,7 @@ Visible acceptance must cover both categories and themes, realistic long names/p
 folder-picker cancellation, replacement and per-condition source isolation, import
 failure/retry and busy navigation. AB and standalone checks also cover invalid/sub-frame
 timing, draft switching, apply/discard, pending workers and preview stop/close.
-The eight-step wizard must fit
+The nine-step wizard must fit
 `1120x820`. The optional standalone designer retains `1040x760` minimum and
 `1400x920` default dimensions bounded by available screen space.
 
@@ -702,7 +722,7 @@ The authoring window is organized around two user-facing modes:
     workflows
 - `Setup Wizard`
   - in-window setup flow for new/incomplete projects and intentional edits
-  - ordered steps: Project, Conditions, Timing, Display & Session, Image Size
+  - ordered steps are Project, Demographics, Conditions, Timing, Display & Session, Image Size
     (Character Size for native AB), Fixation, Response, Review
   - idle `Next` remains enabled on incomplete steps. Clicking it shows a modal with
     the current blocking requirement and its corrective action, including image/word
@@ -721,7 +741,7 @@ The authoring window is organized around two user-facing modes:
   - all guided steps use the shared frameless shell, left-aligned task heading,
     step count, and stable progress/navigation positions; content is top-aligned with
     24 px vertical insets and bounded workspace widths. Bottom navigation has no divider
-  - all eight setup steps must fit inside the compact `1120x820` setup window
+  - all nine setup steps must fit inside the compact `1120x820` setup window
     without bottom clipping, visible child widgets outside their parent bounds,
     or required vertical scrolling
   - the wizard avoids generic footer/status copy; individual step cards should
@@ -977,8 +997,8 @@ task-answer file therefore does not block the separate fixation-only group expor
 Existing results can be consolidated separately through the guarded
 [maintenance CLI](RUNTIME_EXECUTION.md#existing-output-maintenance); normal opening
 does not archive or remove files.
-Launching an experiment opens a modal participant-information prompt. By default every
-project collects Participant Number, Age, Sex, Handedness, and colorblind status before
+Launching an experiment opens Participant Information, which collects the participant
+number and each answer in the [configured questionnaire](#demographics-setup) before
 runtime starts. The same dialog includes the optional
 `Input manually removed electrodes (optional)` text box for electrodes physically
 removed or unplugged before recording. Comma-, semicolon-, or line-separated entries
@@ -1007,13 +1027,11 @@ text and a multi-digit session number, then verify full and compact exports and 
 aborted visit advance the next number. Active history checks/playback block closing
 or switching projects. Registered GUI tests cover these states; ordinary local
 verification excludes Qt execution.
-Participant Number remains the participant identity and duplicate-history lookup key;
-Sex is limited to `Female` or `Male`, and Handedness is limited to `Right handed`,
-`Left handed`, or `Ambidextrous`; colorblind status is a required `Yes` or `No`
-selection. When colorblind status is `Yes`, runtime uses the accessible fixation preset
-of white `#FFFFFF` to vermillion `#D55E00` for the participant tutorial and condition
-playback without changing the authored project colors. The age, sex, handedness, and
-colorblind fields are written as runtime participant metadata for the launched session.
+Participant Number remains the participant identity and duplicate-history lookup key.
+Each configured demographics question requires an answer. The original wording,
+order, and responses are recorded for the visit. Answering `Yes` to the Studio default
+colorblindness question selects the accessible fixation preset for the tutorial and
+condition playback.
 The manually removed electrode list remains editable project metadata, and each new
 visit stores a reviewed snapshot in its execution metadata. It does not alter
 `RunSpec`, `SessionPlan`, or playback behavior. Accepting the participant dialog persists
@@ -1500,7 +1518,7 @@ preprocessing services but must not silently mutate the active project.
   state. The main window assembles the wizard before attaching it to the styled
   workflow stack, which takes ownership. The shared setup-theme helper skips unchanged
   stylesheets so parenting and palette events do not repeatedly restyle the entire
-  wizard. Theme changes, all eight pages, and existing navigation gates remain active.
+  wizard. Theme changes, all nine pages, and existing navigation gates remain active.
 - Main-window styles use the palette observer in `gui/components.py` and pass their
   fresh palette to an existing Setup page after handling `ApplicationPaletteChange`
   in `event()`; Qt does not route that application event through `changeEvent()`.
@@ -1829,13 +1847,13 @@ Fixation displays the effective smallest count limit, identifies the limiting co
 and explains count adjustments caused by changed durations; full per-condition limits
 remain accessible in the tooltip.
 
-For visible acceptance on Windows, walk all eight steps at `1120x820` in both themes,
+For visible acceptance on Windows, walk all nine steps at `1120x820` in both themes,
 then repeat at the normal expanded size and available 125/150% scaling. Include long
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect
 default and one-character names, both image-folder pickers, import failure/retry,
 and instruction Save/Cancel/clear at both dialog sizes. Confirm saved AB settings are
-unchanged through all eight steps. Inspect
+unchanged through all nine steps. Inspect
 Presentation and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
@@ -1845,8 +1863,8 @@ this manual review and is not run by ordinary local verification.
 ### Attentional Blink Pilot Study Mode
 
 For an open AB study on Windows/Linux, Settings > Enable Pilot Study Mode
-(Attentional Blink) enables local pilots with the standard participant number, age,
-sex, handedness and colorblindness form. It defaults off, persists for this computer,
+(Attentional Blink) enables local pilots with participant number and the project's
+demographics questionnaire. It defaults off, persists for this computer,
 and takes precedence over Test Mode only in AB. Other categories retain Test Mode's
 existing behavior. The participant dialog identifies a pilot without EEG hardware.
 Repeat-visit rules still apply to entered participant numbers.
@@ -1854,7 +1872,8 @@ Repeat-visit rules still apply to entered participant numbers.
 Pilot uses null triggers, skips Recording Reminder confirmation and connected-display
 refresh/graphics verification, and preserves fullscreen playback and compiled timing.
 T1/T2 accuracy includes pilots; Bursts over time marks them Pilot. Hover the participant
-cell for demographics; Export Excel includes flat demographics and Pilot columns.
+cell for standard demographics. Export Excel includes those fields and Pilot columns.
+The project participant workbook includes the visit's full questionnaire answers.
 Settings with Pilot and Library access uses 700 x 764 minimum/default; the tab bar
 adds 40 pixels to the previous single-page layout.
 

@@ -377,6 +377,9 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert next_button.isEnabled()
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentIndex() == 1
+    assert guide.step_stack.currentWidget() is guide.demographics_step_surface
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    assert guide.step_stack.currentIndex() == 2
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
     assert guide.conditions_step_surface.content is guide.condition_setup_step
     assert guide.content_stack.currentWidget() is guide.guided_panel
@@ -487,7 +490,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
-    assert guide.step_stack.currentIndex() == 1
+    assert guide.step_stack.currentIndex() == 2
     assert guide.content_stack.currentWidget() is guide.guided_panel
 
     monkeypatch.setattr(
@@ -646,7 +649,7 @@ def test_project_next_explains_missing_required_field_on_click(
     else:
         monkeypatch.setattr(document, "_project_root", saved_root)
     qtbot.mouseClick(guide.setup_wizard_next_button, Qt.MouseButton.LeftButton)
-    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assert guide.step_stack.currentWidget() is guide.demographics_step_surface
     assert len(messages) == 1
     assert document.project.meta.name == (
         "Recovered project name" if missing == "name" else saved_name

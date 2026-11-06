@@ -1,6 +1,6 @@
 # Visual FPVS Experiment Designer
 
-Updated: 2026-10-30. Guided Setup has eight steps with image selection in Conditions.
+Updated: 2026-11-06. Guided Setup has nine steps with image selection in Conditions.
 New Attentional-Blink projects use five-second bursts of white letters with green
 T1 and white T2 digits at 100/300/500 ms SOAs. The retained AB editor shows shared
 character pools, bursts per SOA, condition SOAs, a target-focused timeline, an onset bracket, and a
@@ -35,7 +35,7 @@ are retired. Old files remain readable but cannot be authored, compiled or run; 
 ## Oddball Image Designer
 
 Setup > Conditions edits names, modality, instructions, tasks and image sources in
-the eight-step `1120x820` wizard. Select a condition and use its Base Images and
+the nine-step `1120x820` wizard. Select a condition and use its Base Images and
 Oddball Images buttons to choose folders.
 The source cards show counts, resolution and full-path details with Copy path.
 There are no thumbnails, visual cycle controls or image preview in Setup. Image

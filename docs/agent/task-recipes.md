@@ -12,7 +12,8 @@ evidence boundaries.
 | Task | First source/test | Current contract |
 | --- | --- | --- |
 | Shared layout, themes, no clipping | `gui/components.py`; relevant registered GUI test | [Frontend](../FRONTEND.md#no-clipping-baseline), [design guidance](../design-docs/agent-ui-design.md) |
-| Eight-step Setup and Timing/Session split | `gui/setup_wizard_page.py`, `gui/runtime_settings_page.py`, `gui/session_structure_page.py` | [Setup acceptance](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance) |
+| Nine-step Setup and Timing/Session split | `gui/setup_wizard_page.py`, `gui/runtime_settings_page.py`, `gui/session_structure_page.py` | [Setup acceptance](../GUI_WORKFLOW.md#setup-design-and-manual-acceptance) |
+| Demographics authoring and participant entry | `core/demographics.py`, `gui/demographics_setup_step.py`, `gui/run_page.py`, `runtime/participant_results.py` | [Demographics setup](../GUI_WORKFLOW.md#demographics-setup) |
 | Next blockers and optional description | `gui/setup_wizard_page.py`; `tests/gui/test_setup_project_details.py` | [Home/Setup flow](../GUI_WORKFLOW.md#existing-home-and-setup-flow) |
 | Condition modality, sources and instructions | `gui/condition_setup_step.py`, `gui/document_conditions.py`; `tests/unit/test_condition_modality.py` | [Home/Setup flow](../GUI_WORKFLOW.md#existing-home-and-setup-flow) |
 | Cognitive Load creation and Masking marker authoring | `gui/create_project_dialog.py`, `gui/condition_modifier_dialog.py` | [Cognitive Load](../COGNITIVE_LOAD_FPVS.md), [Masking](../MASKING.md) |

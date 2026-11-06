@@ -15,6 +15,8 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
+    QDialogButtonBox,
     QHeaderView,
     QLabel,
     QListWidget,
@@ -32,6 +34,10 @@ from tests.gui.helpers import (
     record_setup_validation_dialogs,
 )
 
+from fpvs_studio.core.demographics import (
+    DEMOGRAPHICS_PROMPT_LIMIT,
+    default_demographics_questions,
+)
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.components import (
     home_page_stylesheet,
@@ -39,6 +45,7 @@ from fpvs_studio.gui.components import (
     studio_theme_stylesheet,
 )
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.demographics_setup_step import _DemographicsQuestionDialog
 from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.packaged_smoke import _verification_palette
@@ -264,8 +271,8 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
     assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
-    assert len(wizard.progress_steps.step_items) == 8
-    assert wizard.step_stack.count() == 8
+    assert len(wizard.progress_steps.step_items) == 9
+    assert wizard.step_stack.count() == 9
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.property("setupStepSurface") == "true"
     assert wizard.conditions_step_surface.content.maximumWidth() == 1040
@@ -293,6 +300,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "[TODO]" not in step_text
     assert "Step 1 of 6" not in "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Project" in step_metadata_text
+    assert "Demographics" in step_metadata_text
     assert "Conditions" in step_metadata_text
     assert "Design" not in step_metadata_text
     assert "Timing" in step_metadata_text
@@ -305,13 +313,14 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Response" in step_metadata_text
     assert "Review" in step_metadata_text
     assert wizard.findChild(QWidget, "setup_wizard_step_1_project") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_2_conditions") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_3_timing_display") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_4_session") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_5_image_size") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_6_fixation") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_7_response") is not None
-    assert wizard.findChild(QWidget, "setup_wizard_step_8_review") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_2_demographics") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_3_conditions") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_4_timing") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_5_display_session") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_6_image_size") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_7_fixation") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_8_response") is not None
+    assert wizard.findChild(QWidget, "setup_wizard_step_9_review") is not None
     assert wizard.progress_steps.step_circles[0].property("setupProgressState") == "current"
     messages = record_setup_validation_dialogs(monkeypatch)
     assert wizard.findChild(QPushButton, "setup_wizard_fix_button") is None
@@ -336,6 +345,9 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert messages == []
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
+    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
+    qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
     assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
     assert next_button.isEnabled()
     assert messages == []
@@ -344,6 +356,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert messages == [("Complete this setup step", "Add at least one condition")]
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)
     QApplication.processEvents()
+    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
     assert len(messages) == 1
     assert [label.text() for label in wizard.progress_step_labels] == initial_progress_labels
     _assert_balanced_setup_stepper(wizard)
@@ -352,6 +365,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Only the controls needed for this setup step are shown." not in label_text
     for step_key in (
         "project",
+        "demographics",
         "conditions",
         "experiment",
         "display",
@@ -391,7 +405,7 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert wizard.property("launchSurfaceRoot") == "true"
     assert wizard.step_card.property("launchSurfaceFrame") == "true"
     assert wizard.step_card.property("sectionCard") == "false"
-    assert wizard.step_count_label.text() == "Step 1 of 8"
+    assert wizard.step_count_label.text() == "Step 1 of 9"
     assert 'QFrame[launchSurfaceFrame="true"]' in wizard.styleSheet()
     assert "QFrame#non_home_shell_content_frame" in wizard.styleSheet()
     assert "QWidget#page_container_scroll_content" in wizard.styleSheet()
@@ -454,6 +468,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     back_button_lefts: list[int] = []
     for step_key in (
         "project",
+        "demographics",
         "conditions",
         "experiment",
         "session",
@@ -464,7 +479,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     ):
         wizard.open_wizard(step_key=step_key)
         QApplication.processEvents()
-        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 9"
         assert wizard.step_count_label.isVisible()
         assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
         assert "border-top" not in wizard.styleSheet()
@@ -474,7 +489,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         _assert_balanced_setup_stepper(wizard)
         _assert_visible_children_within_parent(wizard.progress_steps)
         for title, label, item in zip(
-            ("Project", "Conditions", "Timing", "Display & Session", "Image Size",
+            ("Project", "Demographics", "Conditions", "Timing", "Display & Session", "Image Size",
              "Fixation", "Response", "Review"),
             wizard.progress_step_labels,
             wizard.progress_steps.step_items,
@@ -567,6 +582,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         else:
             first_panel = {
                 "project": wizard.project_overview_editor.project_overview_card,
+                "demographics": wizard.demographics_setup_step,
                 "conditions": wizard.condition_setup_step.condition_details_section,
                 "experiment": wizard.condition_timing_table,
                 "session": wizard.display_settings_card,
@@ -1019,11 +1035,11 @@ def test_importing_condition_images_blocks_navigation_and_flush(
     "category", [ExperimentCategory.FPVS_ODDBALL, ExperimentCategory.COGNITIVE_LOAD_FPVS,
                  ExperimentCategory.ATTENTIONAL_BLINK],
 )
-def test_all_categories_use_eight_setup_steps_without_constructing_design(
+def test_all_categories_use_nine_setup_steps_without_constructing_design(
     qtbot, tmp_path: Path, category, monkeypatch,
 ) -> None:
     document = ProjectDocument.create_new(
-        parent_dir=tmp_path, project_name="Eight setup steps", experiment_category=category,
+        parent_dir=tmp_path, project_name="Nine setup steps", experiment_category=category,
     )
     protocol = document.project.settings.protocol.model_dump()
     conditions = [condition.model_dump() for condition in document.ordered_conditions()]
@@ -1044,11 +1060,148 @@ def test_all_categories_use_eight_setup_steps_without_constructing_design(
     guide.open_wizard(step_key="design")
     QApplication.processEvents()
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
-    assert guide.step_stack.count() == 8
-    assert len(guide.progress_steps.step_items) == 8
-    assert guide.step_count_label.text() == "Step 2 of 8"
+    assert guide.step_stack.count() == 9
+    assert len(guide.progress_steps.step_items) == 9
+    assert guide.step_count_label.text() == "Step 3 of 9"
     assert "Design" not in " ".join(item.toolTip() for item in guide.progress_steps.step_items)
     assert not hasattr(guide, "design_setup_step")
     assert not hasattr(guide, "design_step_surface")
     assert document.project.settings.protocol.model_dump() == protocol
     assert [condition.model_dump() for condition in document.ordered_conditions()] == conditions
+
+
+def test_demographics_setup_edits_reorders_and_restores_questions(
+    qtbot, controller: StudioController, tmp_path: Path, monkeypatch,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Questionnaire")
+    window.show_setup_wizard(step_key="project")
+    window.resize(1120, 820)
+    window.show()
+    wizard = window.setup_wizard_page
+    click = Qt.MouseButton.LeftButton
+    qtbot.mouseClick(wizard.setup_wizard_next_button, click)
+    QApplication.processEvents()
+    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
+    assert wizard.step_count_label.text() == "Step 2 of 9"
+    step = wizard.demographics_setup_step
+    defaults = default_demographics_questions()
+    assert document.project.demographics_questions == defaults
+    colorblind_row = next(index for index, question in enumerate(defaults)
+                          if question.id == "colorblind")
+    assert "accessible fixation colors" in step.question_list.item(colorblind_row).toolTip()
+    assert not step.restore_defaults_button.isEnabled()
+    assert not step.move_up_button.isEnabled()
+
+    long_prompt = ("Which languages do you use at home, at school, or at work? " * 4).strip()
+    assert len(long_prompt) <= DEMOGRAPHICS_PROMPT_LIMIT
+
+    def add_choice(dialog: _DemographicsQuestionDialog) -> int:
+        dialog.prompt_edit.setText(long_prompt)
+        dialog.kind_combo.setCurrentIndex(dialog.kind_combo.findData("choice"))
+        dialog.options_edit.setPlainText("One\nTwo\nThree or more")
+        dialog.accept()
+        return dialog.result()
+
+    monkeypatch.setattr(_DemographicsQuestionDialog, "exec", add_choice)
+    qtbot.mouseClick(step.add_button, click)
+    added = document.project.demographics_questions[-1]
+    assert added.prompt == long_prompt
+    assert added.options == ["One", "Two", "Three or more"]
+    assert step.question_list.currentRow() == len(defaults)
+    assert long_prompt in step.question_list.currentItem().toolTip()
+    assert not step.move_down_button.isEnabled()
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
+
+    qtbot.mouseClick(step.move_up_button, click)
+    assert document.project.demographics_questions[-2:] == [added, defaults[-1]]
+    assert step.question_list.currentRow() == len(defaults) - 1
+    qtbot.mouseClick(step.move_down_button, click)
+    assert document.project.demographics_questions == [*defaults, added]
+
+    def edit_age(dialog: _DemographicsQuestionDialog) -> int:
+        assert dialog.prompt_edit.text() == defaults[0].prompt
+        dialog.prompt_edit.setText("How old are you in years?")
+        dialog.accept()
+        return dialog.result()
+
+    monkeypatch.setattr(_DemographicsQuestionDialog, "exec", edit_age)
+    step.question_list.setCurrentRow(0)
+    qtbot.mouseClick(step.edit_button, click)
+    edited = document.project.demographics_questions[0]
+    assert edited.id == defaults[0].id
+    assert edited.prompt == "How old are you in years?"
+
+    def cancel_edit(dialog: _DemographicsQuestionDialog) -> int:
+        dialog.prompt_edit.setText("Discard this edit")
+        dialog.reject()
+        return dialog.result()
+
+    monkeypatch.setattr(_DemographicsQuestionDialog, "exec", cancel_edit)
+    qtbot.mouseClick(step.edit_button, click)
+    assert document.project.demographics_questions[0] == edited
+
+    document.save()
+    saved = ProjectDocument.open_existing(document.project_root).project
+    assert saved.demographics_questions == [edited, *defaults[1:], added]
+
+    for _ in range(step.question_list.count()):
+        qtbot.mouseClick(step.remove_button, click)
+    QApplication.processEvents()
+    assert document.project.demographics_questions == []
+    assert step.empty_label.isVisible()
+    assert not step.edit_button.isEnabled()
+    assert not step.remove_button.isEnabled()
+    assert step.restore_defaults_button.isEnabled()
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
+    assert step.empty_label.width() >= step.empty_label.fontMetrics().horizontalAdvance(
+        step.empty_label.text(),
+    )
+    _assert_setup_wizard_vertical_scrolling_disabled(wizard)
+    qtbot.mouseClick(wizard.setup_wizard_next_button, click)
+    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
+    qtbot.mouseClick(wizard.setup_wizard_back_button, click)
+    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
+
+    qtbot.mouseClick(step.restore_defaults_button, click)
+    assert document.project.demographics_questions == defaults
+    assert step.question_list.count() == len(defaults)
+    assert not step.restore_defaults_button.isEnabled()
+
+
+@pytest.mark.parametrize("size", [(520, 360), (600, 400)])
+def test_demographics_question_editor_validation_and_layout(qtbot, size) -> None:
+    dialog = _DemographicsQuestionDialog(None)
+    qtbot.addWidget(dialog)
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+    assert (dialog.width(), dialog.height()) == size
+    assert not dialog.options_edit.isVisible()
+
+    apply_button = dialog.buttons.button(QDialogButtonBox.StandardButton.Save)
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    assert dialog.isVisible()
+    assert dialog.error_label.isVisible()
+    assert dialog.question is None
+
+    dialog.prompt_edit.setText("Which response did you select?")
+    dialog.kind_combo.setCurrentIndex(dialog.kind_combo.findData("choice"))
+    dialog.options_edit.setPlainText("First\nfirst")
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert dialog.options_edit.isVisible()
+    assert dialog.error_label.isVisible()
+    assert dialog.question is None
+    assert (dialog.width(), dialog.height()) == size
+    _assert_visible_children_within_parent(dialog)
+    for label in dialog.findChildren(QLabel):
+        if label.isVisible() and label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width())
+        elif label.isVisible():
+            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+    dialog.options_edit.setPlainText("First\nSecond")
+    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    assert dialog.question is not None
+    assert dialog.question.options == ["First", "Second"]

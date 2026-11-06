@@ -1181,6 +1181,8 @@ def _refresh_participant_summary_if_stale_unlocked(
 
 
 def _summary_output_is_stale(path: Path, history_mtime_ns: int) -> bool:
+    from fpvs_studio.runtime.participant_results import DEMOGRAPHIC_ANSWERS_SHEET_NAME
+
     if not path.is_file():
         return True
     if path.stat().st_mtime_ns < history_mtime_ns:
@@ -1191,8 +1193,8 @@ def _summary_output_is_stale(path: Path, history_mtime_ns: int) -> bool:
             worksheet = workbook[PARTICIPANT_SUMMARY_XLSX_SHEET_NAME]
             header = list(next(worksheet.iter_rows(values_only=True), ()))
             return header != PARTICIPANT_SUMMARY_HEADER or not {
-                "Demographics", "Fixation by Condition", "Fixation Responses", "Task Answers",
-                "Results Notes",
+                "Demographics", DEMOGRAPHIC_ANSWERS_SHEET_NAME, "Fixation by Condition",
+                "Fixation Responses", "Task Answers", "Results Notes",
             }.issubset(workbook.sheetnames)
         finally:
             workbook.close()

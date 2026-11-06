@@ -11,6 +11,7 @@ from pathlib import Path
 from PySide6.QtCore import QObject, Signal
 
 from fpvs_studio.core.condition_timing import propose_condition_timing
+from fpvs_studio.core.demographics import DemographicsQuestion
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.core.masking import condition_masking
@@ -329,6 +330,12 @@ class ProjectDocument(
 
         meta = _validated_copy(self._project.meta, description=description)
         self._apply_project_update(meta=meta)
+
+    def update_demographics_questions(self, questions: list[DemographicsQuestion]) -> None:
+        """Set the project questionnaire in participant presentation order."""
+
+        if questions != self._project.demographics_questions:
+            self._apply_project_update(demographics_questions=questions)
 
     def update_allow_repeated_participant_sessions(self, enabled: bool) -> None:
         """Set whether an existing participant may start another numbered session."""

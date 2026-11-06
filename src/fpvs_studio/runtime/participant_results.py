@@ -1,4 +1,4 @@
-"""Participant research workbook projections and immutable original task labels.
+"""Participant research workbook projections and immutable original question labels.
 
 These private records supplement the canonical response journals. They contain no
 stimulus/frame arrays and never consult the current editable project for old labels.
@@ -18,12 +18,15 @@ from uuid import uuid4
 from openpyxl.styles import Alignment, Font  # type: ignore[import-untyped]
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
+from fpvs_studio.core.demographics import DemographicsAnswer
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.paths import resolve_project_relative_path, to_project_relative_posix
 from fpvs_studio.core.serialization import atomic_text_write
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
 from fpvs_studio.runtime.workbook_layout import autofit_workbook
+
+DEMOGRAPHIC_ANSWERS_SHEET_NAME = "Demographic Answers"
 
 _DIRECTORY = "logs/.participant-results"
 _POST_CONTEXT_DIRECTORY = "logs/post-condition-responses"
@@ -42,6 +45,10 @@ _IDENTITY_HEADERS = [
 _DEMOGRAPHICS_HEADERS = [
     *_IDENTITY_HEADERS, "Age", "Sex", "Handedness", "Colorblind",
     "Manually Removed Electrodes", "Session Aborted", "Project ID", "Source",
+]
+_DEMOGRAPHIC_ANSWER_HEADERS = [
+    *_IDENTITY_HEADERS, "Question", "Answer", "Question Position", "Question ID",
+    "Session Aborted", "Project ID", "Source",
 ]
 _FIXATION_HEADERS = [
     *_IDENTITY_HEADERS, "Condition", "Presentation", "Targets", "Hits", "Misses",
@@ -107,6 +114,7 @@ def capture_participant_results(
     key = (hashlib.sha256(json.dumps(identity).encode()).hexdigest()
            if summary.participant_session_number is not None else
            hashlib.sha256(execution_id.encode()).hexdigest() if execution_id else uuid4().hex)
+    participant_metadata = summary.participant_metadata.model_dump(mode="json")
     payload = {
         "schema_version": 1, "project_id": summary.project_id, "execution_id": execution_id,
         "participant_number": summary.participant_number or "",
@@ -120,7 +128,7 @@ def capture_participant_results(
                 project_root, to_project_relative_posix(project_root, path),
             ),
         ) for run_id, path in (journal_paths or {}).items()},
-        "participant_metadata": summary.participant_metadata.model_dump(mode="json"),
+        "participant_metadata": participant_metadata,
         "definitions": _task_definitions(plan),
         "runs": [{
             "run_id": run.run_id, "condition_id": run.condition_id,
@@ -139,6 +147,11 @@ def capture_participant_results(
             previous = _json(path)
             if previous.get("definitions") != payload["definitions"]:
                 raise ValueError("Original participant question definitions cannot be replaced.")
+            previous_metadata = previous.get("participant_metadata") or {}
+            before = previous_metadata.get("demographics_answers") or []
+            after = participant_metadata.get("demographics_answers") or []
+            if json.dumps(before, sort_keys=True) != json.dumps(after, sort_keys=True):
+                raise ValueError("Original demographic answers cannot be replaced.")
         atomic_text_write(path, json.dumps(payload, ensure_ascii=False, indent=2))
     return path
 
@@ -287,6 +300,7 @@ def _freeze_legacy_participant_results_unlocked(project_root: Path) -> list[Path
     ))
     records = _records(project_root, history)
     _answer_rows(records)
+    _demographic_answer_rows(records)
     _fixation_response_rows(records)
     written = []
     for record, source in _legacy_full_records(project_root, history):
@@ -724,6 +738,31 @@ def _demographic_rows(
     return list(rows.values())
 
 
+def _demographic_answer_rows(records: list[tuple[dict[str, Any], str]]) -> list[list[object]]:
+    rows: list[list[object]] = []
+    seen: dict[tuple[object, ...], str] = {}
+    for record, source in records:
+        metadata = record.get("participant_metadata") or {}
+        snapshots = metadata.get("demographics_answers")
+        if snapshots is None:
+            continue
+        if not isinstance(snapshots, list):
+            raise ValueError("Demographic answers must be recorded in question order.")
+        key = _visit_key(record, source)
+        snapshot_json = json.dumps(snapshots, sort_keys=True)
+        if key in seen:
+            if seen[key] != snapshot_json:
+                raise ValueError("Conflicting demographic answers share a participant visit.")
+            continue
+        seen[key] = snapshot_json
+        answers = [DemographicsAnswer.model_validate(snapshot) for snapshot in snapshots]
+        rows.extend([
+            *_identity(record), answer.prompt, answer.answer, position, answer.question_id,
+            _session_status(record), record.get("project_id", ""), source,
+        ] for position, answer in enumerate(answers, 1))
+    return rows
+
+
 def _fixation_rows(
     history_rows: list[dict[str, str]], records: list[tuple[dict[str, Any], str]],
 ) -> list[list[object]]:
@@ -762,6 +801,9 @@ def _sheet(workbook: Any, name: str, headers: list[str], rows: list[list[object]
     primary = {
         "Demographics": ["PID", "Session Number", "Age", "Sex", "Handedness", "Colorblind",
                          "Session Aborted"],
+        DEMOGRAPHIC_ANSWERS_SHEET_NAME: [
+            "PID", "Session Number", "Question", "Answer", "Question Position",
+        ],
         "Fixation by Condition": ["PID", "Session Number", "Condition", "Presentation",
                                   "Accuracy (%)", "Mean Reaction Time (ms)", "Targets", "Hits",
                                   "Misses", "False Alarms", "Run Aborted", "Session Aborted"],
@@ -813,6 +855,8 @@ def add_participant_results_sheets(
     records = _records(project_root, history_rows)
     _sheet(workbook, "Demographics", _DEMOGRAPHICS_HEADERS,
            _demographic_rows(records, history_rows))
+    _sheet(workbook, DEMOGRAPHIC_ANSWERS_SHEET_NAME, _DEMOGRAPHIC_ANSWER_HEADERS,
+           _demographic_answer_rows(records))
     _sheet(workbook, "Fixation by Condition", _FIXATION_HEADERS,
            _fixation_rows(history_rows, records))
     _sheet(workbook, "Fixation Responses", _FIXATION_RESPONSE_HEADERS,
@@ -823,6 +867,8 @@ def add_participant_results_sheets(
         ["Condition mean fixation reaction time",
          "Milliseconds; hits only. Missing values stay blank."],
         ["Task reaction time", "Seconds; each recorded response/attempt has its own row."],
+        ["Demographic answers", "One row per question and visit, in the recorded order. "
+         "Earlier visits without question snapshots show available fields in Demographics."],
         ["Individual fixation responses", "One row per target plus unmatched keypresses; matched "
          "hit keypresses are not duplicated. Historical compact output retains averages only, "
          "so unavailable individual responses cannot be reconstructed."],

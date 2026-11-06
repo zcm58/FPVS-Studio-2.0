@@ -828,14 +828,14 @@ def test_all_stream_setup_steps_fit_default_window(
     window.show()
     wizard = window.setup_wizard_page
     for step_key in (
-        "project", "conditions", "experiment", "session", "image_size",
+        "project", "demographics", "conditions", "experiment", "session", "image_size",
         "fixation", "response", "review",
     ):
         wizard.open_wizard(step_key=step_key, allow_step_jumps=True)
         QApplication.processEvents()
         assert wizard._current_step_key() == step_key
         assert (window.width(), window.height()) == (1120, 820), step_key
-        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 8"
+        assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 9"
         assert wizard.step_count_label.isVisible()
         assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
         assert "border-top" not in wizard.styleSheet()

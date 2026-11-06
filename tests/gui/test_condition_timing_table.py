@@ -782,7 +782,7 @@ def test_timing_draft_survives_display_navigation_and_applies_at_the_selected_ra
     editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(240.0))
     wizard._go_next()
     assert wizard.step_stack.currentWidget() is wizard.image_size_step_surface
-    assert wizard.step_count_label.text() == "Step 5 of 8"
+    assert wizard.step_count_label.text() == "Step 6 of 9"
     assert document.project.settings.protocol.base_hz == 120
     assert document.project.settings.display.preferred_refresh_hz == 240
     assert not table.has_pending_edits()

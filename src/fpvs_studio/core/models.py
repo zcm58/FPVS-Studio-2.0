@@ -27,6 +27,7 @@ from pydantic import (
 
 from fpvs_studio.core.brainproducts import BrainProductsAmplifier
 from fpvs_studio.core.condition_modifiers import ConditionModifier, validate_condition_modifiers
+from fpvs_studio.core.demographics import DemographicsQuestions, default_demographics_questions
 from fpvs_studio.core.display_geometry import scaled_visual_angle_degrees
 from fpvs_studio.core.enums import (
     ConditionTemplateSchemaVersion,
@@ -1067,6 +1068,16 @@ class ProjectFile(FPVSBaseModel):
     task_modules: list[TaskModule] = Field(default_factory=list)
     condition_modifiers: list[ConditionModifier] = Field(default_factory=list)
     manual_removed_electrodes: dict[str, list[str]] = Field(default_factory=dict)
+    demographics_questions: DemographicsQuestions = Field(
+        default_factory=default_demographics_questions,
+    )
+
+    @model_serializer(mode="wrap")
+    def serialize_demographics(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.demographics_questions == default_demographics_questions():
+            payload.pop("demographics_questions", None)
+        return payload
 
     @model_validator(mode="before")
     @classmethod

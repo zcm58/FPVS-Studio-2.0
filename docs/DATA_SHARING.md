@@ -310,6 +310,10 @@ distinct; other project directories and studies create separate identities. Copy
 the private mapping preserves its UUIDs; OpenFPVS additionally scopes subjects by lab.
 No public hash of a guessable PID is used.
 
+Unchanged Studio demographics questions supply these nullable fields when answered.
+The authored questionnaire and custom answers stay local to Studio. Questionnaire
+edits are excluded from the reporting protocol fingerprint.
+
 All ordinary completed session categories can contribute these snapshots, including
 Attentional Blink and fixation-disabled projects. Structural completion and committed
 research proof remain mandatory. If fixation metrics are absent or invalid, new reports

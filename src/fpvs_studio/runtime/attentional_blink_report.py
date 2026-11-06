@@ -33,6 +33,9 @@ from fpvs_studio.runtime.reporting_lock import project_reporting_lock
 
 ATTENTIONAL_BLINK_BURSTS_FILENAME = "attentional_blink_bursts_v1.csv"
 ATTENTIONAL_BLINK_JOURNAL_FILENAME = "attentional_blink_bursts_v1.jsonl"
+_BURST_PARTICIPANT_FIELDS = (
+    "age", "sex", "handedness", "colorblind", "manual_removed_electrodes",
+)
 _SOA_HEADER = (
     "SOA (ms)",
     "Trigger codes",
@@ -365,7 +368,9 @@ class AttentionalBlinkSessionRecorder:
                             "recording another session."
                         )
             with path.open("a", encoding="utf-8", newline="\n") as handle:
-                handle.write(record.model_dump_json() + "\n")
+                handle.write(record.model_dump_json(
+                    exclude={"participant_metadata": {"demographics_answers"}},
+                ) + "\n")
                 handle.flush()
                 os.fsync(handle.fileno())
         self._records[record.run_id] = record
@@ -405,7 +410,9 @@ def _csv_value(value: object) -> object:
 def _burst_export_payload(record: AttentionalBlinkBurstRecord) -> dict[str, Any]:
     payload = record.model_dump(mode="json", exclude={"participant_metadata"})
     payload["is_test_session"] = record.is_test_session
-    for key, value in record.participant_metadata.model_dump(mode="json").items():
+    for key, value in record.participant_metadata.model_dump(
+        mode="json", include=set(_BURST_PARTICIPANT_FIELDS),
+    ).items():
         payload[f"participant_{key}"] = json.dumps(value) if isinstance(value, list) else value
     return payload
 
@@ -414,7 +421,7 @@ def _burst_export_fields() -> list[str]:
     return [
         *(key for key in AttentionalBlinkBurstRecord.model_fields if key != "participant_metadata"),
         "is_test_session",
-        *(f"participant_{key}" for key in ParticipantMetadata.model_fields),
+        *(f"participant_{key}" for key in _BURST_PARTICIPANT_FIELDS),
     ]
 
 
@@ -448,9 +455,12 @@ def _write_burst_csv(path: Path, records: Iterable[AttentionalBlinkBurstRecord])
 
 def _write_burst_files(directory: Path, records: tuple[AttentionalBlinkBurstRecord, ...]) -> None:
     _write_burst_csv(directory / ATTENTIONAL_BLINK_BURSTS_FILENAME, records)
+    bursts = [record.model_dump(
+        mode="json", exclude={"participant_metadata": {"demographics_answers"}},
+    ) for record in records]
     (directory / "attentional_blink_bursts_v1.json").write_text(
         json.dumps(
-            {"schema_version": "1.0", "bursts": [row.model_dump(mode="json") for row in records]},
+            {"schema_version": "1.0", "bursts": bursts},
             ensure_ascii=False,
             indent=2,
         ),
@@ -489,7 +499,7 @@ def write_attentional_blink_accuracy_xlsx(
     by_participant = workbook.create_sheet("Participant SOA")
     by_participant.append(
         ("Participant", "Session number", "Session ID", "Test session", *_SOA_HEADER,
-         "Pilot session", *ParticipantMetadata.model_fields)
+         "Pilot session", *_BURST_PARTICIPANT_FIELDS)
     )
     groups: dict[tuple[str | None, int | None, str], list[AttentionalBlinkBurstRecord]] = (
         defaultdict(list)
@@ -504,7 +514,7 @@ def write_attentional_blink_accuracy_xlsx(
                 *identity, records[0].is_test_session, *_soa_values(condition),
                 records[0].is_pilot_session,
                 *(json.dumps(value) if isinstance(value, list) else value
-                  for value in metadata.values()),
+                  for value in (metadata[key] for key in _BURST_PARTICIPANT_FIELDS)),
             ))
     bursts = workbook.create_sheet("Bursts")
     fields = _burst_export_fields()

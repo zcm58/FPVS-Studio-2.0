@@ -10,6 +10,8 @@ from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
+    QLineEdit,
     QMessageBox,
     QPushButton,
 )
@@ -607,24 +609,17 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
 def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, monkeypatch) -> None:
     dialog = ParticipantNumberDialog()
     qtbot.addWidget(dialog)
-    assert dialog.prompt_label.text() == "Please enter the participant details."
-    assert [
-        dialog.sex_combo.itemText(index)
-        for index in range(dialog.sex_combo.count())
-    ] == ["Select sex...", "Female", "Male"]
-    assert [
-        dialog.handedness_combo.itemText(index)
-        for index in range(dialog.handedness_combo.count())
-    ] == [
-        "Select handedness...",
+    age = dialog.findChild(QLineEdit, "participant_age_edit")
+    sex = dialog.findChild(QComboBox, "participant_sex_combo")
+    handedness = dialog.findChild(QComboBox, "participant_handedness_combo")
+    colorblind = dialog.findChild(QComboBox, "participant_colorblind_combo")
+    assert [sex.itemText(index) for index in range(1, sex.count())] == ["Female", "Male"]
+    assert [handedness.itemText(index) for index in range(1, handedness.count())] == [
         "Right handed",
         "Left handed",
         "Ambidextrous",
     ]
-    assert [
-        dialog.colorblind_combo.itemText(index)
-        for index in range(dialog.colorblind_combo.count())
-    ] == ["Select yes or no...", "No", "Yes"]
+    assert [colorblind.itemText(index) for index in range(1, colorblind.count())] == ["No", "Yes"]
 
     messages: list[str] = []
     monkeypatch.setattr(
@@ -643,26 +638,29 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
     dialog.participant_number_edit.setText(" 0012 ")
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert "age" in dialog.demographics_error.text().lower()
 
-    dialog.age_edit.setText("121")
+    age.setText("121")
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert "1 to 120" in dialog.demographics_error.text()
 
-    dialog.age_edit.setText("72")
+    age.setText("72")
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert "sex" in dialog.demographics_error.text().lower()
 
-    dialog.sex_combo.setCurrentIndex(dialog.sex_combo.findData("Female"))
+    sex.setCurrentIndex(sex.findData("Female"))
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert "handedness" in dialog.demographics_error.text().lower()
 
-    dialog.handedness_combo.setCurrentIndex(
-        dialog.handedness_combo.findData("Right handed")
-    )
+    handedness.setCurrentIndex(handedness.findData("Right handed"))
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert "colorblind" in dialog.demographics_error.text().lower()
 
-    dialog.colorblind_combo.setCurrentIndex(dialog.colorblind_combo.findData(True))
+    colorblind.setCurrentIndex(colorblind.findData(True))
     dialog.accept()
     assert dialog.result() == int(dialog.DialogCode.Accepted)
     assert dialog.participant_number == "0012"
@@ -672,10 +670,6 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
     assert dialog.participant_metadata.colorblind is True
     assert any("Enter a participant number" in message for message in messages)
     assert any("digits only" in message for message in messages)
-    assert any("age" in message.lower() for message in messages)
-    assert any("sex" in message.lower() for message in messages)
-    assert any("handedness" in message.lower() for message in messages)
-    assert any("colorblind" in message.lower() for message in messages)
 
 
 def test_unsaved_changes_state_and_guard(

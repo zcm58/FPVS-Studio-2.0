@@ -1,8 +1,7 @@
 # Architecture
 
-FPVS Studio's package and dependency map. Start with `AGENTS.md` and
-[the task index](docs/agent/agent-index.md); open detailed contracts only for the
-behavior being changed. Source package guides add local rules.
+Start with `AGENTS.md` and the [task index](docs/agent/agent-index.md). Source
+package guides add local rules.
 
 ## Application Shape
 
@@ -14,10 +13,9 @@ triggers; normal Windows/Linux launches retain hardware and display preflight.
 Mac tests retain refresh verification and transient calibration; EEG is excluded.
 Test Mode defaults off at startup.
 
-Guided Setup keeps Timing (step 3) separate from a two-column Display & Session
-step (step 4). GUI retains timing drafts across that transition; core still owns
-validation and compilation, including exact shared-refresh compatibility for mixed
-image presentation rates. See [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
+Setup retains Timing drafts across Display & Session. The project questionnaire and
+launch answer schemas live in `core/demographics.py`. See the
+[Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
 
 Core owns randomized block membership and occurrence identity; see the
 [block contract](docs/SESSION_PLAN.md#explicit-randomized-condition-blocks).

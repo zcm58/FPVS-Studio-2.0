@@ -189,13 +189,13 @@ def test_setup_wizard_combines_display_and_session_in_two_columns(
     window.show_setup_wizard(step_key="experiment")
     editor = guide.runtime_settings_editor
     assert guide.step_stack.currentWidget() is guide.experiment_step_surface
-    assert guide.step_count_label.text() == "Step 3 of 8"
+    assert guide.step_count_label.text() == "Step 4 of 9"
     assert not editor.isVisible()
     assert editor.timing_controls.isVisible()
     assert not editor.detect_refresh_button.isVisible()
     guide.open_wizard(step_key="display")
     assert guide.step_stack.currentWidget() is guide.display_session_step_surface
-    assert guide.step_count_label.text() == "Step 4 of 8"
+    assert guide.step_count_label.text() == "Step 5 of 9"
     assert editor.isVisible()
     assert not editor.timing_controls.isVisible()
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
@@ -243,7 +243,7 @@ def test_setup_wizard_combines_display_and_session_in_two_columns(
 
     guide.open_wizard(step_key="session")
     assert guide.step_stack.currentWidget() is guide.display_session_step_surface
-    assert guide.step_count_label.text() == "Step 4 of 8"
+    assert guide.step_count_label.text() == "Step 5 of 9"
     assert guide.session_settings_card.title_label.isVisible()
     assert guide.display_settings_card.title_label.isVisible()
     assert (guide.display_settings_card.geometry().right()

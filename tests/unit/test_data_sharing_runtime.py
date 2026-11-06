@@ -10,6 +10,7 @@ from tests.unit.runtime_launcher_helpers import StubEngine
 from tests.unit.test_data_sharing_storage import enable
 
 from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.demographics import DemographicsAnswer
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.execution import ParticipantMetadata
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
@@ -390,7 +391,12 @@ def test_capture_snapshot_cannot_claim_a_different_visit(execution):
 
 def test_electrodes_are_frozen_before_presentation_and_survive_recovery(execution, monkeypatch):
     root, _ = execution
-    metadata = ParticipantMetadata(manual_removed_electrodes=["A1"])
+    local_answer = DemographicsAnswer(
+        question_id="study-notes", prompt="Study notes?", answer="Retain locally",
+    )
+    metadata = ParticipantMetadata(
+        manual_removed_electrodes=["A1"], demographics_answers=[local_answer],
+    )
     metadata.age = 25
     metadata.sex = "Female"
     metadata.handedness = "Left handed"
@@ -404,6 +410,7 @@ def test_electrodes_are_frozen_before_presentation_and_survive_recovery(executio
         assert intent.electrode_exclusions.removed_electrodes == ("A1",)
         metadata.manual_removed_electrodes[:] = ["B2"]
         metadata.age = 50
+        metadata.demographics_answers.clear()
         return original_open(engine, **kwargs)
 
     monkeypatch.setattr(StubEngine, "open_session", open_session)
@@ -411,8 +418,10 @@ def test_electrodes_are_frozen_before_presentation_and_survive_recovery(executio
     summary = execute(execution, metadata=metadata)
     assert summary.participant_metadata.manual_removed_electrodes == ["A1"]
     assert summary.participant_metadata.age == 25
+    assert summary.participant_metadata.demographics_answers == [local_answer]
     intent = data_sharing.read_capture_intents(root)[0]
     payload = intent.report.model_dump_json()
+    assert local_answer.prompt not in payload and local_answer.answer not in payload
     metadata.manual_removed_electrodes[:] = ["C3"]
     monkeypatch.setattr(data_sharing, "queue_report", original_queue)
     assert not data_sharing.recover_captures(root)

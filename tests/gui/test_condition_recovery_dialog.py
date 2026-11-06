@@ -213,6 +213,7 @@ def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
         project=SimpleNamespace(
             settings=SimpleNamespace(allow_repeated_participant_sessions=True),
             manual_removed_electrodes={},
+            demographics_questions=[],
         ),
         validate_recording_launch=Mock(return_value="brainproducts_triggerbox"),
         needs_project_brainproducts_setup=lambda: False,

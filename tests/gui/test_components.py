@@ -281,9 +281,9 @@ def test_shared_fields_keep_keyboard_editing_and_selection(qtbot) -> None:
     assert_visible_children_within_parent(dialog)
 
 
-def test_eight_setup_steps_show_complete_labels_at_compact_width(qtbot) -> None:
+def test_nine_setup_steps_expose_complete_labels_at_compact_width(qtbot) -> None:
     titles = [
-        "Project", "Conditions", "Timing", "Display & Session", "Image Size",
+        "Project", "Demographics", "Conditions", "Timing", "Display & Session", "Image Size",
         "Fixation", "Response", "Review",
     ]
     stepper = SetupProgressStepper(titles)
@@ -293,8 +293,8 @@ def test_eight_setup_steps_show_complete_labels_at_compact_width(qtbot) -> None:
     QApplication.processEvents()
 
     assert_visible_children_within_parent(stepper)
-    assert [label.text() for label in stepper.step_labels] == titles
-    for label in stepper.step_labels:
+    for title, label in zip(titles, stepper.step_labels, strict=True):
+        assert label.text() == title or label.toolTip() == title
         assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
 
 
