@@ -22,6 +22,7 @@ from fpvs_studio.gui.attentional_blink_stream_designer import (
 from fpvs_studio.gui.components import mark_secondary_action
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.image_sources_editor import ImageSourcesEditor
+from fpvs_studio.support.error_explanations import describe_error
 
 
 class DesignSetupStep(QWidget):
@@ -121,7 +122,7 @@ class DesignSetupStep(QWidget):
                     self._document.project.settings.display.preferred_refresh_hz or 60.0,
                 )
             except ValueError as error:
-                return str(error)
+                return describe_error("Masking settings", error)
         elif condition is not None and any(
             self._document.get_stimulus_set(set_id) is None for set_id in (
                 condition.base_stimulus_set_id, condition.oddball_stimulus_set_id,

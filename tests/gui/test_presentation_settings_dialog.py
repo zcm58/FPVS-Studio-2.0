@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
 from tests.gui.helpers import _open_created_project, _write_image_directory
 
@@ -53,15 +55,21 @@ def _apply_button(dialog: PresentationSettingsDialog):
     return dialog.button_box.button(QDialogButtonBox.StandardButton.Apply)
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_presentation_dialog_header_and_preview_fit_minimum_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
+    background,
 ) -> None:
     document, window = _open_created_project(controller, qtbot, tmp_path, "Compact presentation")
     condition_id = document.create_condition(name="Image recognition with peripheral distractors")
     dialog = PresentationSettingsDialog(document, condition_id=condition_id, parent=window)
     qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     dialog.resize(900, 600)
     dialog.show()
     QApplication.processEvents()
@@ -88,11 +96,17 @@ def test_presentation_dialog_header_and_preview_fit_minimum_size(
         "Natural aspect image geometry.\nWarning: the authored image box may extend "
         "beyond the active display."
     )
-    dialog.validation_label.setText(
-        "The selected presentation settings are invalid. Enter a positive image width "
-        "and height, then choose Apply again."
-    )
-    dialog.validation_label.show()
+    error = PermissionError(13, "Access is denied", str(document.project_file_path))
+
+    def fail_save(*_args):
+        raise error
+
+    monkeypatch.setattr(document, "set_condition_presentation", fail_save)
+    dialog.accept()
+    assert dialog.validation_label.isVisible()
+    assert "[Errno" not in dialog.validation_label.text()
+    assert dialog.validation_label.toolTip() == str(error)
+    assert dialog.result() != QDialog.DialogCode.Accepted
     QApplication.processEvents()
     assert dialog.height() == 600
     for label in (dialog.preview_summary_label, dialog.validation_label):

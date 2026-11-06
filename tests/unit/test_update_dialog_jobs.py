@@ -12,6 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from fpvs_studio.support.error_explanations import explain_error
 from fpvs_studio.updates.models import (
     DownloadedInstaller,
     InstallerAsset,
@@ -36,6 +37,7 @@ class _Signal:
 class _Widget:
     def __init__(self):
         self.text = ""
+        self.tooltip = ""
         self.enabled = True
         self.visible = True
         self.value = 0
@@ -43,6 +45,9 @@ class _Widget:
 
     def setText(self, text):
         self.text = text
+
+    def setToolTip(self, text):
+        self.tooltip = text
 
     def setEnabled(self, enabled):
         self.enabled = enabled
@@ -148,6 +153,7 @@ def update_flow(tmp_path):
         "DownloadedInstaller": DownloadedInstaller, "UpdatePhase": UpdatePhase,
         "_PROGRESS_MAXIMUM": 1000, "_LOGGER": logging.getLogger(__name__),
         "sys": SimpleNamespace(platform="win32"),
+        "explain_error": explain_error,
     }
     exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
     jobs, events = [], []
@@ -335,6 +341,7 @@ def test_install_failure_invalidates_cached_download_before_retry(update_flow):
     assert flow.dialog._downloaded_installer is None
     assert flow.dialog.download_button.enabled
     assert flow.dialog.visible
+    assert "Installer verification failed" in flow.dialog.notes_label.tooltip
     flow.dialog.start_download()
     assert len(flow.jobs) == 3
     assert flow.dialog._task_kind == "download"

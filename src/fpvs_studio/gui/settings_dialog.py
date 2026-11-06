@@ -35,6 +35,7 @@ from fpvs_studio.gui.recording_dialog import (
     RecordingSetupDialog,
     recording_preference_summary,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -547,8 +548,10 @@ class AppSettingsDialog(QDialog):
             except (ValueError, OSError) as exc:
                 _LOGGER.exception("Could not save project recording settings")
                 self.recording_summary.setText(
-                    f"Recording setup was not saved. Previous device retained. {exc}"
+                    "Recording setup was not saved. Previous device retained. "
+                    + describe_error("Save recording setup", exc)
                 )
+                self.recording_summary.setToolTip(str(exc))
                 return
         self._recording_configuration = configuration
         self._biosemi_serial_port = port
@@ -556,6 +559,8 @@ class AppSettingsDialog(QDialog):
         self._refresh_recording_summaries()
 
     def _refresh_recording_summaries(self) -> None:
+        self.recording_summary.setToolTip("")
+        self.default_recording_summary.setToolTip("")
         backend = self._default_recording_configuration.get("recording_backend")
         label = next(
             (label for label, value in RECORDING_HARDWARE_CHOICES if value == backend),
@@ -590,8 +595,10 @@ class AppSettingsDialog(QDialog):
         except (ValueError, OSError) as exc:
             _LOGGER.exception("Could not save computer recording default")
             self.default_recording_summary.setText(
-                f"Default was not saved. Previous choice retained. {exc}",
+                "Default was not saved. Previous choice retained. "
+                + describe_error("Save default recording setup", exc),
             )
+            self.default_recording_summary.setToolTip(str(exc))
             return
         self._default_recording_configuration = configuration
         if self._recording_uses_default:
@@ -605,7 +612,11 @@ class AppSettingsDialog(QDialog):
             self._on_use_default_recording_configuration()
         except (ValueError, OSError) as exc:
             _LOGGER.exception("Could not reset project recording choice")
-            self.recording_summary.setText(f"Project choice was not changed. {exc}")
+            self.recording_summary.setText(
+                "Project choice was not changed. "
+                + describe_error("Reset recording setup", exc)
+            )
+            self.recording_summary.setToolTip(str(exc))
             return
         self._recording_uses_default = True
         self._recording_configuration = dict(self._default_recording_configuration)

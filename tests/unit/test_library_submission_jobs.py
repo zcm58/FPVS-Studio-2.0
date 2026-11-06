@@ -18,6 +18,7 @@ from fpvs_studio.developer.library_publisher import (
     PublisherError,
 )
 from fpvs_studio.library.errors import LibraryError
+from fpvs_studio.support.error_explanations import describe_error
 
 
 class Text:
@@ -127,6 +128,7 @@ def state(tmp_path):
         "__version__": __version__,
         "submit_project": upload,
         "publication_review": lambda _prepared: "Inventory",
+        "describe_error": describe_error,
     }
     exec(compile(ast.fix_missing_locations(module), str(path), "exec"), namespace)
     controller = namespace["LibrarySubmissionController"](object())
@@ -168,7 +170,8 @@ def test_failed_upload_retries_original_preparation_without_saving_or_reexportin
     state.lifecycle.jobs[1].run()
     assert c._prepared is state.prepared
     assert c.dialog.states[-1] == (False, True, True, False)
-    assert c.dialog.status.text() == "Offline"
+    assert c.dialog.status.text() == describe_error("Submit Experiment", LibraryError("Offline"))
+    assert "Technical details:\nOffline" in c.dialog.status.tooltip
     retried = []
     state.namespace["submit_project"] = lambda _client, prepared, **_kwargs: retried.append(
         prepared

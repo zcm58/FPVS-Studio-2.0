@@ -35,6 +35,7 @@ from fpvs_studio.runtime.attentional_blink_report import (
     load_attentional_blink_data,
     write_attentional_blink_accuracy_xlsx,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 LOGGER = logging.getLogger(__name__)
 
@@ -165,6 +166,7 @@ class AttentionalBlinkDataDialog(QDialog):
             "error" if state == "error" else "pending" if state == "loading" else "info", title,
         )
         self.summary_label.setText(message)
+        self.summary_label.setToolTip("")
         self.tabs.hide()
         self.inclusion_label.hide()
         self.feedback_label.hide()
@@ -274,7 +276,10 @@ class AttentionalBlinkDataDialog(QDialog):
     @Slot(object)
     def _on_load_failed(self, error: object) -> None:
         self._summary = None
-        self._show_message("error", "Could Not Load", f"{error}\nChoose Retry to try again.")
+        self._show_message(
+            "error", "Could Not Load", describe_error("Load attentional blink results", error),
+        )
+        self.summary_label.setToolTip(str(error))
         LOGGER.warning("Could not load attentional blink accuracy: %s", error)
 
     @Slot()
@@ -300,6 +305,7 @@ class AttentionalBlinkDataDialog(QDialog):
         self._active_export_task = task
         self.status_badge.set_state("pending", "Exporting Excel")
         self.feedback_label.setText("Writing the workbook in the background…")
+        self.feedback_label.setToolTip("")
         self.feedback_label.show()
         self.export_path_label.set_path_text(destination, max_length=100)
         self.export_path_label.show()
@@ -321,7 +327,11 @@ class AttentionalBlinkDataDialog(QDialog):
     @Slot(object)
     def _on_export_failed(self, error: object) -> None:
         self.status_badge.set_state("error", "Export Failed")
-        self.feedback_label.setText(f"{error}\nThe loaded results are still available.")
+        self.feedback_label.setText(
+            describe_error("Export attentional blink results", error)
+            + "\nThe loaded results are still available.",
+        )
+        self.feedback_label.setToolTip(str(error))
         LOGGER.warning("Could not export attentional blink accuracy: %s", error)
 
     @Slot()

@@ -17,6 +17,7 @@ from fpvs_studio.gui.report_bug_dialog import ReportBugDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.support.client import Receipt, ReportClient, ReportServiceError
 from fpvs_studio.support.diagnostics import bounded_text, collect_diagnostics, redact
+from fpvs_studio.support.error_explanations import describe_error
 from fpvs_studio.support.models import Delivery, Draft, Intent, Report, ReportKind
 from fpvs_studio.support.storage import DraftStore, export_report, support_directory
 
@@ -146,6 +147,7 @@ class BugReportController(QObject):
     ) -> None:
         if self._job is not None or (self._lifecycle.is_shutting_down and not saving):
             return
+        self._dialog().status_label.setToolTip("")
         if state:
             self._dialog().set_state(state, message)
         job = self._lifecycle.start_task(
@@ -177,7 +179,11 @@ class BugReportController(QObject):
                     self._loaded = True
                     if self._error_context is not None:
                         self._dialog().offer_error(*self._error_context)
-                self._dialog().set_state("editing", self._safe_error(outcome.error))
+                message = self._safe_error(outcome.error)
+                self._dialog().set_state("editing", message)
+                if isinstance(outcome.error, ReportServiceError):
+                    details = bounded_text(redact(str(outcome.error)))
+                    self._dialog().status_label.setToolTip(f"{message}\n\nDetails: {details}")
                 if saving:
                     self._save_failed = True
                     self._dirty = True
@@ -203,7 +209,7 @@ class BugReportController(QObject):
     @staticmethod
     def _safe_error(error: Exception) -> str:
         if isinstance(error, ReportServiceError):
-            return str(error)
+            return describe_error("Report Error", error)
         return (
             "Local report storage or diagnostics could not be read or saved. "
             "Your text remains in this window; copy it or save it to another location."

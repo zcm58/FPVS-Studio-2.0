@@ -22,6 +22,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 
 class BundleExportOptionsDialog(QDialog):
@@ -131,13 +132,15 @@ class BundleExportOptionsDialog(QDialog):
     def _refresh_validation(self, _text: str = "") -> None:
         project_name = self.export_project_name
         error = ""
+        self.validation_label.setToolTip("")
         if not project_name:
             error = "Enter a project name for the exported copy."
         else:
             try:
                 validate_project_id(slugify_project_name(project_name))
             except ValueError as exc:
-                error = str(exc)
+                error = describe_error("Export project name", exc)
+                self.validation_label.setToolTip(str(exc))
         self.validation_label.setText(error)
         self.validation_label.setVisible(bool(error))
         self.continue_button.setEnabled(not error)

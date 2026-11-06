@@ -67,6 +67,7 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.preview_cache import PreviewPixmapCache
 from fpvs_studio.preprocessing.manifest import asset_variant_path, find_manifest_set
+from fpvs_studio.support.error_explanations import describe_error
 
 _GROUP_NAMES = ("transform", "image_geometry", "text_height", "text_color", "text_position")
 _IMAGE_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
@@ -1171,8 +1172,10 @@ class PresentationSettingsDialog(QDialog):
         try:
             settings = self._effective_preview_settings()
         except (TypeError, ValueError) as error:
-            self.preview_summary_label.setText(f"Preview unavailable: {error}")
+            self.preview_summary_label.setText(describe_error("Presentation preview", error))
+            self.preview_summary_label.setToolTip(str(error))
             return
+        self.preview_summary_label.setToolTip("")
         values = settings.text_height.values
         current_value = self.preview_size_combo.currentData()
         self.preview_size_combo.blockSignals(True)
@@ -1268,7 +1271,8 @@ class PresentationSettingsDialog(QDialog):
                     self._build_condition(),
                 )
         except Exception as error:
-            self.validation_label.setText(str(error))
+            self.validation_label.setText(describe_error("Save presentation settings", error))
+            self.validation_label.setToolTip(str(error))
             self.validation_label.setVisible(True)
             self.validation_label.show()
             return

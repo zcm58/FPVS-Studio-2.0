@@ -41,6 +41,7 @@ from fpvs_studio.runtime.fixation_report import (
     load_fixation_cross_data,
     write_fixation_task_accuracy_xlsx,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 LOGGER = logging.getLogger(__name__)
 
@@ -337,16 +338,18 @@ class FixationCrossDataDialog(QDialog):
         self.export_path_label.set_path_text(str(output_path), max_length=72)
         self.export_path_label.setVisible(True)
         self.export_feedback_label.setText("Writing the selected workbook in the background...")
+        self.export_feedback_label.setToolTip("")
         self.export_feedback_label.setVisible(True)
         self._sync_action_enabled_states()
 
     def _show_export_error(self, error: object) -> None:
         self.export_state_name = "error"
         self.status_badge.set_state("error", "Export Failed")
-        message = str(error).strip() or "The Excel workbook could not be written."
+        message = describe_error("Export fixation results", error)
         self.export_feedback_label.setText(
             f"{message} The loaded fixation results are still available."
         )
+        self.export_feedback_label.setToolTip(str(error))
         self.export_feedback_label.setVisible(True)
         if isinstance(error, FixationExportError):
             LOGGER.warning("Could not export fixation-task accuracy: %s", error)
@@ -377,6 +380,7 @@ class FixationCrossDataDialog(QDialog):
         self.status_badge.set_state("pending", "Loading")
         self.state_title_label.setText("Loading fixation task accuracy...")
         self.state_detail_label.setText("Reading included session history from this project.")
+        self.state_detail_label.setToolTip("")
         self.state_stack.setCurrentWidget(self.state_page)
         self.export_path_label.setVisible(False)
         self.export_feedback_label.setVisible(False)
@@ -398,10 +402,11 @@ class FixationCrossDataDialog(QDialog):
         self.state_name = "error"
         self.status_badge.set_state("error", "Could Not Load")
         self.state_title_label.setText("Fixation data could not be loaded")
-        message = str(error).strip() or "The fixation history could not be read."
+        message = describe_error("Load fixation results", error)
         self.state_detail_label.setText(
             f"{message}\n\nThe project was not changed. Choose Retry to try again."
         )
+        self.state_detail_label.setToolTip(str(error))
         self.state_stack.setCurrentWidget(self.state_page)
         self._sync_action_enabled_states()
         if isinstance(error, FixationDataError):

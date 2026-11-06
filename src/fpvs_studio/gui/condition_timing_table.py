@@ -45,6 +45,7 @@ from fpvs_studio.core.session_ordering import (
 )
 from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.support.error_explanations import describe_error
 
 FREQUENCY_OVERRIDE_WARNING = (
     "Warning: you're about to change the stimulus presentation frequency of this condition. "
@@ -287,6 +288,7 @@ class ConditionTimingTable(QWidget):
         self._update_presentation_totals()
         self._update_actions()
         self.error_label.hide()
+        self.error_label.setToolTip("")
         self.duration_choices.hide()
         if message := self.presentation_count_blocker(include_saved_order=False):
             self.error_label.setText(message)
@@ -298,7 +300,7 @@ class ConditionTimingTable(QWidget):
             if include_saved_order:
                 active_saved_condition_order(self._document.project)
         except ValueError as error:
-            return str(error)
+            return describe_error("Condition presentation counts", error)
         return ""
 
     def saved_order_blocker(self) -> str:
@@ -589,7 +591,8 @@ class ConditionTimingTable(QWidget):
         return True
 
     def _show_timing_error(self, error: ValueError | OSError) -> None:
-        self.error_label.setText(str(error))
+        self.error_label.setText(describe_error("Condition timing", error))
+        self.error_label.setToolTip(str(error))
         self.error_label.show()
         while (item := self.duration_choices_layout.takeAt(0)) is not None:
             if widget := item.widget():

@@ -446,6 +446,9 @@ def test_unsupported_preview_decoder_shows_error_without_changing_project(qtbot,
     )
     _wait(dialog, qtbot)
     assert "cannot identify image" in dialog.status.toolTip()
+    assert "cannot identify image" not in dialog.status.text()
+    assert "image" in dialog.status.text().lower()
+    assert "import it again" in dialog.status.toolTip()
     assert dialog.isVisible() and dialog.apply_button.isEnabled()
     assert document.project.model_dump() == before
     _fit(dialog, size=size)

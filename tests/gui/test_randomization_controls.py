@@ -159,12 +159,14 @@ def test_failed_policy_edit_retains_draft_and_can_be_retried(qtbot, monkeypatch,
     update = document.update_randomization_settings
 
     def fail(**_kwargs):
-        raise DocumentError("Could not apply the change. Try again.")
+        raise DocumentError("AttributeError: 'NoneType' object has no attribute 'model_copy'")
 
     monkeypatch.setattr(document, "update_randomization_settings", fail)
     combo = editor.mode_combos["fixation"]
     combo.setCurrentIndex(combo.findData("fixed"))
     assert editor.error_label.isVisible()
+    assert "AttributeError" not in editor.error_label.text()
+    assert "AttributeError" in editor.error_label.toolTip()
     assert editor.has_pending_edits()
     assert document.project == original
     monkeypatch.setattr(document, "update_randomization_settings", update)

@@ -21,6 +21,7 @@ from fpvs_studio.developer.library_publisher import (
 )
 from fpvs_studio.gui.library_publisher_dialog import LibraryPublisherDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
+from fpvs_studio.support.error_explanations import describe_error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -122,6 +123,7 @@ class LibraryPublisherController(QObject):
         if self._job is not None or self._lifecycle.is_shutting_down:
             return
         self._operation = operation
+        self._view().status_label.setToolTip("")
         self._view().set_busy(True, message)
         job = self._lifecycle.start_task(
             lambda _progress, cancel: work(cancel),
@@ -160,6 +162,9 @@ class LibraryPublisherController(QObject):
                         else self._safe_error(outcome.error)
                     ),
                 )
+            if not canceled and isinstance(outcome.error, PublisherError):
+                label = self._view().status_label
+                label.setToolTip(f"{label.text()}\n\nDetails: {outcome.error}")
             if self._closing:
                 self._view().hide()
 
@@ -205,6 +210,7 @@ class LibraryPublisherController(QObject):
             return
         if self._job is not None or self._lifecycle.is_shutting_down:
             return
+        self._view().status_label.setToolTip("")
         if action == "access":
             self._check_access()
         elif action == "prepare" and self._prepared is None:
@@ -252,7 +258,9 @@ class LibraryPublisherController(QObject):
         try:
             request = self._view().request()
         except PublisherError as error:
-            self._view().set_busy(False, str(error))
+            message = describe_error("Publish Library Experiment", error)
+            self._view().set_busy(False, message)
+            self._view().status_label.setToolTip(f"{message}\n\nDetails: {error}")
             return
         if (request.item_id, request.version) in self._retained_attempts:
             self._view().status_label.setText(
@@ -314,7 +322,7 @@ class LibraryPublisherController(QObject):
     @staticmethod
     def _safe_error(error: Exception | None) -> str:
         if isinstance(error, PublisherError):
-            return str(error)
+            return describe_error("Publish Library Experiment", error)
         _LOGGER.error("Developer Library publishing failed (%s)", type(error).__name__)
         return (
             "Publishing could not finish. Check GitHub access and retry."

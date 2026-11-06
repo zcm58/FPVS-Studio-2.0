@@ -22,13 +22,13 @@ from fpvs_studio.gui.library_publisher_controller import publication_review
 from fpvs_studio.gui.library_submission_dialog import LibrarySubmissionDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.library.client import LibraryClient
-from fpvs_studio.library.errors import LibraryError
 from fpvs_studio.library.submissions import (
     SubmissionList,
     SubmissionStatus,
     list_submissions,
     submit_project,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 
 class LibrarySubmissionController(QObject):
@@ -105,12 +105,9 @@ class LibrarySubmissionController(QObject):
                     self._ready(result.value, upload=False)
                 self._status("Canceled. You can retry this upload.")
             elif result.error is not None:
-                detail = (
-                    str(result.error)
-                    if isinstance(result.error, (LibraryError, PublisherError))
-                    else "The operation failed. Check project files and network, then retry."
-                )
+                detail = describe_error("Submit Experiment", result.error)
                 self._status(detail)
+                self.dialog.status.setToolTip(f"{detail}\n\nTechnical details:\n{result.error}")
             else:
                 finished(result.value)
             if (
@@ -152,7 +149,7 @@ class LibrarySubmissionController(QObject):
                     __version__,
                 )
             except PublisherError as error:
-                self._status(str(error))
+                self._status(describe_error("Submit Experiment", error))
                 return
             if self._save is None or not self._save():
                 self._status("Save the current project before uploading.")

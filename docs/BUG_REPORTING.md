@@ -148,7 +148,11 @@ requests occur on dialog opening, collection, editing, draft saving, or exportin
 
 Common permission, missing-file, file-in-use, disk-space, archive, connection,
 dependency and compatibility errors have plain-language explanations and next
-steps. Unknown errors describe the failed action without guessing its cause.
+steps. Messages state the failed action, a supported possible cause and a short
+recovery step. Unknown errors say that the cause could not be identified rather
+than guessing. Clear field-specific validation keeps its field labels and useful
+values; Python exception names, stack traces, internal field names and serialized
+settings do not appear in primary explanations.
 USB TriggerBox failures retain their connection, marker/reset or cleanup explanation
 before generic file/network rules, including chained Windows access errors and
 serialized launch failures. Technical driver details stay in **Show Details...**.
@@ -160,7 +164,16 @@ size to their wrapped text with a minimum width of 580 logical pixels; details
 expand separately. The report button is never the default or Escape action.
 
 `support/error_explanations.py` owns GUI-neutral explanation rules. New error
-context is redacted and bounded through the existing support helpers. Existing
+popups and exception-driven inline labels use this owner, including recording,
+authoring, results, Library, sharing and update failures. Device/local display
+timeouts remain separate from online-service failures; file errors keep their
+file-specific recovery even when raised during an online operation. Inline
+diagnostics remain in existing tooltips/logs; updater startup errors have expandable
+details without loading the full Studio application. Normal progress messages and
+confirmation decisions are unchanged. Visible acceptance checks the affected
+surfaces at minimum size in both themes, with long failures and expanded details.
+
+New error context is redacted and bounded through the existing support helpers. Existing
 report text is preserved; **Use newly reported error** explicitly replaces its
 diagnostics and fills only blank description fields. Verification, sending, and
 receipt-locked reports cannot replace their payload with a later error.

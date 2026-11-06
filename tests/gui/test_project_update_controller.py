@@ -578,6 +578,11 @@ def test_invalid_receipt_is_quiet_on_open_and_requires_explicit_link_repair(
     state.lifecycle.drain()
     dialog = state.controller.dialog
     assert "Link this project explicitly to repair" in dialog.status_label.text()
+    assert dialog.status_label.text() in dialog.status_label.toolTip()
+    assert (
+        "The Library receipt is corrupt." if receipt_state == "corrupt"
+        else "The Library record belongs to a different project."
+    ) in dialog.status_label.toolTip()
     assert dialog.link_panel.isVisible()
     assert dialog.link_combo.count() == 2
     assert not dialog.install_button.isEnabled()
@@ -591,6 +596,7 @@ def test_invalid_receipt_is_quiet_on_open_and_requires_explicit_link_repair(
     assert state.origins[state.root] is original
     state.lifecycle.drain()
     repaired = state.origins[state.root]
+    assert not dialog.status_label.toolTip()
     assert repaired.local_project_id == state.window.document.project.meta.project_id
     assert repaired.item_id == "masking"
     assert repaired.installed_version is None
@@ -606,21 +612,32 @@ def test_failed_manual_recheck_invalidates_previously_available_install(updates,
     state.lifecycle.drain()
     dialog = state.controller.dialog
     assert dialog.install_button.isEnabled()
+    original_load = module.load_library_origin
+    error = PermissionError(13, "Access is denied", "project_receipt.json")
 
     def unreadable_origin(_root):
-        raise OSError("Project receipt could not be read")
+        raise error
 
     monkeypatch.setattr(module, "load_library_origin", unreadable_origin)
     dialog.check_button.click()
     assert not dialog.install_button.isEnabled()
     state.lifecycle.drain()
-    assert "Project receipt could not be read" in dialog.status_label.text()
+    assert "couldn't access" in dialog.status_label.text()
+    assert "[Errno" not in dialog.status_label.text()
+    assert str(error) in dialog.status_label.toolTip()
+    assert dialog.status_label.text() in dialog.status_label.toolTip()
     assert not dialog.install_button.isEnabled()
     jobs_before_install = len(state.lifecycle.jobs)
     state.controller._action("install")
     assert len(state.lifecycle.jobs) == jobs_before_install
     assert state.client.download_calls == []
     assert state.handoffs == []
+    monkeypatch.setattr(module, "load_library_origin", original_load)
+    dialog.check_button.click()
+    assert not dialog.status_label.toolTip()
+    state.lifecycle.drain()
+    assert not dialog.status_label.toolTip()
+    assert dialog.install_button.isEnabled()
 
 
 def test_canceled_manual_recheck_requires_fresh_check_before_install(updates):

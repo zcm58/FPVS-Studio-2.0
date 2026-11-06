@@ -659,6 +659,21 @@ def test_source_failure_remains_visible_after_task_finishes(
     assert "no supported images" in dialog.status_label.text()
 
 
+def test_source_exception_syntax_remains_in_details(qtbot, monkeypatch, oddball_document):
+    dialog = _open_designer(qtbot, monkeypatch, oddball_document)
+    error = FileNotFoundError(2, "No such file or directory", "C:/stimuli/missing.png")
+    dialog._task_failed(error)
+    dialog._import_finished()
+    assert dialog.status_label.isVisible()
+    assert "couldn't be found" in dialog.status_label.text()
+    assert "[Errno" not in dialog.status_label.text()
+    assert dialog.status_label.toolTip() == str(error)
+    QApplication.processEvents()
+    assert dialog.status_label.height() >= dialog.status_label.heightForWidth(
+        dialog.status_label.width(),
+    )
+
+
 def test_standalone_dialog_hosts_the_same_category_specific_editor(
     qtbot, monkeypatch, oddball_document, tmp_path
 ) -> None:

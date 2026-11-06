@@ -35,6 +35,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 
 @dataclass(frozen=True)
@@ -82,8 +83,12 @@ class SavedReportsDialog(QDialog):
         self.projects_edit.setReadOnly(True)
         self.projects_edit.setAccessibleName("Projects with saved reports needing attention")
         self.projects_edit.setPlainText("\n\n".join(
-            f"{notice.project_root.name}\n{notice.project_root}\n{notice.message}"
+            f"{notice.project_root.name}\n{notice.project_root}\n"
+            f"{describe_error('Saved Reports', notice.message)}"
             for notice in notices
+        ))
+        self.projects_edit.setToolTip("\n\n".join(
+            f"{notice.project_root}\n{notice.message}" for notice in notices
         ))
         layout.addWidget(self.projects_edit, 1)
         footer = QHBoxLayout()
@@ -424,6 +429,7 @@ class DataSharingDialog(QDialog):
         self._busy = busy
         if message:
             self.status_label.setText(message)
+            self.status_label.setToolTip(message)
         self._update_controls()
 
     def _update_controls(self) -> None:

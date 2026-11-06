@@ -28,6 +28,18 @@ def _study(number=1):
     )
 
 
+def test_saved_report_failure_keeps_diagnostics_out_of_primary_text(qtbot, tmp_path):
+    parent = QWidget()
+    qtbot.addWidget(parent)
+    message = "JSONDecodeError: Expecting value: line 1 column 1 (char 0)"
+    dialog = SavedReportsDialog((StartupReportNotice(tmp_path / "Study", message),), parent=parent)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert "JSONDecodeError" not in dialog.projects_edit.toPlainText()
+    assert "unexpected format" in dialog.projects_edit.toPlainText()
+    assert message in dialog.projects_edit.toolTip()
+
+
 @pytest.fixture
 def sharing_palette(qapp, background):
     original = qapp.palette()

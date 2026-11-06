@@ -84,6 +84,46 @@ def test_confirmations_information_and_normal_dismissal_do_not_report(qtbot, pop
     assert requests == []
 
 
+@pytest.mark.parametrize("error", [
+    TypeError("unsupported operand type(s) for +: 'NoneType' and 'int'"),
+    ValueError("serial_enabled must be a boolean; input_value=None"),
+    PermissionError(errno.EACCES, "Permission denied", "C:/results/session.xlsx"),
+])
+def test_technical_failures_keep_plain_primary_text_and_complete_details(qtbot, popups, error):
+    reporter, _requests = popups
+    box = widget_message_box(
+        QMessageBox.Icon.Critical, "Save Error", str(error), QMessageBox.StandardButton.Ok,
+    )
+    qtbot.addWidget(box)
+    reporter.decorate(box, error=error)
+    box.show()
+    primary = box.text() + " " + box.informativeText()
+    for technical in ("NoneType", "serial_enabled", "input_value", "[Errno", "TypeError"):
+        assert technical not in primary
+    assert box.informativeText()
+    assert str(error) in box.detailedText()
+    QApplication.processEvents()
+    assert_visible_children_within_parent(box)
+
+
+def test_standalone_updater_startup_error_has_recovery_and_expandable_diagnostics(
+    qtbot, monkeypatch,
+):
+    from fpvs_studio.gui.updater_window import _show_startup_error
+
+    shown = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box))
+    error = PermissionError(errno.EACCES, "Permission denied", "C:/Studio/installer.exe")
+    _show_startup_error(error)
+    assert len(shown) == 1
+    box = shown[0]
+    qtbot.addWidget(box)
+    primary = box.text() + " " + box.informativeText()
+    assert "[Errno" not in primary
+    assert "full installer" in box.informativeText()
+    assert str(error) in box.detailedText()
+
+
 def test_exception_popup_without_explicit_buttons_keeps_ok_and_escape(qtbot, popups):
     reporter, requests = popups
     box = widget_message_box()

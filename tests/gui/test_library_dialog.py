@@ -694,6 +694,8 @@ def test_bundle_review_error_is_actionable_and_releases_download(
     monkeypatch.setattr(library_module, "read_project_bundle_manifest", invalid)
     controller.dialog.install_button.click()
     qtbot.waitUntil(lambda: client.releases == 1 and controller._job is None)
-    assert controller.dialog.status_label.text() == message
+    assert "damaged" in controller.dialog.status_label.text()
+    assert "Download a fresh copy" in controller.dialog.status_label.text()
+    assert "checksum mismatch" not in controller.dialog.status_label.text()
     assert not controller._importing
     assert controller.dialog.install_button.isEnabled()

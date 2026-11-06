@@ -9,6 +9,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from fpvs_studio.support.error_explanations import describe_error
+
 
 def _bind_methods(instance, filename, owner, names, **namespace):
     source = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui" / filename
@@ -104,6 +106,7 @@ def test_persisted_order_mismatch_does_not_block_timing_count_feasibility(multi_
         table, "condition_timing_table.py", "ConditionTimingTable", ["presentation_count_blocker"],
         active_saved_condition_order=active_saved_condition_order,
         validate_condition_presentation_counts=validate_condition_presentation_counts,
+        describe_error=describe_error,
     )
     assert table.presentation_count_blocker()
     assert table.presentation_count_blocker(include_saved_order=False) == ""

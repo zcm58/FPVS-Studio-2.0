@@ -246,7 +246,7 @@ def test_triggerbox_reports_open_and_missing_dependency_errors(monkeypatch) -> N
         backend.connect()
     message = str(caught.value)
     assert message.startswith("TriggerBox could not open COM3.")
-    assert "Check USB" in message
+    assert "Reconnect USB" in message
     assert "Device Manager" in message
     assert "Details:" in message and "open failed" in message
     backend.close()
@@ -255,8 +255,12 @@ def test_triggerbox_reports_open_and_missing_dependency_errors(monkeypatch) -> N
         raise ModuleNotFoundError("serial")
 
     monkeypatch.setattr(importlib, "import_module", missing_serial)
-    with pytest.raises(BrainProductsTriggerBoxError, match="pyserial is required"):
+    with pytest.raises(BrainProductsTriggerBoxError, match="pyserial is required") as caught:
         BrainProductsTriggerBoxBackend().connect()
+    primary = str(caught.value).partition("Details:")[0]
+    assert primary.startswith("TriggerBox could not load its connection component.")
+    assert "Repair or reinstall FPVS Studio" in primary
+    assert "pyserial" not in primary
 
 
 def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypatch) -> None:
@@ -294,21 +298,22 @@ def test_triggerbox_access_denied_explains_exclusive_port_and_can_retry(monkeypa
 @pytest.mark.parametrize("failure, expected, action", [
     (FileNotFoundError(2, "Missing"), "TriggerBox port COM4 was not found.", "Device Manager"),
     (OSError("could not open port 'COM4': FileNotFoundError(2, 'Absent', None, 3)"),
-     "TriggerBox port COM4 was not found.", "driver if absent"),
+     "TriggerBox port COM4 was not found.", "install its driver if needed"),
     (PermissionError(13, "Denied"), "The COM4 port is occupied or access was denied.",
      "Please close the TriggerBox software (Configuration/Test IO) if it is open"),
     (OSError("[WinError 32] Sharing violation"),
      "The COM4 port is occupied or access was denied.", "then try again"),
     (ValueError("Not a valid baudrate"), "TriggerBox serial settings on COM4 were rejected.",
-     "2,000,000 baud"),
+     "port or driver may be incorrect"),
     (OSError("Cannot configure port: OSError(22, 'Driver error', None, 31)"),
-     "TriggerBox serial settings on COM4 were rejected.", "vendor driver"),
+     "TriggerBox serial settings on COM4 were rejected.", "TriggerBox driver"),
     (OSError("could not open port 'COM4': OSError(22, 'Device unavailable', None, 1167)"),
-     "TriggerBox communication on COM4 failed.", "USB/power"),
+     "TriggerBox communication on COM4 failed.", "USB connection"),
     (OSError("[WinError 21] Not ready"), "TriggerBox communication on COM4 failed.",
-     "reconnect"),
-    (TimeoutError("Timed out"), "TriggerBox port COM4 did not respond in time.", "USB/power"),
-    (OSError("[WinError 121] Timeout"), "TriggerBox port COM4 did not respond in time.", "retry"),
+     "Reconnect"),
+    (TimeoutError("Timed out"), "TriggerBox port COM4 did not respond in time.", "USB connection"),
+    (OSError("[WinError 121] Timeout"), "TriggerBox port COM4 did not respond in time.",
+     "try again"),
     (OSError(22, "Unspecified error"), "TriggerBox could not open COM4.", "Device Manager"),
 ])
 def test_connection_failure_has_specific_recovery_and_retains_details(
@@ -327,6 +332,8 @@ def test_connection_failure_has_specific_recovery_and_retains_details(
     message = str(caught.value)
     assert message.startswith(expected)
     assert action in message.partition("Details:")[0]
+    assert "baud" not in message.partition("Details:")[0]
+    assert "[WinError" not in message.partition("Details:")[0]
     assert str(failure) in message.partition("Details:")[2]
     assert caught.value.__cause__ is failure
     assert len(serial_module.open_calls) == 1
@@ -454,7 +461,7 @@ def test_triggerbox_sync_write_failure_is_explicit_and_cleanup_still_closes(
     with pytest.raises(BrainProductsTriggerBoxError, match="send trigger code 55") as caught:
         backend.send(55)
     assert str(caught.value).startswith(
-        "TriggerBox did not accept the full marker byte." if short_write
+        "TriggerBox did not finish sending the marker." if short_write
         else "TriggerBox could not send a marker."
     )
     assert "Reconnect TriggerBox and check any saved EEG markers before retrying." in str(
@@ -487,7 +494,7 @@ def test_triggerbox_async_reset_failure_surfaces_on_send_reset_and_close(short_w
         ) as caught:
             action()
         assert str(caught.value).startswith(
-            "TriggerBox did not accept the zero reset byte." if short_write
+            "TriggerBox did not finish clearing the trigger signal." if short_write
             else "TriggerBox could not clear the trigger signal."
         )
         assert "check any saved EEG markers before retrying" in str(caught.value)

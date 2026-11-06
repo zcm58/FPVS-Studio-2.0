@@ -84,6 +84,7 @@ from fpvs_studio.gui.window_helpers import (
 )
 from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
 from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
+from fpvs_studio.support.error_explanations import describe_error
 
 _WIZARD_STEPS: tuple[tuple[str, str], ...] = (
     ("project", "Project"),
@@ -1662,7 +1663,7 @@ class SetupWizardPage(QWidget):
                         self._document.project.settings.display.preferred_refresh_hz or 60.0,
                     )
                 except ValueError as error:
-                    return str(error)
+                    return describe_error("Masking settings", error)
                 continue
             for role, set_id in (
                 ("base", condition.base_stimulus_set_id),

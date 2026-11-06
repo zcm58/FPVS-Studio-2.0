@@ -398,10 +398,11 @@ def test_failed_preference_sync_does_not_change_live_hardware(controller, qtbot,
 
 def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path, monkeypatch):
     saves = []
+    error = PermissionError(13, "Access is denied", str(tmp_path / "preferences.ini"))
 
     def fail_save(configuration):
         saves.append(configuration)
-        raise OSError("Preferences are read-only")
+        raise error
 
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
@@ -427,6 +428,8 @@ def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path
         _configuration("unicorn_udp")
     )
     assert any("not saved" in label.text() for label in dialog.findChildren(QLabel))
+    assert "[Errno" not in dialog.default_recording_summary.text()
+    assert dialog.default_recording_summary.toolTip() == str(error)
     monkeypatch.setattr(
         RecordingSetupDialog, "exec",
         lambda subdialog: (
@@ -440,10 +443,11 @@ def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path
 
 def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path):
     attempts = []
+    error = PermissionError(13, "Access is denied", str(tmp_path / "project.json"))
 
     def fail_reset():
         attempts.append(True)
-        raise OSError("Project is read-only")
+        raise error
 
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
@@ -457,6 +461,8 @@ def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path)
     dialog.use_default_recording_button.click()
     assert attempts == [True]
     assert "not changed" in dialog.recording_summary.text()
+    assert "[Errno" not in dialog.recording_summary.text()
+    assert dialog.recording_summary.toolTip() == str(error)
     assert dialog.use_default_recording_button.isEnabled()
     assert not dialog._recording_uses_default
     assert dialog._recording_configuration == _configuration("biosemi_active_three")

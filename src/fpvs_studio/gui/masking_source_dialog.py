@@ -34,6 +34,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     refresh_widget_style,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 
 class MaskingSourceDialog(QDialog):
@@ -415,7 +416,8 @@ class MaskingSourceDialog(QDialog):
         self._refresh_sources()
 
     def _error(self, message: str) -> None:
-        self.status.setText(message)
+        self.status.setText(describe_error("Masking sources", message))
+        self.status.setToolTip(message)
         mark_error_text(self.status)
 
     def accept(self) -> None:

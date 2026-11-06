@@ -91,6 +91,7 @@ from fpvs_studio.runtime.session_export import (
     GROUP_SUMMARY_XLSX_FILENAME,
     write_participant_summary,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 __all__ = [
     "ParticipantNumberDialog",
@@ -872,13 +873,15 @@ class StudioMainWindow(QMainWindow):
         if not self.isVisible() or update_lifecycle().is_shutting_down:
             return
         LOGGER.warning("Participant results could not be opened: %s", error)
-        message = str(error)
+        message = describe_error("Open Participant Results", error)
         if isinstance(error, PermissionError):
             message = (
                 "Close participant_summary.xlsx in Excel, then choose "
                 "View > Open Participant Results again."
             )
-        self._show_participant_results_notice("Participant Results", message, warning=True)
+        self._show_participant_results_notice(
+            "Participant Results", message, warning=True, details=str(error),
+        )
 
     @Slot()
     def _on_participant_results_finished(self) -> None:
@@ -888,7 +891,7 @@ class StudioMainWindow(QMainWindow):
         )
 
     def _show_participant_results_notice(
-        self, title: str, text: str, *, warning: bool = False,
+        self, title: str, text: str, *, warning: bool = False, details: str = "",
     ) -> None:
         if self._participant_results_notice is not None:
             self._participant_results_notice.close()
@@ -898,6 +901,8 @@ class StudioMainWindow(QMainWindow):
         notice.setTextFormat(Qt.TextFormat.PlainText)
         notice.setIcon(QMessageBox.Icon.Warning if warning else QMessageBox.Icon.Information)
         notice.setText(text)
+        if details:
+            notice.setDetailedText(details)
         notice.setStandardButtons(QMessageBox.StandardButton.Close)
         notice.setWindowModality(Qt.WindowModality.NonModal)
         self._participant_results_notice = notice
@@ -1009,7 +1014,10 @@ class StudioMainWindow(QMainWindow):
         try:
             self.document.save()
         except Exception as error:
-            self._set_save_feedback("error", "Save failed", f"Your edits are still open. {error}")
+            self._set_save_feedback(
+                "error", "Save failed",
+                "Your edits are still open. " + describe_error("Save Error", error),
+            )
             _show_error_dialog(self, "Save Error", error)
             return False
         return True

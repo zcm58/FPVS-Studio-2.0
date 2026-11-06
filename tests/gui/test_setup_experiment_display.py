@@ -102,7 +102,8 @@ def test_mac_failed_probe_preserves_rate_and_can_be_retried(
     assert not editor.refresh_is_verified()
     assert editor.detect_refresh_button.isEnabled()
     assert window.document.project.settings.display.preferred_refresh_hz == saved_rate
-    assert "timed out" in editor.timing_status_label.text()
+    assert "macOS System Settings > Displays" in editor.timing_status_label.text()
+    assert "timed out" in editor.timing_status_label.toolTip()
     _assert_visible_children_within_parent(editor)
     label = editor.timing_status_label
     required = label.fontMetrics().boundingRect(
@@ -639,7 +640,7 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
 ) -> None:
     class _FailingEngine:
         def measure_refresh_hz(self, *, runtime_options=None) -> float:
-            raise RuntimeError("stable measurement unavailable")
+            raise RuntimeError("AttributeError: 'NoneType' object has no attribute 'refresh_hz'")
 
     monkeypatch.setattr(
         "fpvs_studio.gui.runtime_settings_page.create_engine",
@@ -669,7 +670,9 @@ def test_setup_wizard_refresh_detection_failure_is_actionable(
     QApplication.processEvents()
 
     assert editor.refresh_is_verified() is False
-    assert "stable measurement unavailable" in editor.timing_status_label.text()
+    assert "AttributeError" not in editor.timing_status_label.text()
+    assert "refresh_hz" not in editor.timing_status_label.text()
+    assert "AttributeError" in editor.timing_status_label.toolTip()
     assert editor.timing_is_compatible()
     assert editor.timing_blocker() == ""
     messages = record_setup_validation_dialogs(monkeypatch)

@@ -121,6 +121,7 @@ from fpvs_studio.runtime.post_condition_responses import (
     post_condition_responses_path,
     rebuild_post_condition_responses,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 _QUESTIONS_KEY = "__post-condition-questions__"
 _PRE_QUESTIONS_KEY = "__pre-condition-questions__"
@@ -447,7 +448,7 @@ class ConditionModifierDialog(QDialog):
             response_path = post_condition_responses_path(self._document.project_root)
             path_detail = str(response_path)
         except (ValueError, OSError) as error:
-            path_error = str(error)
+            path_error = describe_error("Open question responses", error)
             path_detail = (
                 f"{self._document.project_root / POST_CONDITION_RESPONSES_FILENAME}\n{error}"
             )
@@ -472,6 +473,7 @@ class ConditionModifierDialog(QDialog):
         self.status.hide()
         if path_error:
             self.status.setText(path_error)
+            self.status.setToolTip(path_detail)
             mark_error_text(self.status)
             self.status.show()
         layout.addWidget(self.status)
@@ -1011,9 +1013,11 @@ class ConditionModifierDialog(QDialog):
             try:
                 project = self._build_project()
             except ValueError as error:
-                self.question_flow_label.setText(str(error))
+                self.question_flow_label.setText(describe_error("Condition questions", error))
+                self.question_flow_label.setToolTip(str(error))
                 self.question_flow_label.show()
             else:
+                self.question_flow_label.setToolTip("")
                 condition = next(item for item in project.conditions
                                  if item.condition_id == self._condition_id)
                 modules = {task.task_id: task for task in project.task_modules}
@@ -2337,7 +2341,9 @@ class ConditionModifierDialog(QDialog):
         self.status.setVisible(bool(text))
 
     def _show_error(self, error: object) -> None:
-        self._set_status(str(error))
+        message = describe_error("Condition modifiers", error)
+        self._set_status(message)
+        self.status.setToolTip(f"{message}\n\nDetails: {error}")
         mark_error_text(self.status)
 
     def reject(self) -> None:

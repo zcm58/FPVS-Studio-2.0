@@ -50,6 +50,7 @@ from fpvs_studio.library.installations import check_library_install, download_li
 from fpvs_studio.library.models import LibraryCatalog
 from fpvs_studio.library.project_updates import ProjectUpdateResult, check_project_update
 from fpvs_studio.runtime.condition_recovery import ensure_project_update_recovery_ready
+from fpvs_studio.support.error_explanations import describe_error
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.main_window import StudioMainWindow
@@ -64,6 +65,7 @@ class _Checked:
     can_download_separately: bool = True
     reporting_error: str = ""
     reporting_notice: str = ""
+    error_details: str = ""
 
 
 @dataclass(frozen=True)
@@ -221,6 +223,7 @@ class ProjectUpdateController(QObject):
         def check(_progress: ProgressReporter, cancel: Event) -> _Checked:
             separate_allowed = True
             reporting_error, reporting_notice = "", ""
+            error_details: list[str] = []
             try:
                 origin = load_library_origin(root)
                 if origin is not None and origin.local_project_id != local_project_id:
@@ -229,9 +232,13 @@ class ProjectUpdateController(QObject):
                 if automatic:
                     raise
                 origin = None
+                error_details.append(str(error))
                 result = ProjectUpdateResult(
                     "unlinked",
-                    message=f"{error} Link this project explicitly to repair the record.",
+                    message=(
+                        describe_error("Project Update", error)
+                        + " Link this project explicitly to repair the record."
+                    ),
                 )
             else:
                 result = check_project_update(self.client, origin, automatic=automatic,
@@ -262,8 +269,12 @@ class ProjectUpdateController(QObject):
                 except InterruptedError as error:
                     raise LibraryCancelled(str(error)) from error
                 except (DataSharingError, ValueError) as error:
-                    reporting_error = str(error)
-            return _Checked(result, catalog, separate_allowed, reporting_error, reporting_notice)
+                    reporting_error = describe_error("Project Update", error)
+                    error_details.append(str(error))
+            return _Checked(
+                result, catalog, separate_allowed, reporting_error, reporting_notice,
+                "\n".join(error_details),
+            )
 
         self._start(check,
                     lambda value: self._checked(value, automatic=automatic),
@@ -278,6 +289,7 @@ class ProjectUpdateController(QObject):
             return
         generation = self._generation
         if self.dialog is not None:
+            self.dialog.status_label.setToolTip("")
             self.dialog.set_busy(True, message)
         job = self._lifecycle.start_task(callback, keep_success_on_cancel=True)
         self._job = job
@@ -294,7 +306,7 @@ class ProjectUpdateController(QObject):
             if not discarded:
                 if outcome.error is not None:
                     if self.dialog is not None:
-                        self.dialog.set_busy(False, self._error(outcome.error))
+                        self._show_error(outcome.error)
                     else:
                         _LOGGER.info("Project version check unavailable: %s",
                                      self._error(outcome.error))
@@ -342,6 +354,9 @@ class ProjectUpdateController(QObject):
                 can_download_separately=(
                     result.can_install and checked.can_download_separately
                 ),
+            )
+            self.dialog.status_label.setToolTip(
+                f"{message}\n\nDetails: {checked.error_details}" if checked.error_details else "",
             )
             if checked.catalog is not None:
                 self.dialog.set_link_items(checked.catalog.items)
@@ -493,6 +508,7 @@ class ProjectUpdateController(QObject):
         )
         self._importing = True
         if self.dialog is not None:
+            self.dialog.status_label.setToolTip("")
             self.dialog.set_busy(True, "Downloading and updating the current project…")
 
         def update(progress: ProgressReporter, cancel: Event) -> _Updated:
@@ -559,23 +575,24 @@ class ProjectUpdateController(QObject):
                     if isValid(window):
                         window.fail_library_project_update()
                     if current and self.dialog is not None:
-                        self.dialog.set_busy(False, self._error(outcome.error))
+                        self._show_error(outcome.error)
                     self._invalidate_failed_update_candidate()
                 else:
                     if isValid(window):
                         window.finish_bundle_import_processing(restore_previous=True)
                     if current and self.dialog is not None:
-                        message = (
-                            self._error(outcome.error)
-                            if outcome.error is not None and not isinstance(
-                                outcome.error,
-                                (
-                                    LibraryCancelled, ProjectBundleCancelled,
-                                    DataSharingCancelled, InterruptedError,
-                                ),
-                            ) else "Update canceled. Your project is unchanged."
-                        )
-                        self.dialog.set_busy(False, message)
+                        if outcome.error is not None and not isinstance(
+                            outcome.error,
+                            (
+                                LibraryCancelled, ProjectBundleCancelled,
+                                DataSharingCancelled, InterruptedError,
+                            ),
+                        ):
+                            self._show_error(outcome.error)
+                        else:
+                            self.dialog.set_busy(
+                                False, "Update canceled. Your project is unchanged.",
+                            )
             except Exception:
                 _LOGGER.exception("Updated project could not be opened")
                 if isValid(window):
@@ -638,7 +655,7 @@ class ProjectUpdateController(QObject):
             _LOGGER.exception("Project version import handoff failed")
             self._import_finished(None, window)
             if self.dialog is not None and isValid(self.dialog):
-                self.dialog.set_busy(False, self._error(error))
+                self._show_error(error)
 
     def _import_finished(self, root: Path | None, window: StudioMainWindow | None) -> None:
         self.client.release_download()
@@ -663,10 +680,20 @@ class ProjectUpdateController(QObject):
         if self._job is not None:
             self._job.cancel()
 
+    def _show_error(self, error: Exception) -> None:
+        if self.dialog is None:
+            return
+        message = self._error(error)
+        self.dialog.set_busy(False, message)
+        self.dialog.status_label.setToolTip(
+            f"{message}\n\nDetails: {error}"
+            if isinstance(error, (LibraryError, DataSharingError, ValueError, OSError)) else "",
+        )
+
     @staticmethod
     def _error(error: Exception) -> str:
         if isinstance(error, (LibraryError, DataSharingError, ValueError, OSError)):
-            return str(error)
+            return describe_error("Project Update", error)
         _LOGGER.error("Project version operation failed (%s)", type(error).__name__)
         return "Could not check or install the project version. Retry when ready."
 

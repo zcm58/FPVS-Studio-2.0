@@ -38,6 +38,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.main_window import StudioMainWindow
@@ -375,7 +376,10 @@ class DataSharingController(QObject):
                         if operation == "discover":
                             self.dialog.set_studies(())
                         self._render()
-                        self.dialog.set_busy(False, str(outcome.error))
+                        self.dialog.set_busy(
+                            False, describe_error("Experiment Sharing", outcome.error),
+                        )
+                        self.dialog.status_label.setToolTip(str(outcome.error))
                         if (
                             operation == "connect"
                             and isinstance(outcome.error, PendingEnrollmentConflict)
@@ -548,7 +552,11 @@ class DataSharingController(QObject):
                     self._off_error = f"Could not turn sharing off: {outcome.error}"
                     if self.dialog is not None:
                         self._render()
-                        self.dialog.set_busy(False, self._off_error)
+                        self.dialog.set_busy(
+                            False, "Could not turn sharing off. Check whether sharing is enabled. "
+                            + describe_error("Save sharing settings", outcome.error),
+                        )
+                        self.dialog.status_label.setToolTip(self._off_error)
             elif current:
                 self._view = cast(SharingView, outcome.value)
                 self._off_error = self._view.error
@@ -599,6 +607,15 @@ class DataSharingController(QObject):
             "failed": "A contribution needs attention. Review the connection, then retry.",
             "unavailable": "The sharing service is unavailable. Local results remain available.",
         }.get(view.status, view.status.replace("_", " ").capitalize())
+        if self._off_error or view.error:
+            if status.startswith("Could not turn sharing off:"):
+                status = "Could not turn sharing off. " + describe_error(
+                    "Save sharing settings", status.partition(":")[2].strip(),
+                )
+            else:
+                status = describe_error("Experiment Sharing", status)
+            if not view.settings.enabled and not status.startswith("Sharing is off"):
+                status = "Sharing is off. " + status
         if profile is None and self._studies is not None and not view.error and not self._off_error:
             status = (
                 "No matching studies are enabled for your lab. Ask the administrator to enable one."
@@ -616,6 +633,10 @@ class DataSharingController(QObject):
             held=view.held_count, uploaded=view.uploaded_count,
             captures=view.capture_count, capture_limit=view.capture_limit,
             reviewable_captures=view.reviewable_capture_count,
+        )
+        diagnostic = self._off_error or view.error
+        dialog.status_label.setToolTip(
+            f"{status}\n\nTechnical details:\n{diagnostic}" if diagnostic else status,
         )
         dialog.set_project_url(
             f"{DataSharingClient.configured().origin}/projects/{profile.project_id}"

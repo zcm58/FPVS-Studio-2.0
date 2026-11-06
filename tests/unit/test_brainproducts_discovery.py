@@ -155,8 +155,12 @@ def test_missing_pyserial_is_an_explicit_error(monkeypatch: pytest.MonkeyPatch) 
 
     monkeypatch.setattr(discovery.importlib, "import_module", _missing)
 
-    with pytest.raises(discovery.TriggerBoxDiscoveryError, match="pyserial is required"):
+    with pytest.raises(discovery.TriggerBoxDiscoveryError, match="pyserial is required") as caught:
         discovery.discover_triggerbox_ports()
+    primary = str(caught.value).partition("Details:")[0]
+    assert primary.startswith("Studio could not load its TriggerBox connection component.")
+    assert "Repair or reinstall FPVS Studio" in primary
+    assert "pyserial" not in primary
 
 
 @pytest.mark.parametrize("during_iteration", [False, True])
@@ -181,6 +185,10 @@ def test_enumeration_failure_is_an_explicit_error(
     with pytest.raises(discovery.TriggerBoxDiscoveryError, match="enumerate serial ports") as error:
         discovery.discover_triggerbox_ports()
     assert error.value.__cause__ is failure
+    primary = str(error.value).partition("Details:")[0]
+    assert "Windows could not list serial ports." in primary
+    assert "Check Device Manager" in primary
+    assert str(failure) not in primary
 
 
 def test_cancelled_enumeration_stops_between_driver_records(monkeypatch):

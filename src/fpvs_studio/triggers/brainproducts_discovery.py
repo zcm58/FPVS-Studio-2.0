@@ -55,8 +55,9 @@ def discover_triggerbox_ports(
         list_ports = importlib.import_module("serial.tools.list_ports")
     except ImportError as exc:
         raise TriggerBoxDiscoveryError(
-            "Studio serial support is missing. Repair or reinstall FPVS Studio, then Detect "
-            "again. Details: pyserial is required to detect TriggerBox COM ports."
+            "Studio could not load its TriggerBox connection component. The installation "
+            "may be incomplete. Repair or reinstall FPVS Studio, then try Detect again. "
+            "Details: pyserial is required to detect TriggerBox COM ports."
         ) from exc
     try:
         ports = []
@@ -67,8 +68,9 @@ def discover_triggerbox_ports(
         raise
     except Exception as exc:
         raise TriggerBoxDiscoveryError(
-            "Windows could not list serial ports. Check Device Manager, then retry Detect "
-            f"or enter the COM port. Details: Unable to enumerate serial ports: {exc}"
+            "Windows could not list serial ports. Device information may be unavailable. "
+            "Check Device Manager, then try Detect again or enter the COM port. "
+            f"Details: Unable to enumerate serial ports: {exc}"
         ) from exc
     _check_cancelled(cancel_event)
 
@@ -101,8 +103,9 @@ def discover_triggerbox_ports(
         serial_module = importlib.import_module("serial")
     except ImportError as exc:
         raise TriggerBoxDiscoveryError(
-            "Studio serial support is missing. Repair or reinstall FPVS Studio, then Detect "
-            "again. Details: pyserial is required to check TriggerBox COM ports."
+            "Studio could not load its TriggerBox connection component. The installation "
+            "may be incomplete. Repair or reinstall FPVS Studio, then try Detect again. "
+            "Details: pyserial is required to check TriggerBox COM ports."
         ) from exc
     return tuple(
         _check_port_access(candidate, serial_module, cancel_event) for candidate in ordered

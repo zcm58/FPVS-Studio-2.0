@@ -26,6 +26,7 @@ from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryConnection
+from fpvs_studio.support.error_explanations import describe_error
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -108,6 +109,7 @@ class LibraryAccessDialog(QDialog):
         self.connect_button.setEnabled(not busy)
         self.connect_button.setText("Connecting…" if busy else "Connect this PC")
         self.status_label.setText(message)
+        self.status_label.setToolTip("")
 
     def set_connected(self, connection: LibraryConnection) -> None:
         self._connected = True
@@ -118,6 +120,7 @@ class LibraryAccessDialog(QDialog):
             f"Connected to {connection.lab_name or connection.library_name}. {permission} access. "
             "This PC will remember its connection securely."
         )
+        self.status_label.setToolTip("")
         self.offline_button.hide()
         self.connect_button.setEnabled(True)
         self.connect_button.setText("Continue to Studio")
@@ -177,12 +180,14 @@ class LibraryAccessController(QObject):
                     return
                 self._show()
                 if isinstance(result.error, LibraryError):
-                    message = str(result.error)
+                    message = describe_error("Library Access", result.error)
                 else:
                     _LOGGER.error("Library startup setup failed (%s)", type(result.error).__name__)
                     message = "Library access could not be configured. Retry or continue offline."
                 assert self.dialog is not None
                 self.dialog.set_busy(False, message)
+                if isinstance(result.error, LibraryError):
+                    self.dialog.status_label.setToolTip(f"{message}\n\nDetails: {result.error}")
             else:
                 completed(result.value)
 

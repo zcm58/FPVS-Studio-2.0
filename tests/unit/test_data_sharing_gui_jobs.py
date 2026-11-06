@@ -42,6 +42,15 @@ from fpvs_studio.data_sharing.storage import (
     load_settings,
     save_settings,
 )
+from fpvs_studio.support.error_explanations import describe_error
+
+
+class _StatusLabel:
+    def __init__(self):
+        self.tooltip = ""
+
+    def setToolTip(self, text):
+        self.tooltip = text
 
 
 class _Signal:
@@ -218,6 +227,7 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "Path": Path,
         "CaptureArchiveReview": CaptureArchiveReview,
         "StartupReportNotice": _StartupReportNotice,
+        "describe_error": describe_error,
     }
     exec(compile(ast.fix_missing_locations(module), str(path), "exec"), namespace)
     return namespace["DataSharingController"]
@@ -548,6 +558,7 @@ def test_interrupted_discovery_never_leaves_stale_study_choices(state, interrupt
     _finish_jobs(state)
     selections = []
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **_values: None, set_project_url=lambda _url: None,
         set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
         set_studies=selections.append, hide=lambda: None, deleteLater=lambda: None,
@@ -623,6 +634,7 @@ def test_pending_connection_reset_requires_confirmation_and_current_project(stat
 
     state.backend.enroll_library_project = enroll
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **_values: None, set_project_url=lambda _url: None,
         set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
         confirm_pending_connection_reset=confirm, study_title=lambda: "Shared study · 1.0",
@@ -742,6 +754,7 @@ def test_optout_write_failure_is_actionable_and_logged(state, caplog, visible_di
     statuses = []
     if visible_dialog:
         state.controller.dialog = SimpleNamespace(
+            status_label=_StatusLabel(),
             set_state=lambda **values: statuses.append(values["status"]),
             set_project_url=lambda _url: None,
             set_comparison=lambda *_args, **_values: None,
@@ -759,6 +772,7 @@ def test_optout_write_failure_is_actionable_and_logged(state, caplog, visible_di
     assert state.backend.view.settings.enabled
     if visible_dialog:
         assert any("Could not turn sharing off" in status for status in statuses)
+        assert "The settings folder is read-only." in state.controller.dialog.status_label.tooltip
 
 
 def test_durable_off_is_shown_when_postsave_history_read_fails(state, caplog):
@@ -788,6 +802,7 @@ def test_repaired_history_clears_old_optout_error_only_for_accepted_result(state
     state.lifecycle.jobs[-1].run()
     rendered = []
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **values: rendered.append(values),
         set_project_url=lambda _url: None,
         set_comparison=lambda *_args, **_values: None,
@@ -818,7 +833,9 @@ def test_repaired_history_clears_old_optout_error_only_for_accepted_result(state
     canceled.cancel()
     canceled.run()
     assert state.controller._off_error == error
-    assert rendered[-1]["status"] == error
+    assert rendered[-1]["status"] == describe_error("Experiment Sharing", error)
+    assert rendered[-1]["status"].startswith("Sharing is off")
+    assert error in state.controller.dialog.status_label.tooltip
 
     state.controller._request(operation, True if operation == "enable" else None)
     state.lifecycle.jobs[-1].run()
@@ -829,6 +846,7 @@ def test_repaired_history_clears_old_optout_error_only_for_accepted_result(state
         "Sharing is enabled. New eligible sessions will be reported automatically."
         if operation == "enable" else "Sharing is off. Unsent reports are paused."
     )
+    assert "Upload history is malformed." not in state.controller.dialog.status_label.tooltip
 
 
 def test_launch_gate_waits_for_canceled_network_job_then_resumes(state):
@@ -1016,6 +1034,7 @@ def test_capture_archive_requires_explicit_confirmation_of_reviewed_snapshot(sta
     state.lifecycle.jobs[-1].run()
     reviewed = []
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **_values: None, set_project_url=lambda _url: None,
         set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
         confirm_capture_archive=lambda value: reviewed.append(value) or confirmed,
@@ -1045,6 +1064,7 @@ def test_capture_review_project_handoff_cannot_archive_in_another_project(state)
         return True
 
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **_values: None, set_project_url=lambda _url: None,
         set_comparison=lambda *_args, **_values: None, set_busy=lambda *_args: None,
         confirm_capture_archive=switch_project, hide=lambda: None, deleteLater=lambda: None,
@@ -1068,6 +1088,7 @@ def test_comparison_never_renders_unrelated_experiment_version_or_protocol(state
     )
     renders = []
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **_values: None, set_busy=lambda *_values: None,
         set_project_url=lambda _url: None,
         set_comparison=lambda rows, **values: renders.append((rows, values)),
@@ -1092,6 +1113,7 @@ def test_comparison_keeps_cohort_rules_separate_from_current_notice(state, messa
     )
     renders = []
     state.controller.dialog = SimpleNamespace(
+        status_label=_StatusLabel(),
         set_state=lambda **_values: None, set_busy=lambda *_values: None,
         set_project_url=lambda _url: None,
         set_comparison=lambda rows, **values: renders.append((rows, values)),

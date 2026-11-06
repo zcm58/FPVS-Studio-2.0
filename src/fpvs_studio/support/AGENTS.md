@@ -2,6 +2,11 @@
 
 This package owns GUI-neutral report contracts, local diagnostics/drafts, and the
 report-service HTTP client. It must not import Qt, PsychoPy, or project models.
+`error_explanations.py` owns plain-language popup and inline failure explanations.
+State the problem, a supported possible cause and a short recovery step. Preserve
+useful field instructions; keep code syntax in caller-owned diagnostics. Match
+device/local failures before generic network/file rules and never invent an owner
+or root cause. Keep shared explanation coverage in `tests/unit/test_error_explanations.py`.
 Only app-owned support files may be collected or purged; never scan project output.
 Network access requires an explicitly configured HTTPS reporting endpoint and an
 explicit Submit/Check status action. Never ship service credentials. Preserve report

@@ -39,6 +39,10 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Plain-language error recovery](exec-plans/completed/plain-language-error-recovery.md):
+  common popup/inline failures explain the problem, possible cause and recovery;
+  focused checks passed, precommit recorded a confirmed pre-existing Windows import
+  failure, and visible GUI/hardware acceptance remains unperformed.
 - [TriggerBox setup and error guidance](exec-plans/completed/triggerbox-setup-and-error-guidance.md):
   installed-driver/closed-utility guidance and specific serial recovery messages;
   safe precommit and post-integration checks passed, with GUI/hardware checks unperformed.

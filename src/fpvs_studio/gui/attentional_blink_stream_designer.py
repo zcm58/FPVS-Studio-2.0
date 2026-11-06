@@ -40,6 +40,7 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.condition_task_dialog import ConditionTaskDialog
 from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.support.error_explanations import describe_error
 
 
 def is_letter_stream_project(document: ProjectDocument) -> bool:
@@ -517,9 +518,12 @@ class AttentionalBlinkStreamDesigner(QWidget):
                     t2_color=self.t2_color_button.color_hex(),
                 )
         except ValidationError as error:
-            return error.errors()[0]["msg"]
+            self.validation_label.setToolTip(str(error))
+            return describe_error("Attentional blink stream", error)
         except ValueError as error:
-            return str(error).split("\n")[0]
+            self.validation_label.setToolTip(str(error))
+            return describe_error("Attentional blink stream", error)
+        self.validation_label.setToolTip("")
         return ""
 
     def _draft_edited(self, *_args: object) -> None:
@@ -666,7 +670,8 @@ class AttentionalBlinkStreamDesigner(QWidget):
                 bursts_per_soa=self.bursts_per_soa_spin.value(),
             )
         except ValueError as error:
-            self.validation_label.setText(str(error))
+            self.validation_label.setText(describe_error("Save attentional blink stream", error))
+            self.validation_label.setToolTip(str(error))
             self.validation_label.show()
             return False
         finally:

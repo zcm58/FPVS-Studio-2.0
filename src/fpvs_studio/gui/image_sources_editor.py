@@ -16,6 +16,7 @@ from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.window_helpers import _resolution_text
 from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.preprocessing.models import StimulusSetInspectionSummary
+from fpvs_studio.support.error_explanations import describe_error
 
 _LOG = logging.getLogger(__name__)
 
@@ -75,7 +76,7 @@ class ImageSourcesEditor(QWidget):
         if self.is_importing():
             return "Wait for the image folder to finish loading."
         if self._error:
-            return self._error
+            return describe_error("Import stimulus images", self._error)
         if any(
             self._document.get_condition_stimulus_set(self._condition_id, role).image_count == 0
             for role in self._cards
@@ -86,6 +87,7 @@ class ImageSourcesEditor(QWidget):
     def apply_pending_design(self) -> bool:
         message = self.validation_message()
         self.status_label.setText(message)
+        self.status_label.setToolTip(self._error)
         self.status_label.setVisible(bool(message))
         return not message
 
@@ -108,7 +110,10 @@ class ImageSourcesEditor(QWidget):
             card.choose_button.setEnabled(not self.is_busy())
             if role == self._import_role:
                 card.status_badge.set_state("busy", "Importing…")
-        self.status_label.setText(self._error)
+        self.status_label.setText(
+            describe_error("Import stimulus images", self._error) if self._error else "",
+        )
+        self.status_label.setToolTip(self._error)
         self.status_label.setVisible(bool(self._error))
 
     def _choose_source(self, role: str) -> None:

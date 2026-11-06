@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QColor, QPalette
 from PySide6.QtWidgets import QApplication
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
 
@@ -16,7 +17,6 @@ from fpvs_studio.runtime.fixation_report import (
     FixationConditionSummary,
     FixationCrossDataSummary,
     FixationDataError,
-    FixationExportError,
 )
 
 
@@ -372,12 +372,17 @@ def test_excel_export_uses_selected_path_and_reports_async_success(
     assert_visible_children_within_parent(dialog)
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_excel_export_error_keeps_loaded_results_and_allows_retry(
     qtbot,
     tmp_path: Path,
     monkeypatch,
+    background,
 ) -> None:
     dialog = _populated_dialog(qtbot, tmp_path, monkeypatch)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     selected_path = tmp_path / "blocked-export.xlsx"
     monkeypatch.setattr(
         "fpvs_studio.gui.fixation_cross_data_dialog.QFileDialog.getSaveFileName",
@@ -385,13 +390,14 @@ def test_excel_export_error_keeps_loaded_results_and_allows_retry(
     )
 
     dialog.export_button.click()
-    _DeferredBackgroundTask.instances[1].fail(
-        FixationExportError("The selected workbook could not be written.")
-    )
+    error = PermissionError(13, "Access is denied", str(selected_path))
+    _DeferredBackgroundTask.instances[1].fail(error)
 
     assert dialog.export_state_name == "error"
     assert dialog.status_badge.text() == "Export Failed"
-    assert "could not be written" in dialog.export_feedback_label.text()
+    assert "folder" in dialog.export_feedback_label.text()
+    assert "[Errno" not in dialog.export_feedback_label.text()
+    assert dialog.export_feedback_label.toolTip() == str(error)
     assert "still available" in dialog.export_feedback_label.text()
     assert dialog.state_name == "populated"
     assert dialog.state_stack.currentWidget() is dialog.results_page

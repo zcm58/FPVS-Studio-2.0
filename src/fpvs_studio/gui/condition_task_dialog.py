@@ -91,6 +91,7 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
 )
 from fpvs_studio.gui.preview_cache import PreviewPixmapCache
+from fpvs_studio.support.error_explanations import describe_error
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.document import ProjectDocument
@@ -3545,7 +3546,8 @@ class ConditionTaskDialog(QDialog):
                 ],
             )
         except Exception as error:
-            self.validation_label.setText(str(error))
+            self.validation_label.setText(describe_error("Save condition tasks", error))
+            self.validation_label.setToolTip(str(error))
             self.validation_label.setVisible(True)
             self.apply_button.setEnabled(False)
             return
@@ -3560,11 +3562,13 @@ class ConditionTaskDialog(QDialog):
             if self._staged_validator is not None:
                 self._staged_validator(modules, pre_bindings, post_bindings)
         except Exception as error:
-            self.validation_label.setText(str(error))
+            self.validation_label.setText(describe_error("Condition tasks", error))
+            self.validation_label.setToolTip(str(error))
             self.validation_label.setVisible(True)
             self.apply_button.setEnabled(False)
         else:
             self.validation_label.clear()
+            self.validation_label.setToolTip("")
             self.validation_label.setVisible(False)
             self.apply_button.setEnabled(True)
 

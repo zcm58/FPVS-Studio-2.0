@@ -33,8 +33,9 @@ def discovery():
                                stop=lambda: calls.append("stop"))
 
     checked = namedtuple(
-        "Checked", "result catalog can_download_separately reporting_error reporting_notice",
-        defaults=[None, True, "", ""],
+        "Checked",
+        "result catalog can_download_separately reporting_error reporting_notice error_details",
+        defaults=[None, True, "", "", ""],
     )
     # Inject a fake under the source's imported application symbol. No Qt import
     # or widget construction is performed by these coordinator tests.
@@ -56,7 +57,7 @@ def discovery():
         *methods,
     ], type_ignores=[])
     exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
-    notices, requests, states = [], [], []
+    notices, requests, states, tooltips = [], [], [], []
     window = SimpleNamespace(document=SimpleNamespace(project_root=Path("synthetic-project")),
                              isVisible=lambda: flags.visible,
                              is_launch_busy=lambda: flags.busy,
@@ -77,6 +78,7 @@ def discovery():
         if context.dialog is None:
             dialog = SimpleNamespace(
                 visible=False, set_state=lambda **kwargs: states.append(kwargs),
+                status_label=SimpleNamespace(setToolTip=tooltips.append),
             )
             dialog.isVisible = lambda: dialog.visible
             dialog.show = lambda: setattr(dialog, "visible", True)
@@ -84,7 +86,19 @@ def discovery():
 
     context._ensure_dialog = ensure_dialog
     return SimpleNamespace(controller=context, flags=flags, requests=requests, notices=notices,
-                           checked=checked, states=states)
+                           checked=checked, states=states, tooltips=tooltips)
+
+
+def test_checked_result_keeps_diagnostics_separate_and_clears_them_on_success(discovery):
+    d, c = discovery, discovery.controller
+    result = select_project_update(origin(), catalog(item("1.1.0")))
+    c._ensure_dialog(c._window)
+    diagnostic = "ValueError: invalid bundle_sha256"
+    c._checked(d.checked(result, error_details=diagnostic))
+    assert diagnostic in d.tooltips[-1]
+    assert diagnostic not in d.states[-1]["status"]
+    c._checked(d.checked(result))
+    assert d.tooltips[-1] == ""
 
 
 def test_automatic_discovery_offers_new_version_without_install_and_deduplicates(discovery):

@@ -37,6 +37,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.support.error_explanations import explain_error
 from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.models import (
     DownloadedInstaller,
@@ -405,8 +406,8 @@ class UpdateDialog(QDialog):
             else:
                 self.status_label.setText(
                     "A new FPVS Studio version is available, but in-app installation is "
-                    "unavailable because this release lacks valid trusted installer metadata "
-                    "(including its SHA-256 checksum). "
+                    "unavailable because this release is missing information needed to "
+                    "verify the installer. "
                     "Use View Full Release Notes to open the release page."
                 )
             self.download_button.setEnabled(verified_asset)
@@ -437,18 +438,17 @@ class UpdateDialog(QDialog):
 
     def _handle_task_error(self, error: object, kind: str | None = None) -> None:
         _LOGGER.warning("Updater operation failed", extra={"operation": kind, "error": str(error)})
-        if kind == "download":
-            message = "The update download could not be completed. Retry starts a new download."
-        elif kind == "install":
-            message = "The installer could not be verified or launched. Download the update again."
+        if kind == "install":
             self._downloaded_installer = None
-        else:
-            message = (
-                "The update check could not be completed. Check your internet connection "
-                "and try again later from File > Check for Updates."
-            )
-        self.status_label.setText(message)
-        self._set_notes_text(str(error) or "The update operation could not be completed.")
+        title = {"download": "Update Download", "install": "Update Install"}.get(
+            kind or "", "Update Check",
+        )
+        explanation = explain_error(
+            title, str(error), error=error if isinstance(error, BaseException) else None,
+        )
+        self.status_label.setText(explanation.summary)
+        self._set_notes_text(explanation.advice)
+        self.notes_label.setToolTip(f"{explanation.advice}\n\nTechnical details:\n{error}")
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())

@@ -60,6 +60,7 @@ from fpvs_studio.gui.experiment_designer_widgets import (
 )
 from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.preprocessing.models import StimulusSetInspectionSummary
+from fpvs_studio.support.error_explanations import describe_error
 
 _LOG = logging.getLogger(__name__)
 
@@ -698,7 +699,8 @@ class ExperimentDesignerWidget(QWidget):
         self._show_error(str(error))
 
     def _show_error(self, message: str) -> None:
-        self.status_label.setText(message)
+        self.status_label.setText(describe_error("Experiment preview", message))
+        self.status_label.setToolTip(message)
         if self._mode == "attentional_blink":
             self.slot_content.setCurrentWidget(self.status_label)
         self.status_label.show()

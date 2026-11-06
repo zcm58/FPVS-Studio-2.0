@@ -407,17 +407,21 @@ def test_update_dialog_reports_no_update(qtbot) -> None:
 def test_update_dialog_reports_manual_server_error(qtbot) -> None:
     dialog = UpdateDialog(
         auto_check=False,
-        check_callback=lambda _cancel: (_ for _ in ()).throw(RuntimeError("network unavailable")),
+        check_callback=lambda _cancel: (_ for _ in ()).throw(
+            ConnectionError("network unavailable"),
+        ),
     )
     qtbot.addWidget(dialog)
     dialog.show()
 
     dialog.start_update_check()
     qtbot.waitUntil(
-        lambda: "try again later from File > Check for Updates" in dialog.status_label.text()
+        lambda: "online service" in dialog.status_label.text()
     )
 
-    assert "network unavailable" in dialog.notes_label.text()
+    assert "internet connection" in dialog.notes_label.text()
+    assert "network unavailable" not in dialog.notes_label.text()
+    assert "network unavailable" in dialog.notes_label.toolTip()
     assert dialog.download_button.isEnabled() is False
     assert dialog.close_button.text() == "Close"
 
@@ -546,8 +550,8 @@ def test_new_release_without_trusted_installer_metadata_is_not_reported_as_curre
 
     assert "new FPVS Studio version is available" in dialog.status_label.text()
     assert "in-app installation is unavailable" in dialog.status_label.text()
-    assert "valid trusted installer metadata" in dialog.status_label.text()
-    assert "SHA-256 checksum" in dialog.status_label.text()
+    assert "missing information needed to verify the installer" in dialog.status_label.text()
+    assert "SHA-256" not in dialog.status_label.text()
     assert "up to date" not in dialog.status_label.text()
     assert not dialog.download_button.isEnabled()
     assert dialog.release_notes_button.isEnabled()
@@ -1202,12 +1206,17 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
             assert label.height() + 1 >= label.heightForWidth(label.width()), label.objectName()
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
-    assert dialog.notes_label.toolTip() == full_notes
-    assert dialog.notes_label.accessibleDescription() == full_notes
     assert len(dialog.notes_label.text()) <= 240
-    assert len(dialog.notes_label.text().splitlines()) == 4
-    assert dialog.notes_label.text().endswith("...")
     assert dialog.notes_label.text() != full_notes
+    if state == "error":
+        assert full_notes in dialog.notes_label.toolTip()
+        assert full_notes not in dialog.notes_label.accessibleDescription()
+        assert any(word in dialog.notes_label.text().lower() for word in ("try", "retry"))
+    else:
+        assert dialog.notes_label.toolTip() == full_notes
+        assert dialog.notes_label.accessibleDescription() == full_notes
+        assert len(dialog.notes_label.text().splitlines()) == 4
+        assert dialog.notes_label.text().endswith("...")
 
 
 def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(monkeypatch):
@@ -1382,13 +1391,22 @@ def test_apply_progress_failure_keeps_repair_and_complete_error_accessible(
     error = "Target verification failed. " + "FPVS-Studio-long-file-name.dll " * 60
     jobs[-1].finish(error=UpdateError(error))
     assert window.details_label.toPlainText() == error
-    assert window.details_label.isVisible()
+    assert not window.details_label.isVisible()
+    assert window.details_button.isVisible()
+    assert error not in window.status_label.text()
     assert window.repair_button.isVisible()
     assert window.close_button.isVisible()
     assert window.close_button.isEnabled()
     assert not window.progress_bar.isVisible()
     qtbot.wait(1)
     assert_visible_children_within_parent(window)
+    window.details_button.click()
+    qtbot.wait(1)
+    assert window.details_label.isVisible()
+    assert window.details_button.text() == "Hide Details"
+    assert_visible_children_within_parent(window)
+    window.details_button.click()
+    assert not window.details_label.isVisible()
 
 
 def test_apply_late_cancel_cannot_hide_installer_failure(qtbot, deferred_updates):
@@ -1406,7 +1424,8 @@ def test_apply_late_cancel_cannot_hide_installer_failure(qtbot, deferred_updates
     qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
     jobs[-1].run_callback()
     jobs[-1].finish()
-    assert "could not be completed" in window.status_label.text()
+    assert "update" in window.status_label.text().lower()
+    assert "exit code" not in window.status_label.text()
     assert "exit code 12" in window.details_label.toPlainText()
     assert window.repair_button.isVisible()
 
@@ -1429,9 +1448,11 @@ def test_apply_late_cancel_cannot_hide_handoff_timeout(qtbot, deferred_updates, 
     jobs[-1].run_callback()
     jobs[-1].finish()
     assert not window._committed.is_set()
-    assert window.status_label.text() == "The update could not be completed."
+    assert window.status_label.text() != "GitHub update check timed out."
+    assert "try again" in window.status_label.text().lower()
     assert window.details_label.toPlainText() == "GitHub update check timed out."
-    assert window.details_label.isVisible()
+    assert not window.details_label.isVisible()
+    assert window.details_button.isVisible()
     assert window.repair_button.isVisible()
     assert window.repair_button.isEnabled()
     assert window.close_button.isVisible()

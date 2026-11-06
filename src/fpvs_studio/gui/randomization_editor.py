@@ -17,6 +17,7 @@ from fpvs_studio.core.randomization import (
 from fpvs_studio.gui.components import PAGE_SECTION_GAP, mark_error_text, mark_secondary_action
 from fpvs_studio.gui.condition_order_dialog import ConditionOrderDialog
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.support.error_explanations import describe_error
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.condition_timing_table import ConditionTimingTable
@@ -144,12 +145,14 @@ class RandomizationEditor(QWidget):
         if self._timing_table is not None:
             if not self._timing_table.clear_saved_order():
                 self.error_label.setText(self._timing_table.error_label.text())
+                self.error_label.setToolTip(self._timing_table.error_label.toolTip())
                 self.error_label.show()
         else:
             try:
                 self._document.update_condition_timing(clear_saved_condition_order=True)
             except ValueError as error:
-                self.error_label.setText(str(error))
+                self.error_label.setText(describe_error("Clear condition order", error))
+                self.error_label.setToolTip(str(error))
                 self.error_label.show()
 
     def _state(self) -> tuple[object, ...]:
@@ -189,6 +192,7 @@ class RandomizationEditor(QWidget):
         if self._validate_patterns() and self._timing_table is not None:
             if message := self._timing_table.saved_order_blocker():
                 self.error_label.setText(message)
+                self.error_label.setToolTip("")
                 self.error_label.show()
 
     def _refresh_choice_details(self) -> None:
@@ -227,6 +231,7 @@ class RandomizationEditor(QWidget):
                 "This project's stored random patterns need to be replaced. "
                 "Choose Create new random patterns to continue."
             )
+            self.error_label.setToolTip("")
             self.error_label.show()
             self.reset_patterns_button.show()
             return False
@@ -246,7 +251,8 @@ class RandomizationEditor(QWidget):
                 modes={domain: combo.currentData() for domain, combo in self.mode_combos.items()},
             )
         except ValueError as error:
-            self.error_label.setText(str(error))
+            self.error_label.setText(describe_error("Save randomization settings", error))
+            self.error_label.setToolTip(str(error))
             self.error_label.show()
             return False
         finally:
@@ -262,7 +268,8 @@ class RandomizationEditor(QWidget):
         try:
             self._document.generate_new_randomization_seeds()
         except ValueError as error:
-            self.error_label.setText(str(error))
+            self.error_label.setText(describe_error("Create randomization patterns", error))
+            self.error_label.setToolTip(str(error))
             self.error_label.show()
             return
         finally:

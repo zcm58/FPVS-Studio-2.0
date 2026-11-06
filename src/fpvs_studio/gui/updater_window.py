@@ -36,6 +36,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.support.error_explanations import describe_error, explain_error
 from fpvs_studio.updates.helper_client import HelperClient
 from fpvs_studio.updates.helper_service import (
     binary_stdio,
@@ -177,6 +178,11 @@ class ApplyUpdateDialog(QDialog):
         self.details_label.setVisible(False)
         self.details_label.setMaximumHeight(140)
         layout.addWidget(self.details_label)
+        self.details_button = QPushButton("Show Details", self)
+        mark_secondary_action(self.details_button)
+        self.details_button.setVisible(False)
+        self.details_button.clicked.connect(self._toggle_error_details)
+        layout.addWidget(self.details_button)
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)
         self.progress_bar.setTextVisible(False)
@@ -267,17 +273,29 @@ class ApplyUpdateDialog(QDialog):
             self.status_label.setText("The update was canceled before installation.")
             self.close_button.setVisible(True)
         else:
-            self.status_label.setText("The update could not be completed.")
             error = outcome.error if isinstance(outcome, UpdateTaskResult) else None
+            self.status_label.setText(
+                describe_error("Install Studio Update", error)
+                if error is not None else
+                "Studio could not confirm that the update finished. Open Update & Repair to retry."
+            )
             self.details_label.setPlainText(
                 str(error) if error is not None
                 else "Open Update & Repair to retry the full installer."
             )
             self.setMinimumSize(480, 300)
             self.resize(max(self.width(), 560), max(self.height(), 340))
-            self.details_label.setVisible(True)
+            self.details_button.setVisible(True)
             self.repair_button.setVisible(True)
             self.close_button.setVisible(True)
+
+    @Slot()
+    def _toggle_error_details(self) -> None:
+        expanded = not self.details_label.isVisible()
+        self.details_label.setVisible(expanded)
+        self.details_button.setText("Hide Details" if expanded else "Show Details")
+        if expanded:
+            self.resize(self.width(), max(self.height(), 440))
 
     @Slot()
     def _open_repair(self) -> None:
@@ -304,6 +322,21 @@ class ApplyUpdateDialog(QDialog):
             super().closeEvent(event)
 
 
+def _show_startup_error(error: Exception) -> None:
+    explanation = explain_error("Start Update & Repair", str(error), error=error)
+    box = QMessageBox()
+    box.setIcon(QMessageBox.Icon.Critical)
+    box.setWindowTitle("FPVS Studio Updater")
+    box.setTextFormat(Qt.TextFormat.PlainText)
+    box.setText(explanation.summary)
+    box.setInformativeText(
+        explanation.advice + " You can also download the full installer from Studio's release page."
+    )
+    box.setDetailedText(str(error))
+    box.setStandardButtons(QMessageBox.StandardButton.Ok)
+    box.exec()
+
+
 def run_updater_gui(
     *,
     apply_mode: bool = False,
@@ -317,20 +350,14 @@ def run_updater_gui(
     if smoke_report is not None:
         return run_visible_smoke(app, smoke_report)
     if startup_error is not None:
-        QMessageBox.critical(
-            None,
-            "FPVS Studio Updater",
-            f"The updater could not start. Close other updater windows and retry.\n\n"
-            f"{startup_error}\n\n"
-            "You can also download the full installer from FPVS Studio's GitHub Releases page.",
-        )
+        _show_startup_error(startup_error)
         return 1
     window: QDialog
     if apply_mode:
         try:
             incoming, outgoing = binary_stdio()
         except Exception as error:
-            QMessageBox.critical(None, "FPVS Studio Updater", str(error))
+            _show_startup_error(error)
             return 1
         window = ApplyUpdateDialog(
             lambda progress, cancel: run_apply(

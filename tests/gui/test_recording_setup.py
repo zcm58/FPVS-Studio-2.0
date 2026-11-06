@@ -553,14 +553,14 @@ def test_triggerbox_detection_starts_once_on_first_visible_selection(
     (False, "[WinError 5] Access is denied: COM9", "Please close the TriggerBox software"),
     (False, "[WinError 2] The system cannot find the file specified: COM9", "check Device Manager"),
     (False, "Cannot configure port: PermissionError(13, 'Incorrect function.', None, 1)",
-     "2,000,000 baud required"),
+     "repair the TriggerBox driver if needed"),
     (False, "[WinError 1117] The request could not be performed because of an I/O device error",
-     "Check USB/power"),
-    (False, "Write timeout", "Check USB/power"),
+     "Reconnect the USB cable"),
+    (False, "Write timeout", "Reconnect the USB cable"),
     (False, "Unable to close the port: driver handle error.", "Restart Studio before retrying"),
     (False, "[WinError 5] Access is denied. Closing the port also failed: driver handle error.",
      "Restart Studio before retrying"),
-    (False, "", "Check USB and its COM number"),
+    (False, "", "check its port in Device Manager"),
 ])
 def test_triggerbox_detect_reports_access_without_changing_port_values(
     qtbot, port_detection_jobs, accessible, error, action,
@@ -912,9 +912,10 @@ def test_triggerbox_empty_and_failed_detection_allow_manual_port_and_retry(
 
 
 @pytest.mark.parametrize("public_message", [
-    "Studio serial support is missing. Repair or reinstall FPVS Studio, then Detect again.",
-    "Windows could not list serial ports. Check Device Manager, then retry Detect "
-    "or enter the COM port.",
+    "Studio could not load its TriggerBox connection component. The installation may be "
+    "incomplete. Repair or reinstall FPVS Studio, then try Detect again.",
+    "Windows could not list serial ports. Device information may be unavailable. "
+    "Check Device Manager, then try Detect again or enter the COM port.",
     "Enter a valid COM port, such as COM4, before checking access.",
 ])
 def test_triggerbox_discovery_failures_show_known_recovery_and_preserve_raw_details(
@@ -1004,10 +1005,11 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
         assert error not in dialog.detection_status_label.text()
     elif state in ("serial_missing", "enumeration_error"):
         public_message = (
-            "Studio serial support is missing. Repair or reinstall FPVS Studio, then Detect again."
+            "Studio could not load its TriggerBox connection component. The installation may be "
+            "incomplete. Repair or reinstall FPVS Studio, then try Detect again."
             if state == "serial_missing" else
-            "Windows could not list serial ports. Check Device Manager, then retry Detect "
-            "or enter the COM port."
+            "Windows could not list serial ports. Device information may be unavailable. "
+            "Check Device Manager, then try Detect again or enter the COM port."
         )
         error = f"{public_message} Details: {'Long serial-provider diagnostic. ' * 8}"
         port_detection_jobs[0].finish(error=TriggerBoxDiscoveryError(error))
@@ -1633,14 +1635,21 @@ def test_run_recording_summary_fits_existing_window_budget(
     assert label.text() == document.recording_setup_summary()
 
 
-def test_recording_settings_failed_save_preserves_accepted_device(qtbot, tmp_path, monkeypatch):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_recording_settings_failed_save_preserves_accepted_device(
+    qtbot, tmp_path, monkeypatch, background,
+):
     original = {"recording_backend": "serial", "unicorn_udp_port": 1000}
+    error = PermissionError(13, "Access is denied", str(tmp_path / "project.json"))
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
         recording_configuration=original,
-        on_recording_configuration_changed=Mock(side_effect=PermissionError("locked")),
+        on_recording_configuration_changed=Mock(side_effect=error),
     )
     qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     dialog.tabs.setCurrentIndex(2)
     dialog.show()
 
@@ -1653,5 +1662,36 @@ def test_recording_settings_failed_save_preserves_accepted_device(qtbot, tmp_pat
     dialog.recording_setup_button.click()
     QApplication.processEvents()
     assert "not saved" in dialog.recording_summary.text()
+    assert "folder" in dialog.recording_summary.text()
+    assert "[Errno" not in dialog.recording_summary.text()
+    assert str(error) == dialog.recording_summary.toolTip()
     assert dialog._recording_configuration == original
     _assert_labels_fit(dialog)
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_recording_validation_keeps_diagnostics_out_of_primary_text(
+    qtbot, monkeypatch, background,
+):
+    validator = recording_dialog_module.validate_recording_configuration
+    error = ValueError("invalid literal for int() with base 10: 'broken'")
+    monkeypatch.setattr(
+        recording_dialog_module, "validate_recording_configuration", Mock(side_effect=error),
+    )
+    dialog = RecordingSetupDialog(_triggerbox_configuration())
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.show()
+    QApplication.processEvents()
+    assert "int()" not in dialog.error_label.text()
+    assert str(error) == dialog.error_label.toolTip()
+    assert not dialog.apply_button.isEnabled()
+    assert dialog.size().toTuple() == (700, 640)
+    _assert_labels_fit(dialog)
+    monkeypatch.setattr(recording_dialog_module, "validate_recording_configuration", validator)
+    dialog._refresh()
+    assert not dialog.error_label.text()
+    assert not dialog.error_label.toolTip()
+    assert dialog.apply_button.isEnabled()

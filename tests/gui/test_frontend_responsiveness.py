@@ -222,7 +222,8 @@ def test_save_feedback_and_shortcut_work_on_home_and_setup(
         QApplication.processEvents()
         assert badge.width() >= badge.sizeHint().width()
         assert badge.geometry().right() < window.menuBar().width()
-        assert "Disk full" in badge.toolTip()
+        assert "free space" in badge.toolTip()
+        assert "Your edits are still open" in badge.toolTip()
         assert errors
         monkeypatch.setattr(window.document, "save", original_save)
         assert window.save_project()

@@ -173,6 +173,32 @@ def test_local_storage_error_is_visible_and_offline_remains_available(setup, qtb
     assert controller.dialog.offline_button.isEnabled()
 
 
+def test_startup_error_keeps_diagnostics_until_a_new_connection_attempt(setup, qtbot):
+    controller, lifecycle, client, _reads, _enrollments = setup
+    error = LibraryError("JSONDecodeError: invalid enrollment_response")
+
+    def unavailable():
+        raise error
+
+    client.connection_info = unavailable
+    controller.check()
+    lifecycle.jobs[-1].finish()
+    dialog = controller.dialog
+    qtbot.addWidget(dialog)
+    assert "JSONDecodeError" not in dialog.status_label.text()
+    assert "enrollment_response" not in dialog.status_label.text()
+    assert str(error) in dialog.status_label.toolTip()
+    assert dialog.status_label.text() in dialog.status_label.toolTip()
+
+    dialog.code_edit.setText("synthetic-shared-lab-code")
+    dialog.device_edit.setText("Lab PC")
+    dialog.connect_button.click()
+    assert not dialog.status_label.toolTip()
+    lifecycle.jobs[-1].finish()
+    assert "Connected to" in dialog.status_label.text()
+    assert not dialog.status_label.toolTip()
+
+
 def test_client_construction_failure_keeps_startup_recoverable(qapp, qtbot, monkeypatch):
     lifecycle = _Lifecycle(qapp)
     monkeypatch.setattr(module, "update_lifecycle", lambda _app: lifecycle)

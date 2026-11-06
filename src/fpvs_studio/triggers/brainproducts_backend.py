@@ -340,6 +340,8 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
                 )
             elif reason == "device_io":
                 problem += " USB communication failed."
+            if reason != "device_io":
+                problem += " The USB connection may have been interrupted."
             raise BrainProductsTriggerBoxError(
                 f"{problem} Reconnect TriggerBox and check any saved EEG markers before "
                 f"retrying. Details: Unable to {action} code {code} on TriggerBox "
@@ -347,11 +349,12 @@ class BrainProductsTriggerBoxBackend(TriggerBackend):
             ) from exc
         if bytes_written != 1:
             problem = (
-                "TriggerBox did not accept the zero reset byte."
-                if code == 0 else "TriggerBox did not accept the full marker byte."
+                "TriggerBox did not finish clearing the trigger signal."
+                if code == 0 else "TriggerBox did not finish sending the marker."
             )
             raise BrainProductsTriggerBoxError(
-                f"{problem} Reconnect TriggerBox and check any saved EEG markers before "
+                f"{problem} The USB connection may have been interrupted. "
+                "Reconnect TriggerBox and check any saved EEG markers before "
                 f"retrying. Details: Unable to {action} code {code} on TriggerBox {self._port!r}: "
                 f"serial write returned {bytes_written!r}, expected 1."
             )
@@ -362,7 +365,8 @@ def _load_serial_module() -> ModuleType:
         return importlib.import_module("serial")
     except ImportError as exc:
         raise BrainProductsTriggerBoxError(
-            "TriggerBox cannot connect because its serial support is missing. Repair or "
-            "reinstall FPVS Studio before retrying. Details: pyserial is required for Brain "
+            "TriggerBox could not load its connection component. The Studio installation "
+            "may be incomplete. Repair or reinstall FPVS Studio, then try again. "
+            "Details: pyserial is required for Brain "
             "Products TriggerBox output but is not installed."
         ) from exc

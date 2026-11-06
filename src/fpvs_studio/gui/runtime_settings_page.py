@@ -84,6 +84,7 @@ from fpvs_studio.runtime.display_refresh import (
     DisplayRefreshVerification,
     verify_primary_display_refresh,
 )
+from fpvs_studio.support.error_explanations import describe_error
 
 LOGGER = logging.getLogger(__name__)
 
@@ -538,11 +539,15 @@ class DisplaySettingsEditor(QWidget):
             self.timing_status_label.setVisible(True)
         elif report.errors:
             self.timing_status_label.setProperty("statusState", "error")
-            self.timing_status_label.setText(report.errors[0])
+            self.timing_status_label.setText(describe_error("Display timing", report.errors[0]))
+            self.timing_status_label.setToolTip("\n".join(report.errors))
             self.timing_status_label.setVisible(True)
         elif self._refresh_measurement_error:
             self.timing_status_label.setProperty("statusState", "error")
-            self.timing_status_label.setText(self._refresh_measurement_error)
+            self.timing_status_label.setText(
+                describe_error("Display verification", self._refresh_measurement_error),
+            )
+            self.timing_status_label.setToolTip(self._refresh_measurement_error)
             self.timing_status_label.setVisible(True)
         elif report.warnings:
             self.timing_status_label.setProperty("statusState", "warning")
@@ -722,7 +727,7 @@ class DisplaySettingsEditor(QWidget):
     def _on_refresh_detection_failed(self, error: object) -> None:
         LOGGER.error("Display refresh detection failed: %s", error)
         self._refresh_verification = None
-        self._refresh_measurement_error = f"Display verification failed: {error}"
+        self._refresh_measurement_error = str(error)
         self._refresh_timing_status()
         self.refresh_verification_changed.emit()
 

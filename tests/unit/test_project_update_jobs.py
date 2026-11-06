@@ -19,9 +19,10 @@ from fpvs_studio.core.project_bundle_update import (
     ProjectBundleUpdateResult,
 )
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
-from fpvs_studio.library.errors import LibraryCancelled
+from fpvs_studio.library.errors import LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryItem
 from fpvs_studio.library.project_updates import ProjectUpdateResult
+from fpvs_studio.support.error_explanations import describe_error
 
 
 class Signal:
@@ -73,6 +74,7 @@ class Checked:
     can_download_separately: bool = True
     reporting_error: str = ""
     reporting_notice: str = ""
+    error_details: str = ""
 
 
 @dataclass
@@ -88,9 +90,10 @@ def update_job(tmp_path):
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef)
                and n.name == "ProjectUpdateController")
     names = {"_current", "_update_current", "_action", "_run_pending", "_queue_check",
-             "_save_origin", "_invalidate_failed_update_candidate"}
+             "_save_origin", "_invalidate_failed_update_candidate", "_show_error"}
     methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
     calls, jobs, applied, messages = [], [], [], []
+    tooltips = []
     origin = LibraryProjectOrigin(
         service_url="https://library.example.test", item_id="study", installed_version="1.0.0",
         bundle_sha256="b" * 64, local_project_id="local-study",
@@ -164,6 +167,7 @@ def update_job(tmp_path):
     namespace = {
         "Path": Path, "Event": Event, "cast": cast, "_Checked": Checked,
         "LibraryProjectOrigin": LibraryProjectOrigin, "LibraryOriginError": LibraryOriginError,
+        "LibraryError": LibraryError, "describe_error": describe_error,
         "LibraryCancelled": LibraryCancelled, "ProjectBundleCancelled": ProjectBundleCancelled,
         "ProjectBundleUpdateResult": ProjectBundleUpdateResult,
         "UpdateTaskResult": SimpleNamespace, "_Updated": Updated,
@@ -195,6 +199,7 @@ def update_job(tmp_path):
         _offer_timer=SimpleNamespace(stop=lambda: None),
         dialog=SimpleNamespace(
             set_busy=lambda *args: messages.append(args), clear_install_candidate=lambda: None,
+            status_label=SimpleNamespace(setToolTip=tooltips.append),
             check_button=SimpleNamespace(setEnabled=lambda _enabled: None),
             relink_button=SimpleNamespace(setEnabled=lambda _enabled: None),
             auto_check_checkbox=SimpleNamespace(setEnabled=lambda _enabled: None),
@@ -207,7 +212,7 @@ def update_job(tmp_path):
     for name in names:
         setattr(context, name, MethodType(namespace[name], context))
     return SimpleNamespace(controller=context, flags=flags, jobs=jobs, calls=calls,
-                           applied=applied, messages=messages, result=committed)
+                           applied=applied, messages=messages, tooltips=tooltips, result=committed)
 
 
 @pytest.mark.parametrize("blocked", ["save", "fixation", "unknown-version"])
@@ -258,6 +263,8 @@ def test_failure_does_not_replace_open_document_and_releases_lease(update_job, f
     assert s.calls.count("release") == 1
     assert not s.controller._importing
     assert s.messages[-1][0] is False
+    assert s.tooltips[0] == ""
+    assert s.messages[-1][1] in s.tooltips[-1]
     if failure == "source_changed":
         assert "download" not in s.calls
         assert "changed" in s.messages[-1][1]

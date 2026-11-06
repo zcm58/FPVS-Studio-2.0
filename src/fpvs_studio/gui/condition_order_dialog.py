@@ -29,6 +29,7 @@ from fpvs_studio.core.session_ordering import (
 )
 from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
+from fpvs_studio.support.error_explanations import describe_error
 
 _STALE_SETUP_MESSAGE = (
     "Setup changed. Close and reopen the Pseudorandom Condition Order Editor "
@@ -224,8 +225,12 @@ class ConditionOrderDialog(QDialog):
     def _stale(self) -> bool:
         return self._current_signature() != self._signature
 
-    def _error(self, message: str) -> None:
-        self.error_label.setText(message)
+    def _error(self, message: str | BaseException) -> None:
+        self.error_label.setText(
+            describe_error("Condition order", message)
+            if isinstance(message, BaseException) else message,
+        )
+        self.error_label.setToolTip(str(message) if isinstance(message, BaseException) else "")
         self.error_label.setVisible(bool(message))
 
     def _render(self, selected: int = 0) -> None:
@@ -335,7 +340,7 @@ class ConditionOrderDialog(QDialog):
         except ValueError as error:
             valid = False
             if not busy:
-                self._error(str(error))
+                self._error(error)
         else:
             valid = bool(self._order)
             if not busy:
@@ -364,7 +369,7 @@ class ConditionOrderDialog(QDialog):
                 ),
             )
         except RuntimeError as error:
-            self._error(str(error))
+            self._error(error)
             return
         self._seeds = candidate
         self._job.finished.connect(self._generated)
@@ -387,7 +392,7 @@ class ConditionOrderDialog(QDialog):
         elif result.cancelled:
             self._error("Generation cancelled. Generate again or keep editing the list.")
         elif result.error is not None:
-            self._error(str(result.error))
+            self._error(result.error)
         else:
             self._order = list(cast(list[str], result.value))
             self._render()
@@ -406,7 +411,7 @@ class ConditionOrderDialog(QDialog):
             validate_saved_condition_order(self._order, self._counts, randomized_blocks=True)
             self._save_order(list(self._order), self._seeds)
         except (ValueError, OSError) as error:
-            self._error(str(error))
+            self._error(error)
             return
         self.accept()
 

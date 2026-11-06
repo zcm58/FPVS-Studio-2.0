@@ -461,12 +461,21 @@ def test_save_failure_keeps_file_and_model_then_retry_persists_same_list(
     dialog, _table = _open_dialog(qtbot, document, table=table)
     preview_jobs[-1].complete()
 
+    error = PermissionError(13, "Access is denied", str(document.project_file_path))
+
     def fail(*_args):
-        raise OSError("Disk unavailable. Retry Save.")
+        raise error
 
     monkeypatch.setattr(document_module, "save_project_file", fail)
     dialog.save()
-    assert "Disk unavailable" in dialog.error_label.text()
+    assert "folder" in dialog.error_label.text()
+    assert "[Errno" not in dialog.error_label.text()
+    assert table.error_label.toolTip() == str(error)
+    QApplication.processEvents()
+    assert_visible_children_within_parent(dialog)
+    assert dialog.error_label.height() >= dialog.error_label.heightForWidth(
+        dialog.error_label.width(),
+    )
     assert document.project == before
     assert document.project_file_path.read_bytes() == saved_bytes
     assert table.pending_presentation_counts() == {first: 3}

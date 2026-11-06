@@ -34,6 +34,7 @@ from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.installations import download_library_install
 from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
+from fpvs_studio.support.error_explanations import describe_error
 
 _LOGGER = logging.getLogger(__name__)
 ImportCallback = Callable[
@@ -99,6 +100,7 @@ class LibraryController(QObject):
     ) -> None:
         if self._job is not None or self._lifecycle.is_shutting_down:
             return
+        self._view().status_label.setToolTip("")
         self._view().set_busy(True, message, downloading=downloading)
         job = self._lifecycle.start_task(callback, keep_success_on_cancel=True)
         self._job = job
@@ -115,6 +117,12 @@ class LibraryController(QObject):
                     self._view().set_connection(None)
                 message = "Operation canceled." if canceled else self._error(outcome.error)
                 self._view().set_busy(False, message)
+                if not canceled and isinstance(
+                    outcome.error, (LibraryError, LibraryOriginError, ProjectBundleError),
+                ):
+                    self._view().status_label.setToolTip(
+                        f"{message}\n\nDetails: {outcome.error}",
+                    )
             elif self._closing or self._lifecycle.is_shutting_down or job.cancel_event.is_set():
                 # A transfer/enrollment may finish just before cancellation. Never
                 # start an import after Close; keep successfully stored enrollment.
@@ -244,7 +252,10 @@ class LibraryController(QObject):
         except Exception as error:
             _LOGGER.exception("Library project import handoff failed")
             self._import_finished(None)
-            self._view().status_label.setText(self._error(error))
+            message = self._error(error)
+            self._view().status_label.setText(message)
+            if isinstance(error, (LibraryError, LibraryOriginError, ProjectBundleError)):
+                self._view().status_label.setToolTip(f"{message}\n\nDetails: {error}")
 
     def _import_finished(self, project_root: Path | None) -> None:
         self.client.release_download()
@@ -277,6 +288,6 @@ class LibraryController(QObject):
     @staticmethod
     def _error(error: Exception | None) -> str:
         if isinstance(error, (LibraryError, LibraryOriginError, ProjectBundleError)):
-            return str(error)
+            return describe_error("Experiment Library", error)
         _LOGGER.error("Library operation failed (%s)", type(error).__name__)
         return "The library operation could not finish. Retry or contact your lab administrator."

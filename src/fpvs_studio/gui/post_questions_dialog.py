@@ -59,6 +59,7 @@ from fpvs_studio.gui.condition_task_dialog import (
 )
 from fpvs_studio.gui.modifier_library_dialog import ModifierScopeDialog
 from fpvs_studio.runtime.task_runner import question_response_is_valid
+from fpvs_studio.support.error_explanations import describe_error
 
 
 def _label(text: str, parent: QWidget) -> QLabel:
@@ -412,7 +413,7 @@ class PostQuestionsDialog(QDialog):
         return module
 
     def _show_error(self, error: ValueError) -> None:
-        self.status.setText(str(error))
+        self.status.setText(describe_error("Condition questions", error))
         self.status.setToolTip(str(error))
         mark_error_text(self.status)
         self.status.show()

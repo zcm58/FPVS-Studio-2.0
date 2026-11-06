@@ -40,6 +40,7 @@ from fpvs_studio.runtime.recording import (
     recording_backend_label,
     validate_recording_configuration,
 )
+from fpvs_studio.support.error_explanations import describe_error
 from fpvs_studio.triggers.brainproducts_discovery import (
     TriggerBoxDiscoveryError,
     TriggerBoxPortCandidate,
@@ -725,7 +726,8 @@ class RecordingSetupDialog(QDialog):
             validate_recording_configuration(draft)
             validated = ProjectRecordingSettings.model_validate(draft)
         except ValueError as exc:
-            self.error_label.setText(str(exc))
+            self.error_label.setText(describe_error("Recording setup", exc))
+            self.error_label.setToolTip(str(exc))
             self.apply_button.setEnabled(False)
         else:
             self._valid_udp_port = validated.unicorn_udp_port
@@ -735,6 +737,7 @@ class RecordingSetupDialog(QDialog):
             self._valid_amplifier = validated.brainproducts_amplifier
             self._valid_sampling_rate = validated.brainproducts_sampling_rate_hz
             self.error_label.clear()
+            self.error_label.setToolTip("")
             self.apply_button.setEnabled(True)
         self._maybe_detect_ports()
 

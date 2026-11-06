@@ -1426,7 +1426,9 @@ Studio restarts; 100% means the managed update succeeded. Older setup builds wit
 progress reporting remain animated. No elapsed-time percentage or ETA is invented.
 Error details and
 action buttons remain hidden during installation. Failure expands the dialog to a
-`480x300` minimum and `560x340` default, with a read-only scrolling error field.
+`480x300` minimum and `560x340` default, with a plain-language cause/recovery message.
+**Show Details** reveals the read-only scrolling diagnostics and expands the height
+to at least 440 pixels; **Hide Details** hides technical text again.
 Closing the window cancels before setup begins and is ignored after explicit installation
 commitment. Late cancellation cannot turn a failed handoff or installation into a false
 cancellation message. Failure exposes **Open Update & Repair**; successful installation

@@ -1,11 +1,12 @@
 """Registered GUI coverage for recall summaries, burst order and explicit export."""
 
 from dataclasses import replace
+from json import JSONDecodeError
 from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QCloseEvent
+from PySide6.QtGui import QCloseEvent, QColor, QPalette
 from PySide6.QtWidgets import QApplication
 from tests.gui.helpers import assert_visible_children_within_parent
 
@@ -111,9 +112,14 @@ def test_data_and_partial_recall_remain_readable_at_minimum_and_default(dialog, 
         assert button.width() >= button.sizeHint().width()
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_export_cancel_and_background_failure_preserve_loaded_results(
-    dialog, monkeypatch, tmp_path,
+    dialog, monkeypatch, tmp_path, background,
 ):
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(920, 600)
     DeferredTask.instances[-1].complete(_summary())
     monkeypatch.setattr(module.QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
     dialog.start_export()
@@ -128,11 +134,14 @@ def test_export_cancel_and_background_failure_preserve_loaded_results(
     assert not event.isAccepted()
     dialog.reject()
     assert dialog.isVisible()
-    DeferredTask.instances[-1].failed.emit(PermissionError("Workbook is open in Excel."))
+    error = PermissionError(13, "Access is denied", str(path))
+    DeferredTask.instances[-1].failed.emit(error)
     DeferredTask.instances[-1].finished.emit()
     assert dialog.state_name == "populated"
     assert dialog.export_button.isEnabled()
-    assert "Workbook is open" in dialog.feedback_label.text()
+    assert "folder" in dialog.feedback_label.text()
+    assert "[Errno" not in dialog.feedback_label.text()
+    assert dialog.feedback_label.toolTip() == str(error)
     QApplication.processEvents()
     assert_visible_children_within_parent(dialog)
     assert str(path) in dialog.export_path_label.toolTip()
@@ -143,13 +152,18 @@ def test_empty_error_and_retry_states(dialog):
     assert dialog.state_name == "no_data"
     assert not dialog.export_button.isEnabled()
     dialog.start_loading()
-    DeferredTask.instances[-1].failed.emit(ValueError("The journal has invalid JSON on line 3."))
+    error = JSONDecodeError("Expecting value", "invalid", 0)
+    DeferredTask.instances[-1].failed.emit(error)
     DeferredTask.instances[-1].finished.emit()
     assert dialog.state_name == "error"
     assert dialog.refresh_button.text() == "Retry"
-    assert "line 3" in dialog.summary_label.text()
+    assert "couldn't read" in dialog.summary_label.text()
+    assert "Expecting value" not in dialog.summary_label.text()
+    assert dialog.summary_label.toolTip() == str(error)
     QApplication.processEvents()
     assert_visible_children_within_parent(dialog)
+    dialog.start_loading()
+    assert not dialog.summary_label.toolTip()
 
 
 def test_test_sessions_are_included_and_visibly_identified(dialog):
