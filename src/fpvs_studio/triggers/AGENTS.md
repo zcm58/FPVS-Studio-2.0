@@ -30,7 +30,10 @@
   filter (plus the explicit manual selection) and fixed baudrate while reusing the
   access helper. Denied access means the port may be owned by another program; report
   exclusive ownership and retry guidance without claiming a specific owner was found.
-- `brainproducts_errors.py` shares concise recovery wording between setup and launch.
+- `serial_errors.py` classifies native/serialized serial failures without naming an
+  owner. `biosemi_errors.py` and `brainproducts_errors.py` share vendor-specific
+  recovery wording between setup and launch. BioSemi recovery names the USB Trigger
+  Interface, not the EEG USB Receiver or Brain Products utilities; keep ActiView recording.
   Preserve native/serialized Windows reasons and raw diagnostics. No named port does
   not prove a missing driver; a running utility or denied access does not identify
   the handle owner. Keep connection, write/reset failure and timing evidence distinct.
@@ -47,6 +50,11 @@
   bounded failure handling. Cancellation requests are not completion; a driver that
   never acknowledges cancellation requires retained native storage and an explicit
   restart error, never a false clean close or reuse of pending storage.
+  BioSemi reuses this completion helper without a reset worker: poll before the next
+  marker, reject an outstanding write rather than queue it, and drain/cancel only
+  outside timed presentation. Its finish_pending_output hook drains at the runtime
+  condition boundary before feedback/tasks. Do not add an implicit zero to its
+  auto-reset protocol.
 - Resolve unset/blank serial-port configuration to `COM3`, while preserving an
   explicit nonempty port. This is a configuration default, never a retry/fallback
   after a port fails to open or write.

@@ -17,6 +17,10 @@ from fpvs_studio.gui import biosemi_port_selector as selector_module
 from fpvs_studio.gui import recording_dialog as dialog_module
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog
 from fpvs_studio.gui.update_lifecycle import UpdateTaskResult
+from fpvs_studio.triggers.biosemi_errors import (
+    BIOSEMI_SERIAL_SUPPORT_MESSAGE,
+    biosemi_port_error_message,
+)
 from fpvs_studio.triggers.serial_port_access import SerialPortAccessResult, SerialPortInfo
 
 
@@ -79,7 +83,13 @@ def _finish_list(serial_jobs, *ports):
     QApplication.processEvents()
 
 
-def _assert_geometry(dialog):
+def _assert_geometry(qtbot, dialog):
+    # Theme changes and a newly visible wrapped status queue a second layout pass.
+    qtbot.waitUntil(lambda: all(
+        label.height() >= label.heightForWidth(label.width())
+        for label in dialog.findChildren(QLabel)
+        if label.isVisible() and label.wordWrap()
+    ))
     assert (dialog.width(), dialog.height()) == (700, 640)
     assert_visible_children_within_parent(dialog)
     for label in dialog.findChildren(QLabel):
@@ -143,7 +153,7 @@ def test_manual_edit_survives_pending_metadata_and_enumeration_failure(qtbot, se
     selector.edit.setText("COM64")
     serial_jobs.jobs[-1].finish(error=OSError("Synthetic enumeration denied"))
     assert selector.port == "COM64"
-    assert "Could not list ports" in selector.status_label.text()
+    assert "Could not list serial ports" in selector.status_label.text()
     assert "Synthetic enumeration denied" in selector.status_label.toolTip()
     assert selector.status_label.accessibleDescription() == selector.status_label.toolTip()
     assert dialog.apply_button.isEnabled()
@@ -169,8 +179,9 @@ def test_check_opens_only_selected_port_and_reports_its_result(
     error = "[WinError 5] Access denied to COM193" if not accessible else ""
     job.finish(SerialPortAccessResult("COM193", accessible, error))
 
-    state = "Port accessible" if accessible else "Port unavailable"
-    assert f"COM193: {state}" in selector.status_label.text()
+    expected = ("COM193: Port accessible." if accessible else
+                biosemi_port_error_message("COM193", error))
+    assert selector.status_label.text() == expected
     assert selector.port == "COM193"
     assert selector.refresh_button.isEnabled() and selector.check_button.isEnabled()
     assert "No marker bytes" in selector.check_button.toolTip()
@@ -199,6 +210,105 @@ def test_editing_during_check_cancels_it_and_ignores_even_matching_late_result(
     assert selector.port == ("COM193" if restore_original else "COM42")
     assert not selector.status_label.text()
     assert selector.check_button.isEnabled()
+
+
+@pytest.mark.parametrize("backend", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("failure", [
+    "[WinError 5] Access is denied",
+    "[WinError 2] The system cannot find the file specified",
+    "Cannot configure port: OSError(22, 'Driver error', None, 31)",
+    "[WinError 1167] The device is not connected",
+    "[WinError 121] The semaphore timeout period has expired",
+    "Unable to close the port: [WinError 5] Access is denied",
+])
+def test_biosemi_check_error_is_actionable_and_fits(
+    qtbot, serial_jobs, backend, background, failure,
+):
+    dialog = _dialog(qtbot, backend=backend, port="COM193")
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    selector = dialog.biosemi_port_selector
+    _finish_list(serial_jobs, "COM193")
+    selector.check_button.click()
+    serial_jobs.jobs[-1].finish(SerialPortAccessResult("COM193", False, failure))
+    QApplication.processEvents()
+
+    assert selector.status_label.text() == biosemi_port_error_message("COM193", failure)
+    assert "BioSemi" in selector.status_label.text()
+    assert "COM193" in selector.status_label.text()
+    assert "WinError" not in selector.status_label.text()
+    assert "TriggerBox" not in selector.status_label.text()
+    assert failure == selector.status_label.toolTip()
+    assert failure == selector.status_label.accessibleDescription()
+    assert selector.port == "COM193"
+    assert selector.check_button.isEnabled() and dialog.apply_button.isEnabled()
+    assert "keep it recording" in dialog.guidance_label.text()
+    assert "Fully exit serial test tools" in dialog.guidance_label.text()
+    assert "separate from the EEG receiver and ActiView" in dialog.guidance_label.toolTip()
+    _assert_geometry(qtbot, dialog)
+
+
+@pytest.mark.parametrize("operation", ["list", "check"])
+def test_biosemi_missing_studio_serial_support_keeps_dependency_cause(
+    qtbot, serial_jobs, operation,
+):
+    from fpvs_studio.triggers.serial_port_access import SerialPortAccessError
+
+    dialog = _dialog(qtbot, port="COM193")
+    selector = dialog.biosemi_port_selector
+    if operation == "check":
+        _finish_list(serial_jobs, "COM193")
+        selector.check_button.click()
+    failure = SerialPortAccessError("pyserial is required to list or access serial ports")
+    failure.__cause__ = ImportError("Synthetic unavailable serial component")
+    serial_jobs.jobs[-1].finish(error=failure)
+    QApplication.processEvents()
+
+    assert selector.status_label.text() == BIOSEMI_SERIAL_SUPPORT_MESSAGE
+    assert "Synthetic unavailable serial component" in selector.status_label.toolTip()
+    assert "driver" not in selector.status_label.text().lower()
+    assert selector.port == "COM193"
+    assert selector.refresh_button.isEnabled() and selector.check_button.isEnabled()
+    _assert_geometry(qtbot, dialog)
+
+
+@pytest.mark.parametrize("backend", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("operation", ["list", "check"])
+def test_biosemi_worker_start_failure_does_not_claim_a_port_failure(
+    qtbot, serial_jobs, monkeypatch, backend, background, operation,
+):
+    dialog = _dialog(qtbot, backend=backend, port="COM193")
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    selector = dialog.biosemi_port_selector
+    _finish_list(serial_jobs, "COM193")
+    failure = RuntimeError("FPVS Studio is closing; no updater work can be started.")
+    start_task = Mock(side_effect=failure)
+    monkeypatch.setattr(
+        selector_module, "update_lifecycle", lambda: SimpleNamespace(start_task=start_task),
+    )
+
+    (selector.check_button if operation == "check" else selector.refresh_button).click()
+    action = "start the port check" if operation == "check" else "refresh the port list"
+    assert selector.status_label.text() == (
+        f"Studio could not {action}. Studio may be closing. Restart Studio, then try again."
+    )
+    assert str(failure) == selector.status_label.toolTip()
+    assert str(failure) == selector.status_label.accessibleDescription()
+    assert "USB" not in selector.status_label.text()
+    assert "driver" not in selector.status_label.text()
+    assert "occupied" not in selector.status_label.text()
+    assert selector.port == "COM193"
+    assert selector.refresh_button.isEnabled() and selector.check_button.isEnabled()
+    assert dialog.apply_button.isEnabled()
+    start_task.assert_called_once()
+    serial_jobs.enumeration.assert_not_called()
+    serial_jobs.access.assert_not_called()
+    _assert_geometry(qtbot, dialog)
 
 
 def test_retry_clears_previous_error_and_supports_cancelled_check(qtbot, serial_jobs):
@@ -329,4 +439,4 @@ def test_biosemi_geometry_fits_at_minimum_size_in_each_state(qtbot, serial_jobs,
         elif state == "manual":
             selector.edit.setText("COM12345")
     QApplication.processEvents()
-    _assert_geometry(dialog)
+    _assert_geometry(qtbot, dialog)

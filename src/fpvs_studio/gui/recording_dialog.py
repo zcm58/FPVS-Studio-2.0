@@ -51,6 +51,7 @@ from fpvs_studio.triggers.brainproducts_errors import (
     triggerbox_port_error_message,
 )
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
+from fpvs_studio.triggers.serial_port_access import SerialPortAccessError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -466,11 +467,17 @@ class RecordingSetupDialog(QDialog):
             return
         if result.error is not None:
             _LOGGER.warning("TriggerBox port detection failed: %s", result.error)
-            self.detection_status_label.setText(
-                str(result.error).partition("Details:")[0].strip()
-                if isinstance(result.error, TriggerBoxDiscoveryError) else
-                "Unable to list TriggerBox ports. Retry or check Device Manager.",
-            )
+            if (isinstance(result.error, SerialPortAccessError)
+                    and "pyserial is required" in str(result.error).lower()):
+                text = (
+                    "Studio could not check TriggerBox ports because its serial support is "
+                    "unavailable. Repair or reinstall Studio, then try Detect again."
+                )
+            elif isinstance(result.error, TriggerBoxDiscoveryError):
+                text = str(result.error).partition("Details:")[0].strip()
+            else:
+                text = "Unable to list TriggerBox ports. Retry or check Device Manager."
+            self.detection_status_label.setText(text)
             details = str(result.error)
             if result.error.__cause__ is not None:
                 details += f"\n{result.error.__cause__}"
@@ -729,15 +736,22 @@ class RecordingSetupDialog(QDialog):
         else:
             guidance = (
                 "Configure the trigger-interface port in each project's Recording Setup. "
-                if self._computer_default else "Start recording in ActiView before launch. "
+                if self._computer_default else
+                "Start recording in ActiView before launch; keep it recording. "
+            )
+            guidance += (
+                "Fully exit serial test tools or other Studio windows using the trigger port. "
             )
             guidance += "Test and Pilot modes never send markers."
             detail = (
-                "ActiveThree uses BioSemi's compatible USB Trigger Interface and the "
+                f"{'ActiveThree' if selected == 'biosemi_active_three' else 'ActiveTwo'} uses "
+                "BioSemi's compatible USB Trigger Interface and the "
                 "current project's serial port/baud settings. Verify interface wiring, "
                 "recorded markers and physical timing with your system. "
+                "The USB Trigger Interface on the stimulus PC is separate from the EEG "
+                "receiver and ActiView. Select its port in Device Manager. Closing serial "
+                "test tools releases their connections; stopping output may leave a port open. "
                 "Studio sends triggers; BioSemi software owns EEG recording."
-                if selected == "biosemi_active_three" else ""
             )
         self.guidance_label.setText(guidance)
         self.guidance_label.setToolTip(detail)

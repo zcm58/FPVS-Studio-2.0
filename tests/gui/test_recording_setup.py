@@ -1012,6 +1012,56 @@ def test_triggerbox_discovery_failures_show_known_recovery_and_preserve_raw_deta
     assert dialog.brainproducts_port_edit.isEnabled()
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("serial_attribute_present", [False, True])
+def test_triggerbox_broken_serial_support_does_not_request_device_driver_repair(
+    qtbot, port_detection_jobs, monkeypatch, background, serial_attribute_present,
+):
+    from fpvs_studio.triggers import brainproducts_discovery as discovery_module
+    from fpvs_studio.triggers.serial_port_access import SerialPortAccessError
+
+    dialog = RecordingSetupDialog(_triggerbox_configuration(brainproducts_serial_port="COM4"))
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.show()
+    port_detection_jobs[0].finish()
+    dialog.detect_ports_button.click()
+    serial_module = SimpleNamespace(EIGHTBITS=8, PARITY_NONE="N", STOPBITS_ONE=1)
+    if serial_attribute_present:
+        serial_module.Serial = None  # Imported transport is not callable.
+    provider = SimpleNamespace(comports=Mock(return_value=()))
+    modules = {"serial.tools.list_ports": provider, "serial": serial_module}
+    with monkeypatch.context() as imports:
+        imports.setattr(discovery_module.importlib, "import_module", modules.__getitem__)
+        imports.setattr(
+            recording_dialog_module, "discover_triggerbox_ports",
+            discovery_module.discover_triggerbox_ports,
+        )
+        with pytest.raises(SerialPortAccessError) as failure:
+            port_detection_jobs[1].callback(None, Event())
+    port_detection_jobs[1].finish(error=failure.value)
+
+    assert dialog.detection_status_label.text() == (
+        "Studio could not check TriggerBox ports because its serial support is unavailable. "
+        "Repair or reinstall Studio, then try Detect again."
+    )
+    assert str(failure.value) in dialog.detection_status_label.toolTip()
+    assert str(failure.value.__cause__) in dialog.detection_status_label.accessibleDescription()
+    assert "pyserial" not in dialog.detection_status_label.text()
+    assert "Details:" not in dialog.detection_status_label.text()
+    assert "Device Manager" not in dialog.detection_status_label.text()
+    assert "driver" not in dialog.detection_status_label.text()
+    assert "Fully exit Configuration/Test IO before launch" in dialog.guidance_label.text()
+    assert "Stop can leave the COM port occupied" in dialog.guidance_label.text()
+    assert dialog.brainproducts_port_edit.text() == "COM4"
+    assert dialog.detect_ports_button.isEnabled() and dialog.apply_button.isEnabled()
+    QApplication.processEvents()
+    assert (dialog.width(), dialog.height()) == (700, 640)
+    _assert_labels_fit(dialog)
+
+
 def test_triggerbox_cancel_cancels_discovery_and_ignores_late_result(
     qtbot, port_detection_jobs,
 ):

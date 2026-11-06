@@ -335,6 +335,54 @@ backend send failures record `error` before the run/session is aborted and expor
 The pre-run COM-port open check verifies OS-level serial availability; it does not prove
 that downstream EEG/status-channel cabling is physically correct.
 
+BioSemi setup and launch share `triggers/biosemi_errors.py`, using the neutral
+`triggers/serial_errors.py` classifier also used by TriggerBox. Native and serialized
+Windows/POSIX reasons retain the observed operation; raw diagnostics stay in Show
+Details, logs and interrupted recording evidence. Access denial does not identify
+the owning application or establish a missing driver. Cancelled access checks still
+log a failed close even when their dialog has already closed.
+
+| Observed BioSemi failure | Recovery shown |
+| --- | --- |
+| Port occupied/access denied | Fully exit serial test tools or other Studio instances using that port; stopping a test can leave it occupied |
+| Port missing | Reconnect the USB Trigger Interface and check its current COM number in Device Manager |
+| Serial settings rejected | Check the selected interface port and settings; the standard BioSemi interface uses 115200 baud |
+| USB communication failure/timeout | Reconnect the USB Trigger Interface and check Device Manager |
+| Studio serial support unavailable | Repair/reinstall Studio; this is separate from the device driver |
+| Port-check/refresh worker cannot start | Restart Studio; no port operation ran, so this is not a USB diagnosis |
+| Marker/reset write failure or incomplete write | Stop, reconnect and review saved EEG markers; do not resend the failed marker automatically |
+| Port close or unconfirmed native cancellation | Restart Studio before reuse; preserve the connection or pending native storage rather than report a clean close |
+
+On Windows, BioSemi uses the existing native completion helper to retain one pending
+write and its byte buffer. A subsequent marker first polls without waiting; an
+unfinished previous write aborts instead of reusing its storage or queuing a marker.
+The condition boundary and close drain the final write outside presentation with a
+bounded deadline. Deferred failures abort before post-tasks, feedback or completion;
+close requests cancellation only when needed. Unconfirmed cancellation
+retains native storage until process exit. Successful submission or completion still
+does not prove electrical timing or EEG receipt. No implicit zero byte or reset
+worker is added to BioSemi's auto-reset interface.
+If a deferred marker failure appears on the next send or during abort cleanup,
+runtime corrects that original attempt's evidence while preserving any distinct
+unsent attempt. Repeated marker codes do not determine which record is updated.
+Per-run trigger exports are refreshed through the existing writers after a late
+completion failure, including when the task journal cannot be reconciled. If that
+refresh fails, the original experiment error remains primary and acquisition
+evidence records the export failure; existing output paths and formats are unchanged.
+
+The BioSemi **USB Trigger Interface** on the stimulus PC is separate from the EEG
+**USB Receiver** and its driver on the recording PC. Windows normally recognizes the
+trigger interface automatically; if it does not, follow its own vendor driver/setup
+instructions rather than installing TriggerBox or EEG-receiver drivers. Keep ActiView
+acquiring and saving EEG while fully exiting other tools that own the trigger COM
+port. Check the interface-to-receiver cable and ActiView's trigger/status display and
+saved markers separately from Check Port. ActiView can assign low-eight-bit marker
+codes to Pause save control, so review that configuration if saving unexpectedly
+pauses; a successful serial write cannot establish recording state. See BioSemi's
+[interface instructions](https://www.biosemi.com/faq/USB%20Trigger%20interface%20cable.htm),
+[receiver installation](https://www.biosemi.com/faq/install_USB.htm) and
+[trigger handling](https://www.biosemi.com/faq/trigger_signals.htm).
+
 ### actiCHamp parallel-port output
 
 Settings > Recording includes **Brain Products / BrainVision (Parallel port)** for
@@ -392,9 +440,12 @@ ActiveThree reuses the BioSemi USB Trigger Interface and existing project serial
 settings: raw bytes 1–255, normally 115200 baud, 8N1, no flow control. Its effective
 transport is `serial`, while snapshots preserve the ActiveThree selection. BioSemi
 lists the interface for Active3, Active2.5 and Active2; its standard pulse resets
-automatically after 8 ms. Electrode count does not change the marker protocol.
+automatically after 8 ms. USB-C interfaces can have a reprogrammed pulse duration,
+which Studio does not infer or change; older micro-USB interfaces use the fixed
+duration. Electrode count does not change the marker protocol.
 See [BioSemi compatibility](https://www.biosemi.com/faq/prices.htm) and the
-[USB Trigger Interface protocol](https://www.biosemi.com/faq/USB%20Trigger%20interface%20cable.htm).
+[USB Trigger Interface protocol](https://www.biosemi.com/faq/USB%20Trigger%20interface%20cable.htm),
+including [USB-C pulse programming](https://www.biosemi.com/faq/USB_Trigger_interface_ProgramPulseLength.htm).
 
 Project Recording Setup exposes the shared ActiveTwo/ActiveThree serial port while
 retaining `settings.triggers.serial_port` as its persisted owner and preserving the

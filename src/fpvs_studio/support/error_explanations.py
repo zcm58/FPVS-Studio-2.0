@@ -132,9 +132,33 @@ def explain_error(
             "Recorder may be closed, idle or unable to save. Open Recorder, connect the headset "
             "and start recording before launching again.",
         )
-    if "SerialBackendError" in cause_names or "serialbackenderror" in text or re.search(
-        r"fpvs studio cannot detect the .+ serial port", text,
-    ):
+    serial_cause = next(
+        (cause for cause in causes if any(
+            cls.__name__ == "SerialBackendError" for cls in type(cause).__mro__
+        )), None,
+    )
+    serial_source = str(serial_cause) if serial_cause is not None else "\n".join((message, details))
+    biosemi_actionable = re.search(
+        r"BioSemi (?:trigger (?:port|output|interface)|serial settings on|USB communication on|"
+        r"is still sending the previous marker on|"
+        r"could not (?:open trigger port|finish "
+        r"(?:sending a marker|clearing the trigger signal|shutting down))|"
+        r"timed out while (?:sending a marker|clearing the trigger signal))\b", serial_source,
+    )
+    if (serial_cause is not None or biosemi_actionable is not None
+            or "serialbackenderror" in text or re.search(
+                r"fpvs studio cannot detect the .+ serial port", text,
+            )):
+        if biosemi_actionable is not None:
+            readable = _plain_message(
+                serial_source[biosemi_actionable.start():].partition("Details:")[0].splitlines()[0],
+            )
+            if readable:
+                summary, separator, advice = readable.partition(". ")
+                return ErrorExplanation(
+                    summary + "." if separator else summary,
+                    advice or "Check the BioSemi USB Trigger Interface, then try again.",
+                )
         if any(isinstance(cause, ImportError) for cause in causes) or "pyserial" in text:
             return ErrorExplanation(
                 "Studio couldn't load its EEG connection component.",

@@ -8,6 +8,14 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 
 
+class TriggerSubmissionBlockedError(RuntimeError):
+    """The current marker was not submitted because earlier output is unresolved."""
+
+
+class TriggerCompletionError(TriggerSubmissionBlockedError):
+    """A submitted event marker failed while its completion was being observed."""
+
+
 class TriggerBackend(ABC):
     """Minimal trigger backend interface."""
 
@@ -69,6 +77,15 @@ class TriggerBackend(ABC):
             label=label,
             time_s=time_s,
         )
+
+    def finish_pending_output(self) -> None:
+        """Observe submitted-marker completion outside timed playback, without new bytes.
+
+        Synchronous backends have nothing pending. Asynchronous adapters must bound
+        their wait and report event-marker completion with TriggerCompletionError.
+        """
+
+        return None
 
     @abstractmethod
     def reset(self) -> None:

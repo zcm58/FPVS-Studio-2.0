@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import importlib
+from types import SimpleNamespace
 
 import pytest
 
 from fpvs_studio.runtime.triggers import build_trigger_backend
-from fpvs_studio.triggers.base import TriggerBackend
-from fpvs_studio.triggers.serial_backend import SerialBackend
+from fpvs_studio.triggers.base import TriggerBackend, TriggerCompletionError
+from fpvs_studio.triggers.serial_backend import SerialBackend, SerialBackendError
 from fpvs_studio.triggers.serial_port_access import check_serial_port_access
 
 
@@ -118,14 +119,39 @@ def test_serial_backend_close_is_idempotent() -> None:
     assert serial_module.port.closed is True
 
 
-def test_serial_backend_reports_missing_pyserial(monkeypatch) -> None:
+@pytest.mark.parametrize("reset_code", [None, 0])
+def test_serial_backend_finish_does_not_emit_reset_or_close_port(reset_code) -> None:
+    serial_module = _FakeSerialModule()
+    backend = SerialBackend("COM3", reset_code=reset_code, serial_module=serial_module)
+    backend.connect()
+    backend.send(55)
+    backend.finish_pending_output()
+    backend.finish_pending_output()
+    assert serial_module.port.writes == [b"7"]
+    assert not serial_module.port.closed
+    backend.close()
+
+
+@pytest.mark.parametrize("error_type", [ModuleNotFoundError, ImportError])
+def test_serial_backend_reports_missing_or_broken_pyserial(monkeypatch, error_type) -> None:
+    problem = error_type("serial component unavailable")
+
     def _missing_serial(_name: str) -> object:
-        raise ModuleNotFoundError("serial")
+        raise problem
 
     monkeypatch.setattr(importlib, "import_module", _missing_serial)
     backend = SerialBackend("COM3", 115200)
 
-    with pytest.raises(RuntimeError, match="pyserial is required"):
+    with pytest.raises(SerialBackendError, match="Repair or reinstall Studio") as failure:
+        backend.connect()
+    assert failure.value.__cause__ is problem
+    assert "Details: serial component unavailable" in str(failure.value)
+
+
+@pytest.mark.parametrize("serial_module", [SimpleNamespace(), SimpleNamespace(Serial=None)])
+def test_serial_backend_reports_incomplete_serial_installation(serial_module) -> None:
+    backend = SerialBackend("COM3", serial_module=serial_module)
+    with pytest.raises(SerialBackendError, match="Studio serial support is unavailable"):
         backend.connect()
 
 
@@ -137,12 +163,10 @@ def test_serial_backend_reports_open_and_write_failures() -> None:
     )
     with pytest.raises(RuntimeError) as error:
         open_failure_backend.connect()
-    assert str(error.value) == (
-        "FPVS Studio cannot detect the COM3 Serial Port. "
-        "Please make sure that your BioSemi system is properly plugged in. "
-        "If you would like to run the experiment without being connected to "
-        "BioSemi, please navigate to the settings menu and enable test mode."
-    )
+    assert "BioSemi could not open trigger port COM3" in str(error.value)
+    assert "Reconnect the USB Trigger Interface" in str(error.value)
+    assert "Details: open failed" in str(error.value)
+    assert isinstance(error.value.__cause__, OSError)
 
     write_failure_backend = SerialBackend(
         "COM3",
@@ -150,7 +174,7 @@ def test_serial_backend_reports_open_and_write_failures() -> None:
         serial_module=_FakeSerialModule(fail_writes=True),
     )
     write_failure_backend.connect()
-    with pytest.raises(RuntimeError, match="Unable to send trigger code 8"):
+    with pytest.raises(RuntimeError, match="BioSemi could not finish sending a marker"):
         write_failure_backend.send_trigger(8)
 
 
@@ -165,6 +189,101 @@ def test_serial_backend_reports_short_or_extra_writes(bytes_written: int) -> Non
 
     with pytest.raises(RuntimeError, match="expected 1"):
         backend.send_trigger(8)
+
+
+def test_serial_backend_explains_disconnected_port() -> None:
+    backend = SerialBackend("COM4", serial_module=_FakeSerialModule())
+    with pytest.raises(SerialBackendError, match="BioSemi trigger port COM4 is not connected"):
+        backend.send(55)
+
+
+@pytest.mark.parametrize("reset", [False, True])
+def test_serial_backend_write_failure_preserves_cause_and_prevents_retries(reset) -> None:
+    serial_module = _FakeSerialModule(fail_writes=True)
+    backend = SerialBackend("COM4", reset_code=0, serial_module=serial_module)
+    backend.connect()
+    with pytest.raises(SerialBackendError) as failure:
+        backend.reset() if reset else backend.send(55)
+    operation = "clearing the trigger signal" if reset else "sending a marker"
+    assert operation in str(failure.value)
+    assert "Reconnect the USB Trigger Interface" in str(failure.value)
+    assert isinstance(failure.value.__cause__, OSError)
+    serial_module.port.fail_writes = False
+    for attempt in (lambda: backend.send(55), backend.reset, backend.connect, backend.close):
+        with pytest.raises(SerialBackendError) as repeated:
+            attempt()
+        assert repeated.value is failure.value
+    assert not serial_module.port.writes
+    assert serial_module.port.closed
+
+
+def test_serial_backend_close_failure_keeps_connection_and_prevents_reconnect(monkeypatch) -> None:
+    serial_module = _FakeSerialModule()
+    backend = SerialBackend("COM4", serial_module=serial_module)
+    backend.connect()
+    problem = OSError("USB device did not release the handle")
+
+    def fail_close():
+        raise problem
+
+    monkeypatch.setattr(serial_module.port, "close", fail_close)
+    with pytest.raises(
+        SerialBackendError, match="BioSemi trigger port COM4 could not be closed",
+    ) as failure:
+        backend.close()
+    assert not isinstance(failure.value, TriggerCompletionError)
+    assert failure.value.__cause__ is problem
+    assert backend._connection is serial_module.port
+    for attempt in (backend.connect, lambda: backend.send(55)):
+        with pytest.raises(SerialBackendError) as repeated:
+            attempt()
+        assert repeated.value is failure.value
+    assert len(serial_module.open_calls) == 1
+    assert not serial_module.port.writes
+    monkeypatch.setattr(serial_module.port, "close", lambda: None)
+    with pytest.raises(SerialBackendError):
+        backend.close()
+    assert backend._connection is None
+    with pytest.raises(SerialBackendError):
+        backend.connect()
+
+
+@pytest.mark.parametrize("fail_close", [False, True])
+def test_serial_backend_failed_native_initialization_cleans_constructed_connection(
+    monkeypatch, fail_close,
+) -> None:
+    serial_module = _FakeSerialModule()
+    problem = ImportError("Windows serial transport could not load")
+
+    def unavailable_native(_connection):
+        raise problem
+
+    monkeypatch.setattr(
+        "fpvs_studio.triggers.serial_backend.windows_serial_write", unavailable_native,
+    )
+    if fail_close:
+        def close_failure():
+            raise OSError("close failure")
+
+        monkeypatch.setattr(serial_module.port, "close", close_failure)
+    backend = SerialBackend("COM3", serial_module=serial_module)
+    with pytest.raises(SerialBackendError) as failure:
+        backend.connect()
+    assert "Studio serial support is unavailable" in str(failure.value)
+    assert "Windows serial transport could not load" in str(failure.value)
+    if fail_close:
+        assert "could not be closed" in str(failure.value)
+        assert backend._connection is serial_module.port
+        assert failure.value.__cause__.__cause__ is problem
+    else:
+        assert serial_module.port.closed
+        assert backend._connection is None
+        assert failure.value.__cause__ is problem
+    assert failure.value.__cause__ is not failure.value
+    with pytest.raises(SerialBackendError):
+        backend.connect()
+    assert len(serial_module.open_calls) == 1
+    assert not serial_module.port.writes
 
 
 @pytest.mark.parametrize("code", [-1, 0, 256, None, "55"])

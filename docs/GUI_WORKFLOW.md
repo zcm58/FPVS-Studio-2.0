@@ -1121,8 +1121,14 @@ Check Port opens/closes only the selected port at the project baudrate (normally
 115200), 8N1, no flow control, without reading or writing device bytes or making
 explicit buffer-reset/flush calls. RTS/DTR are requested low before opening, though
 the OS/driver may still change them. Success means the port was accessible at that
-moment, not that BioSemi identity, recording or marker receipt was verified. Errors
-remain available in tooltips. Edits and dismissal invalidate pending results; manual
+moment, not that BioSemi identity, recording or marker receipt was verified. Failed
+checks display BioSemi-specific recovery for the observed port error; raw diagnostics
+remain in tooltips and accessible descriptions. Missing Studio serial support is
+distinct from unavailable device metadata or an unlisted interface. Setup guidance
+keeps ActiView recording while fully exiting other tools using the trigger port;
+it distinguishes the stimulus PC's USB Trigger Interface from the EEG receiver.
+Launch popups preserve the backend's specific BioSemi explanation and keep technical
+details in Show Details. Edits and dismissal invalidate pending results; manual
 entry and Apply remain usable after errors. Computer-default setup hides these
 project-only port controls and never writes a BioSemi COM preference.
 TriggerBox discovery starts when its setup is first shown and reads device metadata

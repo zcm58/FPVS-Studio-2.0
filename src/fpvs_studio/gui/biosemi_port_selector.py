@@ -24,6 +24,10 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.triggers.biosemi_errors import (
+    BIOSEMI_SERIAL_SUPPORT_MESSAGE,
+    biosemi_port_error_message,
+)
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
 from fpvs_studio.triggers.serial_port_access import (
     SerialPortAccessResult,
@@ -154,7 +158,17 @@ class BioSemiPortSelector(QWidget):
         try:
             self._job = update_lifecycle().start_task(callback)
         except RuntimeError as exc:
-            self._complete(UpdateTaskResult(error=exc))
+            operation = self._operation
+            self._operation = None
+            self._checked_port = ""
+            _LOGGER.warning("BioSemi serial-port %s could not start: %s", operation, exc)
+            if not self._dismissed:
+                action = "start the port check" if operation == "check" else "refresh the port list"
+                self._status(
+                    f"Studio could not {action}. Studio may be closing. "
+                    "Restart Studio, then try again.",
+                    str(exc),
+                )
         else:
             self._job.finished.connect(self._finished)
         self._buttons()
@@ -182,9 +196,21 @@ class BioSemiPortSelector(QWidget):
                          else "Refresh cancelled. Retry or enter a port.")
         elif result.error is not None:
             _LOGGER.warning("BioSemi serial-port %s failed: %s", operation, result.error)
-            text = (f"{checked_port}: Check failed. Retry." if operation == "check"
-                    else "Could not list ports. Retry or enter a port.")
-            self._status(text, str(result.error))
+            details = str(result.error)
+            if result.error.__cause__ is not None:
+                details += f"\n{result.error.__cause__}"
+            if operation == "check":
+                text = biosemi_port_error_message(checked_port, result.error)
+            elif (isinstance(result.error, ImportError)
+                  or isinstance(result.error.__cause__, ImportError)
+                  or "pyserial is required" in details.lower()):
+                text = BIOSEMI_SERIAL_SUPPORT_MESSAGE
+            else:
+                text = (
+                    "Could not list serial ports. Device information may be unavailable. "
+                    "Retry Refresh or enter the USB Trigger Interface port from Device Manager."
+                )
+            self._status(text, details)
         elif operation == "list":
             ports = cast(tuple[SerialPortInfo, ...], result.value)
             previous = self.edit.text()
@@ -200,19 +226,23 @@ class BioSemiPortSelector(QWidget):
             self.edit.blockSignals(False)
             self.combo.blockSignals(False)
             self._status(
-                "" if ports else "No serial ports listed. Connect the interface or enter its port.",
+                "" if ports else (
+                    "No serial ports listed. Connect the BioSemi USB Trigger Interface and check "
+                    "Device Manager for its port and driver, then Refresh or enter its port."
+                ),
             )
         else:
             access = cast(SerialPortAccessResult, result.value)
             if access.port != checked_port:
                 self._status("")
                 return
-            state = "Port accessible." if access.accessible else "Port unavailable. See details."
+            text = (f"{checked_port}: Port accessible." if access.accessible else
+                    biosemi_port_error_message(checked_port, access.access_error))
             details = access.access_error if not access.accessible else (
                 "The selected port opened and closed. "
                 "BioSemi identity and marker receipt are unverified."
             )
-            self._status(f"{checked_port}: {state}", details)
+            self._status(text, details)
 
     def cancel(self) -> None:
         self._dismissed = True

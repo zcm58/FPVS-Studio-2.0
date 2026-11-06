@@ -64,6 +64,7 @@ from fpvs_studio.runtime.triggers import (
     TriggerEmissionError,
     build_trigger_backend,
 )
+from fpvs_studio.triggers.base import TriggerCompletionError
 from fpvs_studio.triggers.serial_backend import SerialBackendError
 
 _TUTORIAL_REQUIRED_SUCCESSES = 3
@@ -240,8 +241,24 @@ class RuntimeWorker:
                 execution_error = execution_error or trigger_error or exc
 
         if execution_error is not None:
+            export_error_text = None
+            if (isinstance(trigger_cleanup_error, TriggerCompletionError)
+                    and run_summary is not None):
+                run_summary = run_summary.model_copy(update={
+                    "trigger_log": list(trigger_backend.records),
+                })
+                if write_detailed_exports:
+                    try:
+                        write_run_artifacts(output_dir, run_spec, run_summary)
+                    except Exception as export_error:
+                        export_error_text = str(export_error)
+                        LOGGER.exception(
+                            "Corrected trigger records could not be exported after shutdown; "
+                            "retaining the original execution failure and acquisition evidence."
+                        )
             _finish_acquisition_after_error(
                 acquisition, execution_error, records=trigger_backend.records,
+                export_error=export_error_text,
                 trigger_cleanup_error=trigger_cleanup_error,
             )
             raise execution_error
@@ -331,6 +348,7 @@ class RuntimeWorker:
             raise
         session_open = False
         trigger_cleanup_error: Exception | None = None
+        trigger_evidence_export_error: str | None = None
         warnings = list(trigger_warnings)
         sharing_capture: SharingCapture | None = None
         try:
@@ -813,6 +831,11 @@ class RuntimeWorker:
         if execution_error is not None and active_entry is not None and task_checkpoint is not None:
             prior = (run_results[-1] if run_results
                      and run_results[-1].run_id == active_entry.run_id else None)
+            if isinstance(trigger_cleanup_error, TriggerCompletionError) and prior is not None:
+                prior = prior.model_copy(update={
+                    "trigger_log": list(trigger_backend.records[trigger_start_index:]),
+                })
+                run_results[-1] = prior
             try:
                 reconciled = task_checkpoint.reconcile_run_responses(
                     active_entry.run_id, list(prior.task_responses) if prior is not None else [],
@@ -826,6 +849,16 @@ class RuntimeWorker:
                     "Submitted task responses need review in the retained task journal "
                     "before rebuilding responses."
                 )
+                if isinstance(trigger_cleanup_error, TriggerCompletionError) and prior is not None:
+                    try:
+                        checkpoint_results(run_results)
+                    except Exception as checkpoint_error:
+                        trigger_evidence_export_error = str(checkpoint_error)
+                        LOGGER.warning(
+                            "Corrected trigger records could not be exported after shutdown; "
+                            "the original task journal and acquisition evidence are retained.",
+                            exc_info=True,
+                        )
             else:
                 if prior is not None or reconciled:
                     partial_summary = prior or _build_start_aborted_summary(
@@ -857,6 +890,8 @@ class RuntimeWorker:
                     try:
                         checkpoint_results(run_results)
                     except Exception as checkpoint_error:
+                        if isinstance(trigger_cleanup_error, TriggerCompletionError):
+                            trigger_evidence_export_error = str(checkpoint_error)
                         LOGGER.warning(
                             "Partial task result checkpoint could not be updated (%s); "
                             "the primary runtime error and original journal are retained.",
@@ -912,6 +947,7 @@ class RuntimeWorker:
                 abort_reason=abort_reason,
                 interrupted=execution_error is not None,
                 records=trigger_backend.records,
+                export_error=trigger_evidence_export_error,
             )
             compact_summary_path = (
                 None if write_detailed_exports
@@ -1333,9 +1369,10 @@ def _run_spec_with_accessible_fixation_colors(run_spec: RunSpec) -> RunSpec:
 def _finish_playback_trigger_output(
     summary: RunExecutionSummary, backend: LoggedTriggerBackend,
 ) -> tuple[RunExecutionSummary, TriggerEmissionError | None]:
-    """Drain the last pulse without discarding results already returned by playback."""
+    """Finish marker output without discarding results already returned by playback."""
 
     try:
+        backend.finish_pending_output()
         _finish_triggerbox_pulse(backend)
     except TriggerEmissionError as error:
         return summary.model_copy(update={

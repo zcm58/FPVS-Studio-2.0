@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import errno
+import logging
+import sys
 from dataclasses import FrozenInstanceError
 from threading import Event
 from types import SimpleNamespace
@@ -10,6 +13,7 @@ from unittest.mock import Mock
 import pytest
 
 from fpvs_studio.triggers import serial_port_access as access
+from fpvs_studio.triggers.serial_errors import serial_failure_reason
 
 
 @pytest.mark.parametrize("error", [
@@ -17,6 +21,10 @@ from fpvs_studio.triggers import serial_port_access as access
     OSError("could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)"),
     "could not open port 'COM4': PermissionError(13, 'Zugriff verweigert', None, 5)",
     "[WinError 5] Access is denied.",
+    "[Errno 13] Permission denied",
+    "[Errno 1] Operation not permitted",
+    "[Errno 16] Device or resource busy",
+    "[WinError 32] Sharing violation",
 ])
 def test_recognizes_native_and_pyserial_access_denied_errors(error):
     assert access.is_serial_access_denied(error)
@@ -29,6 +37,25 @@ def test_recognizes_native_and_pyserial_access_denied_errors(error):
 ])
 def test_other_serial_failures_are_not_reported_as_access_denied(error):
     assert not access.is_serial_access_denied(error)
+
+
+@pytest.mark.parametrize("error, expected", [
+    (TimeoutError(errno.ETIMEDOUT, "Zeitlimit erreicht"), "timeout"),
+    (OSError(errno.ENODEV, "Device unavailable"), "device_io"),
+    (OSError(errno.ENXIO, "Device unavailable"), "device_io"),
+    ("could not open: PermissionError(13, 'Zugriff verweigert', None, 5)", "busy"),
+    ("could not open: FileNotFoundError(2, 'Nicht gefunden', None, 3)", "missing"),
+    ("Cannot configure port: PermissionError(13, 'Denied', None, 5)", "configuration"),
+    ("[WinError 2] Missing. Closing the port also failed: [WinError 5] Denied", "close"),
+    ("[WinError 170] Device in use", "busy"),
+    ("[WinError 33] Lock violation", "busy"),
+    ("[WinError 1460] Zeitlimit erreicht", "timeout"),
+    ("[WinError 995] Operation aborted", "device_io"),
+    (OSError(errno.EINVAL, "Unknown argument failure"), "unknown"),
+])
+def test_serial_failure_reasons_survive_access_check_serialization(error, expected):
+    assert serial_failure_reason(error) == expected
+    assert serial_failure_reason(str(error)) == expected
 
 
 def _metadata(monkeypatch, ports):
@@ -88,11 +115,36 @@ def test_no_ports_is_an_empty_result(monkeypatch):
 
 @pytest.mark.parametrize("operation", [access.enumerate_serial_ports,
                                        lambda: access.check_serial_port_access("COM193")])
-def test_missing_pyserial_has_an_explicit_dependency_error(monkeypatch, operation):
-    monkeypatch.setattr(access.importlib, "import_module", Mock(side_effect=ModuleNotFoundError()))
+@pytest.mark.parametrize("error_type", [ModuleNotFoundError, ImportError])
+def test_missing_pyserial_has_an_explicit_dependency_error(monkeypatch, operation, error_type):
+    monkeypatch.setattr(access.importlib, "import_module", Mock(side_effect=error_type()))
 
     with pytest.raises(access.SerialPortAccessError, match="pyserial is required"):
         operation()
+
+
+@pytest.mark.parametrize("injected", [False, True])
+@pytest.mark.parametrize("defect", ["Serial", "EIGHTBITS", "PARITY_NONE", "STOPBITS_ONE",
+                                    "noncallable Serial"])
+def test_incomplete_serial_support_is_a_dependency_failure_before_port_access(
+    monkeypatch, injected, defect,
+):
+    factory = Mock(side_effect=AssertionError("Incomplete serial support must not open a port"))
+    attributes = {"Serial": factory, "EIGHTBITS": 8, "PARITY_NONE": "N", "STOPBITS_ONE": 1}
+    if defect == "noncallable Serial":
+        attributes["Serial"] = None
+    else:
+        del attributes[defect]
+    module = SimpleNamespace(**attributes)
+    load = Mock(return_value=module)
+    monkeypatch.setattr(access.importlib, "import_module", load)
+
+    with pytest.raises(access.SerialPortAccessError, match="pyserial is required") as failure:
+        access.check_serial_port_access("COM4", serial_module=module if injected else None)
+
+    assert isinstance(failure.value.__cause__, (AttributeError, ImportError))
+    factory.assert_not_called()
+    assert load.call_count == (0 if injected else 1)
 
 
 @pytest.mark.parametrize("during_iteration", [False, True])
@@ -222,6 +274,60 @@ def test_configuration_failure_closes_constructed_connection_without_open(monkey
     assert not connections[0].open_attempted and connections[0].close_attempted
 
 
+def test_value_error_configuration_context_survives_access_result(monkeypatch):
+    connections, _ = _serial(monkeypatch, configuration_error=ValueError("Unsupported setting"))
+
+    result = access.check_serial_port_access("COM193")
+
+    assert not result.accessible
+    assert result.access_error == "Cannot configure port: Unsupported setting"
+    assert serial_failure_reason(result.access_error) == "configuration"
+    assert not connections[0].open_attempted and connections[0].close_attempted
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pyserial Windows configuration")
+@pytest.mark.parametrize("error_code", [5, 87])
+def test_native_configuration_rejection_closes_handles_without_port_or_marker_io(
+    monkeypatch, error_code,
+):
+    import ctypes
+
+    import serial
+    from serial import serialwin32
+
+    native_error = ctypes.WinError(error_code)
+    open_port = Mock(return_value=123456)
+    events = Mock(side_effect=[234567, 345678])
+    close_handle = Mock(return_value=True)
+    write = Mock(side_effect=AssertionError("Access checks must not send marker bytes"))
+    purge = Mock(side_effect=AssertionError("Rejected configuration must not reach buffer setup"))
+    monkeypatch.setattr(serialwin32.win32, "CreateFile", open_port)
+    monkeypatch.setattr(serialwin32.win32, "CreateEvent", events)
+    monkeypatch.setattr(serialwin32.win32, "CloseHandle", close_handle)
+    for name in ("SetupComm", "GetCommTimeouts", "SetCommTimeouts", "SetCommMask",
+                 "GetCommState", "CancelIoEx"):
+        monkeypatch.setattr(serialwin32.win32, name, Mock(return_value=True))
+    monkeypatch.setattr(serialwin32.win32, "SetCommState", Mock(return_value=False))
+    monkeypatch.setattr(serialwin32.win32, "WriteFile", write)
+    monkeypatch.setattr(serialwin32.win32, "PurgeComm", purge)
+    monkeypatch.setattr(serialwin32, "ctypes", SimpleNamespace(
+        WinError=lambda: native_error, byref=ctypes.byref,
+    ))
+
+    result = access.check_serial_port_access("COM193", serial_module=serial)
+
+    assert not result.accessible
+    assert "Cannot configure port" in result.access_error
+    assert repr(native_error) in result.access_error
+    assert serial_failure_reason(result.access_error) == "configuration"
+    assert not access.is_serial_access_denied(result.access_error)
+    open_port.assert_called_once()
+    assert open_port.call_args.args[0] == r"\\.\COM193"
+    assert [call.args[0] for call in close_handle.call_args_list] == [234567, 345678, 123456]
+    write.assert_not_called()
+    purge.assert_not_called()
+
+
 @pytest.mark.parametrize("open_error", [None, OSError("Open denied")])
 def test_close_failure_cannot_report_accessible_and_preserves_open_error(monkeypatch, open_error):
     connections, _ = _serial(
@@ -255,6 +361,27 @@ def test_cancellation_always_closes_constructed_connection(monkeypatch, stage):
         access.check_serial_port_access("COM193", cancel_event=cancel)
     assert connections[0].close_attempted
     assert connections[0].open_attempted is (stage != "construct")
+
+
+@pytest.mark.parametrize("stage", ["construct", "open", "close"])
+def test_cancelled_access_check_retains_close_failure_in_log(monkeypatch, caplog, stage):
+    cancel = Event()
+    close_error = OSError("Driver refused to close")
+    connections, _ = _serial(
+        monkeypatch, cancel=cancel, cancel_stage=stage,
+        open_error=PermissionError(13, "Access denied"), close_error=close_error,
+    )
+
+    with caplog.at_level(logging.ERROR), pytest.raises(InterruptedError, match="cancelled"):
+        access.check_serial_port_access("COM193", cancel_event=cancel)
+
+    assert connections[0].close_attempted
+    record, = [record for record in caplog.records if record.name == access.__name__]
+    assert "COM193" in record.getMessage()
+    assert "access check" in record.getMessage()
+    assert record.exc_info[1] is close_error
+    if stage != "construct":
+        assert "Access denied" in record.getMessage()
 
 
 @pytest.mark.parametrize("operation", [

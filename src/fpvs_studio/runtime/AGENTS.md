@@ -23,7 +23,9 @@ flow, scoring, recovery and exports. Read the relevant section of
   Runtime owns validation, branches, retries and fixation/answer scoring.
 - Keep `escape` reserved for abort. Score fixation from same-clock hardware timestamps.
   Record trigger `sent` only after successful transport writes, export `error` and abort
-  cleanly on failure. Trigger timestamps exclude warmup; drain pulses outside playback.
+  cleanly on failure. Trigger timestamps exclude warmup; drain pulses and pending
+  serial writes outside playback before feedback/tasks. A deferred completion failure
+  must update the original marker evidence, without inserting a reset byte.
 
 ## Durability and Recovery
 

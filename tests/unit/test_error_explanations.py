@@ -266,7 +266,8 @@ def test_triggerbox_errors_take_precedence_over_file_and_network_guidance(cause,
 @pytest.mark.parametrize("use_details", [False, True])
 @pytest.mark.parametrize("message,expected,advice", [
     ("Trigger preflight failed before launch: Unable to open Brain Products TriggerBox "
-     "on COM9: [WinError 5] Access is denied", "connect", "Pressing Stop can leave the port occupied"),
+     "on COM9: [WinError 5] Access is denied", "connect",
+     "Pressing Stop can leave the port occupied"),
     ("The experiment aborted. Reason: Trigger output failed during condition playback: "
      "TriggerBox could not send a marker. Check any saved EEG markers before retrying. "
      "Details: The operation timed out", "send", "saved EEG"),
@@ -402,6 +403,137 @@ def test_triggerbox_export_wording_keeps_file_permission_guidance(form, message)
 
     assert "file or folder" in explanation.summary
     assert "TriggerBox" not in explanation.description
+
+
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+@pytest.mark.parametrize("failure", [
+    PermissionError(errno.EACCES, "Access is denied"),
+    FileNotFoundError(errno.ENOENT, "No such device"),
+    ValueError("Cannot configure port"),
+    OSError("[WinError 1167] Device disconnected"),
+    TimeoutError("Write timed out"),
+    OSError("Unable to close the port: [WinError 5] Access is denied"),
+    OSError("Unclassified driver response"),
+    ImportError("No module named serial"),
+])
+def test_biosemi_port_failure_preserves_specific_summary_and_recovery(form, failure):
+    from fpvs_studio.triggers.biosemi_errors import biosemi_port_error_message
+    from fpvs_studio.triggers.serial_backend import SerialBackendError
+
+    message = biosemi_port_error_message("COM193", failure)
+    hardware = SerialBackendError(f"{message} Details: {failure}")
+    hardware.__cause__ = failure
+    wrapper = RuntimeError("Trigger preflight failed before launch")
+    wrapper.__cause__ = hardware
+    serialized = f"Trigger preflight failed: SerialBackendError: {hardware}"
+    explanation = explain_error(
+        "Launch Error", serialized if form == "message" else str(wrapper),
+        error=wrapper if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+
+    assert explanation.description.replace("\n\n", " ") == message
+    assert "Details:" not in explanation.description
+    assert "TriggerBox" not in explanation.description
+    assert "BrainVision" not in explanation.description
+    assert "file or folder" not in explanation.description
+    assert "online service" not in explanation.description
+
+
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+@pytest.mark.parametrize("reset", [False, True])
+@pytest.mark.parametrize("failure", [TimeoutError("Write timeout"), OSError("[WinError 31]")])
+def test_biosemi_write_failure_preserves_operation_and_marker_review(form, reset, failure):
+    from fpvs_studio.triggers.biosemi_errors import biosemi_write_error_message
+    from fpvs_studio.triggers.serial_backend import SerialBackendError
+
+    message = biosemi_write_error_message("COM193", failure, reset=reset)
+    hardware = SerialBackendError(f"{message} Details: {failure}")
+    hardware.__cause__ = failure
+    wrapper = RuntimeError("Trigger output failed during playback")
+    wrapper.__cause__ = hardware
+    serialized = f"Session interrupted: SerialBackendError: {hardware}"
+    explanation = explain_error(
+        "Launch Aborted", serialized if form == "message" else str(wrapper),
+        error=wrapper if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+
+    assert explanation.description.replace("\n\n", " ") == message
+    assert ("clearing the trigger signal" if reset else "sending a marker") in explanation.summary
+    assert "saved EEG markers" in explanation.advice
+    assert "WinError" not in explanation.description
+    assert "online service" not in explanation.description
+
+
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+@pytest.mark.parametrize("message", [
+    "BioSemi trigger port COM193 is not connected. Check the USB Trigger Interface cable "
+    "and selected port, then reconnect before retrying.",
+    "BioSemi is still sending the previous marker on COM193. The next marker was not sent "
+    "because the USB connection is delayed. Reconnect the USB Trigger Interface and review "
+    "any saved EEG markers before retrying.",
+    "BioSemi could not finish shutting down. Restart Studio before retrying.",
+    "BioSemi trigger port COM193 could not be released. Windows has not finished sending "
+    "or cancelling a marker. Restart Studio before retrying.",
+])
+def test_biosemi_lifecycle_failure_preserves_the_specific_recovery(form, message):
+    from fpvs_studio.triggers.serial_backend import SerialBackendError
+
+    hardware = SerialBackendError(f"{message} Details: synthetic Windows cancellation failure")
+    wrapper = RuntimeError("Trigger output failed during playback")
+    wrapper.__cause__ = hardware
+    serialized = f"Session interrupted: SerialBackendError: {hardware}"
+    explanation = explain_error(
+        "Launch Aborted", serialized if form == "message" else str(wrapper),
+        error=wrapper if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+
+    assert explanation.description.replace("\n\n", " ") == message
+    assert "Details:" not in explanation.description
+    assert "TriggerBox" not in explanation.description
+
+
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+def test_biosemi_completion_subclass_keeps_serial_recovery_through_wrappers(form):
+    from fpvs_studio.triggers.biosemi_errors import biosemi_write_error_message
+    from fpvs_studio.triggers.serial_backend import SerialWriteCompletionError
+
+    failure = PermissionError(errno.EACCES, "Access is denied")
+    message = biosemi_write_error_message("COM193", failure)
+    hardware = SerialWriteCompletionError(f"{message} Details: {failure}")
+    hardware.__cause__ = failure
+    wrapper = RuntimeError("Trigger output failed")
+    wrapper.__cause__ = hardware
+    serialized = f"Session interrupted: SerialWriteCompletionError: {hardware}"
+    explanation = explain_error(
+        "Launch Aborted", serialized if form == "message" else str(wrapper),
+        error=wrapper if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+
+    assert explanation.description.replace("\n\n", " ") == message
+    assert "file or folder" not in explanation.description
+    assert "Details:" not in explanation.description
+
+
+@pytest.mark.parametrize("form", ["cause_chain", "message", "details"])
+@pytest.mark.parametrize("message", [
+    "BioSemi could not export the session workbook.",
+    "BioSemi could not open C:/exports/session.xlsx.",
+])
+def test_biosemi_named_export_does_not_become_a_trigger_port_failure(form, message):
+    error = RuntimeError(message)
+    error.__cause__ = PermissionError(errno.EACCES, "Access is denied")
+    serialized = f"{message} Details: PermissionError: [WinError 5] Access is denied"
+    explanation = explain_error(
+        "Export Error", serialized if form == "message" else "Unable to export",
+        error=error if form == "cause_chain" else None,
+        details=serialized if form == "details" else "",
+    )
+    assert "file or folder" in explanation.summary
+    assert "BioSemi" not in explanation.description
 
 
 @pytest.mark.parametrize("wrapped", [False, True])

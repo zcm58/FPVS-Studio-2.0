@@ -39,6 +39,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Serial errors and BioSemi recovery](exec-plans/completed/serial-errors-biosemi-recovery.md):
+  actionable setup/launch recovery, pending-write ownership and consistent interrupted
+  marker evidence; simulated, visible and full precommit checks passed.
 - [TriggerBox full-exit guidance and 2.7.3](exec-plans/completed/triggerbox-full-exit-release-2.7.3.md):
   explicit Stop-versus-exit wording and Windows ownership guidance published;
   visible, exact-source, packaged and public download/updater checks passed.

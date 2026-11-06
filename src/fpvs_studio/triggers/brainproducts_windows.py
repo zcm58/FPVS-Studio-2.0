@@ -2,7 +2,7 @@
 
 pyserial 3.x returns the requested length for ERROR_IO_PENDING. Its single
 OVERLAPPED must not be reused, or its payload released, until native completion.
-This helper never waits; the TriggerBox backend owns polling and deadlines.
+This helper never waits; the TriggerBox and BioSemi backends own polling and deadlines.
 """
 
 from __future__ import annotations

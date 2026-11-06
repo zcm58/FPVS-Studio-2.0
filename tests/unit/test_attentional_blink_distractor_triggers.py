@@ -2,6 +2,7 @@
 
 from collections import Counter
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from tests.unit.test_psychopy_engine import _build_fake_psychopy, _patch_fake_psychopy
@@ -12,7 +13,7 @@ from fpvs_studio.core.project_service import build_starter_project
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
 from fpvs_studio.runtime.session_export import write_run_artifacts
 from fpvs_studio.runtime.triggers import LoggedTriggerBackend, TriggerEmissionError
-from fpvs_studio.triggers.serial_backend import SerialBackend
+from fpvs_studio.triggers.serial_backend import SerialBackend, SerialBackendError
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
 
@@ -136,15 +137,22 @@ def test_failed_pre_stream_marker_aborts_without_starting_the_stream(monkeypatch
     engine = PsychoPyEngine()
     _patch_fake_psychopy(monkeypatch, engine, fake)
     backend.connect()
+    close_port = Mock()
+    backend._backend._connection.close = close_port
     try:
-        with pytest.raises(TriggerEmissionError, match="marker write failed"):
+        with pytest.raises(TriggerEmissionError, match="marker write failed") as failure:
             engine.run_condition(
                 run, tmp_path, runtime_options={"timing_warmup_frames": 2},
                 trigger_backend=backend,
             )
     finally:
-        backend.close()
-        engine.close_session()
+        try:
+            with pytest.raises(SerialBackendError, match="marker write failed") as closing:
+                backend.close()
+        finally:
+            engine.close_session()
+    assert closing.value is failure.value.__cause__
+    close_port.assert_called_once_with()
     assert captures["window"].closed
     assert captures["window"]._flip_index == 3
     assert [(r.frame_index, r.label, r.status) for r in backend.records] == [

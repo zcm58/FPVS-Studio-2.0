@@ -1173,12 +1173,11 @@ def test_launch_run_checks_serial_port_before_engine_session(
                     serial_port=port,
                 ),
             )
-        assert str(error.value) == (
-            f"FPVS Studio cannot detect the {port} Serial Port. "
-            "Please make sure that your BioSemi system is properly plugged in. "
-            "If you would like to run the experiment without being connected to "
-            "BioSemi, please navigate to the settings menu and enable test mode."
-        )
+        assert f"BioSemi trigger port {port} was not found." in str(error.value)
+        assert "USB Trigger Interface" in str(error.value)
+        assert "Device Manager" in str(error.value)
+        assert "port unavailable" in str(error.value).partition("Details:")[2]
+        assert "test mode" not in str(error.value).lower()
         assert isinstance(error.value.__cause__.__cause__, FileNotFoundError)
     finally:
         unregister_engine("stub-serial-preflight")

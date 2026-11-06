@@ -11,7 +11,11 @@ from collections.abc import Mapping
 from fpvs_studio.core.execution import TriggerRecord, TriggerStatus
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 from fpvs_studio.runtime.recording import validate_production_recording
-from fpvs_studio.triggers.base import TriggerBackend
+from fpvs_studio.triggers.base import (
+    TriggerBackend,
+    TriggerCompletionError,
+    TriggerSubmissionBlockedError,
+)
 from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxBackend
 from fpvs_studio.triggers.null_backend import NullBackend
 from fpvs_studio.triggers.parallel_backend import ParallelPortBackend
@@ -46,6 +50,7 @@ class LoggedTriggerBackend(TriggerBackend):
         self._backend = backend
         self._backend_name = backend_name
         self._raw_records: list[_RawTriggerAttempt] = []
+        self._last_output_attempt_index: int | None = None
 
     @property
     def emits_hardware_triggers(self) -> bool:
@@ -143,12 +148,31 @@ class LoggedTriggerBackend(TriggerBackend):
             status = "error"
             message = str(exc)
             caught_exception = exc
+            if isinstance(exc, TriggerCompletionError):
+                self._mark_last_error(message)
+                message = "This marker was not sent because the previous marker failed. " + message
 
+        if not isinstance(caught_exception, TriggerSubmissionBlockedError):
+            self._last_output_attempt_index = len(self._raw_records)
         self._raw_records.append(
             (normalized_frame_index, time_s, code, normalized_label, status, message)
         )
         if status == "error":
             raise TriggerEmissionError(message) from caught_exception
+
+    def _mark_last_error(self, message: str) -> None:
+        index = self._last_output_attempt_index
+        if index is not None and self._raw_records[index][4] == "sent":
+            frame, time_s, code, label, _status, _message = self._raw_records[index]
+            self._raw_records[index] = (frame, time_s, code, label, "error", message)
+
+    def finish_pending_output(self) -> None:
+        try:
+            self._backend.finish_pending_output()
+        except Exception as exc:
+            if isinstance(exc, TriggerCompletionError):
+                self._mark_last_error(str(exc))
+            raise TriggerEmissionError(str(exc)) from exc
 
     def reset(self) -> None:
         try:
@@ -161,7 +185,11 @@ class LoggedTriggerBackend(TriggerBackend):
             raise
 
     def close(self) -> None:
-        self._backend.close()
+        try:
+            self._backend.close()
+        except TriggerCompletionError as exc:
+            self._mark_last_error(str(exc))
+            raise
 
 
 class LoggedNullBackend(LoggedTriggerBackend):

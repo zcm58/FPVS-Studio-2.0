@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import importlib
+import logging
 import re
 from dataclasses import dataclass
 from threading import Event
 from types import ModuleType
 
+from fpvs_studio.triggers.serial_errors import serial_failure_reason
+
 _COM_PORT = re.compile(r"COM([1-9]\d*)", re.IGNORECASE)
+_LOGGER = logging.getLogger(__name__)
 
 
 class SerialPortAccessError(RuntimeError):
@@ -33,17 +37,13 @@ class SerialPortAccessResult:
 
 
 def is_serial_access_denied(error: BaseException | str) -> bool:
-    """Recognize denied access, without claiming which process owns a port.
+    """Recognize denied or occupied access, without claiming a particular owner.
 
     On Windows pyserial embeds repr(PermissionError) inside SerialException text,
     losing its errno. Match the numeric form too, independent of localized wording.
     """
 
-    return (
-        isinstance(error, PermissionError)
-        or getattr(error, "winerror", None) == 5
-        or re.search(r"\bPermissionError\(13\s*,|\[WinError 5\]", str(error)) is not None
-    )
+    return serial_failure_reason(error) == "busy"
 
 
 def enumerate_serial_ports(*, cancel_event: Event | None = None) -> tuple[SerialPortInfo, ...]:
@@ -102,14 +102,26 @@ def check_serial_port_access(
             raise SerialPortAccessError(
                 "pyserial is required to check serial port access.",
             ) from exc
+    try:
+        serial_factory = serial_module.Serial
+        bytesize = serial_module.EIGHTBITS
+        parity = serial_module.PARITY_NONE
+        stopbits = serial_module.STOPBITS_ONE
+        if not callable(serial_factory):
+            raise ImportError("The serial transport is unavailable.")
+    except (ImportError, AttributeError) as exc:
+        raise SerialPortAccessError(
+            "Studio serial support is unavailable. Repair or reinstall Studio, then try again. "
+            "Details: pyserial is required to check serial port access.",
+        ) from exc
     connection = None
     error = ""
     try:
         # Set line preferences while closed. The OS/driver may still change those
         # lines during open(), which can also perform its own buffer initialization.
-        connection = serial_module.Serial(
-            port=None, baudrate=baudrate, bytesize=serial_module.EIGHTBITS,
-            parity=serial_module.PARITY_NONE, stopbits=serial_module.STOPBITS_ONE,
+        connection = serial_factory(
+            port=None, baudrate=baudrate, bytesize=bytesize,
+            parity=parity, stopbits=stopbits,
             timeout=0, write_timeout=0, rtscts=False, dsrdtr=False, xonxoff=False,
         )
         connection.port = port
@@ -120,11 +132,19 @@ def check_serial_port_access(
         _check_cancelled(cancel_event)
     except Exception as exc:
         error = str(exc) or type(exc).__name__
+        if isinstance(exc, ValueError):
+            error = f"Cannot configure port: {error}"
     finally:
         if connection is not None:
             try:
                 connection.close()
             except Exception as exc:
+                # A dismissed/cancelled GUI job can discard its result. Retain
+                # actual cleanup failures here before cancellation supersedes it.
+                _LOGGER.exception(
+                    "Serial port %s could not be closed after its access check. "
+                    "Earlier check error: %s", port, error or "none",
+                )
                 close_error = str(exc) or type(exc).__name__
                 error = (
                     f"{error} Closing the port also failed: {close_error}"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import csv
 import json
 import sys
 from pathlib import Path
@@ -11,9 +12,10 @@ from unittest.mock import Mock
 import pytest
 from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import StubEngine
+from tests.unit.test_brainproducts_windows_writes import native_driver as native_driver
 
 from fpvs_studio.core.compiler import compile_session_plan
-from fpvs_studio.core.execution import AcquisitionEvidence, ParticipantMetadata
+from fpvs_studio.core.execution import AcquisitionEvidence, ParticipantMetadata, RunExecutionSummary
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
@@ -23,7 +25,7 @@ from fpvs_studio.core.project_config import (
 )
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.core.serialization import read_json_file
-from fpvs_studio.runtime import launcher, triggers
+from fpvs_studio.runtime import launcher, run_worker, triggers
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.launcher import (
@@ -46,7 +48,7 @@ from fpvs_studio.runtime.run_worker import (
     _execution_error_details,
 )
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
-from fpvs_studio.triggers import brainproducts_backend
+from fpvs_studio.triggers import brainproducts_backend, serial_backend
 from fpvs_studio.triggers.null_backend import NullBackend
 from fpvs_studio.triggers.serial_port_access import check_serial_port_access
 
@@ -748,6 +750,378 @@ def test_triggerbox_native_pyserial_open_failure_reaches_access_check_and_runtim
     evidence = _evidence(root)
     assert evidence.state == "interrupted"
     assert all(not run.attempted_events for run in evidence.runs)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 error replay")
+@pytest.mark.parametrize("selected", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("code, summary, action", [
+    (5, "BioSemi trigger port COM3 is occupied or access was denied", "Fully exit"),
+    (2, "BioSemi trigger port COM3 was not found", "Device Manager"),
+    (121, "BioSemi trigger port COM3 did not respond in time", "Reconnect"),
+    (1117, "BioSemi USB communication on COM3 failed", "USB Trigger Interface"),
+])
+def test_biosemi_native_open_failure_preserves_recovery_and_interrupted_evidence(
+    execution, monkeypatch, selected, code, summary, action,
+):
+    import ctypes
+
+    from serial import serialwin32
+
+    native_error = ctypes.WinError(code)
+    open_port = Mock(return_value=serialwin32.win32.INVALID_HANDLE_VALUE)
+    write = Mock(side_effect=AssertionError("A denied open must never send a marker"))
+    monkeypatch.setattr(serialwin32.win32, "CreateFile", open_port)
+    monkeypatch.setattr(serialwin32.win32, "WriteFile", write)
+    monkeypatch.setattr(serialwin32, "ctypes", SimpleNamespace(WinError=lambda: native_error))
+    root, plan = execution
+    captures = {}
+    with pytest.raises(PreflightError) as caught:
+        _execute(
+            root, plan, RuntimeWorker(StubEngine(captures)),
+            recording_backend=selected, serial_port="COM3", serial_baudrate=115200,
+        )
+
+    message = str(caught.value)
+    assert summary in message and action in message
+    assert repr(native_error) in message.partition("Details:")[2]
+    assert "TriggerBox" not in message and "BrainVision" not in message
+    open_port.assert_called_once()
+    assert open_port.call_args.args[0] == "COM3"
+    assert open_port.call_args.args[2] == 0  # Exclusive ownership remains required.
+    write.assert_not_called()
+    assert captures.get("open_count", 0) == 0
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted"
+    assert all(not run.attempted_events for run in evidence.runs)
+
+
+@pytest.mark.parametrize("selected", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("mode", ["full", "compact"])
+def test_biosemi_close_failure_retains_marker_evidence_and_blocks_completed_handoff(
+    execution, sample_project, monkeypatch, selected, mode,
+):
+    root, plan = execution
+    sample_project.settings.recording = ProjectRecordingSettings(recording_backend=selected)
+    config = export_project_config(sample_project, root)
+    port = SimpleNamespace(
+        write=Mock(return_value=1), close=Mock(side_effect=OSError("close denied")),
+    )
+    serial_module = SimpleNamespace(
+        Serial=Mock(return_value=port), EIGHTBITS=8, PARITY_NONE="N", STOPBITS_ONE=1,
+    )
+    monkeypatch.setattr(serial_backend, "_load_serial_module", lambda: serial_module)
+
+    with pytest.raises(serial_backend.SerialBackendError) as caught:
+        _execute(
+            root, plan, RuntimeWorker(StubEngine({})), recording_backend=selected,
+            serial_port="COM3", export_mode=mode,
+            toolbox_handoff_config=config.model_dump(mode="json"),
+        )
+
+    assert "BioSemi trigger port COM3 could not be closed" in str(caught.value)
+    assert "Restart Studio" in str(caught.value)
+    assert "close denied" in str(caught.value).partition("Details:")[2]
+    assert port.write.call_count > 0 and port.close.call_count == 1
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted" and evidence.runs[0].attempted_events
+    assert all(
+        attempt.status == "sent" for run in evidence.runs for attempt in run.attempted_events
+    )
+    assert "close denied" in evidence.abort_reason
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("selected", ["serial", "biosemi_active_three"])
+@pytest.mark.parametrize("launch_kind", ["run", "session"])
+@pytest.mark.parametrize("mode", ["compact", "full"])
+def test_biosemi_deferred_final_marker_failure_stops_before_tasks_and_feedback(
+    execution, monkeypatch, native_driver, selected, launch_kind, mode,
+):
+    root, plan = execution
+    spec = plan.ordered_entries()[0].run_spec
+    driver = native_driver
+    final_index = len(spec.trigger_events)
+    driver.blocked.add(final_index)
+    monkeypatch.setattr(serial_backend, "_load_serial_module", lambda: driver.module)
+    captures = {}
+    engine = StubEngine(captures)
+    play = engine.run_condition
+
+    def fail_final_completion(*args, **kwargs):
+        summary = play(*args, **kwargs)
+        driver.blocked.clear()
+        driver.errors[final_index] = 1117
+        return summary
+
+    monkeypatch.setattr(engine, "run_condition", fail_final_completion)
+    completion = Mock(return_value=False)
+    monkeypatch.setattr(engine, "show_completion_screen", completion)
+    worker = RuntimeWorker(engine)
+    feedback = Mock(return_value=False)
+    monkeypatch.setattr(worker, "_show_condition_feedback", feedback)
+    tasks = Mock(wraps=run_worker.run_task_modules)
+    monkeypatch.setattr(run_worker, "run_task_modules", tasks)
+    options = {"recording_backend": selected, "serial_reset_code": 0, "export_mode": mode}
+
+    with pytest.raises(RuntimeError, match="1117") as failure:
+        if launch_kind == "session":
+            _execute(root, plan, worker, **options)
+        else:
+            worker.execute(
+                root, spec, root / "runs" / "single", participant_number="007",
+                runtime_options=options,
+            )
+
+    assert isinstance(failure.value, triggers.TriggerEmissionError)
+    assert failure.value.__cause__.__cause__.winerror == 1117
+    feedback.assert_not_called()
+    completion.assert_not_called()
+    assert tasks.call_count == (1 if launch_kind == "session" else 0)
+    assert not any("on_module_start" in call.kwargs for call in tasks.call_args_list)
+    assert captures["run_ids"] == [spec.run_id]
+    assert [payload for payload, _when in driver.writes] == [
+        bytes([event.code]) for event in spec.trigger_events
+    ]
+    assert driver.closed and not driver.reused_pending
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted"
+    assert "1117" in evidence.abort_reason
+    attempts = evidence.runs[0].attempted_events
+    assert len(attempts) == final_index
+    assert all(attempt.status == "sent" for attempt in attempts[:-1])
+    last = attempts[-1]
+    event = spec.trigger_events[-1]
+    assert (last.code, last.label, last.frame_index) == (event.code, event.label, event.frame_index)
+    assert last.status == "error" and "1117" in last.message
+    assert all(not run.attempted_events for run in evidence.runs[1:])
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+    if mode == "full":
+        folder = root / "runs" / (
+            f"P007_session01/{spec.run_id}" if launch_kind == "session" else "single"
+        )
+        saved = read_json_file(folder / "run_summary.json", RunExecutionSummary)
+        assert saved.aborted and saved.completed_frames == spec.display.total_frames
+        assert saved.trigger_log[-1].status == "error"
+        assert saved.trigger_log[-1].frame_index == event.frame_index
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("next_code", [55, 128])
+def test_biosemi_deferred_failure_marks_previous_and_unsent_attempts(native_driver, next_code):
+    driver = native_driver
+    driver.blocked.add(1)
+    output = serial_backend.SerialBackend("COM3", serial_module=driver.module)
+    backend = triggers.LoggedTriggerBackend(output, backend_name="serial")
+    backend.connect()
+    backend.send_prevalidated_trigger(55, frame_index=7, label="first", time_s=.125)
+    driver.blocked.clear()
+    driver.errors[1] = 1117
+    with pytest.raises(triggers.TriggerEmissionError, match="1117"):
+        backend.send_prevalidated_trigger(next_code, frame_index=8, label="next", time_s=.25)
+    with pytest.raises(serial_backend.SerialBackendError):
+        backend.close()
+
+    first, second = backend.records
+    assert (first.code, first.frame_index, first.label, first.time_s) == (55, 7, "first", .125)
+    assert (second.code, second.frame_index, second.label, second.time_s) == (
+        next_code, 8, "next", .25,
+    )
+    assert first.status == second.status == "error"
+    assert "1117" in first.message and "1117" in second.message
+    assert "not sent because the previous marker failed" in second.message
+    assert len(driver.writes) == 1
+    assert driver.closed and not driver.reused_pending
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("next_attempt", [False, True])
+@pytest.mark.parametrize("failure_kind", ["native", "timeout"])
+def test_biosemi_close_failure_updates_the_pending_marker_record(
+    native_driver, monkeypatch, next_attempt, failure_kind,
+):
+    driver = native_driver
+    driver.blocked.add(1)
+    monkeypatch.setattr(serial_backend, "_WRITE_TIMEOUT_S", .01)
+    output = serial_backend.SerialBackend("COM3", serial_module=driver.module)
+    backend = triggers.LoggedTriggerBackend(output, backend_name="serial")
+    backend.connect()
+    backend.send_prevalidated_trigger(55, frame_index=7, label="pending", time_s=.125)
+    if next_attempt:
+        with pytest.raises(triggers.TriggerEmissionError, match="previous marker"):
+            backend.send_prevalidated_trigger(55, frame_index=8, label="unsent", time_s=.25)
+    if failure_kind == "native":
+        driver.blocked.clear()
+        driver.errors[1] = 1117
+    with pytest.raises(serial_backend.SerialBackendError):
+        backend.close()
+
+    records = backend.records
+    assert len(records) == (2 if next_attempt else 1)
+    assert all(record.status == "error" for record in records)
+    assert (records[0].frame_index, records[0].label, records[0].time_s) == (7, "pending", .125)
+    assert ("1117" if failure_kind == "native" else "timed out") in records[0].message
+    assert len(driver.writes) == 1 and driver.closed
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+def test_biosemi_successful_close_drain_keeps_submitted_marker_sent(native_driver):
+    driver = native_driver
+    driver.blocked.add(1)
+    output = serial_backend.SerialBackend("COM3", serial_module=driver.module)
+    backend = triggers.LoggedTriggerBackend(output, backend_name="serial")
+    backend.connect()
+    backend.send_prevalidated_trigger(55)
+    with pytest.raises(triggers.TriggerEmissionError, match="previous marker"):
+        backend.send_prevalidated_trigger(55)
+    driver.blocked.clear()
+    with pytest.raises(serial_backend.SerialBackendError, match="previous marker"):
+        backend.close()
+    assert [record.status for record in backend.records] == ["sent", "error"]
+    assert len(driver.writes) == 1 and driver.closed
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("query_error", [6, 87])
+def test_biosemi_failed_new_write_never_relabels_earlier_success(
+    native_driver, monkeypatch, query_error,
+):
+    driver = native_driver
+    monkeypatch.setattr("fpvs_studio.triggers.brainproducts_windows._RETAINED_WRITES", [])
+    output = serial_backend.SerialBackend("COM3", serial_module=driver.module)
+    backend = triggers.LoggedTriggerBackend(output, backend_name="serial")
+    backend.connect()
+    backend.send_prevalidated_trigger(55, label="completed")
+    driver.query_error = query_error
+    with pytest.raises(triggers.TriggerEmissionError):
+        backend.send_prevalidated_trigger(55, label="failed")
+    with pytest.raises(serial_backend.SerialBackendError):
+        backend.close()
+    assert [record.status for record in backend.records] == ["sent", "error"]
+    assert len(driver.writes) == 2 and not driver.closed
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("operation", ["finish", "close"])
+def test_biosemi_manual_reset_failure_never_relabels_an_event(native_driver, operation):
+    driver = native_driver
+    output = serial_backend.SerialBackend("COM3", reset_code=0, serial_module=driver.module)
+    backend = triggers.LoggedTriggerBackend(output, backend_name="serial")
+    backend.connect()
+    backend.send_prevalidated_trigger(55)
+    driver.blocked.add(2)
+    backend.reset()
+    driver.blocked.clear()
+    driver.errors[2] = 1117
+    if operation == "finish":
+        with pytest.raises(triggers.TriggerEmissionError, match="1117"):
+            backend.finish_pending_output()
+    with pytest.raises(serial_backend.SerialBackendError, match="1117"):
+        backend.close()
+    assert [record.status for record in backend.records] == ["sent"]
+    assert [payload for payload, _when in driver.writes] == [b"7", b"\x00"]
+    assert driver.closed
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("selected", ["serial", "biosemi_active_three"])
+def test_biosemi_engine_abort_retains_late_marker_failure_in_acquisition(
+    execution, monkeypatch, native_driver, selected,
+):
+    root, plan = execution
+    spec = plan.ordered_entries()[0].run_spec
+    driver = native_driver
+    final_index = len(spec.trigger_events)
+    driver.blocked.add(final_index)
+    monkeypatch.setattr(serial_backend, "_load_serial_module", lambda: driver.module)
+    captures = {}
+    engine = StubEngine(captures)
+    play = engine.run_condition
+
+    def interrupt_playback(*args, **kwargs):
+        play(*args, **kwargs)
+        driver.blocked.clear()
+        driver.errors[final_index] = 1117
+        raise RuntimeError("Presentation interrupted")
+
+    monkeypatch.setattr(engine, "run_condition", interrupt_playback)
+    with pytest.raises(RuntimeError, match="Presentation interrupted"):
+        _execute(root, plan, RuntimeWorker(engine), recording_backend=selected)
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted"
+    assert "Presentation interrupted" in evidence.abort_reason and "1117" in evidence.abort_reason
+    attempts = evidence.runs[0].attempted_events
+    assert len(attempts) == final_index
+    assert attempts[-1].status == "error" and "1117" in attempts[-1].message
+    assert all(record.status == "sent" for record in attempts[:-1])
+    assert all(not run.attempted_events for run in evidence.runs[1:])
+    assert not captures.get("completion_screens") and not captures.get("condition_feedback")
+    assert driver.closed
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 completion replay")
+@pytest.mark.parametrize("launch_kind, refresh_failure, journal_error", [
+    ("run", False, None), ("session", False, None),
+    ("run", True, None), ("session", True, None),
+    ("session", False, PermissionError), ("session", False, ValueError),
+])
+def test_biosemi_late_close_refreshes_full_marker_exports_without_hiding_original_error(
+    execution, monkeypatch, native_driver, launch_kind, refresh_failure, journal_error,
+):
+    root, plan = execution
+    spec = plan.ordered_entries()[0].run_spec
+    driver = native_driver
+    driver.blocked.add(1)
+    monkeypatch.setattr(serial_backend, "_load_serial_module", lambda: driver.module)
+    close = serial_backend.SerialBackend.close
+
+    def fail_at_close(self):
+        driver.blocked.clear()
+        driver.errors[1] = 1117
+        return close(self)
+
+    monkeypatch.setattr(serial_backend.SerialBackend, "close", fail_at_close)
+    write = run_worker.write_run_artifacts
+    snapshots = []
+
+    def write_or_fail(folder, run_spec, summary):
+        snapshots.append(summary)
+        if refresh_failure and summary.trigger_log[0].status == "error":
+            raise PermissionError("Trigger evidence file locked")
+        return write(folder, run_spec, summary)
+
+    monkeypatch.setattr(run_worker, "write_run_artifacts", write_or_fail)
+    if journal_error is not None:
+        monkeypatch.setattr(
+            run_worker.TaskResponseCheckpoint, "reconcile_run_responses",
+            Mock(side_effect=journal_error("Task journal unavailable")),
+        )
+    worker = RuntimeWorker(StubEngine({}))
+    with pytest.raises(triggers.TriggerEmissionError, match="previous marker"):
+        if launch_kind == "session":
+            _execute(root, plan, worker, recording_backend="serial", export_mode="full")
+        else:
+            worker.execute(
+                root, spec, root / "runs" / "single", participant_number="007",
+                runtime_options={"recording_backend": "serial"},
+            )
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted" and "1117" in evidence.abort_reason
+    assert [attempt.status for attempt in evidence.runs[0].attempted_events] == ["error", "error"]
+    assert evidence.export_error == ("Trigger evidence file locked" if refresh_failure else None)
+    folder = root / "runs" / (
+        f"P007_session01/{spec.run_id}" if launch_kind == "session" else "single"
+    )
+    saved = read_json_file(folder / "run_summary.json", RunExecutionSummary)
+    expected = ["sent", "error"] if refresh_failure else ["error", "error"]
+    assert [record.status for record in saved.trigger_log] == expected
+    with (folder / "trigger_log.csv").open(newline="", encoding="utf-8-sig") as stream:
+        assert [row["status"] for row in csv.DictReader(stream)] == expected
+    assert saved.aborted and saved.completed_frames == snapshots[0].completed_frames
+    assert saved.frame_intervals == snapshots[0].frame_intervals
+    assert saved.response_log == snapshots[0].response_log
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+    assert driver.closed and len(driver.writes) == 1
 
 
 def test_parallel_factory_uses_explicit_address_without_serial_configuration(monkeypatch):
