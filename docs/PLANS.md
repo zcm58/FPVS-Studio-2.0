@@ -39,6 +39,10 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [BrainVision transport qualification](exec-plans/completed/brainvision-transport-qualification.md):
+  Windows pending-write completion, COM-selection preservation and LiveAmp/Recorder 1
+  plus actiCHamp/Recorder 2 guidance; software and visible checks recorded, physical
+  qualification remains separate.
 - [Plain-language error recovery](exec-plans/completed/plain-language-error-recovery.md):
   common popup/inline failures explain the problem, possible cause and recovery;
   focused checks passed, precommit recorded a confirmed pre-existing Windows import

@@ -204,6 +204,45 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert not dialog.apply_button.isEnabled()
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("amplifier, recorder", [
+    ("actichamp", "BrainVision Recorder 1 or 2"), ("liveamp", "BrainVision Recorder 1"),
+])
+def test_triggerbox_amplifier_specific_recording_guidance_fits(
+    qtbot, background, amplifier, recorder, port_detection_jobs,
+):
+    dialog = RecordingSetupDialog(_triggerbox_configuration(
+        brainproducts_amplifier=amplifier, brainproducts_serial_port="COM4",
+    ))
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.show()
+    port_detection_jobs[0].finish()
+    QApplication.processEvents()
+    assert (dialog.width(), dialog.height()) == (700, 640)
+    assert recorder in dialog.guidance_label.text()
+    assert "Close Configuration/Test IO" in dialog.guidance_label.text()
+    assert dialog.apply_button.isEnabled()
+    if amplifier == "liveamp":
+        assert "wired 8-bit STE" in dialog.brainproducts_amplifier_combo.currentText()
+        assert "wired eight-bit STE or STE compact" in dialog.guidance_label.text()
+        assert "exclude the native jack inputs" in dialog.guidance_label.toolTip()
+        assert "first eight rows blindly" in dialog.guidance_label.toolTip()
+        assert "1.27.0001" in dialog.guidance_label.toolTip()
+        assert "lower eight bits as high-active" not in dialog.guidance_label.toolTip()
+    else:
+        assert "Workspace Editor" in dialog.guidance_label.toolTip()
+        assert "lower eight bits as high-active" in dialog.guidance_label.toolTip()
+    assert dialog.guidance_label.accessibleDescription() == dialog.guidance_label.toolTip()
+    _assert_labels_fit(dialog)
+    dialog.brainproducts_pulse_edit.setText("1")
+    QApplication.processEvents()
+    assert not dialog.apply_button.isEnabled()
+    _assert_labels_fit(dialog)
+
+
 def test_recording_setup_apply_and_keyboard_cancel(qtbot):
     original = {"recording_backend": None, "unicorn_udp_port": 1000}
     dialog = RecordingSetupDialog(original)
@@ -647,6 +686,37 @@ def test_triggerbox_access_results_keep_unavailable_candidates_selectable(
     dialog.brainproducts_port_combo.activated.emit(0)
     assert dialog.brainproducts_port_edit.text() == "COM9"
     assert "COM9: Port accessible" in dialog.detection_status_label.text()
+
+
+def test_triggerbox_detect_preserves_manual_edit_after_selecting_listed_port(
+    qtbot, port_detection_jobs, monkeypatch,
+):
+    discovery = Mock(return_value=())
+    monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
+    dialog = RecordingSetupDialog(_triggerbox_configuration())
+    qtbot.addWidget(dialog)
+    dialog.show()
+    port_detection_jobs[0].finish(candidates=(
+        TriggerBoxPortCandidate("COM3", "TriggerBox Plus"),
+        TriggerBoxPortCandidate("COM9", "TriggerBox Plus"),
+    ))
+    dialog.brainproducts_port_combo.setCurrentIndex(1)
+    dialog.brainproducts_port_combo.activated.emit(1)
+    dialog.brainproducts_port_edit.setText("COM42")
+    dialog.brainproducts_port_edit.textEdited.emit("COM42")
+
+    dialog.detect_ports_button.click()
+
+    assert dialog.brainproducts_port_edit.text() == "COM42"
+    cancel = Event()
+    port_detection_jobs[1].callback(None, cancel)
+    discovery.assert_called_once_with(check_access=True, cancel_event=cancel, selected_port="COM42")
+    port_detection_jobs[1].finish(candidates=(
+        TriggerBoxPortCandidate("COM9", "TriggerBox Plus", accessible=True),
+        TriggerBoxPortCandidate("COM42", "Manually selected port", accessible=True),
+    ))
+    assert dialog.brainproducts_port_edit.text() == "COM42"
+    assert dialog.detection_status_label.text() == "COM42: Port accessible when checked."
 
 
 def test_triggerbox_checked_results_do_not_verify_a_manual_edit_during_scan(
@@ -1184,6 +1254,7 @@ def test_settings_recording_subdialog_persists_only_apply(
             "brainproducts_serial_port": (
                 "COM123" if backend == "brainproducts_triggerbox" else "COM3"
             ),
+            "brainproducts_parallel_address": None,
             "brainproducts_pulse_width_ms": 20 if backend == "brainproducts_triggerbox" else 10,
             "brainproducts_amplifier": (
                 "actichamp" if backend == "brainproducts_triggerbox" else None

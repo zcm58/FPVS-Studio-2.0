@@ -38,8 +38,15 @@
   Plus uses a distinct adapter/identity at fixed 2,000,000 baud. Its connection-owned
   worker clears a latched event after the configured pulse; sends never sleep or queue.
   Reject active pulses/insufficient low intervals, retain asynchronous reset failures
-  until observed, and always close worker/port. Reset/close may drain a pulse only
+  until observed, and close worker/port once pending I/O is resolved. Reset/close may drain a pulse only
   outside presentation. Keep codes 1–255 intact and use zero solely for idle/reset.
+- `brainproducts_windows.py` owns genuine pySerial Win32 write completion. Preserve
+  one outstanding write and its byte buffer until Windows reports a terminal result.
+  Flip callbacks submit without waiting; the worker observes completion before
+  starting pulse/low deadlines. Connect/reset/close drain outside presentation with
+  bounded failure handling. Cancellation requests are not completion; a driver that
+  never acknowledges cancellation requires retained native storage and an explicit
+  restart error, never a false clean close or reuse of pending storage.
 - Resolve unset/blank serial-port configuration to `COM3`, while preserving an
   explicit nonempty port. This is a configuration default, never a retry/fallback
   after a port fails to open or write.

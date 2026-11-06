@@ -365,7 +365,7 @@ class AppSettingsDialog(QDialog):
         recording = QWidget(self.tabs)
         recording_layout = QVBoxLayout(recording)
         recording_layout.setContentsMargins(16, 16, 16, 16)
-        recording_layout.setSpacing(12)
+        recording_layout.setSpacing(8)
         recording_layout.addWidget(_section_title("Computer default", recording))
         self.default_recording_summary = QLabel(recording)
         self.default_recording_summary.setWordWrap(True)

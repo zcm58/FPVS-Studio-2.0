@@ -262,7 +262,9 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_amplifier_combo.setAccessibleName("Brain Products EEG amplifier")
         self.brainproducts_amplifier_combo.addItem("Choose amplifier", None)
         for value, label in AMPLIFIER_LABELS.items():
-            self.brainproducts_amplifier_combo.addItem(label, value)
+            self.brainproducts_amplifier_combo.addItem(
+                "LiveAmp (wired 8-bit STE)" if value == "liveamp" else label, value,
+            )
         amplifier = configuration.get("brainproducts_amplifier")
         amplifier_index = self.brainproducts_amplifier_combo.findData(amplifier)
         if amplifier_index < 0:
@@ -417,14 +419,17 @@ class RecordingSetupDialog(QDialog):
     def _start_port_detection(self, *, check_access: bool) -> None:
         if self._port_detection_job is not None or self._discovery_dismissed:
             return
+        draft_port = self.brainproducts_port_edit.text()
         selected_port = (
-            self.brainproducts_port_edit.text().strip() or None
+            draft_port.strip() or None
         ) if check_access and self._keep_triggerbox_port else None
         self._detection_started = True
         for index, candidate in enumerate(self._port_detection_candidates or ()):
             self.brainproducts_port_combo.setItemData(
                 index, candidate.description, Qt.ItemDataRole.ToolTipRole,
             )
+        # Updating the selected row's tooltip can replace a newer manual edit.
+        self.brainproducts_port_combo.setEditText(draft_port)
         self._port_detection_candidates = None
         self._port_access_checked = check_access
         self.detect_ports_button.setEnabled(False)
@@ -490,6 +495,11 @@ class RecordingSetupDialog(QDialog):
                 port = candidates[0].port
             elif len(candidates) > 1:
                 port = ""
+        # Tooltip/model updates restore the selected row's text. Manual values
+        # absent from the list must have no selected row to preserve their text.
+        self.brainproducts_port_combo.setCurrentIndex(
+            self.brainproducts_port_combo.findText(port),
+        )
         self.brainproducts_port_combo.setEditText(port)
         self.brainproducts_port_edit.blockSignals(False)
         self.brainproducts_port_combo.blockSignals(False)
@@ -659,15 +669,37 @@ class RecordingSetupDialog(QDialog):
             )
             detail = UNICORN_VALIDATION_NOTE
         elif brainproducts:
+            amplifier = self._selected_amplifier()
+            liveamp = triggerbox and amplifier == "liveamp"
+            recorder = {
+                "actichamp": "BrainVision Recorder 1 or 2",
+                "liveamp": "BrainVision Recorder 1",
+                "brainamp": "BrainVision Recorder 1",
+            }.get(amplifier or "", "BrainVision Recorder")
             guidance = (
                 "Install TriggerBox software/drivers on this PC. Close Configuration/Test IO "
                 "before launch; keep it closed during experiments. "
-                "Start recording in BrainVision Recorder and keep "
+                f"Start recording in {recorder} and keep "
                 "it recording. Test and Pilot modes never send markers."
                 if triggerbox else
-                "Start recording in BrainVision Recorder before launch. "
+                f"Start recording in {recorder} before launch. "
                 "Verify received markers and timing on your equipment. "
                 "Test and Pilot modes never send markers."
+            )
+            if liveamp:
+                guidance += " LiveAmp requires the wired eight-bit STE or STE compact input."
+            marker_setup = (
+                "Connect to the wired eight-bit STE or STE compact input; the built-in "
+                "LiveAmp jack cannot carry Studio's full marker codes. In Recorder 1, group "
+                "the eight STE inputs together as Stimulus; exclude the native jack inputs. "
+                "STE row numbers vary by setup, so do not select the first eight rows blindly. "
+                "Set polarity so idle zero is ignored and sent values are preserved. "
+                "STE compact requires LiveAmp revision 04 or later, firmware 4.77 or later, "
+                "and Recorder 1.27.0001 or later, with wired trigger input enabled. "
+                "Wireless Trigger accessories require separate timing qualification. "
+                if liveamp else
+                "In BrainVision Recorder, enable the lower eight bits as high-active Stimulus "
+                "inputs. For Recorder 2, use the Workspace Editor's marker settings. "
             )
             detail = (
                 "For actiCHamp / actiCHamp Plus. Connect the parallel port using the "
@@ -683,8 +715,8 @@ class RecordingSetupDialog(QDialog):
                 "COM port directly. "
                 "Connect the TriggerBox USB port to this computer and use the vendor's "
                 "amplifier-specific output cable. For TriggerBox Plus, set the lower "
-                "eight output switches to PC. In BrainVision Recorder, enable the lower "
-                "eight bits as high-active Stimulus inputs. Disable Recorder Debouncing "
+                "eight output switches to PC. "
+                + marker_setup + "Disable Recorder Debouncing "
                 "for Studio markers unless its effect has been validated; it can suppress "
                 "closely spaced markers. Recorder and the amplifier "
                 "own EEG acquisition; Studio cannot check that they are recording. "

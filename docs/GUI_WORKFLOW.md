@@ -1153,8 +1153,13 @@ TriggerBox uses its own port and fixed vendor baudrate. Visible guidance require
 installing TriggerBox software/drivers on the stimulus PC, closing Configuration/Test IO
 before launch and throughout experiments, and keeping BrainVision Recorder recording.
 The installed driver remains available when the utilities close; Studio opens the COM
-port directly. Tooltips expose driver/cable, Plus PC-switch, lower-eight-bit
-Stimulus and amplifier-sampling requirements. It has no automatic Recorder probe
+port directly. actiCHamp guidance includes Recorder 1 and 2 and names Recorder 2's
+Workspace Editor. LiveAmp is labelled **LiveAmp (wired 8-bit STE)** and names
+Recorder 1; visible guidance
+requires wired STE/STE compact input. Details explain extension-only marker grouping,
+the native jack limitation, variable Recorder row numbering, polarity verification
+and STE compact prerequisites. Tooltips also expose driver/cable, Plus PC-switch
+and amplifier-sampling requirements. It has no automatic Recorder probe
 and advises disabling Recorder Debouncing unless validated for the intended markers.
 Normal launches use the BrainVision Recording Reminder described above. Home identifies
 the selected device independently of ActiveThree's shared serial transport.
@@ -1179,8 +1184,14 @@ ports, rejected serial settings, disconnected-device I/O, timeout, close failure
 missing Studio serial support. No trigger bytes should be sent by Detect. An edit
 during the check must not inherit the old port's success.
 Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
+Switch between actiCHamp and LiveAmp at `700x640` in both themes, including pulse
+validation errors. Recorder version and input guidance must follow the selection;
+LiveAmp must not inherit actiCHamp's lower-eight-Recorder-bit instruction. The full
+hardware details remain accessible through the tooltip and accessible description.
 Apply COM3 or COM4 with actiCHamp, reopen Recording Setup or Change Default, and
 confirm the saved port stays selected when discovery lists a different port.
+Select a detected port, type a different COM port and click Detect: the displayed
+port must remain the manually entered value while that same port is checked.
 Switch devices, Cancel and reopen to check staged fields. With lab equipment,
 confirm normal-run saved markers separately from port discovery and check that
 Test/Pilot sends none.

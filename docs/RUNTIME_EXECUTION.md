@@ -415,7 +415,8 @@ COM port, close Configuration/Test IO and keep those utilities closed throughout
 experiment. The installed driver remains available after they close; Studio talks
 directly to the port. Keep BrainVision Recorder open and saving EEG. On Plus, set
 lower-eight-bit switches to PC. Configure all
-eight Recorder bits as high-active Stimulus inputs so codes remain 1–255.
+eight Recorder bits as high-active Stimulus inputs for actiCHamp/BrainAmp so codes
+remain 1–255. LiveAmp requires the extension-specific mapping described below.
 Windows serial ports are exclusive: the TriggerBox utility and Studio cannot own
 the same COM port simultaneously. `PermissionError(13, ..., 5)` / Windows error 5
 means access was denied, commonly because another program has the port open. Runtime
@@ -493,9 +494,18 @@ presentation; runtime also drains it between conditions before tasks/feedback.
 Code zero is electrical idle, never a normal logged event; 255 remains a valid event.
 Windows pySerial's nonblocking write can return success while OS transmission is
 pending; `sent` records successful submission, not completed USB transfer or EEG
-receipt. Pulse/low-interval deadlines follow software submission and do not establish
-physical edge timing. Cleanup preserves all reported reset, worker-stop and port-close
-errors together so a primary trigger failure cannot hide a failure to release the port.
+receipt. `triggers/brainproducts_windows.py` retains each native write buffer and
+completion structure until Windows reports completion; another write cannot reuse
+them while pending. The callback submits and checks without waiting. The owned worker
+observes completion before starting the high-pulse deadline, and observes zero-reset
+completion before starting the low interval. Initial and final zeros are drained
+outside presentation. These observations still do not establish physical edge timing.
+
+Pending-write and cancellation waits are bounded. If the driver never acknowledges
+cancellation, Studio reports a restart-required cleanup failure and retains the
+connection and native storage until process exit instead of freeing storage still
+owned by Windows or reporting a clean close. Cleanup preserves reset, worker-stop
+and port-close errors together so a primary failure cannot hide cleanup failure.
 
 The saved optional `brainproducts_amplifier` selects `actichamp` (including Plus),
 `brainamp`, or `liveamp`; `brainproducts_sampling_rate_hz` records the positive integer
@@ -552,16 +562,74 @@ than assuming Recorder 1 menu names. See the vendor's
 [Recorder 2 workflow](https://pressrelease.brainproducts.com/brainvision-recorder-2/)
 and [downloads/licensing](https://www.brainproducts.com/downloads/recorder/).
 
-Select actiCHamp and the same actual EEG sampling rate in Studio. Start **saving a
+For LiveAmp with Recorder 1, use the wired eight-bit input on an STE or STE compact,
+connected to TriggerBox with the amplifier-specific cable. The native LiveAmp jack
+provides one bit (two separate one-bit inputs on LiveAmp 64), so it cannot carry
+Studio's complete 1–255 marker range. In Recorder, group the eight extension inputs
+together as Stimulus and exclude the native jack inputs. Their row numbers vary:
+the vendor's examples place STE at bits 1–8 on a single LiveAmp and 2–9 on LiveAmp 64.
+Do not select the first eight Recorder rows blindly. Configure polarity so idle zero
+is ignored and the sent values are preserved; verify actual recorded onset markers
+instead of silently inverting Studio bytes. See the
+[trigger-port guide, LiveAmp section](https://www.brainproducts.com/download/communication-with-the-trigger-port-a-beginners-guide/).
+
+STE compact additionally requires LiveAmp revision 04 or later, firmware 4.77 or
+later and Recorder 1.27.0001 or later, with wired trigger input enabled. See the
+[hardware requirements](https://www.brainproducts.com/solutions/liveamp-ste/) and
+[Recorder requirement](https://pressrelease.brainproducts.com/liveamp-ste-compact-mobility-set/).
+This support is for the wired input. The separate Wireless Trigger accessory has
+its own pulse/spacing requirements and is not qualified by Studio's wired LiveAmp
+table; wireless EEG transmission alone does not imply a wireless trigger path.
+
+Select the actual amplifier family and the same EEG sampling rate in Studio. Start **saving a
 recording** in Recorder before a normal Studio launch, then stop Recorder after the
 experiment. Monitoring traces alone is not proof a recording is being saved. Studio
 asks the operator to confirm before a normal BrainVision launch. This is a manual
 check. Studio does not start/stop either Recorder or read its recording state.
 Test/Pilot sends no markers, so use a short normal run for receipt validation. Inspect saved distinct
-and repeated codes, counts/order and timing; Recorder 2 uses
+and repeated codes, counts/order and timing. LiveAmp/Recorder 1 and
+actiCHamp/Recorder 2 are separate supported acquisition pairings; Recorder 2 uses
 [BVRF](https://www.brainproducts.com/support-resources/brainvision-recording-format/),
 so do not require a legacy `.vmrk` file as its recording evidence. Remote control
 would require a separate integration; USB trigger output does not provide it.
+
+#### Hardware-free BrainVision verification
+
+The trigger focused route and `tests/unit/test_runtime_recording.py` exercise the
+supported software path without installing TriggerBox software or opening a device.
+Keep the evidence boundaries explicit:
+
+| Check | What it verifies | What it cannot verify |
+| --- | --- | --- |
+| Injected discovery/access failures | Named and manual COM selection, occupied/missing-port recovery, byte-free Detect and cancellation | The actual driver, COM owner or connected device identity |
+| Real pySerial Windows open with intercepted native calls | The Windows error-to-pySerial-to-Studio chain, exclusive open request, blocked launch and retained diagnostics | Why a particular physical computer denied COM4 |
+| Real pySerial localhost receiver | All event bytes 1–255, repeated codes, zero resets, shutdown and reconnection | USB settings applied by the vendor driver, electrical levels or Recorder receipt |
+| Synthetic Windows pending/completed/error writes | Completion ordering, buffer lifetime and cleanup failure handling | USB latency, physical pulse widths or amplifier sampling |
+
+The localhost test is explicit test injection; normal Studio launches cannot select
+it as a fallback. pySerial's socket handler transfers real bytes but ignores hardware
+serial/control settings. Its simple loop handler simulates a transmission duration
+and rejects a nonempty write with zero write timeout, so it is not interchangeable
+with Studio's nonblocking Windows transport. See the
+[pySerial transport documentation](https://pyserial.readthedocs.io/en/latest/url_handlers.html).
+
+The official [TriggerBox application interface](https://www.brainproducts.com/download/triggerbox-programming-examples/)
+defines the byte protocol; the vendor does not document a complete USB TriggerBox
+emulator in the reviewed interface/software resources. The older
+[trigger2marker tool](https://pressrelease.brainproducts.com/trigger-code-design/)
+models Recorder marker decoding, not USB or electrical behavior; it predates
+Recorder 2 and cannot establish Recorder 2 compatibility. RCS2 is a remote-control
+server version, not a promise of Recorder 2 support. Do not substitute RCS, RDA or
+LSL data streaming for qualification of this USB-to-amplifier route.
+
+Physical acceptance still requires the actual driver/device, amplifier cable and
+switches, matching declared amplifier/sample rate, Recorder 1/2 marker decoding,
+recording state and saved marker counts/order. Test distinct and repeated codes,
+including 1, 55, 127, 128 and 255, at the experiment's shortest spacing. Inspect the
+saved Recorder recording rather than relying only on on-screen markers. Measure
+stimulus-to-EEG delay and jitter separately with a photosensor or equivalent
+measurement; a nominal 1 ms training statement and passing simulations do not
+establish that delay. Exact Recorder 2 controls require its installed-version manual.
 
 ### Unicorn Recorder UDP: receiver validation pending
 

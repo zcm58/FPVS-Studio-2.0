@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -43,6 +44,7 @@ from fpvs_studio.runtime.run_worker import RuntimeWorker, _build_and_connect_tri
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
 from fpvs_studio.triggers import brainproducts_backend
 from fpvs_studio.triggers.null_backend import NullBackend
+from fpvs_studio.triggers.serial_port_access import check_serial_port_access
 
 
 @pytest.fixture(autouse=True)
@@ -586,6 +588,61 @@ def test_triggerbox_occupied_com4_aborts_before_presentation_with_recovery(execu
     assert str(failure) in str(caught.value)
     serial_module.Serial.assert_called_once()
     assert serial_module.Serial.call_args.kwargs["port"] == "COM4"
+    assert captures.get("open_count", 0) == 0
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted"
+    assert all(not run.attempted_events for run in evidence.runs)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 error replay")
+@pytest.mark.parametrize("error_code, expected, recovery", [
+    (5, "The COM4 port is occupied or access was denied.", "Please close the TriggerBox software"),
+    (2, "TriggerBox port COM4 was not found.", "Device Manager"),
+])
+def test_triggerbox_native_pyserial_open_failure_reaches_access_check_and_runtime(
+    execution, monkeypatch, error_code, expected, recovery,
+):
+    import ctypes
+
+    import serial
+    from serial import serialwin32
+
+    assert serial.Serial is serialwin32.Serial
+    native_error = ctypes.WinError(error_code)
+    raw_error = f"could not open port 'COM4': {native_error!r}"
+    open_port = Mock(return_value=serialwin32.win32.INVALID_HANDLE_VALUE)
+    write = Mock(side_effect=AssertionError("A failed open must not write markers"))
+    # Intercept the OS boundary: the real Serial.open runs, but never opens a device.
+    monkeypatch.setattr(serialwin32.win32, "CreateFile", open_port)
+    monkeypatch.setattr(serialwin32.win32, "WriteFile", write)
+    monkeypatch.setattr(serialwin32, "ctypes", SimpleNamespace(WinError=lambda: native_error))
+    open_arguments = (
+        "COM4", serialwin32.win32.GENERIC_READ | serialwin32.win32.GENERIC_WRITE,
+        0, None, serialwin32.win32.OPEN_EXISTING,
+        serialwin32.win32.FILE_ATTRIBUTE_NORMAL | serialwin32.win32.FILE_FLAG_OVERLAPPED, 0,
+    )
+
+    access = check_serial_port_access("COM4", baudrate=2_000_000)
+    assert not access.accessible and access.access_error == raw_error
+    open_port.assert_called_once_with(*open_arguments)
+    open_port.reset_mock()
+
+    root, plan = execution
+    captures = {}
+    with pytest.raises(PreflightError) as caught:
+        _execute(
+            root, plan, RuntimeWorker(StubEngine(captures)),
+            recording_backend="brainproducts_triggerbox", brainproducts_serial_port="COM4",
+            brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+        )
+
+    assert expected in str(caught.value) and recovery in str(caught.value)
+    assert raw_error in str(caught.value)
+    serial_failure = caught.value.__cause__.__cause__
+    assert isinstance(serial_failure, serial.SerialException)
+    assert str(serial_failure) == raw_error
+    open_port.assert_called_once_with(*open_arguments)
+    write.assert_not_called()
     assert captures.get("open_count", 0) == 0
     evidence = _evidence(root)
     assert evidence.state == "interrupted"

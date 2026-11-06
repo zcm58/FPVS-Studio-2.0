@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import socket
 import threading
 import time
 from types import SimpleNamespace
@@ -109,6 +110,78 @@ def test_triggerbox_protocol_and_initial_zero() -> None:
         assert backend.emits_hardware_triggers is True
     finally:
         backend.close()
+
+
+def test_triggerbox_real_pyserial_transport_preserves_all_codes_and_reconnects() -> None:
+    """Exercise real byte transport; localhost is not a USB/Recorder emulator.
+
+    Vendor interface: https://www.brainproducts.com/download/triggerbox-programming-examples/
+    The socket handler preserves nonblocking writes but ignores electrical serial
+    settings. Assert the requested settings separately; do not qualify hardware timing.
+    """
+    import serial
+
+    connections = []
+    requested_settings = []
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen(1)
+        listener.settimeout(2)
+        endpoint = f"socket://127.0.0.1:{listener.getsockname()[1]}"
+
+        def open_transport(**kwargs):
+            requested_settings.append(dict(kwargs))
+            assert kwargs.pop("port") == "COM4"
+            connection = serial.serial_for_url(endpoint, **kwargs)
+            connections.append(connection)
+            return connection
+
+        adapter = SimpleNamespace(
+            Serial=open_transport, EIGHTBITS=serial.EIGHTBITS,
+            PARITY_NONE=serial.PARITY_NONE, STOPBITS_ONE=serial.STOPBITS_ONE,
+        )
+        backend = BrainProductsTriggerBoxBackend(
+            "COM4", pulse_width_ms=1, serial_module=adapter,
+        )
+
+        for codes in (range(1, 256), (55, 55, 1, 255)):
+            backend.connect()
+            worker = backend._worker
+            peer, _address = listener.accept()
+            with peer:
+                peer.settimeout(2)
+
+                def receive(count, receiver=peer):
+                    received = bytearray()
+                    while len(received) < count:
+                        chunk = receiver.recv(count - len(received))
+                        assert chunk, "Transport closed before all marker bytes arrived"
+                        received.extend(chunk)
+                    return bytes(received)
+
+                try:
+                    assert receive(1) == b"\x00"
+                    for code in codes:
+                        # Test pacing is outside presentation; no physical timing claim.
+                        with backend._condition:
+                            backend._wait_until_ready()
+                        backend.send(code)
+                        assert receive(2) == bytes((code, 0))
+                finally:
+                    backend.close()
+                assert receive(2) == b"\x00\x00"  # Drained reset and final idle.
+                assert peer.recv(1) == b""
+            assert worker is not None and not worker.is_alive()
+            assert not connections[-1].is_open
+
+    assert len(connections) == 2
+    assert requested_settings == [
+        dict(
+            port="COM4", baudrate=2_000_000, bytesize=8, parity="N", stopbits=1,
+            timeout=0, write_timeout=0, rtscts=False, dsrdtr=False, xonxoff=False,
+        ),
+    ] * 2
 
 
 @pytest.mark.parametrize("port", [None, "", "   "])
