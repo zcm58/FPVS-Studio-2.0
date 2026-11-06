@@ -24,6 +24,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.gui.window_helpers import _show_error_dialog
 from fpvs_studio.triggers.biosemi_errors import (
     BIOSEMI_SERIAL_SUPPORT_MESSAGE,
     biosemi_port_error_message,
@@ -164,14 +165,19 @@ class BioSemiPortSelector(QWidget):
             _LOGGER.warning("BioSemi serial-port %s could not start: %s", operation, exc)
             if not self._dismissed:
                 action = "start the port check" if operation == "check" else "refresh the port list"
-                self._status(
+                self._show_error(
+                    exc,
                     f"Studio could not {action}. Studio may be closing. "
                     "Restart Studio, then try again.",
-                    str(exc),
                 )
         else:
             self._job.finished.connect(self._finished)
         self._buttons()
+
+    def _show_error(self, error: Exception, message: str) -> None:
+        self._status("")
+        if self.isVisible():
+            _show_error_dialog(self, "BioSemi Serial Port Error", error, message=message)
 
     @Slot(object)
     def _finished(self, value: object) -> None:
@@ -210,7 +216,7 @@ class BioSemiPortSelector(QWidget):
                     "Could not list serial ports. Device information may be unavailable. "
                     "Retry Refresh or enter the USB Trigger Interface port from Device Manager."
                 )
-            self._status(text, details)
+            self._show_error(result.error, text)
         elif operation == "list":
             ports = cast(tuple[SerialPortInfo, ...], result.value)
             previous = self.edit.text()
@@ -236,13 +242,15 @@ class BioSemiPortSelector(QWidget):
             if access.port != checked_port:
                 self._status("")
                 return
-            text = (f"{checked_port}: Port accessible." if access.accessible else
-                    biosemi_port_error_message(checked_port, access.access_error))
-            details = access.access_error if not access.accessible else (
-                "The selected port opened and closed. "
-                "BioSemi identity and marker receipt are unverified."
-            )
-            self._status(text, details)
+            if access.accessible:
+                self._status(
+                    f"{checked_port}: Port accessible.",
+                    "The selected port opened and closed. "
+                    "BioSemi identity and marker receipt are unverified.",
+                )
+            else:
+                message = biosemi_port_error_message(checked_port, access.access_error)
+                self._show_error(ValueError(access.access_error or message), message)
 
     def cancel(self) -> None:
         self._dismissed = True

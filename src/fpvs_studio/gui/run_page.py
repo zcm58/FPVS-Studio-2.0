@@ -46,6 +46,7 @@ from fpvs_studio.gui.components import (
 )
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
+from fpvs_studio.gui.recording_dialog import configure_brainproducts_for_launch
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.window_helpers import (
@@ -918,6 +919,8 @@ class RunPage(QWidget):
         if self.is_launch_busy():
             return
         try:
+            if not configure_brainproducts_for_launch(self, self._document):
+                return
             self._document.validate_recording_launch()
             refresh_hz = self.current_refresh_hz()
             local_display = None

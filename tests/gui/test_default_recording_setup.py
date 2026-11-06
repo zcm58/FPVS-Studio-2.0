@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QSettings, Qt
@@ -14,8 +15,10 @@ from tests.gui.helpers import assert_visible_children_within_parent, open_create
 
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.gui import controller as controller_module
+from fpvs_studio.gui import settings_dialog as settings_dialog_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.gui.recording_dialog import (
     DefaultRecordingHardwareDialog,
     RecordingSetupDialog,
@@ -302,7 +305,8 @@ def test_actichamp_project_port_and_timing_survive_computer_default_changes(
     controller.use_default_recording_configuration()
     assert document.uses_default_recording_configuration
     assert document.recording_configuration == replacement
-    assert document.validate_recording_launch() == "brainproducts_triggerbox"
+    with pytest.raises(DocumentError, match="Confirm this project's"):
+        document.validate_recording_launch()
     assert ProjectDocument.open_existing(document.project_root).project.settings.recording is None
 
 
@@ -436,6 +440,8 @@ def test_failed_preference_sync_does_not_change_live_hardware(controller, qtbot,
 
 
 def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path, monkeypatch):
+    popup = Mock()
+    monkeypatch.setattr(settings_dialog_module, "_show_error_dialog", popup)
     saves = []
     error = PermissionError(13, "Access is denied", str(tmp_path / "preferences.ini"))
 
@@ -466,9 +472,9 @@ def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path
     assert ProjectRecordingSettings.model_validate(saves[0]).model_dump(mode="json") == (
         _configuration("unicorn_udp")
     )
-    assert any("not saved" in label.text() for label in dialog.findChildren(QLabel))
-    assert "[Errno" not in dialog.default_recording_summary.text()
-    assert dialog.default_recording_summary.toolTip() == str(error)
+    popup.assert_called_once_with(dialog, "Save Default Recording Setup Error", error)
+    assert "ActiveTwo" in dialog.default_recording_summary.text()
+    assert not dialog.default_recording_summary.toolTip()
     monkeypatch.setattr(
         RecordingSetupDialog, "exec",
         lambda subdialog: (
@@ -480,7 +486,9 @@ def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path
     dialog.default_recording_setup_button.click()
 
 
-def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path):
+def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path, monkeypatch):
+    popup = Mock()
+    monkeypatch.setattr(settings_dialog_module, "_show_error_dialog", popup)
     attempts = []
     error = PermissionError(13, "Access is denied", str(tmp_path / "project.json"))
 
@@ -499,9 +507,9 @@ def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path)
     qtbot.addWidget(dialog)
     dialog.use_default_recording_button.click()
     assert attempts == [True]
-    assert "not changed" in dialog.recording_summary.text()
-    assert "[Errno" not in dialog.recording_summary.text()
-    assert dialog.recording_summary.toolTip() == str(error)
+    popup.assert_called_once_with(dialog, "Reset Recording Setup Error", error)
+    assert "ActiveThree" in dialog.recording_summary.text()
+    assert not dialog.recording_summary.toolTip()
     assert dialog.use_default_recording_button.isEnabled()
     assert not dialog._recording_uses_default
     assert dialog._recording_configuration == _configuration("biosemi_active_three")

@@ -47,6 +47,8 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
 - Recording Apply atomically saves project override and selected BioSemi port; Cancel
   preserves drafts. Explicit project choice overrides computer defaults. Recorder
   readiness runs in the launch worker; metadata discovery/access checks send no bytes.
+  Normal Brain Products launches require project timing confirmation before participant
+  entry. Use the shared modal error for Recording Setup and keep progress inline.
   Do not add a manual Unicorn checkbox or claim hardware receipt. See Recording and
   launch sections in `docs/GUI_WORKFLOW.md` before changing this surface.
 

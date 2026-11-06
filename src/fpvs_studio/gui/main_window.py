@@ -61,6 +61,7 @@ from fpvs_studio.gui.processing_page import (
     BundleExportResultPage,
     BundleImportProcessingPage,
 )
+from fpvs_studio.gui.recording_dialog import configure_brainproducts_for_launch
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
     BioSemiRecordingConfirmationDialog,
@@ -1028,6 +1029,8 @@ class StudioMainWindow(QMainWindow):
         if self.is_launch_busy():
             return
         try:
+            if not configure_brainproducts_for_launch(self, self.document):
+                return
             self.document.validate_recording_launch()
         except Exception as error:
             _show_error_dialog(self, "Launch Blocked", error)
@@ -1184,6 +1187,8 @@ class StudioMainWindow(QMainWindow):
                     "Enable Allow repeat participant sessions in Setup > Project to save "
                     "the re-run as a new visit. The interrupted visit will be preserved."
                 )
+            if not configure_brainproducts_for_launch(self, self.document):
+                return
             backend = self.document.validate_recording_launch()
         except Exception as error:
             _show_error_dialog(self, "Re-run Blocked", error)

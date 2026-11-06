@@ -1046,8 +1046,8 @@ The same Recording tab shows **Default for this computer** and **Change Default�
 available without an open project. Its editor uses the existing recording fields
 and saves a typed JSON preference at `recording/default_configuration` in the app's
 local user-profile QSettings store. Root-folder changes do not reset this preference.
-The first-time picker chooses hardware only; configure required device details,
-including Brain Products amplifier/rate, through Change Default before normal launch.
+The first-time picker chooses hardware only. **Change Default…** can save the
+Brain Products amplifier and EEG sampling rate to prefill project setup.
 
 An explicit project's `settings.recording` overrides the computer default. An unset
 field inherits it dynamically; changing the default updates an inheriting open
@@ -1055,13 +1055,21 @@ document and projects opened later without saving or dirtying them. **Recording
 Setup…** creates an override, and **Use Computer Default** clears only that field
 on disk while preserving other saved values and open drafts. Summaries distinguish
 inheritance from an override. Cancel and failed saves retain the previous choice.
+The first normal Brain Products launch from Home, Run, or a condition re-run
+opens project **Recording Setup** if the project inherits its device or has no
+saved amplifier or EEG sampling rate. For parallel output, the amplifier is
+actiCHamp. Confirm the settings used in BrainVision Recorder and click **Apply**.
+Studio saves the project choice before asking for participant details. Cancel or
+a save failure stops that launch. Later launches use the project's saved values.
+**Use Computer Default** clears that confirmation so the next Brain Products
+launch asks again. Test/Pilot can run without first configuring recording.
 Home shows a centered `Recording Device: <selected device>` immediately above Launch
 Experiment, including the ActiveThree and TriggerBox/Plus identities.
 Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
 backends are added. The existing effective transport, endpoint and Recorder-check
 details remain in the label's tooltip and accessible description; Run retains its
 full output summary. Home and Run preserve the no-marker Test/Pilot text and
-actionable invalid-setting messages. The device label identifies the configuration,
+show when Recording Setup is required. The device label identifies the configuration,
 not a detected connection or recording-readiness result.
 Projects without `settings.recording` inherit the computer default in the native app.
 Save/reopen and project switching preserve overrides and inheritance; `.fpvsconfig`
@@ -1142,6 +1150,10 @@ in first-time setup. Saved ports, including COM3 and COM4, and manual edits surv
 discovery. Multiple matches require a choice during first-time setup. Empty/error
 states retain manual entry. Access failures keep candidates visible and
 expose their errors; successful access applies only to the checked port at that moment.
+Detect opens an error dialog when it finds no candidates, cannot run, or cannot
+open the selected port. The error identifies a checked alternative when one is
+available, while retaining the operator's selection. A generic USB Serial Port
+can be checked by entering its COM number from Device Manager and clicking Detect.
 Metadata-only status says a port is listed, not that the hardware is connected;
 access success says "when checked". Details explain persistent unplugged rev.02 ports
 and distinguish port access from amplifier/Recorder readiness. Detection and launch
@@ -1183,6 +1195,9 @@ never create the presentation engine or reserve a visit after a failed check. Th
 registered for a safe visible environment and is not run by ordinary local checks.
 
 Visible TriggerBox acceptance: inspect Recording Setup at `700x640` in both themes.
+Confirm Detect matches the height of the COM dropdown. Failed checks and invalid
+Apply attempts open Studio's error dialog with expandable diagnostics. Progress and
+successful checks stay in Recording Setup.
 Exercise Detect with no device, one device and synthetic multiple/error results;
 enter a manual port while a scan is pending and confirm it survives completion.
 Check manual COM3/COM4 with generic metadata: simulate access denied, verify the visible
@@ -1190,7 +1205,9 @@ close-and-retry action, then release the port and Detect again. Also exercise mi
 ports, rejected serial settings, disconnected-device I/O, timeout, close failure and
 missing Studio serial support. No trigger bytes should be sent by Detect. An edit
 during the check must not inherit the old port's success.
-Choose actiCHamp at 100 Hz: 10 ms must disable Apply and 20 ms must allow it.
+Choose actiCHamp at 100 Hz. Apply with 10 ms must report an error and keep the draft
+open. Apply with 20 ms must save. Reopen the project and confirm the amplifier and
+rate still match the saved choice.
 Switch between actiCHamp and LiveAmp at `700x640` in both themes, including pulse
 validation errors. Recorder version and input guidance must follow the selection;
 LiveAmp must not inherit actiCHamp's lower-eight-Recorder-bit instruction. The full

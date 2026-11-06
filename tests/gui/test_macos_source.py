@@ -173,6 +173,7 @@ def test_launch_confirms_local_display_only_on_mac_before_condition_selection(
         _document=SimpleNamespace(
             project=sample_project, experiment_test_mode_enabled=test_mode,
             validate_recording_launch=Mock(),
+            needs_project_brainproducts_setup=lambda: False,
             validation_report=Mock(return_value=SimpleNamespace(
                 is_valid=platform_name == "win32",
             )),

@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from tests.platform_adapters import windows_runtime
+from tests.platform_adapters import set_module_platform, windows_runtime
 from tests.unit.runtime_launcher_helpers import StubEngine
 from tests.unit.test_brainproducts_windows_writes import native_driver as native_driver
 
@@ -25,6 +25,9 @@ from fpvs_studio.core.project_config import (
 )
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.core.serialization import read_json_file
+from fpvs_studio.gui import document_runtime
+from fpvs_studio.gui.document_runtime import DocumentRuntimeMixin
+from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.runtime import launcher, run_worker, triggers
 from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -56,6 +59,37 @@ from fpvs_studio.triggers.serial_port_access import check_serial_port_access
 @pytest.fixture(autouse=True)
 def _windows_acquisition_contract(monkeypatch):
     windows_runtime(monkeypatch)
+
+
+@pytest.mark.parametrize("backend", ["brainproducts_triggerbox", "brainproducts_parallel"])
+@pytest.mark.parametrize("mode", ["inherited", "incomplete", "saved", "test", "pilot"])
+def test_project_brainproducts_confirmation_is_required_for_normal_launch(
+    monkeypatch, backend, mode,
+):
+    set_module_platform(monkeypatch, document_runtime, "win32")
+    configuration = ProjectRecordingSettings(
+        recording_backend=backend,
+        brainproducts_parallel_address=0x378 if backend == "brainproducts_parallel" else None,
+        brainproducts_amplifier="actichamp",
+        brainproducts_sampling_rate_hz=None if mode in ("incomplete", "test", "pilot") else 500,
+    ).model_dump(mode="json")
+    document = SimpleNamespace(
+        local_testing_enabled=mode in ("test", "pilot"),
+        uses_default_recording_configuration=mode in ("inherited", "test", "pilot"),
+        recording_configuration=configuration,
+        recording_launch_options=lambda: {
+            **configuration, "experiment_test_mode": mode == "test", "pilot_mode": mode == "pilot",
+        },
+    )
+    needs_setup = mode in ("inherited", "incomplete")
+    assert DocumentRuntimeMixin.needs_project_brainproducts_setup(document) is needs_setup
+    if needs_setup:
+        expected = "Confirm this project's" if mode == "inherited" else "sampling rate"
+        with pytest.raises(DocumentError, match=expected):
+            DocumentRuntimeMixin.validate_recording_launch(document)
+    else:
+        expected = backend if mode == "saved" else "null"
+        assert DocumentRuntimeMixin.validate_recording_launch(document) == expected
 
 
 class FakeUnicorn(NullBackend):

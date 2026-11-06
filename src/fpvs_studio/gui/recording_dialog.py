@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QIntValidator, QShowEvent
@@ -30,17 +30,18 @@ from fpvs_studio.gui.biosemi_port_selector import BioSemiPortSelector
 from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
+    mark_form_field_action,
     mark_primary_action,
     mark_secondary_action,
 )
 from fpvs_studio.gui.parallel_port_selector import ParallelPortSelector
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
+from fpvs_studio.gui.window_helpers import _show_error_dialog
 from fpvs_studio.runtime.recording import (
     UNICORN_VALIDATION_NOTE,
     recording_backend_label,
     validate_recording_configuration,
 )
-from fpvs_studio.support.error_explanations import describe_error
 from fpvs_studio.triggers.brainproducts_discovery import (
     TriggerBoxDiscoveryError,
     TriggerBoxPortCandidate,
@@ -52,6 +53,9 @@ from fpvs_studio.triggers.brainproducts_errors import (
 )
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
 from fpvs_studio.triggers.serial_port_access import SerialPortAccessError
+
+if TYPE_CHECKING:
+    from fpvs_studio.gui.document import ProjectDocument
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -123,13 +127,13 @@ class DefaultRecordingHardwareDialog(QDialog):
 
 
 def recording_preference_summary(configuration: dict[str, object]) -> str:
-    """Describe a saved choice while preserving actionable invalid-state feedback."""
+    """Describe the saved device or indicate that setup is required."""
 
     try:
         backend = validate_recording_configuration(configuration)
         label = recording_backend_label(configuration)
     except ValueError:
-        return "Recording setup invalid. Open Recording Setup to check the device and EEG settings."
+        return "Recording Setup required before recording."
     if backend == "unicorn_udp":
         return f"{label} — Recorder check before launch"
     if configuration.get("recording_backend") is None:
@@ -257,7 +261,7 @@ class RecordingSetupDialog(QDialog):
             "and your manually selected COM port. "
             "No marker bytes are sent.",
         )
-        mark_secondary_action(self.detect_ports_button)
+        mark_form_field_action(self.detect_ports_button)
         port_layout.addWidget(self.detect_ports_button)
         self.brainproducts_amplifier_combo = QComboBox(self)
         self.brainproducts_amplifier_combo.setAccessibleName("Brain Products EEG amplifier")
@@ -332,11 +336,6 @@ class RecordingSetupDialog(QDialog):
         self.guidance_label.setTextFormat(Qt.TextFormat.PlainText)
         self.guidance_label.setObjectName("recording_setup_guidance")
         layout.addWidget(self.guidance_label)
-        self.error_label = QLabel(self)
-        self.error_label.setWordWrap(True)
-        self.error_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.error_label.setObjectName("recording_setup_error")
-        layout.addWidget(self.error_label)
         layout.addStretch(1)
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Cancel,
@@ -359,12 +358,14 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_sampling_rate_combo.currentIndexChanged.connect(self._refresh)
         self.detect_ports_button.clicked.connect(self._detect_ports)
         self.brainproducts_port_edit.textEdited.connect(self._manual_port_edited)
-        self.brainproducts_port_combo.activated.connect(self._manual_port_edited)
+        self.brainproducts_port_combo.activated.connect(self._port_selected)
         self.finished.connect(self._cancel_port_detection)
         self.finished.connect(self.biosemi_port_selector.cancel)
         self.finished.connect(self.parallel_port_selector.cancel)
         self._refresh()
         apply_dialog_theme(self)
+        self.brainproducts_port_combo.ensurePolished()
+        self.detect_ports_button.setFixedHeight(self.brainproducts_port_combo.sizeHint().height())
 
     def _populate_sampling_rates(self, selected: object = None) -> None:
         amplifier = self._selected_amplifier()
@@ -414,6 +415,10 @@ class RecordingSetupDialog(QDialog):
         self._keep_triggerbox_port = True
         self._refresh_port_detection_status()
 
+    def _port_selected(self, _index: int) -> None:
+        self._keep_triggerbox_port = True
+        self._refresh_port_detection_status(report_errors=True)
+
     def _detect_ports(self) -> None:
         self._start_port_detection(check_access=True)
 
@@ -434,11 +439,9 @@ class RecordingSetupDialog(QDialog):
         self._port_detection_candidates = None
         self._port_access_checked = check_access
         self.detect_ports_button.setEnabled(False)
-        self.detection_status_label.setText(
+        self._show_port_detection_status(
             "Checking TriggerBox port access…" if check_access else "Detecting TriggerBox ports…",
         )
-        self.detection_status_label.setToolTip("")
-        self.detection_status_label.setAccessibleDescription("")
         try:
             lifecycle = update_lifecycle()
             self._port_detection_job = lifecycle.start_task(
@@ -451,9 +454,28 @@ class RecordingSetupDialog(QDialog):
                 ),
             )
         except RuntimeError as exc:
-            self._port_detection_finished(UpdateTaskResult(error=exc))
+            _LOGGER.warning("TriggerBox port detection could not start: %s", exc)
+            self.detect_ports_button.setEnabled(True)
+            self._show_port_detection_error(
+                exc,
+                "Studio could not start TriggerBox detection. Restart Studio and try again.",
+            )
             return
         self._port_detection_job.finished.connect(self._port_detection_finished)
+
+    def _show_port_detection_status(self, text: str, *, details: str = "") -> None:
+        label = self.detection_status_label
+        label.setText(text)
+        label.setToolTip(details)
+        label.setAccessibleDescription(details)
+        label.setVisible(
+            bool(text) and self.backend_combo.currentData() == "brainproducts_triggerbox",
+        )
+
+    def _show_port_detection_error(self, error: Exception, message: str) -> None:
+        self._show_port_detection_status("")
+        if self.isVisible() and self.backend_combo.currentData() == "brainproducts_triggerbox":
+            _show_error_dialog(self, "TriggerBox Detection Error", error, message=message)
 
     @Slot(object)
     def _port_detection_finished(self, value: object) -> None:
@@ -463,7 +485,7 @@ class RecordingSetupDialog(QDialog):
         self.detect_ports_button.setEnabled(True)
         result = cast(UpdateTaskResult, value)
         if result.cancelled:
-            self.detection_status_label.setText("Detection cancelled. Enter a COM port or retry.")
+            self._show_port_detection_status("Detection cancelled. Enter a COM port or retry.")
             return
         if result.error is not None:
             _LOGGER.warning("TriggerBox port detection failed: %s", result.error)
@@ -477,12 +499,7 @@ class RecordingSetupDialog(QDialog):
                 text = str(result.error).partition("Details:")[0].strip()
             else:
                 text = "Unable to list TriggerBox ports. Retry or check Device Manager."
-            self.detection_status_label.setText(text)
-            details = str(result.error)
-            if result.error.__cause__ is not None:
-                details += f"\n{result.error.__cause__}"
-            self.detection_status_label.setToolTip(details)
-            self.detection_status_label.setAccessibleDescription(details)
+            self._show_port_detection_error(result.error, text)
             return
         candidates = cast(tuple[TriggerBoxPortCandidate, ...], result.value)
         self._port_detection_candidates = candidates
@@ -510,8 +527,8 @@ class RecordingSetupDialog(QDialog):
         self.brainproducts_port_combo.setEditText(port)
         self.brainproducts_port_edit.blockSignals(False)
         self.brainproducts_port_combo.blockSignals(False)
-        self._refresh_port_detection_status()
         self._refresh()
+        self._refresh_port_detection_status(report_errors=True)
 
     @staticmethod
     def _port_candidate_details(candidate: TriggerBoxPortCandidate) -> str:
@@ -534,23 +551,35 @@ class RecordingSetupDialog(QDialog):
         )
         return details
 
-    def _refresh_port_detection_status(self) -> None:
+    def _refresh_port_detection_status(self, *, report_errors: bool = False) -> None:
         candidates = self._port_detection_candidates
         if candidates is None or self._discovery_dismissed:
             return
         details = "\n".join(
             f"{item.port}: {self._port_candidate_details(item)}" for item in candidates
         )
-        self.detection_status_label.setToolTip(details)
-        self.detection_status_label.setAccessibleDescription(details)
         port = self.brainproducts_port_edit.text().strip().upper()
         selected = next((item for item in candidates if item.port.upper() == port), None)
-        if self._port_access_checked and candidates:
-            if selected is not None:
+        error = False
+        if self._port_access_checked:
+            if not candidates:
+                text = (
+                    "No TriggerBox COM port found. Connect the TriggerBox and install its "
+                    "software and driver if needed. If Device Manager lists it as a USB "
+                    "Serial Port, enter its COM number and click Detect again."
+                )
+                error = True
+            elif selected is not None:
                 if selected.accessible is True:
                     text = f"{selected.port}: Port accessible when checked."
                 elif selected.accessible is False:
                     text = triggerbox_port_error_message(selected.port, selected.access_error)
+                    alternatives = [item.port for item in candidates if item.accessible is True]
+                    if len(alternatives) == 1:
+                        text += f" Choose {alternatives[0]} if it is your TriggerBox port."
+                    elif alternatives:
+                        text += " Other ports opened. Choose your TriggerBox port from the list."
+                    error = True
                 else:
                     text = f"{selected.port}: Access was not checked."
             elif port:
@@ -562,9 +591,10 @@ class RecordingSetupDialog(QDialog):
                     f"{len(candidates)} ports checked: {accessible} accessible, "
                     f"{unavailable} unavailable. Choose a port."
                 )
-            self.detection_status_label.setText(text)
-            return
-        if len(candidates) == 1:
+                if unavailable == len(candidates):
+                    text = "No checked port could be opened. Select a port for recovery steps."
+                    error = True
+        elif len(candidates) == 1:
             text = f"TriggerBox port listed: {candidates[0].port}. Access not checked."
             if self._keep_triggerbox_port and port != candidates[0].port:
                 text += " Selected port retained. Detect can check it."
@@ -579,7 +609,12 @@ class RecordingSetupDialog(QDialog):
                 if self._keep_triggerbox_port and port else
                 "Detect again or enter its actual COM port."
             )
-        self.detection_status_label.setText(text)
+        if error:
+            self._show_port_detection_status("")
+            if report_errors:
+                self._show_port_detection_error(ValueError(details or text), text)
+        else:
+            self._show_port_detection_status(text, details=details)
 
     def _cancel_port_detection(self, _result: int) -> None:
         self._discovery_dismissed = True
@@ -653,9 +688,11 @@ class RecordingSetupDialog(QDialog):
         for widget in (
             self.brainproducts_port_label, self.brainproducts_port_row,
             self.brainproducts_amplifier_label, self.brainproducts_amplifier_combo,
-            self.detection_status_label,
         ):
             widget.setVisible(triggerbox)
+        self.detection_status_label.setVisible(
+            triggerbox and bool(self.detection_status_label.text()),
+        )
         self.brainproducts_parallel_label.setVisible(parallel)
         self.parallel_port_selector.setVisible(parallel)
         for widget in (
@@ -766,16 +803,10 @@ class RecordingSetupDialog(QDialog):
                 self.pulse_requirement_label.setText(
                     f"Minimum pulse: {minimum:g} ms. Launch checks spacing between markers.",
                 )
-        draft = self._draft()
         try:
-            if biosemi and not self._computer_default and not self.biosemi_port_selector.port:
-                raise ValueError("Enter the BioSemi trigger-interface serial port.")
-            validate_recording_configuration(draft)
-            validated = ProjectRecordingSettings.model_validate(draft)
-        except ValueError as exc:
-            self.error_label.setText(describe_error("Recording setup", exc))
-            self.error_label.setToolTip(str(exc))
-            self.apply_button.setEnabled(False)
+            validated = self._validate_draft(self._draft())
+        except ValueError:
+            pass  # Report validation only when the operator clicks Apply.
         else:
             self._valid_udp_port = validated.unicorn_udp_port
             self._valid_triggerbox_port = validated.brainproducts_serial_port
@@ -783,17 +814,43 @@ class RecordingSetupDialog(QDialog):
             self._valid_pulse_width = validated.brainproducts_pulse_width_ms
             self._valid_amplifier = validated.brainproducts_amplifier
             self._valid_sampling_rate = validated.brainproducts_sampling_rate_hz
-            self.error_label.clear()
-            self.error_label.setToolTip("")
-            self.apply_button.setEnabled(True)
         self._maybe_detect_ports()
 
+    def _validate_draft(self, draft: dict[str, object]) -> ProjectRecordingSettings:
+        if (draft["recording_backend"] in ("serial", "biosemi_active_three")
+                and not self._computer_default and not self.biosemi_port_selector.port):
+            raise ValueError("Enter the BioSemi trigger-interface serial port.")
+        validate_recording_configuration(draft)
+        return ProjectRecordingSettings.model_validate(draft)
+
     def accept(self) -> None:
-        self._refresh()
-        if not self.apply_button.isEnabled():
+        draft = self._draft()
+        try:
+            self._validate_draft(draft)
+        except ValueError as exc:
+            _show_error_dialog(self, "Recording Setup Error", exc)
             return
-        self._configuration = self._draft()
+        self._configuration = draft
         if (not self._computer_default
                 and self.backend_combo.currentData() in ("serial", "biosemi_active_three")):
             self._accepted_biosemi_serial_port = self.biosemi_port_selector.port
         super().accept()
+
+
+def configure_brainproducts_for_launch(parent: QWidget, document: ProjectDocument) -> bool:
+    """Review and save project recording settings before continuing a normal launch."""
+
+    if not document.needs_project_brainproducts_setup():
+        return True
+    dialog = RecordingSetupDialog(
+        document.recording_configuration, parent,
+        biosemi_serial_port=document.project.settings.triggers.serial_port,
+        biosemi_serial_baudrate=document.project.settings.triggers.baudrate,
+    )
+    if dialog.exec() != int(QDialog.DialogCode.Accepted):
+        return False
+    configuration = dialog.configuration
+    if configuration["recording_backend"] in ("serial", "biosemi_active_three"):
+        configuration["serial_port"] = dialog.biosemi_serial_port
+    document.save_recording_configuration(configuration)
+    return True

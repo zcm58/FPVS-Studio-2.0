@@ -8,7 +8,7 @@ from functools import partial
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 
-from fpvs_studio.support.error_explanations import explain_error
+from fpvs_studio.support.error_explanations import ErrorExplanation, explain_error
 
 REPORT_BUTTON_TEXT = "Report this bug. Please!"
 _DECORATED = "fpvs_reportable_error"
@@ -36,7 +36,10 @@ class ErrorDialogReporter(QObject):
             self.decorate(watched)
         return super().eventFilter(watched, event)
 
-    def decorate(self, box: QMessageBox, *, error: BaseException | None = None) -> None:
+    def decorate(
+        self, box: QMessageBox, *, error: BaseException | None = None,
+        explanation: ErrorExplanation | None = None,
+    ) -> None:
         if box.property(_DECORATED) or box.icon() not in (
             QMessageBox.Icon.Critical,
             QMessageBox.Icon.Warning,
@@ -62,7 +65,8 @@ class ErrorDialogReporter(QObject):
         original = box.text()
         informative = box.informativeText()
         details = box.detailedText()
-        explanation = explain_error(title, original, error=error, details=details)
+        if explanation is None:
+            explanation = explain_error(title, original, error=error, details=details)
         diagnostic = "\n\n".join(
             value for value in (title, original, informative, details) if value
         )
@@ -105,7 +109,9 @@ def install_error_reporting(app: QApplication) -> ErrorDialogReporter:
     return existing if existing is not None else ErrorDialogReporter(app)
 
 
-def decorate_error_dialog(box: QMessageBox, error: BaseException) -> None:
+def decorate_error_dialog(
+    box: QMessageBox, error: BaseException, *, explanation: ErrorExplanation | None = None,
+) -> None:
     app = QApplication.instance()
     if isinstance(app, QApplication):
-        install_error_reporting(app).decorate(box, error=error)
+        install_error_reporting(app).decorate(box, error=error, explanation=explanation)

@@ -161,10 +161,26 @@ class DocumentRuntimeMixin:
             backend = validate_recording_configuration(options)
             label = recording_backend_label(options)
         except ValueError:
-            return "Recording setup invalid. Open Settings > Recording to correct it."
+            return "Recording Setup required before recording."
         if backend == "unicorn_udp":
             return f"{label} — Recorder check before launch"
         return label
+
+    def needs_project_brainproducts_setup(self) -> bool:
+        """Require project-specific EEG timing before the first normal launch."""
+        if sys.platform == "darwin" or self.local_testing_enabled:
+            return False
+        options = self.recording_configuration
+        backend = options["recording_backend"]
+        if backend not in ("brainproducts_triggerbox", "brainproducts_parallel"):
+            return False
+        return (
+            self.uses_default_recording_configuration
+            or options["brainproducts_sampling_rate_hz"] is None
+            or (
+                backend == "brainproducts_triggerbox" and options["brainproducts_amplifier"] is None
+            )
+        )
 
     def validate_recording_launch(self) -> str:
         """Validate local settings without probing vendor software on the GUI thread.
@@ -182,9 +198,16 @@ class DocumentRuntimeMixin:
                 "Run EEG acquisition on the Windows lab PC."
             )
         try:
-            return validate_recording_configuration(self.recording_launch_options())
+            backend = validate_recording_configuration(self.recording_launch_options())
         except ValueError as exc:
             raise DocumentError(str(exc)) from exc
+        if (backend in ("brainproducts_triggerbox", "brainproducts_parallel")
+                and self.uses_default_recording_configuration):
+            raise DocumentError(
+                "Confirm this project's Brain Products amplifier and Recorder sampling rate "
+                "in Recording Setup before launching."
+            )
+        return backend
 
     def validation_report(self, *, refresh_hz: float) -> ProjectValidationReport:
         """Validate the current project at a specific compile refresh rate."""

@@ -53,12 +53,20 @@ def serial_jobs(monkeypatch):
     lifecycle = SimpleNamespace(start_task=start_task)
     enumeration = Mock(return_value=(SerialPortInfo("COM193", "USB Serial Converter"),))
     access = Mock(return_value=SerialPortAccessResult("COM193", True))
+    popup = Mock()
     monkeypatch.setattr(selector_module, "update_lifecycle", lambda: lifecycle)
     monkeypatch.setattr(selector_module, "enumerate_serial_ports", enumeration)
     monkeypatch.setattr(selector_module, "check_serial_port_access", access)
+    monkeypatch.setattr(selector_module, "_show_error_dialog", popup)
     monkeypatch.setattr(dialog_module, "update_lifecycle", lambda: lifecycle)
     monkeypatch.setattr(dialog_module, "discover_triggerbox_ports", Mock(return_value=()))
-    return SimpleNamespace(jobs=jobs, enumeration=enumeration, access=access)
+    return SimpleNamespace(jobs=jobs, enumeration=enumeration, access=access, popup=popup)
+
+
+def _error_popup(serial_jobs, selector):
+    assert not selector.status_label.text()
+    assert serial_jobs.popup.call_args.args[:2] == (selector, "BioSemi Serial Port Error")
+    return serial_jobs.popup.call_args.kwargs["message"], serial_jobs.popup.call_args.args[2]
 
 
 def _dialog(qtbot, *, backend="serial", port="COM3", baudrate=115200, computer_default=False):
@@ -153,9 +161,9 @@ def test_manual_edit_survives_pending_metadata_and_enumeration_failure(qtbot, se
     selector.edit.setText("COM64")
     serial_jobs.jobs[-1].finish(error=OSError("Synthetic enumeration denied"))
     assert selector.port == "COM64"
-    assert "Could not list serial ports" in selector.status_label.text()
-    assert "Synthetic enumeration denied" in selector.status_label.toolTip()
-    assert selector.status_label.accessibleDescription() == selector.status_label.toolTip()
+    message, error = _error_popup(serial_jobs, selector)
+    assert "Could not list serial ports" in message
+    assert str(error) == "Synthetic enumeration denied"
     assert dialog.apply_button.isEnabled()
 
 
@@ -179,17 +187,16 @@ def test_check_opens_only_selected_port_and_reports_its_result(
     error = "[WinError 5] Access denied to COM193" if not accessible else ""
     job.finish(SerialPortAccessResult("COM193", accessible, error))
 
-    expected = ("COM193: Port accessible." if accessible else
-                biosemi_port_error_message("COM193", error))
-    assert selector.status_label.text() == expected
     assert selector.port == "COM193"
     assert selector.refresh_button.isEnabled() and selector.check_button.isEnabled()
     assert "No marker bytes" in selector.check_button.toolTip()
     if accessible:
+        assert selector.status_label.text() == "COM193: Port accessible."
         assert "identity and marker receipt are unverified" in selector.status_label.toolTip()
     else:
-        assert error in selector.status_label.toolTip()
-        assert error in selector.status_label.accessibleDescription()
+        message, diagnostic = _error_popup(serial_jobs, selector)
+        assert message == biosemi_port_error_message("COM193", error)
+        assert str(diagnostic) == error
 
 
 @pytest.mark.parametrize("restore_original", [False, True])
@@ -235,13 +242,13 @@ def test_biosemi_check_error_is_actionable_and_fits(
     serial_jobs.jobs[-1].finish(SerialPortAccessResult("COM193", False, failure))
     QApplication.processEvents()
 
-    assert selector.status_label.text() == biosemi_port_error_message("COM193", failure)
-    assert "BioSemi" in selector.status_label.text()
-    assert "COM193" in selector.status_label.text()
-    assert "WinError" not in selector.status_label.text()
-    assert "TriggerBox" not in selector.status_label.text()
-    assert failure == selector.status_label.toolTip()
-    assert failure == selector.status_label.accessibleDescription()
+    message, error = _error_popup(serial_jobs, selector)
+    assert message == biosemi_port_error_message("COM193", failure)
+    assert "BioSemi" in message
+    assert "COM193" in message
+    assert "WinError" not in message
+    assert "TriggerBox" not in message
+    assert str(error) == failure
     assert selector.port == "COM193"
     assert selector.check_button.isEnabled() and dialog.apply_button.isEnabled()
     assert "keep it recording" in dialog.guidance_label.text()
@@ -266,9 +273,10 @@ def test_biosemi_missing_studio_serial_support_keeps_dependency_cause(
     serial_jobs.jobs[-1].finish(error=failure)
     QApplication.processEvents()
 
-    assert selector.status_label.text() == BIOSEMI_SERIAL_SUPPORT_MESSAGE
-    assert "Synthetic unavailable serial component" in selector.status_label.toolTip()
-    assert "driver" not in selector.status_label.text().lower()
+    message, error = _error_popup(serial_jobs, selector)
+    assert message == BIOSEMI_SERIAL_SUPPORT_MESSAGE
+    assert error is failure
+    assert "driver" not in message.lower()
     assert selector.port == "COM193"
     assert selector.refresh_button.isEnabled() and selector.check_button.isEnabled()
     _assert_geometry(qtbot, dialog)
@@ -294,14 +302,14 @@ def test_biosemi_worker_start_failure_does_not_claim_a_port_failure(
 
     (selector.check_button if operation == "check" else selector.refresh_button).click()
     action = "start the port check" if operation == "check" else "refresh the port list"
-    assert selector.status_label.text() == (
+    message, error = _error_popup(serial_jobs, selector)
+    assert message == (
         f"Studio could not {action}. Studio may be closing. Restart Studio, then try again."
     )
-    assert str(failure) == selector.status_label.toolTip()
-    assert str(failure) == selector.status_label.accessibleDescription()
-    assert "USB" not in selector.status_label.text()
-    assert "driver" not in selector.status_label.text()
-    assert "occupied" not in selector.status_label.text()
+    assert error is failure
+    assert "USB" not in message
+    assert "driver" not in message
+    assert "occupied" not in message
     assert selector.port == "COM193"
     assert selector.refresh_button.isEnabled() and selector.check_button.isEnabled()
     assert dialog.apply_button.isEnabled()
@@ -317,7 +325,7 @@ def test_retry_clears_previous_error_and_supports_cancelled_check(qtbot, serial_
     _finish_list(serial_jobs, "COM193")
     selector.check_button.click()
     serial_jobs.jobs[-1].finish(error=RuntimeError("Synthetic missing driver"))
-    assert "Synthetic missing driver" in selector.status_label.toolTip()
+    assert str(_error_popup(serial_jobs, selector)[1]) == "Synthetic missing driver"
     selector.check_button.click()
     assert "Checking COM193" in selector.status_label.text()
     assert selector.status_label.toolTip() == ""

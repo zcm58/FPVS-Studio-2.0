@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent, widget_message_box
 
 from fpvs_studio.gui.error_dialogs import REPORT_BUTTON_TEXT, ErrorDialogReporter
+from fpvs_studio.gui.window_helpers import _show_error_dialog
 from fpvs_studio.triggers.biosemi_errors import (
     biosemi_port_error_message,
     biosemi_write_error_message,
@@ -144,6 +145,28 @@ def test_exception_popup_without_explicit_buttons_keeps_ok_and_escape(qtbot, pop
     qtbot.keyClick(box, Qt.Key.Key_Escape)
     qtbot.waitUntil(lambda: not box.isVisible())
     assert requests == []
+
+
+def test_recording_modal_preserves_recovery_and_keeps_raw_error_in_details(
+    qtbot, popups, monkeypatch,
+):
+    raw = "[WinError 2] The system cannot find the file specified."
+    message = triggerbox_port_error_message("COM3", raw)
+    shown = []
+
+    def inspect(box):
+        qtbot.addWidget(box)
+        shown.append(box)
+        assert box.icon() == QMessageBox.Icon.Critical
+        assert box.text() == message
+        assert raw in box.detailedText()
+        assert box.standardButtons() & QMessageBox.StandardButton.Ok
+        assert box.findChild(QPushButton, "report_error_button") is not None
+        return int(QMessageBox.StandardButton.Ok)
+
+    monkeypatch.setattr(QMessageBox, "exec", inspect)
+    _show_error_dialog(None, "TriggerBox Detection Error", ValueError(raw), message=message)
+    assert len(shown) == 1
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])

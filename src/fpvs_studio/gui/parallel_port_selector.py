@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui.components import mark_secondary_action
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
+from fpvs_studio.gui.window_helpers import _show_error_dialog
 from fpvs_studio.triggers.parallel_discovery import ParallelPortCandidate, discover_parallel_ports
 
 _LOGGER = logging.getLogger(__name__)
@@ -145,7 +146,12 @@ class ParallelPortSelector(QWidget):
             return
         if result.error is not None:
             _LOGGER.warning("Parallel port discovery failed: %s", result.error)
-            self._status("Detection failed. Retry or enter the address.", str(result.error))
+            self._status("")
+            if self.isVisible():
+                _show_error_dialog(
+                    self, "Parallel Port Detection Error", result.error,
+                    message="Studio could not list parallel ports. Retry or enter the I/O address.",
+                )
             return
         candidates = cast(tuple[ParallelPortCandidate, ...], result.value)
         previous = self.edit.text()

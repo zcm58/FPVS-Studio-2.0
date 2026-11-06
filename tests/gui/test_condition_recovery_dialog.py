@@ -176,6 +176,26 @@ def test_busy_window_does_not_start_recovery_launch():
     main_window.StudioMainWindow._launch_recovered_condition(window, _record())
 
 
+def test_cancelled_recording_setup_stops_recovery_before_participant_entry(monkeypatch):
+    setup = Mock(return_value=False)
+    participant = Mock()
+    monkeypatch.setattr(main_window, "configure_brainproducts_for_launch", setup)
+    monkeypatch.setattr(main_window, "ParticipantNumberDialog", participant)
+    document = SimpleNamespace(
+        local_testing_enabled=False,
+        project=SimpleNamespace(settings=SimpleNamespace(allow_repeated_participant_sessions=True)),
+        validate_recording_launch=Mock(),
+    )
+    window = SimpleNamespace(
+        isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
+        _bundle_import_processing_active=False, _project_update_reload_failed=False,
+    )
+    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+    setup.assert_called_once_with(window, document)
+    document.validate_recording_launch.assert_not_called()
+    participant.assert_not_called()
+
+
 def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
     participant_dialog = Mock()
     participant_dialog.DialogCode.Accepted = 1
@@ -195,6 +215,7 @@ def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
             manual_removed_electrodes={},
         ),
         validate_recording_launch=Mock(return_value="brainproducts_triggerbox"),
+        needs_project_brainproducts_setup=lambda: False,
         update_manual_removed_electrodes=Mock(),
         save=Mock(),
     )
@@ -215,6 +236,7 @@ def test_current_setup_replacement_cancel_does_not_compile_or_launch(monkeypatch
         local_testing_enabled=False,
         project=SimpleNamespace(settings=SimpleNamespace(allow_repeated_participant_sessions=True)),
         validate_recording_launch=Mock(), compile_session=Mock(),
+        needs_project_brainproducts_setup=lambda: False,
     )
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False,
@@ -234,6 +256,7 @@ def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypa
         local_testing_enabled=False,
         project=SimpleNamespace(settings=SimpleNamespace(allow_repeated_participant_sessions=True)),
         validate_recording_launch=Mock(), compile_session=Mock(),
+        needs_project_brainproducts_setup=lambda: False,
     )
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,

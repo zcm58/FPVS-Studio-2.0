@@ -39,6 +39,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Project Brain Products recording setup](exec-plans/completed/project-brainproducts-recording-setup.md):
+  modal setup errors and first-launch project timing confirmation.
 - [Studio 2.7.4 release](exec-plans/completed/release-2.7.4.md): serial/BioSemi fixes
   published immutable/latest; exact-source CI, packaged checks, public downloads,
   attestations and updater selection passed.

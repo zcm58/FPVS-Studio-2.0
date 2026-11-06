@@ -108,6 +108,7 @@ __all__ = [
     "image_size_preview_dialog_stylesheet",
     "project_overview_stylesheet",
     "mark_error_text",
+    "mark_form_field_action",
     "mark_compact_info_action",
     "mark_launch_action",
     "mark_home_launch_action",
@@ -871,6 +872,12 @@ def mark_primary_action(button: QPushButton) -> None:
 
 def mark_secondary_action(button: QPushButton) -> None:
     _set_widget_property(button, "secondaryActionRole", "true")
+
+
+def mark_form_field_action(button: QPushButton) -> None:
+    """Style a secondary action placed beside a form field."""
+    mark_secondary_action(button)
+    _set_widget_property(button, "formFieldAction", "true")
 
 
 def mark_compact_info_action(button: QPushButton) -> None:
@@ -1748,6 +1755,13 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QPushButton:focus {{
         border: 2px solid {theme.focus_ring};
+    }}
+    QPushButton[formFieldAction="true"] {{
+        padding: 3px 12px;
+        min-height: 22px;
+    }}
+    QPushButton[formFieldAction="true"]:focus {{
+        padding: 2px 11px;
     }}
     QLabel[statusBadge="true"] {{
         border: 1px solid {color_border_soft};

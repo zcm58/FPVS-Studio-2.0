@@ -23,7 +23,9 @@ from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.gui import home_page as home_page_module
 from fpvs_studio.gui import parallel_port_selector as parallel_port_selector_module
 from fpvs_studio.gui import recording_dialog as recording_dialog_module
+from fpvs_studio.gui import settings_dialog as settings_dialog_module
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.gui.recording_dialog import RecordingSetupDialog
 from fpvs_studio.gui.run_page import ParticipantLaunchDetails, RunPage
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
@@ -84,6 +86,29 @@ def port_detection_jobs(monkeypatch):
     return jobs
 
 
+@pytest.fixture(autouse=True)
+def recording_errors(monkeypatch):
+    """Capture standard error popups without entering a second modal event loop."""
+    popup = Mock()
+    for module in (recording_dialog_module, parallel_port_selector_module, settings_dialog_module):
+        monkeypatch.setattr(module, "_show_error_dialog", popup)
+    return popup
+
+
+def _assert_invalid_apply(dialog, recording_errors):
+    recording_errors.reset_mock()
+    dialog.apply_button.click()
+    assert dialog.result() != int(QDialog.DialogCode.Accepted)
+    assert recording_errors.call_args.args[:2] == (dialog, "Recording Setup Error")
+    recording_errors.assert_called_once()
+
+
+def _detection_error_message(dialog, recording_errors):
+    assert not dialog.detection_status_label.text()
+    assert recording_errors.call_args.args[:2] == (dialog, "TriggerBox Detection Error")
+    return recording_errors.call_args.kwargs["message"]
+
+
 def _select_triggerbox_timing(dialog, *, amplifier="actichamp", sampling_rate=500):
     dialog.brainproducts_amplifier_combo.setCurrentIndex(
         dialog.brainproducts_amplifier_combo.findData(amplifier),
@@ -140,7 +165,9 @@ def _assert_labels_fit(widget) -> None:
     ("brainproducts_parallel", 1000),
     ("unicorn_udp", "broken saved port"), ("unknown old selection", 1000),
 ])
-def test_recording_setup_geometry_and_validation(qtbot, background, backend, port):
+def test_recording_setup_geometry_and_validation(
+    qtbot, background, backend, port, recording_errors,
+):
     configuration = {"recording_backend": backend, "unicorn_udp_port": port}
     if backend in ("brainproducts_triggerbox", "brainproducts_parallel"):
         configuration.update(
@@ -168,7 +195,8 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert "open and recording" in dialog.guidance_label.text()
         assert "raw BDF or BDF+" in dialog.guidance_label.text()
         assert "operator responsibilities" in dialog.guidance_label.text()
-        assert dialog.apply_button.isEnabled() == isinstance(port, int)
+        if not isinstance(port, int):
+            _assert_invalid_apply(dialog, recording_errors)
     elif backend == "brainproducts_triggerbox":
         assert dialog.backend_combo.currentText() == (
             "Brain Products / BrainVision (TriggerBox/Plus)"
@@ -202,7 +230,7 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
     elif backend not in (None, "serial"):
         assert dialog.backend_combo.currentData() == backend
         assert backend in dialog.backend_combo.toolTip()
-        assert not dialog.apply_button.isEnabled()
+        _assert_invalid_apply(dialog, recording_errors)
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
@@ -210,7 +238,7 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
     ("actichamp", "BrainVision Recorder 1 or 2"), ("liveamp", "BrainVision Recorder 1"),
 ])
 def test_triggerbox_amplifier_specific_recording_guidance_fits(
-    qtbot, background, amplifier, recorder, port_detection_jobs,
+    qtbot, background, amplifier, recorder, port_detection_jobs, recording_errors,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration(
         brainproducts_amplifier=amplifier, brainproducts_serial_port="COM4",
@@ -241,7 +269,7 @@ def test_triggerbox_amplifier_specific_recording_guidance_fits(
     _assert_labels_fit(dialog)
     dialog.brainproducts_pulse_edit.setText("1")
     QApplication.processEvents()
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
     _assert_labels_fit(dialog)
 
 
@@ -275,7 +303,9 @@ def test_recording_setup_apply_and_keyboard_cancel(qtbot):
     ("0x378", 777, 10, False), ("0x378", 100, 19, False),
     ("0x378", 100, 20, True),
 ])
-def test_parallel_address_and_actichamp_timing_validation(qtbot, address, rate, pulse, valid):
+def test_parallel_address_and_actichamp_timing_validation(
+    qtbot, address, rate, pulse, valid, recording_errors,
+):
     dialog = RecordingSetupDialog(_parallel_configuration(
         brainproducts_sampling_rate_hz=rate, brainproducts_pulse_width_ms=pulse,
     ))
@@ -291,13 +321,12 @@ def test_parallel_address_and_actichamp_timing_validation(qtbot, address, rate, 
     assert dialog.brainproducts_pulse_edit.isVisible()
     assert "actiCHamp" in dialog.guidance_label.toolTip()
     assert "InpOut driver installed and running" in dialog.guidance_label.toolTip()
-    assert dialog.apply_button.isEnabled() is valid
     if valid:
         dialog.apply_button.click()
         assert dialog.configuration["brainproducts_parallel_address"] == int(address, 16)
         assert dialog.configuration["brainproducts_amplifier"] == "actichamp"
     else:
-        assert dialog.error_label.text()
+        _assert_invalid_apply(dialog, recording_errors)
     _assert_labels_fit(dialog)
 
 
@@ -331,7 +360,7 @@ def test_parallel_discovery_uses_only_metadata_and_retains_manual_address(
 
 
 def test_parallel_discovery_requires_choice_for_multiple_or_missing_addresses(
-    qtbot, port_detection_jobs,
+    qtbot, port_detection_jobs, recording_errors,
 ):
     dialog = RecordingSetupDialog(_parallel_configuration(brainproducts_parallel_address=None))
     qtbot.addWidget(dialog)
@@ -341,7 +370,7 @@ def test_parallel_discovery_requires_choice_for_multiple_or_missing_addresses(
         ParallelPortCandidate("LPT2", 0xD010, "second device"),
     ))
     assert dialog.brainproducts_parallel_edit.text() == ""
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
     assert "Several" in dialog.parallel_port_selector.status_label.text()
     dialog.brainproducts_parallel_combo.setCurrentIndex(1)
     assert dialog.parallel_port_selector.address == 0xD010
@@ -351,10 +380,12 @@ def test_parallel_discovery_requires_choice_for_multiple_or_missing_addresses(
     port_detection_jobs[1].finish(candidates=(ParallelPortCandidate("LPT3", None, "third device"),))
     assert dialog.brainproducts_parallel_edit.text() == ""
     assert "Device Manager > Resources" in dialog.parallel_port_selector.status_label.text()
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
 
 
-def test_parallel_manual_draft_survives_backend_switch_and_cancel(qtbot, port_detection_jobs):
+def test_parallel_manual_draft_survives_backend_switch_and_cancel(
+    qtbot, port_detection_jobs, recording_errors,
+):
     original = _parallel_configuration()
     dialog = RecordingSetupDialog(original)
     qtbot.addWidget(dialog)
@@ -373,7 +404,7 @@ def test_parallel_manual_draft_survives_backend_switch_and_cancel(qtbot, port_de
         ParallelPortCandidate("LPT1", 0x378, "detected device"),
     ))
     assert dialog.brainproducts_parallel_edit.text() == ""
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
 
 
 @pytest.mark.parametrize("finish", ["cancel", "switch"])
@@ -408,7 +439,7 @@ def test_parallel_discovery_cancel_and_backend_switch_ignore_stale_results(
     "busy", "empty", "multiple", "missing", "error", "unique", "cancelled", "manual",
 ])
 def test_parallel_discovery_states_fit_minimum_dialog(
-    qtbot, port_detection_jobs, background, state,
+    qtbot, port_detection_jobs, background, state, recording_errors,
 ):
     dialog = RecordingSetupDialog(_parallel_configuration(
         brainproducts_parallel_address=None,
@@ -436,7 +467,8 @@ def test_parallel_discovery_states_fit_minimum_dialog(
     elif state == "error":
         details = "Windows could not read the parallel-port device resources. " * 12
         port_detection_jobs[0].finish(error=RuntimeError(details))
-        assert dialog.parallel_port_selector.status_label.toolTip() == details
+        assert not dialog.parallel_port_selector.status_label.text()
+        assert str(recording_errors.call_args.args[2]) == details
     elif state == "cancelled":
         port_detection_jobs[0].finish(cancelled=True)
     elif state == "unique":
@@ -465,7 +497,7 @@ def test_parallel_discovery_states_fit_minimum_dialog(
     ("COM123", "0", False), ("COM123", "1001", False),
     ("COM123", "broken saved pulse", False),
 ])
-def test_triggerbox_fields_validation_and_geometry(qtbot, port, pulse, valid):
+def test_triggerbox_fields_validation_and_geometry(qtbot, port, pulse, valid, recording_errors):
     dialog = RecordingSetupDialog(_triggerbox_configuration(
         brainproducts_serial_port=port, brainproducts_pulse_width_ms=pulse,
     ))
@@ -475,7 +507,8 @@ def test_triggerbox_fields_validation_and_geometry(qtbot, port, pulse, valid):
     assert (dialog.width(), dialog.height()) == (700, 640)
     assert not dialog.port_edit.isEnabled()
     assert not dialog.endpoint_label.isVisible()
-    assert dialog.apply_button.isEnabled() is valid
+    if not valid:
+        _assert_invalid_apply(dialog, recording_errors)
     assert "250 Hz" in dialog.brainproducts_pulse_edit.toolTip()
     assert "twice the pulse width" in dialog.brainproducts_pulse_edit.toolTip()
     _assert_labels_fit(dialog)
@@ -486,7 +519,7 @@ def test_triggerbox_fields_validation_and_geometry(qtbot, port, pulse, valid):
     ("actichamp", 777), ("liveamp", 100), ("unknown amplifier", 500),
 ])
 def test_triggerbox_apply_requires_supported_amplifier_and_sampling_rate(
-    qtbot, amplifier, sampling_rate,
+    qtbot, amplifier, sampling_rate, recording_errors,
 ):
     original = _triggerbox_configuration(
         brainproducts_amplifier=amplifier, brainproducts_sampling_rate_hz=sampling_rate,
@@ -495,10 +528,7 @@ def test_triggerbox_apply_requires_supported_amplifier_and_sampling_rate(
     qtbot.addWidget(dialog)
     dialog.show()
     QApplication.processEvents()
-    assert not dialog.apply_button.isEnabled()
-    assert dialog.error_label.text()
-    dialog.accept()
-    assert dialog.result() != int(QDialog.DialogCode.Accepted)
+    _assert_invalid_apply(dialog, recording_errors)
     assert dialog.configuration == original
     _assert_labels_fit(dialog)
 
@@ -515,7 +545,7 @@ def test_triggerbox_apply_requires_supported_amplifier_and_sampling_rate(
     ("liveamp", 250, 8, True, 8),
 ])
 def test_triggerbox_sampling_rate_updates_pulse_requirement_and_apply(
-    qtbot, amplifier, sampling_rate, pulse, valid, minimum,
+    qtbot, amplifier, sampling_rate, pulse, valid, minimum, recording_errors,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration(
         brainproducts_amplifier=amplifier,
@@ -525,15 +555,16 @@ def test_triggerbox_sampling_rate_updates_pulse_requirement_and_apply(
     qtbot.addWidget(dialog)
     dialog.show()
     QApplication.processEvents()
-    assert dialog.apply_button.isEnabled() is valid
     assert f"{minimum} ms" in dialog.pulse_requirement_label.text()
     assert "spacing" in dialog.pulse_requirement_label.text()
     if not valid:
-        assert dialog.error_label.text()
+        _assert_invalid_apply(dialog, recording_errors)
     _assert_labels_fit(dialog)
 
 
-def test_triggerbox_amplifier_change_preserves_supported_rate_and_clears_unsupported(qtbot):
+def test_triggerbox_amplifier_change_preserves_supported_rate_and_clears_unsupported(
+    qtbot, recording_errors,
+):
     dialog = RecordingSetupDialog(_triggerbox_configuration())
     qtbot.addWidget(dialog)
     dialog.show()
@@ -545,7 +576,7 @@ def test_triggerbox_amplifier_change_preserves_supported_rate_and_clears_unsuppo
         dialog.brainproducts_amplifier_combo.findData("liveamp"),
     )
     assert dialog.brainproducts_sampling_rate_combo.currentData() is None
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
     assert {dialog.brainproducts_sampling_rate_combo.itemData(index)
             for index in range(dialog.brainproducts_sampling_rate_combo.count())} == {
         None, 250, 500, 1000,
@@ -604,7 +635,7 @@ def test_triggerbox_detection_starts_once_on_first_visible_selection(
     (False, "", "check its port in Device Manager"),
 ])
 def test_triggerbox_detect_reports_access_without_changing_port_values(
-    qtbot, port_detection_jobs, accessible, error, action,
+    qtbot, port_detection_jobs, accessible, error, action, recording_errors,
 ):
     dialog = RecordingSetupDialog(_unconfigured_triggerbox())
     qtbot.addWidget(dialog)
@@ -621,10 +652,12 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
         "COM9", candidate.description, accessible=accessible, access_error=error,
     ),))
 
-    assert "COM9" in dialog.detection_status_label.text()
-    assert action in dialog.detection_status_label.text()
+    message = (dialog.detection_status_label.text() if accessible else
+               _detection_error_message(dialog, recording_errors))
+    assert "COM9" in message
+    assert action in message
     if not accessible:
-        assert dialog.detection_status_label.text() == triggerbox_port_error_message("COM9", error)
+        assert message == triggerbox_port_error_message("COM9", error)
     assert dialog.brainproducts_port_combo.itemText(0) == "COM9"
     assert dialog.brainproducts_port_edit.text() == "COM9"
     details = dialog.brainproducts_port_combo.itemData(0, Qt.ItemDataRole.ToolTipRole)
@@ -637,24 +670,23 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
         assert "Configuration/Test IO" in details
         assert "Only one application" in details
         assert "Selecting a port manually cannot release it" in details
-        assert "other apps using COM9, then try again" in dialog.detection_status_label.text()
-        assert "Pressing Stop can leave the port occupied" in dialog.detection_status_label.text()
+        assert "other apps using COM9, then try again" in message
+        assert "Pressing Stop can leave the port occupied" in message
     else:
         assert "occupied or access was denied" not in details
         assert "Configuration/Test IO" not in details
         assert "Only one application" not in details
     if error:
         assert error in details
-        assert error in dialog.detection_status_label.toolTip()
-        assert error in dialog.detection_status_label.accessibleDescription()
-        assert error not in dialog.detection_status_label.text()
+        assert error in str(recording_errors.call_args.args[2])
+        assert error not in message
     assert dialog.configuration["brainproducts_serial_port"] == "COM3"
     dialog.apply_button.click()
     assert dialog.configuration["brainproducts_serial_port"] == "COM9"
 
 
 def test_triggerbox_access_results_keep_unavailable_candidates_selectable(
-    qtbot, port_detection_jobs,
+    qtbot, port_detection_jobs, recording_errors,
 ):
     dialog = RecordingSetupDialog(_unconfigured_triggerbox())
     qtbot.addWidget(dialog)
@@ -677,12 +709,13 @@ def test_triggerbox_access_results_keep_unavailable_candidates_selectable(
     assert dialog.brainproducts_port_edit.text() == ""
     assert "1 accessible, 1 unavailable" in dialog.detection_status_label.text()
     assert "Choose a port" in dialog.detection_status_label.text()
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
     dialog.brainproducts_port_combo.setCurrentIndex(1)
     dialog.brainproducts_port_combo.activated.emit(1)
     assert dialog.brainproducts_port_edit.text() == "COM12"
-    assert dialog.detection_status_label.text() == triggerbox_port_error_message(
-        "COM12", "The port is in use by another application.",
+    recovery = triggerbox_port_error_message("COM12", "The port is in use by another application.")
+    assert _detection_error_message(dialog, recording_errors) == (
+        f"{recovery} Choose COM9 if it is your TriggerBox port."
     )
     assert dialog.apply_button.isEnabled()
     dialog.brainproducts_port_combo.setCurrentIndex(0)
@@ -762,7 +795,7 @@ def test_triggerbox_checked_results_do_not_verify_a_manual_edit_during_scan(
 
 
 def test_triggerbox_manual_port_access_denied_can_retry_without_changing_selection(
-    qtbot, port_detection_jobs, monkeypatch,
+    qtbot, port_detection_jobs, monkeypatch, recording_errors,
 ):
     discovery = Mock(return_value=())
     monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
@@ -784,9 +817,11 @@ def test_triggerbox_manual_port_access_denied_can_retry_without_changing_selecti
     port_detection_jobs[1].finish(candidates=(
         TriggerBoxPortCandidate("COM4", description, accessible=False, access_error=error),
     ))
-    assert dialog.detection_status_label.text() == triggerbox_port_error_message("COM4", error)
-    assert description in dialog.detection_status_label.toolTip()
-    assert error in dialog.detection_status_label.accessibleDescription()
+    assert _detection_error_message(dialog, recording_errors) == (
+        triggerbox_port_error_message("COM4", error)
+    )
+    assert description in str(recording_errors.call_args.args[2])
+    assert error in str(recording_errors.call_args.args[2])
     assert dialog.brainproducts_port_edit.text() == " COM4 "
     assert dialog.detect_ports_button.isEnabled()
     assert dialog.apply_button.isEnabled()
@@ -803,6 +838,50 @@ def test_triggerbox_manual_port_access_denied_can_retry_without_changing_selecti
     assert dialog.brainproducts_port_edit.text() == " COM4 "
     dialog.apply_button.click()
     assert dialog.configuration["brainproducts_serial_port"] == "COM4"
+
+
+@pytest.mark.parametrize("accessible", [False, True])
+def test_default_triggerbox_detect_checks_saved_com3_with_generic_metadata(
+    qtbot, port_detection_jobs, monkeypatch, accessible, recording_errors,
+):
+    from fpvs_studio.triggers import brainproducts_discovery as discovery_module
+
+    error = "" if accessible else "could not open port: FileNotFoundError(2, 'Missing', None, 2)"
+    metadata = SimpleNamespace(device="COM3", description="USB Serial Port (COM3)")
+    list_ports = SimpleNamespace(comports=lambda: [metadata])
+    serial = SimpleNamespace()
+    modules = {"serial.tools.list_ports": list_ports, "serial": serial}
+    check_access = Mock(return_value=SimpleNamespace(accessible=accessible, access_error=error))
+    monkeypatch.setattr(discovery_module, "importlib", SimpleNamespace(import_module=modules.get))
+    monkeypatch.setattr(discovery_module, "check_serial_port_access", check_access)
+    monkeypatch.setattr(
+        recording_dialog_module, "discover_triggerbox_ports",
+        discovery_module.discover_triggerbox_ports,
+    )
+    dialog = RecordingSetupDialog(_triggerbox_configuration(), computer_default=True)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    initial = port_detection_jobs[0].callback(None, Event())
+    assert initial == ()
+    check_access.assert_not_called()
+    port_detection_jobs[0].finish(candidates=initial)
+
+    qtbot.mouseClick(dialog.detect_ports_button, Qt.MouseButton.LeftButton)
+    cancel = Event()
+    candidates = port_detection_jobs[1].callback(None, cancel)
+    check_access.assert_called_once_with(
+        "COM3", baudrate=2_000_000, serial_module=serial, cancel_event=cancel,
+    )
+    port_detection_jobs[1].finish(candidates=candidates)
+    if accessible:
+        assert dialog.detection_status_label.text() == "COM3: Port accessible when checked."
+        assert "device identity not verified" in dialog.detection_status_label.toolTip()
+    else:
+        message = _detection_error_message(dialog, recording_errors)
+        assert message.startswith("TriggerBox port COM3 was not found.")
+        assert "install its driver if needed" in message
+    assert dialog.brainproducts_port_edit.text() == "COM3"
+    assert dialog.detect_ports_button.isEnabled()
 
 
 def test_triggerbox_blank_manual_port_is_not_sent_to_access_check(
@@ -958,7 +1037,7 @@ def test_triggerbox_multiple_candidates_never_choose_arbitrary_first(
 
 
 def test_triggerbox_empty_and_failed_detection_allow_manual_port_and_retry(
-    qtbot, port_detection_jobs,
+    qtbot, port_detection_jobs, recording_errors,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration(brainproducts_serial_port="COM123"))
     qtbot.addWidget(dialog)
@@ -971,8 +1050,8 @@ def test_triggerbox_empty_and_failed_detection_allow_manual_port_and_retry(
     assert dialog.detect_ports_button.isEnabled()
     dialog.detect_ports_button.click()
     port_detection_jobs[1].finish(error=RuntimeError("Serial port metadata is unavailable"))
-    assert "Unable to list TriggerBox ports" in dialog.detection_status_label.text()
-    assert "Serial port metadata is unavailable" in dialog.detection_status_label.toolTip()
+    assert "Unable to list TriggerBox ports" in _detection_error_message(dialog, recording_errors)
+    assert str(recording_errors.call_args.args[2]) == "Serial port metadata is unavailable"
     assert dialog.brainproducts_port_edit.text() == "COM123"
     assert dialog.apply_button.isEnabled()
     dialog.detect_ports_button.click()
@@ -992,7 +1071,7 @@ def test_triggerbox_empty_and_failed_detection_allow_manual_port_and_retry(
     "Enter a valid COM port, such as COM4, before checking access.",
 ])
 def test_triggerbox_discovery_failures_show_known_recovery_and_preserve_raw_details(
-    qtbot, port_detection_jobs, public_message,
+    qtbot, port_detection_jobs, public_message, recording_errors,
 ):
     dialog = RecordingSetupDialog(_triggerbox_configuration())
     qtbot.addWidget(dialog)
@@ -1002,12 +1081,10 @@ def test_triggerbox_discovery_failures_show_known_recovery_and_preserve_raw_deta
     error.__cause__ = RuntimeError("Underlying serial provider error")
     port_detection_jobs[0].finish(error=error)
 
-    assert dialog.detection_status_label.text() == public_message
-    assert raw_details in dialog.detection_status_label.toolTip()
-    assert "Underlying serial provider error" in (
-        dialog.detection_status_label.accessibleDescription()
-    )
-    assert raw_details not in dialog.detection_status_label.text()
+    assert _detection_error_message(dialog, recording_errors) == public_message
+    failure = recording_errors.call_args.args[2]
+    assert raw_details in str(failure)
+    assert str(failure.__cause__) == "Underlying serial provider error"
     assert dialog.detect_ports_button.isEnabled()
     assert dialog.brainproducts_port_edit.isEnabled()
 
@@ -1015,7 +1092,7 @@ def test_triggerbox_discovery_failures_show_known_recovery_and_preserve_raw_deta
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("serial_attribute_present", [False, True])
 def test_triggerbox_broken_serial_support_does_not_request_device_driver_repair(
-    qtbot, port_detection_jobs, monkeypatch, background, serial_attribute_present,
+    qtbot, port_detection_jobs, monkeypatch, background, serial_attribute_present, recording_errors,
 ):
     from fpvs_studio.triggers import brainproducts_discovery as discovery_module
     from fpvs_studio.triggers.serial_port_access import SerialPortAccessError
@@ -1043,16 +1120,16 @@ def test_triggerbox_broken_serial_support_does_not_request_device_driver_repair(
             port_detection_jobs[1].callback(None, Event())
     port_detection_jobs[1].finish(error=failure.value)
 
-    assert dialog.detection_status_label.text() == (
-        "Studio could not check TriggerBox ports because its serial support is unavailable. "
-        "Repair or reinstall Studio, then try Detect again."
+    message = _detection_error_message(dialog, recording_errors)
+    assert message == (
+        "Studio could not check TriggerBox ports because its serial support is "
+        "unavailable. Repair or reinstall Studio, then try Detect again."
     )
-    assert str(failure.value) in dialog.detection_status_label.toolTip()
-    assert str(failure.value.__cause__) in dialog.detection_status_label.accessibleDescription()
-    assert "pyserial" not in dialog.detection_status_label.text()
-    assert "Details:" not in dialog.detection_status_label.text()
-    assert "Device Manager" not in dialog.detection_status_label.text()
-    assert "driver" not in dialog.detection_status_label.text()
+    assert recording_errors.call_args.args[2] is failure.value
+    assert "pyserial" not in message
+    assert "Details:" not in message
+    assert "Device Manager" not in message
+    assert "driver" not in message
     assert "Fully exit Configuration/Test IO before launch" in dialog.guidance_label.text()
     assert "Stop can leave the COM port occupied" in dialog.guidance_label.text()
     assert dialog.brainproducts_port_edit.text() == "COM4"
@@ -1084,10 +1161,11 @@ def test_triggerbox_cancel_cancels_discovery_and_ignores_late_result(
 @pytest.mark.parametrize("state", [
     "busy", "empty", "manual_empty", "multiple", "error", "unique", "checking", "accessible",
     "unavailable", "denied", "settings", "device_io", "timeout", "close", "unknown",
-    "multiple_access", "serial_missing", "enumeration_error",
+    "multiple_access", "multiple_unavailable", "serial_missing", "enumeration_error",
+    "detect_empty",
 ])
 def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths(
-    qtbot, port_detection_jobs, background, state,
+    qtbot, port_detection_jobs, background, state, recording_errors,
 ):
     access_errors = {
         "unavailable": "[WinError 2] The system cannot find the file specified. ",
@@ -1116,6 +1194,17 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     access_error = access_errors.get(state, access_errors["denied"]) * 8
     if state in ("empty", "manual_empty"):
         port_detection_jobs[0].finish()
+    elif state == "detect_empty":
+        port_detection_jobs[0].finish()
+        recording_errors.assert_not_called()
+        dialog.detect_ports_button.click()
+        assert "Checking TriggerBox port access" in dialog.detection_status_label.text()
+        port_detection_jobs[1].finish()
+        message = _detection_error_message(dialog, recording_errors)
+        assert message.startswith("No TriggerBox COM port")
+        assert "install its software and driver" in message
+        assert "Device Manager" in message
+        assert dialog.detect_ports_button.isEnabled()
     elif state == "multiple":
         port_detection_jobs[0].finish(candidates=(
             candidate, TriggerBoxPortCandidate("COM12", "TriggerBox Plus"),
@@ -1123,9 +1212,10 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     elif state == "error":
         error = "Unable to enumerate TriggerBox ports: Windows device metadata access failed. " * 8
         port_detection_jobs[0].finish(error=RuntimeError(error))
-        assert dialog.detection_status_label.toolTip() == error
-        assert "Unable to list TriggerBox ports" in dialog.detection_status_label.text()
-        assert error not in dialog.detection_status_label.text()
+        message = _detection_error_message(dialog, recording_errors)
+        assert str(recording_errors.call_args.args[2]) == error
+        assert "Unable to list TriggerBox ports" in message
+        assert error not in message
     elif state in ("serial_missing", "enumeration_error"):
         public_message = (
             "Studio could not load its TriggerBox connection component. The installation may be "
@@ -1136,33 +1226,37 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
         )
         error = f"{public_message} Details: {'Long serial-provider diagnostic. ' * 8}"
         port_detection_jobs[0].finish(error=TriggerBoxDiscoveryError(error))
-        assert dialog.detection_status_label.text() == public_message
-        assert dialog.detection_status_label.toolTip() == error
+        assert _detection_error_message(dialog, recording_errors) == public_message
+        assert str(recording_errors.call_args.args[2]) == error
     elif state == "unique":
         port_detection_jobs[0].finish(candidates=(candidate,))
-    elif state in ("checking", "accessible", "multiple_access") or state in access_errors:
+    elif state in ("checking", "accessible", "multiple_access", "multiple_unavailable") or (
+        state in access_errors
+    ):
+        multiple = state in ("multiple_access", "multiple_unavailable")
+        unavailable = state in access_errors or state == "multiple_unavailable"
         initial_candidates = (candidate,)
-        if state == "multiple_access":
+        if multiple:
             initial_candidates += (TriggerBoxPortCandidate("COM12", "TriggerBox Plus"),)
         port_detection_jobs[0].finish(candidates=initial_candidates)
-        if state == "multiple_access":
+        if multiple:
             dialog.brainproducts_port_edit.clear()
             dialog.brainproducts_port_edit.textEdited.emit("")
         dialog.detect_ports_button.click()
         if state != "checking":
             checked_candidates = (TriggerBoxPortCandidate(
-                candidate.port, description, accessible=state not in access_errors,
-                access_error=access_error if state in access_errors else "",
+                candidate.port, description, accessible=not unavailable,
+                access_error=access_error if unavailable else "",
             ),)
-            if state == "multiple_access":
+            if multiple:
                 checked_candidates += (TriggerBoxPortCandidate(
                     "COM12", "TriggerBox Plus", accessible=False, access_error=access_error,
                 ),)
             port_detection_jobs[1].finish(candidates=checked_candidates)
     QApplication.processEvents()
     assert (dialog.width(), dialog.height()) == (700, 640)
-    assert not dialog.apply_button.isEnabled()  # 10 ms is below the 20 ms minimum at 100 Hz.
-    assert dialog.error_label.text()
+    assert dialog.detect_ports_button.height() == dialog.brainproducts_port_combo.height()
+    assert dialog.detect_ports_button.width() >= dialog.detect_ports_button.sizeHint().width()
     assert dialog.detection_status_label.wordWrap()
     assert dialog.pulse_requirement_label.wordWrap()
     assert "Fully exit Configuration/Test IO before launch" in dialog.guidance_label.text()
@@ -1171,9 +1265,8 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     assert dialog.detection_status_label.textFormat() == Qt.TextFormat.PlainText
     if state in access_errors:
         assert dialog.brainproducts_port_edit.text() == candidate.port
-        assert dialog.detection_status_label.text() == triggerbox_port_error_message(
-            candidate.port, access_error,
-        )
+        recovery = triggerbox_port_error_message(candidate.port, access_error)
+        assert _detection_error_message(dialog, recording_errors) == recovery
     elif state == "accessible":
         assert dialog.detection_status_label.text() == (
             f"{candidate.port}: Port accessible when checked."
@@ -1182,16 +1275,22 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
         assert dialog.detection_status_label.text() == (
             "2 ports checked: 1 accessible, 1 unavailable. Choose a port."
         )
+    elif state == "multiple_unavailable":
+        message = _detection_error_message(dialog, recording_errors)
+        assert "No checked port could be opened" in message
     _assert_labels_fit(dialog)
-    if state in ("multiple", "unique", "accessible", "multiple_access") or state in access_errors:
+    if state in ("multiple", "unique", "accessible", "multiple_access"):
         assert description in dialog.detection_status_label.toolTip()
         assert "can remain listed when unplugged" in dialog.detection_status_label.toolTip()
+    if state in ("multiple", "unique", "accessible", "multiple_access") or state in access_errors:
         assert description in dialog.brainproducts_port_combo.itemData(
             0, Qt.ItemDataRole.ToolTipRole,
         )
-    if state == "multiple_access" or state in access_errors:
+    if state == "multiple_access":
         assert access_error in dialog.detection_status_label.toolTip()
         assert access_error in dialog.detection_status_label.accessibleDescription()
+    elif state in access_errors or state == "multiple_unavailable":
+        assert access_error in str(recording_errors.call_args.args[2])
 
 
 def test_triggerbox_drafts_survive_device_switch_and_cancel(qtbot):
@@ -1231,7 +1330,7 @@ def test_triggerbox_drafts_survive_device_switch_and_cancel(qtbot):
     ("unicorn_udp", "brainproducts_triggerbox"),
 ])
 def test_switch_from_invalid_device_draft_applies_last_valid_inactive_values(
-    qtbot, edited_backend, selected_backend,
+    qtbot, edited_backend, selected_backend, recording_errors,
 ):
     original = ProjectRecordingSettings(
         recording_backend=edited_backend,
@@ -1248,13 +1347,13 @@ def test_switch_from_invalid_device_draft_applies_last_valid_inactive_values(
         dialog.brainproducts_pulse_edit.setText("20")
         dialog.brainproducts_port_edit.clear()
         dialog.brainproducts_pulse_edit.clear()
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
     dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData(selected_backend))
     assert dialog.apply_button.isEnabled()
     QApplication.processEvents()
     _assert_labels_fit(dialog)
     dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData(edited_backend))
-    assert not dialog.apply_button.isEnabled()
+    _assert_invalid_apply(dialog, recording_errors)
     dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData(selected_backend))
     dialog.apply_button.click()
     accepted = ProjectRecordingSettings.model_validate(dialog.configuration)
@@ -1387,6 +1486,7 @@ def test_actichamp_port_apply_and_reopen_keeps_saved_port_during_detection(
 
     def apply_port(child):
         child.brainproducts_port_edit.setText(port)
+        _select_triggerbox_timing(child, sampling_rate=1000)
         child.accept()
         return child.result()
 
@@ -1401,6 +1501,8 @@ def test_actichamp_port_apply_and_reopen_keeps_saved_port_during_detection(
         saved = ProjectDocument.open_existing(document.project_root).recording_configuration
     assert saved is not None
     assert saved["brainproducts_serial_port"] == port
+    assert saved["brainproducts_amplifier"] == "actichamp"
+    assert saved["brainproducts_sampling_rate_hz"] == 1000
 
     reopened = RecordingSetupDialog(saved, computer_default=computer_default)
     qtbot.addWidget(reopened)
@@ -1408,6 +1510,8 @@ def test_actichamp_port_apply_and_reopen_keeps_saved_port_during_detection(
     other_candidate = TriggerBoxPortCandidate(other_port, "TriggerBox Plus")
     port_detection_jobs[0].finish(candidates=(other_candidate,))
     assert reopened.brainproducts_port_edit.text() == port
+    assert reopened.brainproducts_amplifier_combo.currentData() == "actichamp"
+    assert reopened.brainproducts_sampling_rate_combo.currentData() == 1000
     discovery = Mock(return_value=())
     monkeypatch.setattr(recording_dialog_module, "discover_triggerbox_ports", discovery)
     reopened.detect_ports_button.click()
@@ -1423,6 +1527,75 @@ def test_actichamp_port_apply_and_reopen_keeps_saved_port_during_detection(
     assert reopened.apply_button.isEnabled()
     assert (reopened.width(), reopened.height()) == (700, 640)
     _assert_labels_fit(reopened)
+
+
+@pytest.mark.parametrize("entrypoint", ["home", "run"])
+@pytest.mark.parametrize("has_default_timing", [False, True])
+def test_first_brainproducts_launch_saves_project_timing_before_participant_entry(
+    qtbot, controller, tmp_path, monkeypatch, entrypoint, has_default_timing,
+):
+    default = _triggerbox_configuration() if has_default_timing else _unconfigured_triggerbox()
+    controller.save_default_recording_configuration(default)
+    document, window = open_created_project(controller, qtbot, tmp_path, "First EEG launch")
+    prepare_compile_ready_project(window, tmp_path / "first-eeg-assets")
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+    page = window if entrypoint == "home" else window.run_page
+    participant = Mock(return_value=None)
+    monkeypatch.setattr(page, "_collect_launch_participant_details", participant)
+    popup = Mock()
+    monkeypatch.setattr("fpvs_studio.gui.main_window._show_error_dialog", popup)
+    manifest = document.project_root / "project.json"
+    original = manifest.read_bytes()
+    assert document.uses_default_recording_configuration
+    with pytest.raises(DocumentError, match="amplifier"):
+        document.validate_recording_launch()
+
+    def configure(child):
+        qtbot.addWidget(child)
+        assert child.brainproducts_amplifier_combo.currentData() == (
+            default["brainproducts_amplifier"]
+        )
+        assert child.brainproducts_sampling_rate_combo.currentData() == (
+            default["brainproducts_sampling_rate_hz"]
+        )
+        _select_triggerbox_timing(child, sampling_rate=1000)
+        child.apply_button.click()
+        return child.result()
+
+    setup = Mock(return_value=int(QDialog.DialogCode.Rejected))
+    monkeypatch.setattr(RecordingSetupDialog, "exec", setup)
+    page.launch_session()
+    setup.assert_called_once()
+    participant.assert_not_called()
+    popup.assert_not_called()
+    assert manifest.read_bytes() == original
+
+    monkeypatch.setattr(RecordingSetupDialog, "exec", configure)
+    save_error = PermissionError("Synthetic read-only project file")
+    with monkeypatch.context() as denied:
+        denied.setattr(document, "save_recording_configuration", Mock(side_effect=save_error))
+        page.launch_session()
+    popup.assert_called_once_with(page, "Launch Blocked", save_error)
+    participant.assert_not_called()
+    assert manifest.read_bytes() == original
+    assert document.uses_default_recording_configuration
+
+    page.launch_session()
+    participant.assert_called_once_with()
+    assert not document.uses_default_recording_configuration
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.recording_configuration["brainproducts_amplifier"] == "actichamp"
+    assert reopened.recording_configuration["brainproducts_sampling_rate_hz"] == 1000
+    assert reopened.validate_recording_launch() == "brainproducts_triggerbox"
+    assert controller.load_default_recording_configuration() == (
+        ProjectRecordingSettings.model_validate(default).model_dump(mode="json")
+    )
+
+    monkeypatch.setattr(RecordingSetupDialog, "exec", setup)
+    setup.reset_mock()
+    page.launch_session()
+    setup.assert_not_called()
+    assert participant.call_count == 2
 
 
 @pytest.mark.parametrize("entrypoint", ["home", "run"])
@@ -1593,12 +1766,12 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
         (
             "unicorn_udp",
             "broken saved port",
-            "Recording setup invalid. Open Settings > Recording to correct it.",
+            "Recording Setup required before recording.",
         ),
         (
             "unknown old selection",
             1000,
-            "Recording setup invalid. Open Settings > Recording to correct it.",
+            "Recording Setup required before recording.",
         ),
     ],
 )
@@ -1762,7 +1935,7 @@ def test_run_recording_summary_fits_existing_window_budget(
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_recording_settings_failed_save_preserves_accepted_device(
-    qtbot, tmp_path, monkeypatch, background,
+    qtbot, tmp_path, monkeypatch, background, recording_errors,
 ):
     original = {"recording_backend": "serial", "unicorn_udp_port": 1000}
     error = PermissionError(13, "Access is denied", str(tmp_path / "project.json"))
@@ -1786,17 +1959,16 @@ def test_recording_settings_failed_save_preserves_accepted_device(
     monkeypatch.setattr(RecordingSetupDialog, "exec", fake_exec)
     dialog.recording_setup_button.click()
     QApplication.processEvents()
-    assert "not saved" in dialog.recording_summary.text()
-    assert "folder" in dialog.recording_summary.text()
-    assert "[Errno" not in dialog.recording_summary.text()
-    assert str(error) == dialog.recording_summary.toolTip()
+    recording_errors.assert_called_once_with(dialog, "Save Recording Setup Error", error)
+    assert "ActiveTwo" in dialog.recording_summary.text()
+    assert not dialog.recording_summary.toolTip()
     assert dialog._recording_configuration == original
     _assert_labels_fit(dialog)
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_recording_validation_keeps_diagnostics_out_of_primary_text(
-    qtbot, monkeypatch, background,
+    qtbot, monkeypatch, background, recording_errors,
 ):
     validator = recording_dialog_module.validate_recording_configuration
     error = ValueError("invalid literal for int() with base 10: 'broken'")
@@ -1810,13 +1982,14 @@ def test_recording_validation_keeps_diagnostics_out_of_primary_text(
     dialog.setPalette(palette)
     dialog.show()
     QApplication.processEvents()
-    assert "int()" not in dialog.error_label.text()
-    assert str(error) == dialog.error_label.toolTip()
-    assert not dialog.apply_button.isEnabled()
+    recording_errors.assert_not_called()
+    _assert_invalid_apply(dialog, recording_errors)
+    recording_errors.assert_called_once_with(dialog, "Recording Setup Error", error)
+    assert all("int()" not in label.text() for label in dialog.findChildren(QLabel))
     assert dialog.size().toTuple() == (700, 640)
     _assert_labels_fit(dialog)
     monkeypatch.setattr(recording_dialog_module, "validate_recording_configuration", validator)
-    dialog._refresh()
-    assert not dialog.error_label.text()
-    assert not dialog.error_label.toolTip()
-    assert dialog.apply_button.isEnabled()
+    recording_errors.reset_mock()
+    dialog.apply_button.click()
+    assert dialog.result() == int(QDialog.DialogCode.Accepted)
+    recording_errors.assert_not_called()

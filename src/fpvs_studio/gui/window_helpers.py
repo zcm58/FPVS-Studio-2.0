@@ -37,6 +37,7 @@ from fpvs_studio.gui.design_system import (
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.error_dialogs import decorate_error_dialog
+from fpvs_studio.support.error_explanations import ErrorExplanation
 
 _CYCLE_HELP_TEXT = "Cycle = one turn of base presentations plus one oddball presentation."
 _FIXATION_FEASIBILITY_TOOLTIP_TEXT = (
@@ -66,7 +67,9 @@ def _canonical_runtime_background_hex(background_color: str) -> str | None:
     return None
 
 
-def _show_error_dialog(parent: QWidget | None, title: str, error: Exception) -> None:
+def _show_error_dialog(
+    parent: QWidget | None, title: str, error: Exception, *, message: str | None = None,
+) -> None:
     """Show one user-facing error dialog with expandable details."""
 
     dialog = QMessageBox(parent)
@@ -76,7 +79,8 @@ def _show_error_dialog(parent: QWidget | None, title: str, error: Exception) -> 
     dialog.setDetailedText(
         "".join(traceback.format_exception(type(error), error, error.__traceback__))
     )
-    decorate_error_dialog(dialog, error)
+    explanation = ErrorExplanation(message, "") if message is not None else None
+    decorate_error_dialog(dialog, error, explanation=explanation)
     if not isinstance(error, (ValueError, FileNotFoundError)):
         logging.getLogger(__name__).error("%s", title,
                                          exc_info=(type(error), error, error.__traceback__))

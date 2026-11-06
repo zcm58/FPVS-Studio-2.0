@@ -73,7 +73,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Manifest schemas and persistence | `preprocessing/models.py`, `preprocessing/manifest.py` |
 | Portable paths and project persistence | `core/paths.py`, `core/project_service.py` |
 | Guarded current-project Library replacement | `core/project_bundle_update.py`; ordinary imports never replace projects |
-| Runtime recording and evidence | `runtime/recording.py`, `runtime/acquisition_evidence.py` |
+| Recording | `gui/recording_dialog.py`, `gui/document_runtime.py`, `runtime/recording.py`, `runtime/acquisition_evidence.py` |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
