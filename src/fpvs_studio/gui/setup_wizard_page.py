@@ -235,6 +235,7 @@ class SetupWizardPage(QWidget):
 
         self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
         self.demographics_setup_step = DemographicsSetupStep(document, self)
+        self.demographics_setup_step.pending_edits_changed.connect(self.pending_edits_changed)
         self.condition_setup_step = ConditionSetupStep(
             document, self, load_fpvs_root_dir=load_fpvs_root_dir,
         )
@@ -555,6 +556,7 @@ class SetupWizardPage(QWidget):
     def has_pending_edits(self) -> bool:
         return (
             self.project_overview_editor.has_pending_edits()
+            or self.demographics_setup_step.has_pending_edits()
             or self.condition_setup_step.has_pending_edits()
             or self.condition_timing_table.has_pending_edits()
             or self.session_structure_editor.randomization_editor.has_pending_edits()
@@ -572,6 +574,10 @@ class SetupWizardPage(QWidget):
             self._active_step_index = self._step_index_for_key(
                 "session" if order_blocker else "experiment",
             )
+            self.refresh()
+            return False
+        if not self.demographics_setup_step.flush_pending_edits():
+            self._select_step(self._step_index_for_key("demographics"))
             self.refresh()
             return False
         self.project_overview_editor.flush_pending_edits()
@@ -875,6 +881,8 @@ class SetupWizardPage(QWidget):
             self._show_step_blocker(self._project_details_blocker())
             return
         if not self.flush_pending_edits(defer_timing=self._current_step_key() == "experiment"):
+            if self._current_step_key() == "demographics":
+                return
             error_label = (
                 self.session_structure_editor.randomization_editor.error_label
                 if self._current_step_key() == "session"

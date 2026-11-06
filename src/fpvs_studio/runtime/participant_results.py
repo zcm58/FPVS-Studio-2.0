@@ -748,16 +748,18 @@ def _demographic_answer_rows(records: list[tuple[dict[str, Any], str]]) -> list[
             continue
         if not isinstance(snapshots, list):
             raise ValueError("Demographic answers must be recorded in question order.")
+        answers = [DemographicsAnswer.model_validate(snapshot) for snapshot in snapshots]
         key = _visit_key(record, source)
-        snapshot_json = json.dumps(snapshots, sort_keys=True)
+        snapshot_json = json.dumps([answer.model_dump(mode="json") for answer in answers])
         if key in seen:
             if seen[key] != snapshot_json:
                 raise ValueError("Conflicting demographic answers share a participant visit.")
             continue
         seen[key] = snapshot_json
-        answers = [DemographicsAnswer.model_validate(snapshot) for snapshot in snapshots]
         rows.extend([
-            *_identity(record), answer.prompt, answer.answer, position, answer.question_id,
+            *_identity(record), answer.prompt,
+            "\n".join(answer.answer) if isinstance(answer.answer, list) else answer.answer,
+            position, answer.question_id,
             _session_status(record), record.get("project_id", ""), source,
         ] for position, answer in enumerate(answers, 1))
     return rows
@@ -868,6 +870,7 @@ def add_participant_results_sheets(
          "Milliseconds; hits only. Missing values stay blank."],
         ["Task reaction time", "Seconds; each recorded response/attempt has its own row."],
         ["Demographic answers", "One row per question and visit, in the recorded order. "
+         "Checkbox selections are listed one per line. A blank answer marks a skipped question. "
          "Earlier visits without question snapshots show available fields in Demographics."],
         ["Individual fixation responses", "One row per target plus unmatched keypresses; matched "
          "hit keypresses are not duplicated. Historical compact output retains averages only, "

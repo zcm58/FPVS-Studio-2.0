@@ -88,6 +88,9 @@ interaction.
   the stepper, with a 24 px bottom inset. All steps must fit without clipping or
   required scrolling; the page layout map lives in
   [GUI workflow](GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
+- Demographics uses a reorderable question outline and a selected inline card. The
+  card's prompt, response type, and actions remain reachable at `1120x820`. Large
+  questionnaires and choice lists scroll inside their own panels.
 - Project uses two aligned sibling cards for Project details and Experiment setup,
   with distinct headings and compact field labels. Its description
   is optional, editable and persisted; refresh preserves pending project-name edits. Idle **Next** stays

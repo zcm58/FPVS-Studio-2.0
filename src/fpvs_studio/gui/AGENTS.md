@@ -22,8 +22,9 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   presentations only within fixed block headers; Alt+Up/Down supports keyboard moves.
   New ordinary GUI projects opt into blocks; existing pooled designs change only on
   explicit editor Save. Keep AB/masking group workflows and occurrence timing intact.
-  Demographics owns the ordered questionnaire. Participant Information binds the
-  saved questions and captures answers separately from participant number and electrodes.
+  Demographics owns the ordered questionnaire draft and validates it before Save.
+  Preview and Participant Information share the answer widgets. Participant number
+  and electrode review stay separate from authored questions.
 - Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
   offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
   reviewed bundle import.

@@ -235,20 +235,31 @@ authored frequencies. The canonical rule is in [Run timing](RUNSPEC.md#timing-mo
 
 Open **Setup > Demographics**, between Project and Conditions. New and existing
 projects start with Age, Sex, Handedness, and “Are you colorblind?” unless a
-questionnaire has been saved. Add or edit a question to choose single-line text,
-age (1–120), multiple choice, or yes/no. Use **Move up** and **Move down** to set
-the order in Participant Information. An empty list leaves participant number and
-electrode review. **Restore defaults** replaces the list with the original four
-questions in Studio order. Save Setup to persist the list in `project.json`.
+questionnaire has been saved. Select a question in the outline to edit its wording,
+type, choices, and **Required** setting in the card. Types include short answer,
+paragraph, multiple choice, checkboxes, dropdown, linear scale, rating, date, time,
+age (1–120), and yes/no. Multiple choice and checkboxes can offer an **Other** text
+answer. Linear scales can label both endpoints. New questions start optional and
+the four Studio defaults start required.
+
+Duplicate or delete the selected question. Drag questions in the outline or use
+**Move up** and **Move down** to set their order in Participant Information.
+**Preview** opens the same questionnaire controls used at launch. It checks answers
+without recording them. Use **Discard draft** to recover from unfinished edits.
+An empty questionnaire leaves participant number and electrode review. **Restore
+defaults** replaces the draft with the original four questions in Studio order.
+Save Setup to persist the list in `project.json`.
 Project bundles and `.fpvsconfig` setup handoffs carry the authored questions.
 
 In an approved visible session, open Setup at `1120x820` and use Next from Project
-to reach Demographics. Add a long question, edit its choices, move it above a default,
-and remove a question. Save and reopen, then check the order in Participant Information
-at `600x360` from Home and Run. Verify a missing answer keeps the dialog open, an empty
-list needs only the participant number, and restoring defaults brings back all four
-questions. Complete a compact session with a custom answer and inspect **Demographic
-Answers** in **View > Open Participant Results**.
+to reach Demographics. Add a long multiple-choice question, edit its choices, enable
+Other, duplicate the card, and drag it above a default. Test the move buttons and
+check that invalid choices keep the draft open. At `600x360`, preview a mix of types
+with an optional blank and a missing required answer. Save and reopen, then check
+that Participant Information from Home and Run shows the same order and controls.
+Check the empty and restored questionnaires. Complete a compact session with a
+paragraph and checkbox selections, then inspect **Demographic Answers** in
+**View > Open Participant Results**.
 
 ## Launch
 
@@ -1063,8 +1074,8 @@ aborted visit advance the next number. Active history checks/playback block clos
 or switching projects. Registered GUI tests cover these states; ordinary local
 verification excludes Qt execution.
 Participant Number remains the participant identity and duplicate-history lookup key.
-Each configured demographics question requires an answer. The original wording,
-order, and responses are recorded for the visit. Answering `Yes` to the Studio default
+Each question marked **Required** must be answered. The original wording, order,
+and responses are recorded for the visit. Answering `Yes` to the Studio default
 colorblindness question selects the accessible fixation preset for the tutorial and
 condition playback.
 The manually removed electrode list remains editable project metadata, and each new

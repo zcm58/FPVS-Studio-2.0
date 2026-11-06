@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QRadioButton,
 )
 from tests.gui.helpers import (
     _ImmediateProgressTask,
@@ -610,15 +611,17 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
     dialog = ParticipantNumberDialog()
     qtbot.addWidget(dialog)
     age = dialog.findChild(QLineEdit, "participant_age_edit")
-    sex = dialog.findChild(QComboBox, "participant_sex_combo")
-    handedness = dialog.findChild(QComboBox, "participant_handedness_combo")
+    sex = dialog.findChild(QRadioButton, "participant_sex_option_0")
+    handedness = dialog.findChild(QRadioButton, "participant_handedness_option_0")
     colorblind = dialog.findChild(QComboBox, "participant_colorblind_combo")
-    assert [sex.itemText(index) for index in range(1, sex.count())] == ["Female", "Male"]
-    assert [handedness.itemText(index) for index in range(1, handedness.count())] == [
-        "Right handed",
-        "Left handed",
-        "Ambidextrous",
-    ]
+    assert [
+        dialog.findChild(QRadioButton, f"participant_sex_option_{index}").text()
+        for index in range(2)
+    ] == ["Female", "Male"]
+    assert [
+        dialog.findChild(QRadioButton, f"participant_handedness_option_{index}").text()
+        for index in range(3)
+    ] == ["Right handed", "Left handed", "Ambidextrous"]
     assert [colorblind.itemText(index) for index in range(1, colorblind.count())] == ["No", "Yes"]
 
     messages: list[str] = []
@@ -650,12 +653,12 @@ def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, m
     assert dialog.result() != int(dialog.DialogCode.Accepted)
     assert "sex" in dialog.demographics_error.text().lower()
 
-    sex.setCurrentIndex(sex.findData("Female"))
+    sex.setChecked(True)
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
     assert "handedness" in dialog.demographics_error.text().lower()
 
-    handedness.setCurrentIndex(handedness.findData("Right handed"))
+    handedness.setChecked(True)
     dialog.accept()
     assert dialog.result() != int(dialog.DialogCode.Accepted)
     assert "colorblind" in dialog.demographics_error.text().lower()

@@ -144,13 +144,13 @@ def collect_demographics(
     """Snapshot the configured answers and project unchanged Studio questions to fixed fields."""
     defaults = {question.id: question for question in default_demographics_questions()}
     snapshots: list[DemographicsAnswer] = []
-    studio_fields: dict[str, DemographicsValue] = {}
+    studio_fields: dict[str, DemographicsValue | None] = {}
     for question in questions:
         answer = question.validate_answer(answers.get(question.id))
         snapshots.append(DemographicsAnswer(
             question_id=question.id, prompt=question.prompt, answer=answer,
         ))
-        if question == defaults.get(question.id):
+        if question.model_copy(update={"required": True}) == defaults.get(question.id):
             studio_fields[question.id] = answer
     return ParticipantMetadata.model_validate({
         **studio_fields,

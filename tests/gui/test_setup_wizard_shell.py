@@ -15,8 +15,6 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
-    QDialog,
-    QDialogButtonBox,
     QHeaderView,
     QLabel,
     QListWidget,
@@ -34,10 +32,7 @@ from tests.gui.helpers import (
     record_setup_validation_dialogs,
 )
 
-from fpvs_studio.core.demographics import (
-    DEMOGRAPHICS_PROMPT_LIMIT,
-    default_demographics_questions,
-)
+from fpvs_studio.core.demographics import default_demographics_questions
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.components import (
     home_page_stylesheet,
@@ -45,7 +40,6 @@ from fpvs_studio.gui.components import (
     studio_theme_stylesheet,
 )
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.demographics_setup_step import _DemographicsQuestionDialog
 from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.packaged_smoke import _verification_palette
@@ -1070,7 +1064,7 @@ def test_all_categories_use_nine_setup_steps_without_constructing_design(
     assert [condition.model_dump() for condition in document.ordered_conditions()] == conditions
 
 
-def test_demographics_setup_edits_reorders_and_restores_questions(
+def test_demographics_builder_edits_previews_reorders_and_restores(
     qtbot, controller: StudioController, tmp_path: Path, monkeypatch,
 ) -> None:
     document, window = _open_created_project(controller, qtbot, tmp_path, "Questionnaire")
@@ -1084,124 +1078,178 @@ def test_demographics_setup_edits_reorders_and_restores_questions(
     assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
     assert wizard.step_count_label.text() == "Step 2 of 9"
     step = wizard.demographics_setup_step
+    editor = step.editor
     defaults = default_demographics_questions()
     assert document.project.demographics_questions == defaults
     colorblind_row = next(index for index, question in enumerate(defaults)
                           if question.id == "colorblind")
+    step.question_list.setCurrentRow(colorblind_row)
+    qtbot.mouseClick(editor.required_checkbox, click)
     assert "accessible fixation colors" in step.question_list.item(colorblind_row).toolTip()
+    qtbot.mouseClick(editor.required_checkbox, click)
+    step.question_list.setCurrentRow(0)
     assert not step.restore_defaults_button.isEnabled()
     assert not step.move_up_button.isEnabled()
 
     long_prompt = ("Which languages do you use at home, at school, or at work? " * 4).strip()
-    assert len(long_prompt) <= DEMOGRAPHICS_PROMPT_LIMIT
-
-    def add_choice(dialog: _DemographicsQuestionDialog) -> int:
-        dialog.prompt_edit.setText(long_prompt)
-        dialog.kind_combo.setCurrentIndex(dialog.kind_combo.findData("choice"))
-        dialog.options_edit.setPlainText("One\nTwo\nThree or more")
-        dialog.accept()
-        return dialog.result()
-
-    monkeypatch.setattr(_DemographicsQuestionDialog, "exec", add_choice)
     qtbot.mouseClick(step.add_button, click)
-    added = document.project.demographics_questions[-1]
-    assert added.prompt == long_prompt
-    assert added.options == ["One", "Two", "Three or more"]
+    assert not editor.required_checkbox.isChecked()
+    editor.prompt_edit.setText(long_prompt)
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("checkboxes"))
+    editor._option_edits[0].setText("English")
+    editor._option_edits[1].setText("Spanish")
+    qtbot.mouseClick(editor.add_option_button, click)
+    editor._option_edits[2].setText("French")
+    qtbot.mouseClick(editor.other_button, click)
+    qtbot.mouseClick(editor.required_checkbox, click)
+    assert editor.required_checkbox.isChecked()
+    qtbot.mouseClick(editor.required_checkbox, click)
+    QApplication.processEvents()
+    assert editor.options_panel.isVisible()
+    assert editor.other_button.text() == "Remove Other"
+    assert not editor.required_checkbox.isChecked()
     assert step.question_list.currentRow() == len(defaults)
     assert long_prompt in step.question_list.currentItem().toolTip()
     assert not step.move_down_button.isEnabled()
+    assert document.project.demographics_questions == defaults
+    assert wizard.has_pending_edits()
     _assert_visible_children_within_parent(wizard.demographics_step_surface)
 
+    qtbot.mouseClick(editor.duplicate_button, click)
+    assert editor.prompt_edit.text() == long_prompt
+    assert [edit.text() for edit in editor._option_edits] == ["English", "Spanish", "French"]
+    assert editor.other_button.text() == "Remove Other"
+    assert not editor.required_checkbox.isChecked()
+    editor.prompt_edit.setText("Which languages do you read?")
     qtbot.mouseClick(step.move_up_button, click)
-    assert document.project.demographics_questions[-2:] == [added, defaults[-1]]
-    assert step.question_list.currentRow() == len(defaults) - 1
+    assert step.question_list.currentRow() == len(defaults)
     qtbot.mouseClick(step.move_down_button, click)
-    assert document.project.demographics_questions == [*defaults, added]
+    assert step.question_list.currentRow() == len(defaults) + 1
 
-    def edit_age(dialog: _DemographicsQuestionDialog) -> int:
-        assert dialog.prompt_edit.text() == defaults[0].prompt
-        dialog.prompt_edit.setText("How old are you in years?")
-        dialog.accept()
-        return dialog.result()
+    # Deliver the list order produced by dropping the duplicate before the defaults.
+    item = step.question_list.takeItem(step.question_list.currentRow())
+    step.question_list.insertItem(0, item)
+    step.question_list.setCurrentItem(item)
+    step.question_list.order_changed.emit()
+    assert step.question_list.currentRow() == 0
+    assert editor.prompt_edit.text() == "Which languages do you read?"
 
-    monkeypatch.setattr(_DemographicsQuestionDialog, "exec", edit_age)
-    step.question_list.setCurrentRow(0)
-    qtbot.mouseClick(step.edit_button, click)
-    edited = document.project.demographics_questions[0]
-    assert edited.id == defaults[0].id
-    assert edited.prompt == "How old are you in years?"
+    previews = []
 
-    def cancel_edit(dialog: _DemographicsQuestionDialog) -> int:
-        dialog.prompt_edit.setText("Discard this edit")
-        dialog.reject()
-        return dialog.result()
+    class Preview:
+        def __init__(self, _parent, *, demographics_questions, preview):
+            assert preview
+            previews.append(demographics_questions)
 
-    monkeypatch.setattr(_DemographicsQuestionDialog, "exec", cancel_edit)
-    qtbot.mouseClick(step.edit_button, click)
-    assert document.project.demographics_questions[0] == edited
+        def exec(self):
+            return 0
 
+        def deleteLater(self):
+            pass
+
+    monkeypatch.setattr("fpvs_studio.gui.demographics_setup_step.ParticipantNumberDialog", Preview)
+    qtbot.mouseClick(step.preview_button, click)
+    duplicate, *middle, added = previews[0]
+    assert duplicate.id != added.id
+    assert middle == defaults
+    assert duplicate.prompt == "Which languages do you read?"
+    assert added.prompt == long_prompt
+    assert added.options == ["English", "Spanish", "French"]
+    assert added.allow_other and not added.required
+    assert document.project.demographics_questions == defaults
+
+    qtbot.mouseClick(wizard.setup_wizard_next_button, click)
+    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
+    assert not wizard.has_pending_edits()
     document.save()
     saved = ProjectDocument.open_existing(document.project_root).project
-    assert saved.demographics_questions == [edited, *defaults[1:], added]
+    assert saved.demographics_questions == previews[0]
 
+    qtbot.mouseClick(wizard.setup_wizard_back_button, click)
+    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
     for _ in range(step.question_list.count()):
-        qtbot.mouseClick(step.remove_button, click)
+        qtbot.mouseClick(editor.remove_button, click)
     QApplication.processEvents()
-    assert document.project.demographics_questions == []
     assert step.empty_label.isVisible()
-    assert not step.edit_button.isEnabled()
-    assert not step.remove_button.isEnabled()
+    qtbot.mouseClick(step.preview_button, click)
+    assert previews[-1] == []
     assert step.restore_defaults_button.isEnabled()
+    assert wizard.has_pending_edits()
+    assert wizard.flush_pending_edits()
+    assert document.project.demographics_questions == []
     _assert_visible_children_within_parent(wizard.demographics_step_surface)
     assert step.empty_label.width() >= step.empty_label.fontMetrics().horizontalAdvance(
         step.empty_label.text(),
     )
     _assert_setup_wizard_vertical_scrolling_disabled(wizard)
-    qtbot.mouseClick(wizard.setup_wizard_next_button, click)
-    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
-    qtbot.mouseClick(wizard.setup_wizard_back_button, click)
-    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
 
     qtbot.mouseClick(step.restore_defaults_button, click)
-    assert document.project.demographics_questions == defaults
     assert step.question_list.count() == len(defaults)
     assert not step.restore_defaults_button.isEnabled()
+    assert wizard.flush_pending_edits()
+    assert document.project.demographics_questions == defaults
+    document.save()
 
 
-@pytest.mark.parametrize("size", [(520, 360), (600, 400)])
-def test_demographics_question_editor_validation_and_layout(qtbot, size) -> None:
-    dialog = _DemographicsQuestionDialog(None)
-    qtbot.addWidget(dialog)
-    dialog.resize(*size)
-    dialog.show()
+def test_demographics_builder_validates_drafts_and_keeps_controls_visible(
+    qtbot, controller: StudioController, tmp_path: Path,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Question validation")
+    window.show_setup_wizard(step_key="demographics")
+    window.resize(1120, 820)
+    window.show()
+    wizard = window.setup_wizard_page
+    step = wizard.demographics_setup_step
+    editor = step.editor
+    click = Qt.MouseButton.LeftButton
+
+    qtbot.mouseClick(step.add_button, click)
+    qtbot.mouseClick(wizard.setup_wizard_next_button, click)
     QApplication.processEvents()
-    assert (dialog.width(), dialog.height()) == size
-    assert not dialog.options_edit.isVisible()
+    assert wizard.step_stack.currentWidget() is wizard.demographics_step_surface
+    assert editor.error_label.isVisible()
+    assert "question wording" in editor.error_label.text()
+    assert wizard.has_pending_edits()
+    assert not document.dirty
 
-    apply_button = dialog.buttons.button(QDialogButtonBox.StandardButton.Save)
-    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
-    assert dialog.isVisible()
-    assert dialog.error_label.isVisible()
-    assert dialog.question is None
-
-    dialog.prompt_edit.setText("Which response did you select?")
-    dialog.kind_combo.setCurrentIndex(dialog.kind_combo.findData("choice"))
-    dialog.options_edit.setPlainText("First\nfirst")
-    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
+    editor.prompt_edit.setText("Which response did you select?")
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("choice"))
+    editor._option_edits[0].setText("First")
+    editor._option_edits[1].setText("first")
+    assert not wizard.flush_pending_edits()
+    assert "different" in editor.error_label.text()
     QApplication.processEvents()
-    assert dialog.options_edit.isVisible()
-    assert dialog.error_label.isVisible()
-    assert dialog.question is None
-    assert (dialog.width(), dialog.height()) == size
-    _assert_visible_children_within_parent(dialog)
-    for label in dialog.findChildren(QLabel):
-        if label.isVisible() and label.wordWrap():
-            assert label.height() >= label.heightForWidth(label.width())
-        elif label.isVisible():
-            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
+    assert editor.error_label.height() >= editor.error_label.heightForWidth(
+        editor.error_label.width(),
+    )
 
-    dialog.options_edit.setPlainText("First\nSecond")
-    qtbot.mouseClick(apply_button, Qt.MouseButton.LeftButton)
-    assert dialog.result() == QDialog.DialogCode.Accepted
-    assert dialog.question is not None
-    assert dialog.question.options == ["First", "Second"]
+    editor._option_edits[1].setText("Second")
+    for option in range(12):
+        qtbot.mouseClick(editor.add_option_button, click)
+        editor._option_edits[-1].setText(f"Additional option {option + 1}")
+    QApplication.processEvents()
+    assert editor.options_scroll.verticalScrollBar().maximum() > 0
+    assert editor.add_option_button.isVisible()
+    assert editor.required_checkbox.isVisible()
+    assert step.preview_button.isVisible()
+    assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("scale"))
+    editor.scale_min_combo.setCurrentIndex(0)
+    editor.scale_max_spin.setValue(10)
+    editor.scale_min_label_edit.setText("Never")
+    editor.scale_max_label_edit.setText("Every day")
+    QApplication.processEvents()
+    assert editor.range_panel.isVisible()
+    assert editor.endpoint_labels.isVisible()
+    assert not editor.options_panel.isVisible()
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("rating"))
+    assert editor.scale_max_spin.minimum() == 3
+    assert not editor.endpoint_labels.isVisible()
+
+    qtbot.mouseClick(step.discard_button, click)
+    assert not wizard.has_pending_edits()
+    assert not editor.error_label.isVisible()
+    assert document.project.demographics_questions == default_demographics_questions()

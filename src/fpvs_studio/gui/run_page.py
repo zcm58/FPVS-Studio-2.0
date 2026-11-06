@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from html import escape
 
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtGui import QIntValidator, QShowEvent
+from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressDialog,
     QPushButton,
-    QScrollArea,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
@@ -51,6 +50,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
+from fpvs_studio.gui.demographics_form import DemographicsForm
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.recording_dialog import configure_brainproducts_for_launch
@@ -219,7 +219,7 @@ class ParticipantSessionCheckTask(QObject):
 
 
 class ParticipantNumberDialog(QDialog):
-    """Collect the required launch-time participant details."""
+    """Collect launch details or test the questionnaire from Setup."""
 
     def __init__(
         self,
@@ -227,13 +227,15 @@ class ParticipantNumberDialog(QDialog):
         *,
         manual_removed_electrodes: Mapping[str, Sequence[str]] | None = None,
         demographics_questions: Sequence[DemographicsQuestion] | None = None,
+        preview: bool = False,
     ) -> None:
         super().__init__(parent)
+        self._preview = preview
         self._saved_manual_removed_electrodes = {
             key: tuple(value)
             for key, value in (manual_removed_electrodes or {}).items()
         }
-        self.setWindowTitle("Participant Information")
+        self.setWindowTitle("Demographics Preview" if preview else "Participant Information")
         self.setModal(True)
         self.setMinimumSize(600, 360)
         self.resize(600, 360)
@@ -246,37 +248,13 @@ class ParticipantNumberDialog(QDialog):
                 if demographics_questions is None else demographics_questions
             )
         )
-        self._demographics_fields: dict[str, QLineEdit | QComboBox] = {}
-
         self.participant_number_edit = QLineEdit(self)
         self.participant_number_edit.setObjectName("participant_number_edit")
         self.participant_number_edit.setPlaceholderText("Digits only (for example, 0012)")
         self.participant_number_edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-        self.participant_number_edit.setFocus()
-
-        self.demographics_scroll = QScrollArea(self)
-        self.demographics_scroll.setWidgetResizable(True)
-        self.demographics_scroll.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.demographics_scroll.setFrameShape(QFrame.Shape.NoFrame)
-        self.demographics_scroll.setHorizontalScrollBarPolicy(
-            Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        self.demographics_scroll = DemographicsForm(
+            self._demographics_questions, self, prompt_width=prompt_width,
         )
-        questions_widget = QWidget()
-        questions_form = QFormLayout(questions_widget)
-        questions_form.setContentsMargins(0, 0, 0, 0)
-        questions_form.setFormAlignment(Qt.AlignmentFlag.AlignTop)
-        questions_form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
-        for question in self._demographics_questions:
-            label = QLabel(question.prompt, questions_widget)
-            label.setObjectName(f"participant_{question.id}_prompt")
-            label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setWordWrap(True)
-            label.setFixedWidth(prompt_width)
-            label.setToolTip(f"<p>{escape(question.prompt)}</p>")
-            field = self._build_demographics_field(question, questions_widget)
-            self._demographics_fields[question.id] = field
-            questions_form.addRow(label, field)
-        self.demographics_scroll.setWidget(questions_widget)
         self.demographics_scroll.setVisible(bool(self._demographics_questions))
 
         self.demographics_error = QLabel(self)
@@ -285,11 +263,7 @@ class ParticipantNumberDialog(QDialog):
         self.demographics_error.setWordWrap(True)
         self.demographics_error.setMinimumWidth(1)
         self.demographics_error.hide()
-        for field in self._demographics_fields.values():
-            if isinstance(field, QLineEdit):
-                field.textChanged.connect(self.demographics_error.hide)
-            else:
-                field.currentIndexChanged.connect(self.demographics_error.hide)
+        self.demographics_scroll.changed.connect(self.demographics_error.hide)
 
         self.manual_removed_electrodes_edit = QLineEdit(self)
         self.manual_removed_electrodes_edit.setObjectName(
@@ -330,12 +304,23 @@ class ParticipantNumberDialog(QDialog):
             self.manual_removed_electrodes_edit
         )
 
-        self.button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
+        self.button_box = QDialogButtonBox(parent=self)
         self.button_box.setObjectName("participant_number_button_box")
-        self.button_box.accepted.connect(self.accept)
+        if preview:
+            self.button_box.setStandardButtons(QDialogButtonBox.StandardButton.Close)
+            if self._demographics_questions:
+                check = self.button_box.addButton(
+                    "Check responses", QDialogButtonBox.ButtonRole.ApplyRole,
+                )
+                check.setObjectName("demographics_preview_check_button")
+                check.clicked.connect(self.accept)
+                check.setDefault(True)
+                mark_primary_action(check)
+        else:
+            self.button_box.setStandardButtons(
+                QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
+            )
+            self.button_box.accepted.connect(self.accept)
         self.button_box.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
@@ -345,46 +330,21 @@ class ParticipantNumberDialog(QDialog):
         layout.addWidget(self.manual_removed_electrodes_label)
         layout.addWidget(self.manual_removed_electrodes_edit)
         layout.addWidget(self.button_box)
+        if preview:
+            participant_number_label.hide()
+            self.participant_number_edit.hide()
+            self.manual_removed_electrodes_label.hide()
+            self.manual_removed_electrodes_edit.hide()
+            if not self._demographics_questions:
+                layout.insertWidget(0, QLabel("This questionnaire has no questions.", self))
+                layout.insertStretch(1)
+        else:
+            self.participant_number_edit.setFocus()
         apply_dialog_theme(self)
 
         self.participant_number_edit.textChanged.connect(
             self._prefill_manual_removed_electrodes
         )
-
-    @staticmethod
-    def _build_demographics_field(
-        question: DemographicsQuestion, parent: QWidget,
-    ) -> QLineEdit | QComboBox:
-        if question.kind in ("age", "text"):
-            edit = QLineEdit(parent)
-            edit.setObjectName(f"participant_{question.id}_edit")
-            edit.setAccessibleName(question.prompt)
-            if question.kind == "age":
-                edit.setPlaceholderText("Whole number from 1 to 120")
-                validator = QIntValidator(1, 120, edit)
-                edit.setValidator(validator)
-                edit.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-            return edit
-
-        combo = QComboBox(parent)
-        combo.setObjectName(f"participant_{question.id}_combo")
-        combo.setAccessibleName(question.prompt)
-        combo.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
-        combo.setMinimumContentsLength(14)
-        combo.addItem("Select an answer…", None)
-        if question.kind == "yes_no":
-            combo.addItem("No", False)
-            combo.addItem("Yes", True)
-        else:
-            for option in question.options:
-                combo.addItem(option, option)
-                combo.setItemData(
-                    combo.count() - 1, f"<p>{escape(option)}</p>", Qt.ItemDataRole.ToolTipRole,
-                )
-        combo.currentTextChanged.connect(
-            lambda current: combo.setToolTip(f"<p>{escape(current)}</p>"),
-        )
-        return combo
 
     @property
     def participant_number(self) -> str:
@@ -398,10 +358,7 @@ class ParticipantNumberDialog(QDialog):
 
         return collect_demographics(
             self._demographics_questions,
-            {
-                question_id: field.text() if isinstance(field, QLineEdit) else field.currentData()
-                for question_id, field in self._demographics_fields.items()
-            },
+            self.demographics_scroll.answers(),
             manual_removed_electrodes=self.manual_removed_electrodes,
         )
 
@@ -430,6 +387,12 @@ class ParticipantNumberDialog(QDialog):
         self.manual_removed_electrodes_edit.setText(", ".join(saved))
 
     def accept(self) -> None:
+        if self._preview:
+            if self._validate_demographics():
+                self.demographics_error.setText("Responses are valid.")
+                self.demographics_error.setToolTip("")
+                self.demographics_error.show()
+            return
         participant_number = self.participant_number
         if not participant_number:
             QMessageBox.warning(
@@ -448,18 +411,7 @@ class ParticipantNumberDialog(QDialog):
             self.participant_number_edit.setFocus()
             self.participant_number_edit.selectAll()
             return
-        try:
-            _ = self.participant_metadata
-        except DemographicsResponseError as error:
-            field = self._demographics_fields[error.question_id]
-            self.demographics_error.setText(str(error))
-            self.demographics_error.setToolTip(f"<p>{escape(str(error))}</p>")
-            self.demographics_error.show()
-            layout = self.layout()
-            assert layout is not None
-            layout.activate()
-            field.setFocus()
-            self.demographics_scroll.ensureWidgetVisible(field)
+        if not self._validate_demographics():
             return
         signals_were_blocked = self.participant_number_edit.blockSignals(True)
         try:
@@ -467,6 +419,20 @@ class ParticipantNumberDialog(QDialog):
         finally:
             self.participant_number_edit.blockSignals(signals_were_blocked)
         super().accept()
+
+    def _validate_demographics(self) -> bool:
+        try:
+            _ = self.participant_metadata
+        except DemographicsResponseError as error:
+            self.demographics_error.setText(str(error))
+            self.demographics_error.setToolTip(f"<p>{escape(str(error))}</p>")
+            self.demographics_error.show()
+            layout = self.layout()
+            assert layout is not None
+            layout.activate()
+            self.demographics_scroll.focus_answer(error.question_id)
+            return False
+        return True
 
 
 class BioSemiRecordingConfirmationDialog(QDialog):

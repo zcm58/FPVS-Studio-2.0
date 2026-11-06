@@ -1048,8 +1048,8 @@ preserving existing rows and column values.
 Launch-time participant metadata:
 
 - the GUI collects Participant Number and the ordered project demographics
-  questionnaire. Every configured answer is required for interactive launches that
-  collect participant details
+  questionnaire. Questions marked required must be answered to launch. An unanswered
+  optional question still has a snapshot with its original wording and position
 - Participant Number remains the required participant identity; each visit also has
   its own participant session number
 - an answer of `Yes` to the Studio default colorblindness question selects the
@@ -1060,7 +1060,7 @@ Launch-time participant metadata:
   records retain the snapshots. Both export modes show them in the participant workbook
 - unchanged Studio questions also populate the corresponding fixed fields in
   execution summaries, full-mode `participant_metadata.csv`, and
-  `logs/session_condition_history.csv`. Reordering preserves this mapping
+  `logs/session_condition_history.csv`. Reordering and toggling Required preserve this mapping
 
 Project-level reporting index:
 
@@ -1086,8 +1086,10 @@ Participant results workbook:
   - `Demographics` makes participant/visit details directly accessible; test IDs are
     retained with an explicit label
   - `Demographic Answers` contains one row per captured question, including visit,
-    original position, wording and answer. Older visits still appear in the fixed
-    `Demographics` sheet when only standard fields were recorded
+    original position, wording and answer. Checkbox selections occupy separate lines
+    in the answer cell, paragraph breaks are preserved, and optional skips are blank.
+    Scale and rating answers are numbers, and date and time answers use `YYYY-MM-DD`
+    and `HH:MM` text. Older visits with only standard fields appear in `Demographics`
   - research sheets distinguish `Test Participant` (reserved IDs `0`/`00`) from the
     recorded `Test Mode` and `Pilot Mode` launch flags; unavailable historical flags
     remain unavailable, and original Participant Summary inclusion rules are unchanged

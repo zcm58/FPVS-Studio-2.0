@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from fpvs_studio.core.data_sharing import protocol_fingerprint
 from fpvs_studio.core.demographics import (
+    DemographicsAnswer,
     DemographicsQuestion,
     DemographicsResponseError,
     default_demographics_questions,
@@ -42,6 +43,14 @@ def test_project_and_config_round_trip_retains_custom_order_or_empty_list(
 ):
     questions = [] if empty else [
         DemographicsQuestion(id="language", prompt="Primary language"),
+        DemographicsQuestion(
+            id="services", prompt="Services used", kind="checkboxes", options=["A", "B"],
+            required=False, allow_other=True,
+        ),
+        DemographicsQuestion(
+            id="frequency", prompt="How often?", kind="scale", scale_min=0, scale_max=7,
+            scale_min_label="Never", scale_max_label="Daily",
+        ),
         *reversed(default_demographics_questions()),
     ]
     project = ProjectFile.model_validate({
@@ -101,6 +110,75 @@ def test_text_response_rejects_overlong_input_without_truncating_it():
     question = DemographicsQuestion(id="notes", prompt="Additional notes")
     with pytest.raises(DemographicsResponseError, match="2,000 characters"):
         collect_demographics([question], {"notes": "x" * 2001})
+
+
+def test_legacy_question_uses_required_default_and_keeps_old_serialized_shape():
+    payload = {"id": "language", "prompt": "Primary language", "kind": "text", "options": []}
+    question = DemographicsQuestion.model_validate(payload)
+    assert question.required
+    assert question.model_dump() == payload
+
+
+@pytest.mark.parametrize(("question_options", "submitted", "recorded"), [
+    ({"kind": "paragraph"}, "First line\r\nSecond line", "First line\nSecond line"),
+    ({"kind": "choice", "options": ["A", "B"], "allow_other": True}, "Other text", "Other text"),
+    ({"kind": "checkboxes", "options": ["A", "B"], "allow_other": True}, ["A", "C"], ["A", "C"]),
+    ({"kind": "dropdown", "options": ["A", "B"]}, "A", "A"),
+    ({"kind": "scale", "scale_min": 0}, 0, 0),
+    ({"kind": "rating", "scale_max": 8}, 8, 8),
+    ({"kind": "date"}, "2024-02-29", "2024-02-29"),
+    ({"kind": "time"}, "00:00", "00:00"),
+    ({"kind": "checkboxes", "options": ["A", "B"], "required": False}, [], None),
+])
+def test_form_answer_round_trip_preserves_typed_value(question_options, submitted, recorded):
+    question = DemographicsQuestion(id="item", prompt="Question", **question_options)
+    metadata = collect_demographics([question], {question.id: submitted})
+    restored = ParticipantMetadata.model_validate_json(metadata.model_dump_json(exclude_none=True))
+    snapshot, = restored.demographics_answers
+    assert snapshot.question_id == "item"
+    assert snapshot.prompt == "Question"
+    assert type(snapshot.answer) is type(recorded)
+    assert snapshot.answer == recorded
+
+
+@pytest.mark.parametrize(("question_options", "submitted"), [
+    ({"kind": "paragraph"}, "First line\x00Second line"),
+    ({"kind": "text"}, "First line\nSecond line"),
+    ({"kind": "checkboxes", "options": ["A", "B"]}, []),
+    ({"kind": "checkboxes", "options": ["A", "B"]}, ["A", "C"]),
+    ({"kind": "checkboxes", "options": ["A", "B"], "allow_other": True}, ["C", "D"]),
+    ({"kind": "checkboxes", "options": ["A", "B"], "allow_other": True}, ["A", "A"]),
+    ({"kind": "dropdown", "options": ["A", "B"]}, "C"),
+    ({"kind": "scale", "scale_min": 0}, False),
+    ({"kind": "rating"}, 6),
+    ({"kind": "date"}, "2025-02-29"),
+    ({"kind": "time"}, "10:00+00:00"),
+])
+def test_form_responses_reject_invalid_values(question_options, submitted):
+    question = DemographicsQuestion(id="item", prompt="Question", **question_options)
+    with pytest.raises(DemographicsResponseError) as error:
+        collect_demographics([question], {question.id: submitted})
+    assert error.value.question_id == "item"
+
+
+def test_making_studio_colorblind_question_optional_preserves_meaning():
+    question = default_demographics_questions()[-1].model_copy(update={"required": False})
+    assert collect_demographics([question], {question.id: True}).colorblind is True
+    assert collect_demographics([question], {}).colorblind is None
+
+
+def test_checkbox_snapshot_bounds_the_number_and_length_of_selections():
+    options = [f"Option {i:02d}".ljust(120, "-") for i in range(20)]
+    question = DemographicsQuestion(
+        id="choices", prompt="Which ones?", kind="checkboxes", options=options, allow_other=True,
+    )
+    selected = [*options, "x" * 2000]
+    snapshot, = collect_demographics([question], {question.id: selected}).demographics_answers
+    assert snapshot.answer == selected
+    with pytest.raises(ValidationError, match="Only one checkbox answer"):
+        DemographicsAnswer(question_id=question.id, prompt=question.prompt, answer=[
+            "a" * 2000, "b" * 2000,
+        ])
 
 
 def test_local_questionnaire_is_outside_reporting_protocol(sample_project, sample_project_root):

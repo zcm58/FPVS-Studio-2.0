@@ -13,8 +13,8 @@ triggers; normal Windows/Linux launches retain hardware and display preflight.
 Mac tests retain refresh verification and transient calibration; EEG is excluded.
 Test Mode defaults off at startup.
 
-Setup retains Timing drafts across Display & Session. The project questionnaire and
-launch answer schemas live in `core/demographics.py`. See the
+Setup retains Timing drafts across Display & Session. Core defines demographics;
+Setup preview and launch share the participant form. See the
 [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
 
 Core owns randomized block membership and occurrence identity; see the

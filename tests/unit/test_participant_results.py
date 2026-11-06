@@ -319,6 +319,61 @@ def test_refresh_adds_demographic_answers_to_an_older_workbook(tmp_path, results
         updated.close()
 
 
+def test_workbook_preserves_multiline_choices_and_skipped_demographic_answers(tmp_path, results):
+    plan, summary = results
+    answers = {
+        "notes": "=1+2\nAdditional notes",
+        "languages": ["=Example", "French, Canadian", "Other | details"],
+        "optional": None,
+        "rating": 5,
+        "scale": 0,
+        "date": "2026-11-06",
+        "time": "03:05",
+    }
+    summary.participant_metadata.demographics_answers = [
+        DemographicsAnswer(question_id=key, prompt=key.capitalize(), answer=answer)
+        for key, answer in answers.items()
+    ]
+    summary.output_dir = "runs/session01"
+    write_session_artifacts(tmp_path / summary.output_dir, plan, summary)
+    append_session_condition_history(tmp_path, plan, summary, refresh_reports=False)
+    workbook = load_workbook(write_participant_summary(tmp_path))
+    try:
+        full_rows = _rows(workbook, DEMOGRAPHIC_ANSWERS_SHEET_NAME)
+        skipped = next(row for row in full_rows if row["Question ID"] == "optional")
+        assert skipped["Answer"] is None
+    finally:
+        workbook.close()
+
+    snapshot = capture_participant_results(tmp_path, plan, summary)
+    payload = json.loads(snapshot.read_text(encoding="utf-8"))
+    assert {
+        answer["question_id"]: answer["answer"]
+        for answer in payload["participant_metadata"]["demographics_answers"]
+    } == answers
+
+    workbook = load_workbook(write_participant_summary(tmp_path))
+    try:
+        sheet = workbook[DEMOGRAPHIC_ANSWERS_SHEET_NAME]
+        rows = _rows(workbook, DEMOGRAPHIC_ANSWERS_SHEET_NAME)
+        assert [row["Question ID"] for row in rows] == list(answers)
+        assert [row["Question Position"] for row in rows] == list(range(1, len(answers) + 1))
+        assert {row["Question ID"]: row["Answer"] for row in rows} == {
+            **answers, "languages": "=Example\nFrench, Canadian\nOther | details",
+        }
+        column = next(cell.column for cell in sheet[1] if cell.value == "Answer")
+        cells = {row["Question ID"]: sheet.cell(index, column)
+                 for index, row in enumerate(rows, 2)}
+        for key in ("notes", "languages", "date", "time"):
+            assert cells[key].data_type == "s"
+        for key in ("rating", "scale"):
+            assert cells[key].data_type == "n"
+        for key in ("notes", "languages"):
+            assert cells[key].alignment.wrap_text
+    finally:
+        workbook.close()
+
+
 def test_aborted_test_visit_and_missing_rt_are_retained(tmp_path, results):
     plan, summary = results
     summary.participant_number = "00"

@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
+    QRadioButton,
     QWidget,
 )
 from tests.gui.helpers import (
@@ -89,10 +91,8 @@ def test_participant_dialog_collects_and_prefills_manual_removed_electrodes(
     _assert_visible_children_within_parent(dialog)
 
     dialog.findChild(QLineEdit, "participant_age_edit").setText("30")
-    sex = dialog.findChild(QComboBox, "participant_sex_combo")
-    sex.setCurrentIndex(sex.findData("Female"))
-    handedness = dialog.findChild(QComboBox, "participant_handedness_combo")
-    handedness.setCurrentIndex(handedness.findData("Right handed"))
+    dialog.findChild(QRadioButton, "participant_sex_option_0").setChecked(True)
+    dialog.findChild(QRadioButton, "participant_handedness_option_0").setChecked(True)
     colorblind = dialog.findChild(QComboBox, "participant_colorblind_combo")
     colorblind.setCurrentIndex(colorblind.findData(False))
     dialog.accept()
@@ -107,7 +107,7 @@ def test_configured_demographics_form_fits_and_collects_answers_in_order(qtbot):
     long_option = "The behavioral testing laboratory on the north side of the university campus"
     questions = [
         DemographicsQuestion(
-            id="site", prompt=prompt, kind="choice", options=[long_option, "Other"],
+            id="site", prompt=prompt, kind="dropdown", options=[long_option, "Other"],
         ),
         DemographicsQuestion(id="glasses", prompt="Are you wearing glasses?", kind="yes_no"),
         DemographicsQuestion(id="language", prompt="First language", kind="text"),
@@ -197,6 +197,111 @@ def test_long_demographics_form_reveals_unanswered_question(qtbot):
     assert dialog.demographics_error.isHidden()
     dialog.accept()
     assert dialog.result() == int(dialog.DialogCode.Accepted)
+
+
+def test_form_collects_paragraph_checkboxes_scale_rating_date_and_time(qtbot):
+    questions = [
+        DemographicsQuestion(id="notes", prompt="Notes", kind="paragraph"),
+        DemographicsQuestion(
+            id="languages", prompt="Languages spoken", kind="checkboxes",
+            options=["English", "French"], allow_other=True,
+        ),
+        DemographicsQuestion(
+            id="ease", prompt="How easy was it?", kind="scale", scale_min=0, scale_max=7,
+            scale_min_label="Very difficult", scale_max_label="Very easy",
+        ),
+        DemographicsQuestion(id="comfort", prompt="Comfort", kind="rating", scale_max=7),
+        DemographicsQuestion(id="visit-date", prompt="Visit date", kind="date"),
+        DemographicsQuestion(id="visit-time", prompt="Visit time", kind="time", required=False),
+    ]
+    dialog = ParticipantNumberDialog(demographics_questions=questions)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == (600, 360)
+    assert dialog.demographics_scroll.horizontalScrollBar().maximum() == 0
+    _assert_visible_children_within_parent(dialog.demographics_scroll.widget())
+    assert dialog.rect().contains(dialog.button_box.geometry())
+
+    dialog.participant_number_edit.setText("0015")
+    dialog.findChild(QPlainTextEdit, "participant_notes_paragraph").setPlainText("Line 1\nLine 2")
+    other_option = dialog.findChild(QCheckBox, "participant_languages_other_option")
+    other_edit = dialog.findChild(QLineEdit, "participant_languages_other_edit")
+    assert not other_edit.isEnabled()
+    dialog.findChild(QCheckBox, "participant_languages_option_0").setChecked(True)
+    other_option.setChecked(True)
+    assert other_edit.isEnabled()
+    other_edit.setText("Polish")
+    scale = dialog.findChild(QComboBox, "participant_ease_combo")
+    assert scale.itemText(scale.findData(0)) == "0 — Very difficult"
+    assert scale.itemText(scale.findData(7)) == "7 — Very easy"
+    scale.setCurrentIndex(scale.findData(0))
+    rating = dialog.findChild(QComboBox, "participant_comfort_combo")
+    rating.setCurrentIndex(rating.findData(6))
+
+    date = dialog.findChild(QLineEdit, "participant_visit-date_edit")
+    time = dialog.findChild(QLineEdit, "participant_visit-time_edit")
+    assert date.text() == time.text() == ""
+    date.setText("2026-02-30")
+    dialog.accept()
+    assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert dialog.demographics_error.isVisible()
+    date.setText("2026-11-06")
+    dialog.accept()
+    assert dialog.result() == int(dialog.DialogCode.Accepted)
+    assert [answer.answer for answer in dialog.participant_metadata.demographics_answers] == [
+        "Line 1\nLine 2", ["English", "Polish"], 0, 6, "2026-11-06", None,
+    ]
+
+
+def test_preview_uses_real_validation_without_accepting_a_participant(qtbot):
+    dialog = ParticipantNumberDialog(
+        demographics_questions=[
+            DemographicsQuestion(
+                id="choice", prompt="Preferred method", kind="choice",
+                options=["Email", "Telephone"], required=False, allow_other=True,
+            ),
+            DemographicsQuestion(id="time", prompt="Best time", kind="time"),
+        ],
+        preview=True,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == (600, 360)
+    assert dialog.windowTitle() == "Demographics Preview"
+    assert dialog.participant_number_edit.isHidden()
+    assert dialog.manual_removed_electrodes_edit.isHidden()
+    _assert_visible_children_within_parent(dialog)
+
+    check = dialog.findChild(QPushButton, "demographics_preview_check_button")
+    time = dialog.findChild(QLineEdit, "participant_time_edit")
+    check.click()
+    assert "Best time" in dialog.demographics_error.text()
+    time.setText("23:50")
+    other = dialog.findChild(QRadioButton, "participant_choice_other_option")
+    other.click()
+    check.click()
+    assert dialog.demographics_error.text() == "Enter the other answer."
+    assert dialog.isVisible()
+
+    other_text = dialog.findChild(QLineEdit, "participant_choice_other_edit")
+    other_text.setText("x" * 2_001)
+    check.click()
+    assert "2,000 characters" in dialog.demographics_error.text()
+    assert len(other_text.text()) == 2_001
+
+    clear = dialog.findChild(QPushButton, "participant_choice_clear")
+    assert clear.isEnabled()
+    clear.click()
+    assert not other.isChecked()
+    check.click()
+    assert dialog.demographics_error.text() == "Responses are valid."
+    assert dialog.result() != int(dialog.DialogCode.Accepted)
+    assert dialog.isVisible()
+    assert [answer.answer for answer in dialog.participant_metadata.demographics_answers] == [
+        None, "23:50",
+    ]
 
 
 def test_background_color_control_is_run_tab_presets_only(
