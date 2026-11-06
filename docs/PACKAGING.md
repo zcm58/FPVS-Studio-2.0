@@ -75,8 +75,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
-The [2.7.3 full-exit guidance release](exec-plans/active/triggerbox-full-exit-release-2.7.3.md)
-tracks the explicit Stop-versus-exit wording and Windows port-ownership guidance.
+The [2.7.3 full-exit guidance release](exec-plans/completed/triggerbox-full-exit-release-2.7.3.md)
+records explicit Stop-versus-exit guidance and verified immutable publication.
 The [2.7.2 audit and release](exec-plans/completed/actichamp-adversarial-release-2.7.2.md)
 records adversarial checks, packaged TriggerBox fixes and verified immutable publication.
 The [2.7.1 release record](exec-plans/completed/release-2.7.1.md) tracks USB TriggerBox
