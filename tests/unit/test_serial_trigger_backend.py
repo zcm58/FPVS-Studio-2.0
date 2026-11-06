@@ -9,6 +9,8 @@ import pytest
 
 from fpvs_studio.runtime.triggers import build_trigger_backend
 from fpvs_studio.triggers.base import TriggerBackend, TriggerCompletionError
+from fpvs_studio.triggers.manual import send_test_trigger
+from fpvs_studio.triggers.null_backend import NullBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, SerialBackendError
 from fpvs_studio.triggers.serial_port_access import check_serial_port_access
 
@@ -106,6 +108,59 @@ def test_serial_backend_reset_is_noop_by_default_and_manual_reset_writes_zero() 
     manual_reset_backend.reset()
 
     assert serial_module.port.writes == [bytes([0])]
+
+
+@pytest.mark.parametrize("code", range(10))
+def test_biosemi_manual_test_writes_the_digit_once_and_closes(code: int) -> None:
+    serial_module = _FakeSerialModule()
+    backend = SerialBackend("COM4", serial_module=serial_module)
+
+    send_test_trigger(backend, code)
+
+    assert serial_module.port.writes == [bytes([code])]
+    assert serial_module.port.closed
+
+
+@pytest.mark.parametrize("code", [-1, 10, True, "1"])
+def test_manual_test_rejects_invalid_digits_without_opening_the_port(code: object) -> None:
+    serial_module = _FakeSerialModule()
+    backend = SerialBackend("COM4", serial_module=serial_module)
+
+    with pytest.raises(ValueError, match="integer from 0 to 9"):
+        send_test_trigger(backend, code)  # type: ignore[arg-type]
+
+    assert serial_module.open_calls == []
+
+
+def test_manual_test_rejects_log_only_output() -> None:
+    with pytest.raises(ValueError, match="hardware output"):
+        send_test_trigger(NullBackend(), 1)
+
+
+def test_manual_test_reports_failed_write_and_releases_port() -> None:
+    serial_module = _FakeSerialModule(fail_writes=True)
+    backend = SerialBackend("COM4", serial_module=serial_module)
+
+    with pytest.raises(SerialBackendError, match="BioSemi could not finish sending a marker"):
+        send_test_trigger(backend, 1)
+
+    assert serial_module.port.closed
+
+
+def test_manual_test_preserves_write_and_cleanup_diagnostics(monkeypatch) -> None:
+    serial_module = _FakeSerialModule(fail_writes=True)
+    backend = SerialBackend("COM4", serial_module=serial_module)
+
+    def fail_close() -> None:
+        raise OSError("close failed")
+
+    monkeypatch.setattr(serial_module.port, "close", fail_close)
+
+    with pytest.raises(RuntimeError, match="BioSemi could not finish sending a marker") as error:
+        send_test_trigger(backend, 9)
+
+    assert "write failed" in str(error.value)
+    assert "close failed" in str(error.value)
 
 
 def test_serial_backend_close_is_idempotent() -> None:

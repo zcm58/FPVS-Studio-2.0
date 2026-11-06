@@ -150,10 +150,13 @@ class SerialBackend(TriggerBackend):
     def reset(self) -> None:
         if self._reset_code is None:
             return
-        self._write_marker(
-            validate_reset_trigger_code(self._reset_code),
-            action="reset trigger line",
-        )
+        validate_reset_trigger_code(self._reset_code)
+        self.write_idle()
+
+    def write_idle(self) -> None:
+        """Explicitly write the idle byte for a manual hardware test or reset."""
+
+        self._write_marker(0, action="reset trigger line")
 
     def finish_pending_output(self) -> None:
         """Confirm the last submitted marker outside frame playback, without resetting."""

@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import pytest
 
 from fpvs_studio.triggers import parallel_backend as backend_module
+from fpvs_studio.triggers.manual import send_test_trigger
 from fpvs_studio.triggers.parallel_backend import (
     ParallelPortBackend,
     ParallelPortDriverUnavailableError,
@@ -97,6 +98,19 @@ def test_full_eight_bit_codes_and_pulse_are_preserved(code: int) -> None:
         assert {address for address, _code, _when in driver.attempts} == {0x378}
     finally:
         backend.close()
+
+
+def test_parallel_manual_test_writes_digit_to_selected_address_and_releases_driver() -> None:
+    driver = FakeDriver()
+    backend = ParallelPortBackend(0x378, pulse_width_ms=5, driver=driver)
+
+    send_test_trigger(backend, 9)
+
+    assert driver.codes[:2] == [0, 9]
+    assert driver.codes[2:] and set(driver.codes[2:]) == {0}
+    assert driver.attempts[2][2] - driver.attempts[1][2] >= 0.005
+    assert {address for address, _code, _when in driver.attempts} == {0x378}
+    assert driver.closed
 
 
 @pytest.mark.parametrize("code", [0, -1, 256, None, True, "55"])

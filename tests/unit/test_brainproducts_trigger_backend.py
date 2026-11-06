@@ -19,6 +19,7 @@ from fpvs_studio.triggers.brainproducts_errors import (
     triggerbox_failure_reason,
     triggerbox_port_error_message,
 )
+from fpvs_studio.triggers.manual import send_test_trigger
 
 
 class _FakePort:
@@ -110,6 +111,23 @@ def test_triggerbox_protocol_and_initial_zero() -> None:
         assert backend.emits_hardware_triggers is True
     finally:
         backend.close()
+
+
+@pytest.mark.parametrize("code", [0, 9])
+def test_triggerbox_manual_test_writes_the_digit_and_releases_port(code: int) -> None:
+    serial_module = _FakeSerialModule()
+    backend = BrainProductsTriggerBoxBackend("COM22", pulse_width_ms=5, serial_module=serial_module)
+
+    send_test_trigger(backend, code)
+
+    writes = serial_module.port.writes
+    assert writes[0] == b"\x00"
+    assert writes[1] == bytes([code])
+    assert writes[2:] and set(writes[2:]) == {b"\x00"}
+    if code != 0:
+        attempts = serial_module.port.attempts
+        assert attempts[2][1] - attempts[1][1] >= 0.005
+    assert serial_module.port.closed
 
 
 def test_triggerbox_real_pyserial_transport_preserves_all_codes_and_reconnects() -> None:

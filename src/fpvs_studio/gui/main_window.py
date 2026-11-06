@@ -74,6 +74,7 @@ from fpvs_studio.gui.run_page import (
     confirm_brainvision_recording,
 )
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
+from fpvs_studio.gui.trigger_tester import TriggerTesterDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.window_helpers import (
@@ -196,6 +197,7 @@ class StudioMainWindow(QMainWindow):
         self._project_update_reload_failed = False
         self._setup_wizard_page: SetupWizardPage | None = None
         self._image_resizer_page: ImageResizerPage | None = None
+        self._trigger_tester: TriggerTesterDialog | None = None
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
         self._bundle_export_result_page: BundleExportResultPage | None = None
         self._bundle_import_processing_page: BundleImportProcessingPage | None = None
@@ -404,6 +406,28 @@ class StudioMainWindow(QMainWindow):
         self._set_home_chrome_visible(True)
         self._apply_utility_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
+
+    def show_trigger_tester(self) -> None:
+        if self.is_launch_busy() or self._launch_after_session_seed_ready:
+            self.statusBar().showMessage("Finish the current launch before testing triggers.", 4000)
+            return
+        if self._trigger_tester is not None:
+            self._trigger_tester.raise_()
+            self._trigger_tester.activateWindow()
+            return
+        dialog = TriggerTesterDialog(
+            self.document.recording_configuration, self.document.project.settings.triggers, self,
+        )
+        self._trigger_tester = dialog
+        dialog.finished.connect(self._on_trigger_tester_closed)
+        dialog.open()
+
+    @Slot(int)
+    def _on_trigger_tester_closed(self, _result: int) -> None:
+        dialog = self._trigger_tester
+        self._trigger_tester = None
+        if dialog is not None:
+            dialog.deleteLater()
 
     def _show_initial_workflow_surface(self) -> None:
         self.show_home()
@@ -676,6 +700,9 @@ class StudioMainWindow(QMainWindow):
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
+        self.trigger_tester_action = QAction("Trigger Tester", self)
+        self.trigger_tester_action.setObjectName("trigger_tester_action")
+        self.trigger_tester_action.triggered.connect(self.show_trigger_tester)
         accuracy_label = (
             "T1 and T2 Accuracy..."
             if self.document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
@@ -733,6 +760,7 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.library_action, "View", "download experiments catalog"),
             ActionEntry(self.project_update_action, "File", "library project version"),
             ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
+            ActionEntry(self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi"),
             ActionEntry(self.check_updates_action, "File", "software version update"),
             ActionEntry(self.report_bug_action, "File", "help bug support issue"),
             ActionEntry(self.request_feature_action, "File", "help suggestion feedback"),
@@ -828,6 +856,7 @@ class StudioMainWindow(QMainWindow):
         self.view_menu.addAction(self.data_sharing_action)
         self.view_menu.addAction(self.interrupted_sessions_action)
         self.tools_menu.addAction(self.image_resizer_action)
+        self.tools_menu.addAction(self.trigger_tester_action)
 
     def show_task_accuracy(self) -> None:
         if self.document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
@@ -1026,7 +1055,7 @@ class StudioMainWindow(QMainWindow):
     def launch_session(self) -> None:
         if self._project_update_reload_failed or self._bundle_import_processing_active:
             return
-        if self.is_launch_busy():
+        if self.is_launch_busy() or self._trigger_tester is not None:
             return
         try:
             if not configure_brainproducts_for_launch(self, self.document):
@@ -1174,6 +1203,7 @@ class StudioMainWindow(QMainWindow):
         if (
             not self.isVisible() or self.is_launch_busy()
             or self._bundle_import_processing_active or self._project_update_reload_failed
+            or self._trigger_tester is not None
         ):
             return
         try:
@@ -1608,6 +1638,7 @@ class StudioMainWindow(QMainWindow):
             self.interrupted_sessions_action,
             self.data_sharing_action,
             self.image_resizer_action,
+            self.trigger_tester_action,
             self.launch_action,
         )
         for action in actions:

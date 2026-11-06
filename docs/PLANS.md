@@ -40,6 +40,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
 - [Configurable demographics](exec-plans/completed/configurable-demographics.md)
+- [Trigger Tester](exec-plans/completed/trigger-tester.md)
 - [Project Brain Products recording setup](exec-plans/completed/project-brainproducts-recording-setup.md):
   modal setup errors and first-launch project timing confirmation.
 - [Studio 2.7.4 release](exec-plans/completed/release-2.7.4.md): serial/BioSemi fixes

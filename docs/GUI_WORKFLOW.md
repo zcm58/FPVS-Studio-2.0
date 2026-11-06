@@ -530,6 +530,41 @@ Cognitive Load FPVS creation, placeholder replacement, reusable backward-countin
 task controls and visible acceptance are documented in
 [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md).
 
+### Trigger Tester
+
+Open a project, then choose **Tools > Trigger Tester**. Select the recording output
+and press `0`–`9` on the top row or numeric keypad, or click a digit. The tester
+preselects the effective project recording device and uses its BioSemi baud rate,
+Brain Products pulse width, and configured endpoints. COM port edits apply to this
+dialog only. Opening the tester or switching to a serial output checks access to
+the selected port without sending a trigger. Access errors use the same BioSemi or
+TriggerBox recovery guidance as Recording Setup. After editing a port, press Enter
+or choose **Check Port**. Digits become available after the port opens and closes
+successfully. Verify receipt separately in the recording software.
+For parallel output, set the I/O address in **Settings > Recording > Recording Setup**.
+
+Each keypress opens the selected output, sends the digit and releases the connection.
+Wait for the result before sending the next digit. Studio reports the outcome of
+the local write. Use digits `1`–`9` to verify receipt in BrainVision Recorder 2 or
+BioSemi ActiView. Digit `0` writes the idle value, which may be omitted from the
+marker display.
+
+#### Visible smoke path
+
+1. In an approved visible GUI session, open **Tools > Trigger Tester** at `560x340`
+   in both themes. Confirm the selected output, COM port, digit buttons, status
+   and Close fit. Switch outputs and confirm Studio checks only the selected serial
+   port. Edit the port, press Enter, and verify sending becomes available after a
+   successful check.
+2. With the Brain Products hardware connected, check `1`, `9`, and a repeated `5`
+   on the recording PC in BrainVision Recorder 2. Repeat with the BioSemi USB
+   Trigger Interface and ActiView. Check that `0` reports an idle write in Studio.
+3. Open with a missing or occupied COM port. Confirm the vendor-specific modal
+   includes the port and recovery guidance. Correct the port or release it, use
+   **Check Port** and send a digit. Reopen to confirm the saved endpoint is checked.
+
+Registered GUI coverage lives in `tests/gui/test_trigger_tester.py`.
+
 ### Experimental visual cycle designer
 
 The retained Attentional-Blink editor provides a three-condition burst designer with

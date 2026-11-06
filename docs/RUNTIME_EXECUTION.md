@@ -264,6 +264,10 @@ The PsychoPy implementation:
 
 ## Trigger behavior
 
+[Trigger Tester](GUI_WORKFLOW.md#trigger-tester) uses the transport adapters directly
+for operator-selected digits outside runtime playback. The manual idle write for
+`0` is separate from normal experiment marker validation.
+
 - runtime passes a logged trigger backend through the engine seam
 - when serial output is enabled, runtime opens the configured serial port before the
   engine session starts so wrong, missing, busy, or unavailable COM ports fail before
