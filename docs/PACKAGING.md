@@ -65,7 +65,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.7.1`.
+For the current release package, use the PEP 440-compatible package version `2.7.2`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -75,6 +75,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
+The [2.7.2 audit and release](exec-plans/active/actichamp-adversarial-release-2.7.2.md)
+tracks additional adversarial checks and the packaged TriggerBox transport/setup fixes.
 The [2.7.1 release record](exec-plans/completed/release-2.7.1.md) tracks USB TriggerBox
 and launch-setting fixes, source/dependency freshness, immutable assets and public checks.
 The [2.6.1 release record](exec-plans/completed/release-2.6.1.md) tracks the merged Mac
@@ -334,7 +336,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.7.1.exe
+dist\installer\FPVS-Studio-Setup-2.7.2.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and

@@ -267,6 +267,45 @@ def test_changed_computer_default_updates_inherited_project_but_preserves_overri
     assert "ActiveTwo" in window.home_page.recording_summary.text()
 
 
+def test_actichamp_project_port_and_timing_survive_computer_default_changes(
+    controller, qtbot, tmp_path,
+):
+    initial = _configuration(
+        "brainproducts_triggerbox", brainproducts_serial_port="COM4",
+        brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=100,
+        brainproducts_pulse_width_ms=20,
+    )
+    override = _configuration(
+        "brainproducts_triggerbox", brainproducts_serial_port="COM3",
+        brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+    )
+    replacement = _configuration(
+        "brainproducts_triggerbox", brainproducts_serial_port="COM9",
+        brainproducts_amplifier="liveamp", brainproducts_sampling_rate_hz=1000,
+        brainproducts_pulse_width_ms=4,
+    )
+    controller.save_default_recording_configuration(initial)
+    document, _window = open_created_project(controller, qtbot, tmp_path)
+    assert document.uses_default_recording_configuration
+    assert document.recording_configuration == initial
+    controller.save_recording_configuration(override)
+    saved_project = (document.project_root / "project.json").read_bytes()
+
+    controller.save_default_recording_configuration(replacement)
+
+    assert not document.uses_default_recording_configuration
+    assert document.recording_configuration == override
+    assert document.validate_recording_launch() == "brainproducts_triggerbox"
+    assert (document.project_root / "project.json").read_bytes() == saved_project
+    reopened = ProjectDocument.open_existing(document.project_root)
+    assert reopened.recording_configuration == override
+    controller.use_default_recording_configuration()
+    assert document.uses_default_recording_configuration
+    assert document.recording_configuration == replacement
+    assert document.validate_recording_launch() == "brainproducts_triggerbox"
+    assert ProjectDocument.open_existing(document.project_root).project.settings.recording is None
+
+
 def test_settings_default_is_editable_without_a_project(qtbot, qapp, tmp_path, monkeypatch):
     controller = _controller(qapp, tmp_path, monkeypatch)
     controller.save_fpvs_root_dir(tmp_path)

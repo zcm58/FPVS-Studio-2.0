@@ -40,7 +40,11 @@ from fpvs_studio.runtime.recording import (
     validate_recording_configuration,
     validate_recording_trigger_schedule,
 )
-from fpvs_studio.runtime.run_worker import RuntimeWorker, _build_and_connect_trigger_backend
+from fpvs_studio.runtime.run_worker import (
+    RuntimeWorker,
+    _build_and_connect_trigger_backend,
+    _execution_error_details,
+)
 from fpvs_studio.runtime.unicorn_recorder import RecorderReadinessError
 from fpvs_studio.triggers import brainproducts_backend
 from fpvs_studio.triggers.null_backend import NullBackend
@@ -482,6 +486,102 @@ def test_single_run_cleanup_failure_keeps_marker_attempts(execution, monkeypatch
     evidence = _evidence(root)
     assert evidence.state == "interrupted"
     assert evidence.runs[0].attempted_events
+
+
+@pytest.mark.parametrize("mode,fail_export", [
+    ("single", False), ("full", False), ("compact", False), ("full", True), ("compact", True),
+])
+@pytest.mark.parametrize("failure", ["presentation", "trigger"])
+def test_triggerbox_cleanup_failure_remains_in_evidence_after_primary_failure(
+    execution, sample_project, monkeypatch, caplog, mode, fail_export, failure,
+):
+    root, plan = execution
+    sample_project.settings.recording = ProjectRecordingSettings(
+        recording_backend="brainproducts_triggerbox", brainproducts_amplifier="actichamp",
+        brainproducts_sampling_rate_hz=500,
+    )
+    config = export_project_config(sample_project, root)
+    output = FakeTriggerBox()
+    cleanup_error = OSError("TriggerBox reset worker did not stop; restart FPVS Studio.")
+    output.close = Mock(side_effect=cleanup_error)
+    monkeypatch.setattr(triggers, "BrainProductsTriggerBoxBackend", lambda **_kwargs: output)
+    engine = StubEngine({})
+    original_playback = engine.run_condition
+    original_error = (
+        triggers.TriggerEmissionError("TriggerBox event write failed")
+        if failure == "trigger" else RuntimeError("presentation failed")
+    )
+
+    def fail_after_markers(*args, **kwargs):
+        original_playback(*args, **kwargs)
+        raise original_error
+
+    monkeypatch.setattr(engine, "run_condition", fail_after_markers)
+    if fail_export:
+        monkeypatch.setattr(
+            "fpvs_studio.runtime.run_worker.write_participant_summary",
+            Mock(side_effect=PermissionError("workbook locked")),
+        )
+    options = {
+        "recording_backend": "brainproducts_triggerbox", "brainproducts_amplifier": "actichamp",
+        "brainproducts_sampling_rate_hz": 500,
+        "toolbox_handoff_config": config.model_dump(mode="json"),
+    }
+    worker = RuntimeWorker(engine)
+    with pytest.raises(type(original_error)) as caught:
+        if mode == "single":
+            spec = plan.ordered_entries()[0].run_spec
+            worker.execute(
+                root, spec, root / "runs" / spec.run_id, participant_number="007",
+                runtime_options=options,
+            )
+        else:
+            _execute(root, plan, worker, export_mode=mode, **options)
+
+    assert caught.value is original_error
+    evidence = _evidence(root)
+    assert evidence.state == "interrupted"
+    assert str(original_error) in evidence.abort_reason
+    assert str(cleanup_error) in evidence.abort_reason
+    if fail_export:
+        assert evidence.export_error == "workbook locked"
+    assert str(cleanup_error) in caplog.text
+    assert evidence.runs[0].attempted_events
+    assert not list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
+
+
+@pytest.mark.parametrize("fail_close", [False, True])
+def test_triggerbox_retained_write_cause_is_not_a_second_cleanup_failure(
+    fail_close,
+):
+    port = SimpleNamespace(
+        write=Mock(side_effect=[1, OSError("event USB write failed"), 1]),
+        close=Mock(side_effect=OSError("port close failed") if fail_close else None),
+    )
+    serial_module = SimpleNamespace(
+        Serial=lambda **_kwargs: port, EIGHTBITS=8, PARITY_NONE="N", STOPBITS_ONE=1,
+    )
+    output = brainproducts_backend.BrainProductsTriggerBoxBackend(
+        "COM4", pulse_width_ms=1, serial_module=serial_module,
+    )
+    backend = triggers.LoggedTriggerBackend(output, backend_name="brainproducts_triggerbox")
+    backend.connect()
+    with pytest.raises(triggers.TriggerEmissionError) as primary:
+        backend.send_trigger(55)
+    with pytest.raises(brainproducts_backend.BrainProductsTriggerBoxError) as cleanup:
+        backend.close()
+
+    error = primary.value
+    details = _execution_error_details(error, cleanup.value)
+    port.close.assert_called_once()
+    assert [call.args[0] for call in port.write.call_args_list] == [b"\x00", b"7", b"\x00"]
+    if fail_close:
+        assert cleanup.value is not primary.value.__cause__
+        assert "Trigger cleanup also failed" in details
+        assert "port close failed" in details
+    else:
+        assert cleanup.value is primary.value.__cause__
+        assert details == f"{type(error).__name__}: {error}"
 
 
 def test_evidence_write_failure_precedes_output(execution, monkeypatch):

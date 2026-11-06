@@ -432,12 +432,13 @@ def test_brainvision_reminder_gates_launch_on_both_surfaces(
     monkeypatch.setattr(document, "launch_compiled_session", launch)
     page.launch_session()
     if test_mode:
-        assert events == ["launch"]
+        expected_events = ["launch"]
     elif accepted:
-        assert events == ["reminder", "launch"]
+        expected_events = ["reminder", "launch"]
     else:
-        assert events == ["reminder"]
-    assert not window.is_launch_busy()
+        expected_events = ["reminder"]
+    qtbot.waitUntil(lambda: events == expected_events)
+    qtbot.waitUntil(lambda: not window.is_launch_busy())
 
 
 @pytest.mark.parametrize("platform_name", ["win32", "darwin"])

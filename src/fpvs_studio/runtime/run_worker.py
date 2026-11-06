@@ -126,6 +126,7 @@ class RuntimeWorker:
         session_open = False
         execution_error: Exception | None = None
         trigger_error: TriggerEmissionError | None = None
+        trigger_cleanup_error: Exception | None = None
         run_summary: RunExecutionSummary | None = None
         checkpointed_summary: RunExecutionSummary | None = None
         try:
@@ -234,11 +235,14 @@ class RuntimeWorker:
             try:
                 trigger_backend.close()
             except Exception as exc:
+                trigger_cleanup_error = exc
+                LOGGER.exception("Trigger shutdown reported an error after run playback.")
                 execution_error = execution_error or trigger_error or exc
 
         if execution_error is not None:
             _finish_acquisition_after_error(
                 acquisition, execution_error, records=trigger_backend.records,
+                trigger_cleanup_error=trigger_cleanup_error,
             )
             raise execution_error
         assert run_summary is not None
@@ -326,6 +330,7 @@ class RuntimeWorker:
             _finish_acquisition_after_error(acquisition, exc)
             raise
         session_open = False
+        trigger_cleanup_error: Exception | None = None
         warnings = list(trigger_warnings)
         sharing_capture: SharingCapture | None = None
         try:
@@ -800,10 +805,10 @@ class RuntimeWorker:
                 try:
                     trigger_backend.close()
                 except Exception as exc:
+                    trigger_cleanup_error = exc
+                    LOGGER.exception("Trigger shutdown reported an error after session playback.")
                     if execution_error is None:
                         execution_error = trigger_error or exc
-                    else:
-                        LOGGER.exception("Runtime cleanup also failed after session interruption.")
 
         if execution_error is not None and active_entry is not None and task_checkpoint is not None:
             prior = (run_results[-1] if run_results
@@ -882,7 +887,8 @@ class RuntimeWorker:
 
         if execution_error is not None:
             abort_reason = (
-                f"Session interrupted: {type(execution_error).__name__}: {execution_error}"
+                "Session interrupted: "
+                + _execution_error_details(execution_error, trigger_cleanup_error)
             )
         if execution_error is None and trigger_error is None:
             recovery.stage("finalizing")
@@ -961,6 +967,7 @@ class RuntimeWorker:
             _finish_acquisition_after_error(
                 acquisition, execution_error or trigger_error or export_error,
                 records=trigger_backend.records, export_error=str(export_error),
+                trigger_cleanup_error=trigger_cleanup_error,
             )
             if execution_error is not None:
                 LOGGER.exception("Result finalization also failed after session interruption.")
@@ -1391,13 +1398,27 @@ def _build_and_connect_trigger_backend(
     return trigger_backend, warnings
 
 
+def _execution_error_details(
+    error: Exception, trigger_cleanup_error: Exception | None = None,
+) -> str:
+    details = f"{type(error).__name__}: {error}"
+    if (trigger_cleanup_error is not None and trigger_cleanup_error is not error
+            and trigger_cleanup_error is not error.__cause__):
+        details += (
+            f" Trigger cleanup also failed: {type(trigger_cleanup_error).__name__}: "
+            f"{trigger_cleanup_error}"
+        )
+    return details
+
+
 def _finish_acquisition_after_error(
     acquisition: AcquisitionEvidenceRecorder, error: Exception, *,
     records: Iterable[TriggerRecord] = (), export_error: str | None = None,
+    trigger_cleanup_error: Exception | None = None,
 ) -> None:
     try:
         acquisition.finish(
-            abort_reason=f"{type(error).__name__}: {error}", interrupted=True,
+            abort_reason=_execution_error_details(error, trigger_cleanup_error), interrupted=True,
             records=list(records), export_error=export_error,
         )
     except Exception:

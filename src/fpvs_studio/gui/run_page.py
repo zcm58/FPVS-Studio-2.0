@@ -532,7 +532,7 @@ class BrainVisionRecordingReminderDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 18, 24, 18)
-        layout.setSpacing(16)
+        layout.setSpacing(10)
         layout.addWidget(self.prompt_label, stretch=1)
         layout.addWidget(buttons)
         apply_dialog_theme(self)

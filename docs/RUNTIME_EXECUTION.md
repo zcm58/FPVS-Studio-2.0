@@ -780,6 +780,10 @@ error when writing remains possible. No disk I/O is added to a flip callback. An
 process kill or machine failure can omit the current run's in-memory attempts; the
 export explicitly states that persistence boundary. Do not reconstruct missing attempts
 from compiled intent or infer a successful recording from a completed Studio session.
+If trigger shutdown also fails after a presentation or marker error, the interrupted
+evidence retains both errors in `abort_reason` and the application log records the
+cleanup failure, including restart/reconnect guidance. The original exception remains
+the raised error; cleanup cannot replace it or create a completed handoff.
 
 These software checks do not prove physical display onset timing. Lab timing precision
 still needs BioSemi/BDF and photodiode validation on the actual machine and display.

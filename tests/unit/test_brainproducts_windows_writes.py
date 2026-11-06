@@ -31,11 +31,13 @@ class _NativeDriver:
         self.writes = []
         self.blocked = set()
         self.errors = {}
+        self.submission_errors = {}
         self.query_error = None
         self.short = set()
         self.reused_pending = False
         self.cancelled = False
         self.cancel_completes = True
+        self.cancel_error = None
         self.closed = False
         self.port = serialwin32.Serial(port=None, timeout=0, write_timeout=0)
         self.port._port_handle = 123456
@@ -67,6 +69,9 @@ class _NativeDriver:
             index = len(self.writes)
             self.changed.notify_all()
         ctypes.cast(count, ctypes.POINTER(self.win32.DWORD))[0] = size
+        if index in self.submission_errors:
+            self.local.error = self.submission_errors[index]
+            return False
         self.local.error = self.win32.ERROR_IO_PENDING if index in self.blocked else 0
         return index not in self.blocked
 
@@ -90,7 +95,11 @@ class _NativeDriver:
         self.cancelled = True
         if self.cancel_completes:
             self.blocked.discard(len(self.writes))
-            self.errors[len(self.writes)] = self.win32.ERROR_OPERATION_ABORTED
+            if self.cancel_error is None:
+                self.errors[len(self.writes)] = self.win32.ERROR_OPERATION_ABORTED
+        if self.cancel_error is not None:
+            self.local.error = self.cancel_error
+            return False
         return True
 
     def _close(self, handle):
@@ -316,3 +325,76 @@ def test_invalid_completion_query_retains_unconfirmed_native_storage(
     assert len(retained) == 1
     assert retained[0]._connection is driver.port
     assert retained[0]._payload == b"7"
+
+
+@pytest.mark.parametrize("error", [8, 995, 1784])
+def test_native_submission_rejection_does_not_retry_or_retain_storage(native_driver, error):
+    driver = native_driver
+    driver.submission_errors[2] = error
+    backend = BrainProductsTriggerBoxBackend("COM4", serial_module=driver.module)
+    backend.connect()
+    with pytest.raises(BrainProductsTriggerBoxError, match="serial write returned 0"):
+        backend.send(255)
+    assert backend._native_write is not None and not backend._native_write.pending
+    with pytest.raises(BrainProductsTriggerBoxError, match="serial write returned 0"):
+        backend.close()
+    assert [payload for payload, _when in driver.writes] == [b"\x00", b"\xff", b"\x00"]
+    assert driver.closed
+    assert not driver.reused_pending
+
+
+@pytest.mark.parametrize("cancel_completes", [True, False])
+def test_initial_zero_timeout_releases_only_confirmed_native_storage(
+    native_driver, monkeypatch, cancel_completes,
+):
+    driver = native_driver
+    driver.blocked.add(1)
+    driver.cancel_completes = cancel_completes
+    retained = []
+    monkeypatch.setattr(backend_module, "_WRITE_TIMEOUT_S", .025)
+    monkeypatch.setattr(windows_module, "_RETAINED_WRITES", retained)
+    backend = BrainProductsTriggerBoxBackend("COM4", serial_module=driver.module)
+    with pytest.raises(BrainProductsTriggerBoxError, match="timed out while clearing") as caught:
+        backend.connect()
+    backend.close()
+    assert backend._worker is None
+    assert len(driver.writes) == 1
+    assert driver.cancelled
+    assert driver.closed is cancel_completes
+    assert bool(retained) is not cancel_completes
+    if not cancel_completes:
+        assert "retained until process exit" in str(caught.value)
+        assert retained[0]._payload == b"\x00"
+        assert retained[0]._connection is driver.port
+
+
+@pytest.mark.parametrize("cancel_error, completes", [(1168, True), (5, True), (5, False)])
+def test_cancel_failure_never_substitutes_for_native_completion(
+    native_driver, monkeypatch, cancel_error, completes,
+):
+    driver = native_driver
+    driver.blocked.add(2)
+    driver.cancel_error = cancel_error
+    driver.cancel_completes = completes
+    retained = []
+    monkeypatch.setattr(backend_module, "_WRITE_TIMEOUT_S", .025)
+    monkeypatch.setattr(windows_module, "_RETAINED_WRITES", retained)
+    backend = BrainProductsTriggerBoxBackend("COM4", serial_module=driver.module)
+    backend.connect()
+    backend.send(128)
+    with pytest.raises(BrainProductsTriggerBoxError, match="timed out while sending"):
+        backend.reset()
+    with pytest.raises(BrainProductsTriggerBoxError) as caught:
+        backend.close()
+    assert driver.closed is completes
+    assert bool(retained) is not completes
+    assert not driver.reused_pending
+    assert len(driver.writes) == (3 if completes else 2)
+    if cancel_error == 1168:
+        assert "cancellation failed" not in str(caught.value)
+        assert "could not finish shutting down" not in str(caught.value)
+    else:
+        assert "WinError 5" in str(caught.value)
+    if not completes:
+        assert "retained until process exit" in str(caught.value)
+        assert retained[0]._payload == b"\x80"
