@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [actiCHamp adversarial audit and 2.7.2](exec-plans/active/actichamp-adversarial-release-2.7.2.md) | Reproduce and fix remaining trigger workflow failures, verify exact packaged source and publish the next patch release |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
@@ -40,6 +39,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [actiCHamp adversarial audit and 2.7.2](exec-plans/completed/actichamp-adversarial-release-2.7.2.md):
+  secondary cleanup diagnostics and reminder layout repaired; native failure probes,
+  exact-source CI, packaged checks and immutable public release verification passed.
 - [BrainVision transport qualification](exec-plans/completed/brainvision-transport-qualification.md):
   Windows pending-write completion, COM-selection preservation and LiveAmp/Recorder 1
   plus actiCHamp/Recorder 2 guidance; software and visible checks recorded, physical

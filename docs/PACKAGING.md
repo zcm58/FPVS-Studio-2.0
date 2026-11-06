@@ -75,8 +75,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
-The [2.7.2 audit and release](exec-plans/active/actichamp-adversarial-release-2.7.2.md)
-tracks additional adversarial checks and the packaged TriggerBox transport/setup fixes.
+The [2.7.2 audit and release](exec-plans/completed/actichamp-adversarial-release-2.7.2.md)
+records adversarial checks, packaged TriggerBox fixes and verified immutable publication.
 The [2.7.1 release record](exec-plans/completed/release-2.7.1.md) tracks USB TriggerBox
 and launch-setting fixes, source/dependency freshness, immutable assets and public checks.
 The [2.6.1 release record](exec-plans/completed/release-2.6.1.md) tracks the merged Mac
