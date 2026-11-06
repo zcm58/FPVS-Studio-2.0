@@ -412,14 +412,20 @@ def test_publisher_export_menu_follows_startup_mode_and_saves_at_prepare(
     controller._developer_mode.active = enabled
     document, window = open_created_project(controller, qtbot, tmp_path)
     action = window.publish_library_action
+    entries = window.export_menu.actions()
+    assert [entry.isSeparator() for entry in entries] == [
+        index % 2 == 1 for index in range(len(entries))
+    ]
     if not enabled:
         assert action is None
+        assert entries[-1] is window.submit_library_action
         assert all(
             "Publish to Experiment Library" not in item.text()
-            for item in window.export_menu.actions()
+            for item in entries
         )
         return
-    assert action in window.export_menu.actions()
+    assert entries[-3] is window.submit_library_action
+    assert entries[-1] is action
     assert action.text() == "Publish to Experiment Library..."
     shown, saved = [], []
     controller._library_publisher_controller = SimpleNamespace(

@@ -481,6 +481,11 @@ callbacks; native/visible test results must report the actual environment.
 
 ## Main Window
 
+File, View and Tools use a native divider between each visible item, including
+items inside Import and Export. In a visible session, open the menus at Home's
+`760x520` minimum and `1120x720` default in both themes. Check that every label fits
+and neighboring items have one divider. Repeat for Export with Library publishing enabled.
+
 ### Authoring and project discovery responsiveness
 
 Manage Projects shows its loading state before discovery and project JSON reads run

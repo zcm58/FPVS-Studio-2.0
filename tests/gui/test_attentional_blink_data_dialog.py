@@ -214,9 +214,9 @@ def test_view_action_uses_ab_project_and_blocks_handoff_while_busy(
     monkeypatch.setattr("fpvs_studio.gui.main_window.QMessageBox.information", lambda *a: None)
     assert window.fixation_cross_data_action in window.view_menu.actions()
     assert window.fixation_cross_data_action.text() == "T1 and T2 Accuracy..."
-    assert [action.text() for action in window.tools_menu.actions()] == [
-        "Image Resizer", "Trigger Tester",
-    ]
+    assert [
+        action.text() for action in window.tools_menu.actions() if not action.isSeparator()
+    ] == ["Image Resizer", "Trigger Tester"]
     window.fixation_cross_data_action.trigger()
     task = DeferredTask.instances[-1]
     assert not window._allow_project_handoff_during_fixation_load()

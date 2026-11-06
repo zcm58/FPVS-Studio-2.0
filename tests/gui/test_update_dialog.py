@@ -11,9 +11,9 @@ from pathlib import Path
 from threading import Event
 
 import pytest
-from PySide6.QtCore import QByteArray, QCoreApplication, QEvent, Qt, QThread, QTimer
+from PySide6.QtCore import QByteArray, QCoreApplication, QEvent, QPoint, Qt, QThread, QTimer
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QLabel, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget
 from shiboken6 import isValid
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
 
@@ -59,45 +59,58 @@ def _available_update(_cancel_event: Event | None = None) -> UpdateCheckResult:
     )
 
 
-def test_main_window_file_menu_groups_actions(
+@pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
+def test_main_window_menus_separate_each_visible_action(
     controller,
     qtbot,
     tmp_path: Path,
+    size: tuple[int, int],
 ) -> None:
     _document, window = open_created_project(controller, qtbot, tmp_path)
+    window.resize(*size)
+    window.show()
+    QApplication.processEvents()
+    assert window.size().toTuple() == size
+    menu_bar = window.menuBar()
+    anchor = menu_bar.mapToGlobal(QPoint(0, menu_bar.height()))
 
-    menu_entries = [
-        "---" if action.isSeparator() else action.text()
-        for action in window.file_menu.actions()
-        if action.isVisible()
-    ]
-
-    assert menu_entries == [
-        "Manage Projects...",
-        "Save",
-        "---",
-        "Import",
-        "Export",
-        "Update Project Version...",
-        "---",
-        "Settings...",
-        "---",
-        "Check for Updates",
-        "Report a Bug...",
-        "Request a Feature...",
-        "About",
-    ]
-    assert [action.text() for action in window.import_menu.actions()] == [
-        "Project Bundle...",
-        "Project Config...",
-    ]
-    assert [action.text() for action in window.export_menu.actions()] == [
-        "Project Bundle...",
-        "FPVS Toolbox Config...",
-        "Completed Project Config...",
-        "Group Summary...",
-        "Request Library publication...",
-    ]
+    menus = (
+        (window.file_menu, [
+            "Manage Projects...", "Save", "Import", "Export", "Update Project Version...",
+            "Find Action...", "Settings...", "Check for Updates", "Report a Bug...",
+            "Request a Feature...", "About",
+        ]),
+        (window.view_menu, [
+            "Experiment Library...", "Open Participant Results", "Fixation Task Accuracy...",
+            "Data Sharing & Comparison...", "Interrupted Sessions…",
+        ]),
+        (window.tools_menu, ["Image Resizer", "Trigger Tester"]),
+        (window.import_menu, ["Project Bundle...", "Project Config..."]),
+        (window.export_menu, [
+            "Project Bundle...", "FPVS Toolbox Config...", "Completed Project Config...",
+            "Group Summary...", "Upload Project for Review...",
+        ]),
+    )
+    for menu, labels in menus:
+        menu.popup(anchor)
+        try:
+            qtbot.waitUntil(menu.isVisible)
+            QApplication.processEvents()
+            rows = [(action, menu.actionGeometry(action)) for action in menu.actions()]
+            # Hidden actions and the extra separators they leave have no visible row.
+            rows = [(action, rect) for action, rect in rows if not rect.isEmpty()]
+            assert [action.text() for action, _ in rows if not action.isSeparator()] == labels
+            assert [action.isSeparator() for action, _ in rows] == [
+                index % 2 == 1 for index in range(2 * len(labels) - 1)
+            ]
+            for action, rect in rows:
+                assert menu.rect().contains(rect)
+                if not action.isSeparator():
+                    assert rect.width() >= menu.fontMetrics().horizontalAdvance(action.text())
+            for (_, above), (_, below) in zip(rows, rows[1:], strict=False):
+                assert above.bottom() < below.top()
+        finally:
+            menu.hide()
 
 
 def test_main_window_exposes_file_check_for_updates_action(

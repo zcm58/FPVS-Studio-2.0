@@ -142,15 +142,16 @@ def test_view_menu_order_and_action_load_active_project(
         "View",
         "Tools",
     ]
-    assert [action.text() for action in window.view_menu.actions()] == [
+    assert [action.text() for action in window.view_menu.actions() if not action.isSeparator()] == [
         "Experiment Library...",
-        "",
         "Open Participant Results",
-        "Fixation Task Accuracy..."
+        "Fixation Task Accuracy...",
+        "Data Sharing & Comparison...",
+        "Interrupted Sessions…",
     ]
-    assert [action.text() for action in window.tools_menu.actions()] == [
-        "Image Resizer", "Trigger Tester",
-    ]
+    assert [
+        action.text() for action in window.tools_menu.actions() if not action.isSeparator()
+    ] == ["Image Resizer", "Trigger Tester"]
 
     window.fixation_cross_data_action.trigger()
 

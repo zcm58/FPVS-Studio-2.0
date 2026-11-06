@@ -822,7 +822,6 @@ class StudioMainWindow(QMainWindow):
         self.save_state_label.setWordWrap(False)
         self.save_state_label.setAccessibleName("Project save status")
         self.menuBar().setCornerWidget(self.save_state_label)
-        self.file_menu.addSeparator()
         self.import_menu = QMenu("Import", self.file_menu)
         self.import_menu.setObjectName("file_import_menu")
         self.import_menu.addAction(self.import_project_bundle_action)
@@ -836,27 +835,30 @@ class StudioMainWindow(QMainWindow):
         self.export_menu.addAction(self.export_group_summary_action)
         self.export_menu.addAction(self.submit_library_action)
         if self.publish_library_action is not None:
-            self.export_menu.addSeparator()
             self.export_menu.addAction(self.publish_library_action)
         self.file_menu.addMenu(self.export_menu)
         self.file_menu.addAction(self.project_update_action)
-        self.file_menu.addSeparator()
         self.file_menu.addAction(self.find_action_action)
         self.file_menu.addAction(self.settings_action)
-        self.file_menu.addSeparator()
         self.file_menu.addAction(self.check_updates_action)
         self.file_menu.addAction(self.report_bug_action)
         self.file_menu.addAction(self.request_feature_action)
         self.file_menu.addAction(self.tutorials_action)
         self.file_menu.addAction(self.about_action)
         self.view_menu.addAction(self.library_action)
-        self.view_menu.addSeparator()
         self.view_menu.addAction(self.participant_results_action)
         self.view_menu.addAction(self.fixation_cross_data_action)
         self.view_menu.addAction(self.data_sharing_action)
         self.view_menu.addAction(self.interrupted_sessions_action)
         self.tools_menu.addAction(self.image_resizer_action)
         self.tools_menu.addAction(self.trigger_tester_action)
+
+        # Native menus collapse neighboring separators around hidden actions.
+        for menu in (
+            self.file_menu, self.import_menu, self.export_menu, self.view_menu, self.tools_menu,
+        ):
+            for action in menu.actions()[1:]:
+                menu.insertSeparator(action)
 
     def show_task_accuracy(self) -> None:
         if self.document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
