@@ -684,7 +684,8 @@ def test_triggerbox_occupied_com4_aborts_before_presentation_with_recovery(execu
         )
 
     assert "The COM4 port is occupied or access was denied." in str(caught.value)
-    assert "Please close the TriggerBox software (Configuration/Test IO)" in str(caught.value)
+    assert "Fully exit the TriggerBox software (Configuration/Test IO)" in str(caught.value)
+    assert "Pressing Stop can leave the port occupied." in str(caught.value)
     assert str(failure) in str(caught.value)
     serial_module.Serial.assert_called_once()
     assert serial_module.Serial.call_args.kwargs["port"] == "COM4"
@@ -696,7 +697,7 @@ def test_triggerbox_occupied_com4_aborts_before_presentation_with_recovery(execu
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Native pySerial Win32 error replay")
 @pytest.mark.parametrize("error_code, expected, recovery", [
-    (5, "The COM4 port is occupied or access was denied.", "Please close the TriggerBox software"),
+    (5, "The COM4 port is occupied or access was denied.", "Fully exit the TriggerBox software"),
     (2, "TriggerBox port COM4 was not found.", "Device Manager"),
 ])
 def test_triggerbox_native_pyserial_open_failure_reaches_access_check_and_runtime(

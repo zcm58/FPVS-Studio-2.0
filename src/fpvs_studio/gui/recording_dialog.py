@@ -677,10 +677,10 @@ class RecordingSetupDialog(QDialog):
                 "brainamp": "BrainVision Recorder 1",
             }.get(amplifier or "", "BrainVision Recorder")
             guidance = (
-                "Install TriggerBox software/drivers on this PC. Close Configuration/Test IO "
-                "before launch; keep it closed during experiments. "
-                f"Start recording in {recorder} and keep "
-                "it recording. Test and Pilot modes never send markers."
+                "Install TriggerBox software/drivers on this PC. Fully exit Configuration/Test IO "
+                "before launch; keep them closed. Stop can leave the COM port occupied. "
+                f"Start recording in {recorder}; keep it recording. "
+                "Test and Pilot modes never send markers."
                 if triggerbox else
                 f"Start recording in {recorder} before launch. "
                 "Verify received markers and timing on your equipment. "
@@ -711,8 +711,9 @@ class RecordingSetupDialog(QDialog):
                 "repeated markers and physical timing before collecting study data."
                 if parallel else
                 "The TriggerBox software package supplies the USB serial driver. The driver "
-                "remains available when Configuration/Test IO is closed; Studio opens the "
-                "COM port directly. "
+                "remains available after Configuration/Test IO fully exits; Studio opens the "
+                "COM port directly. Pressing Stop stops cyclic test output but can leave "
+                "the port occupied. Fully exit both utilities before using Studio. "
                 "Connect the TriggerBox USB port to this computer and use the vendor's "
                 "amplifier-specific output cable. For TriggerBox Plus, set the lower "
                 "eight output switches to PC. "

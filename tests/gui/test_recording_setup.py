@@ -176,8 +176,9 @@ def test_recording_setup_geometry_and_validation(qtbot, background, backend, por
         assert dialog.brainproducts_port_edit.isVisible()
         assert dialog.brainproducts_pulse_edit.isVisible()
         assert "Install TriggerBox software/drivers on this PC" in dialog.guidance_label.text()
-        assert "Close Configuration/Test IO before launch" in dialog.guidance_label.text()
-        assert "keep it closed during experiments" in dialog.guidance_label.text()
+        assert "Fully exit Configuration/Test IO before launch" in dialog.guidance_label.text()
+        assert "keep them closed" in dialog.guidance_label.text()
+        assert "Stop can leave the COM port occupied" in dialog.guidance_label.text()
         assert "Start recording in BrainVision Recorder" in dialog.guidance_label.text()
         assert "keep it recording" in dialog.guidance_label.text()
         assert "high-active" in dialog.guidance_label.toolTip()
@@ -223,7 +224,8 @@ def test_triggerbox_amplifier_specific_recording_guidance_fits(
     QApplication.processEvents()
     assert (dialog.width(), dialog.height()) == (700, 640)
     assert recorder in dialog.guidance_label.text()
-    assert "Close Configuration/Test IO" in dialog.guidance_label.text()
+    assert "Fully exit Configuration/Test IO" in dialog.guidance_label.text()
+    assert "Stop can leave the COM port occupied" in dialog.guidance_label.text()
     assert dialog.apply_button.isEnabled()
     if amplifier == "liveamp":
         assert "wired 8-bit STE" in dialog.brainproducts_amplifier_combo.currentText()
@@ -589,7 +591,7 @@ def test_triggerbox_detection_starts_once_on_first_visible_selection(
 
 @pytest.mark.parametrize("accessible, error, action", [
     (True, "", "Port accessible when checked"),
-    (False, "[WinError 5] Access is denied: COM9", "Please close the TriggerBox software"),
+    (False, "[WinError 5] Access is denied: COM9", "Fully exit the TriggerBox software"),
     (False, "[WinError 2] The system cannot find the file specified: COM9", "check Device Manager"),
     (False, "Cannot configure port: PermissionError(13, 'Incorrect function.', None, 1)",
      "repair the TriggerBox driver if needed"),
@@ -635,7 +637,8 @@ def test_triggerbox_detect_reports_access_without_changing_port_values(
         assert "Configuration/Test IO" in details
         assert "Only one application" in details
         assert "Selecting a port manually cannot release it" in details
-        assert "if it is open, then try again" in dialog.detection_status_label.text()
+        assert "other apps using COM9, then try again" in dialog.detection_status_label.text()
+        assert "Pressing Stop can leave the port occupied" in dialog.detection_status_label.text()
     else:
         assert "occupied or access was denied" not in details
         assert "Configuration/Test IO" not in details
@@ -1112,7 +1115,8 @@ def test_triggerbox_discovery_states_fit_minimum_dialog_with_full_metadata_paths
     assert dialog.error_label.text()
     assert dialog.detection_status_label.wordWrap()
     assert dialog.pulse_requirement_label.wordWrap()
-    assert "Close Configuration/Test IO before launch" in dialog.guidance_label.text()
+    assert "Fully exit Configuration/Test IO before launch" in dialog.guidance_label.text()
+    assert "Stop can leave the COM port occupied" in dialog.guidance_label.text()
     assert "keep it recording" in dialog.guidance_label.text()
     assert dialog.detection_status_label.textFormat() == Qt.TextFormat.PlainText
     if state in access_errors:

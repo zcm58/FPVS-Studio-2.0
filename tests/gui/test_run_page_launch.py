@@ -361,7 +361,10 @@ def test_brainvision_recording_reminder_copy_actions_and_fit(qtbot, size, dark, 
     assert dialog.continue_button.text() == "Continue"
     prompt = dialog.prompt_label
     assert "BrainVision Recorder is open and saving a recording" in prompt.text()
-    assert ("Close TriggerBox Test IO and Configuration on this PC" in prompt.text()) is uses_usb
+    assert (
+        "Fully exit TriggerBox Test IO and Configuration on this PC" in prompt.text()
+    ) is uses_usb
+    assert ("Stop can leave the COM port occupied" in prompt.text()) is uses_usb
     assert prompt.height() >= prompt.heightForWidth(prompt.width())
     for button in (dialog.cancel_button, dialog.continue_button):
         assert button.width() >= button.sizeHint().width()

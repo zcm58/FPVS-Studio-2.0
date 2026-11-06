@@ -13,6 +13,7 @@ from tests.gui.helpers import assert_visible_children_within_parent, widget_mess
 
 from fpvs_studio.gui.error_dialogs import REPORT_BUTTON_TEXT, ErrorDialogReporter
 from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxError
+from fpvs_studio.triggers.brainproducts_errors import triggerbox_port_error_message
 from fpvs_studio.triggers.parallel_backend import (
     ParallelPortDriverUnavailableError,
     ParallelPortError,
@@ -242,11 +243,8 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
 @pytest.mark.parametrize("serialized", [False, True])
 def test_triggerbox_error_keeps_plain_guidance_and_fits(qtbot, popups, background, serialized):
     reporter, requests = popups
-    message = (
-        "TriggerBox could not connect on COM1234567890. Check the USB cable and driver, "
-        "and close Configuration/Test IO or any other program using this port. "
-        "Details: [WinError 5] Access is denied"
-    )
+    message = triggerbox_port_error_message("COM1234567890", "[WinError 5] Access is denied")
+    message += " Details: [WinError 5] Access is denied"
     hardware_error = BrainProductsTriggerBoxError(message)
     hardware_error.__cause__ = PermissionError(errno.EACCES, "Access is denied")
     box = widget_message_box(
@@ -257,8 +255,10 @@ def test_triggerbox_error_keeps_plain_guidance_and_fits(qtbot, popups, backgroun
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     box.setPalette(palette)
     reporter.decorate(box, error=None if serialized else hardware_error)
-    assert box.text() == "TriggerBox could not connect on COM1234567890."
-    assert "close Configuration/Test IO" in box.informativeText()
+    assert box.text() == "The COM1234567890 port is occupied or access was denied."
+    assert "Fully exit the TriggerBox software" in box.informativeText()
+    assert "Configuration/Test IO" in box.informativeText()
+    assert "Pressing Stop can leave the port occupied" in box.informativeText()
     assert "file or folder" not in box.text()
     assert "WinError 5" not in box.informativeText()
     assert message in box.detailedText()

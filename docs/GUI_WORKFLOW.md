@@ -1101,8 +1101,9 @@ authority if callers bypass the GUI; see
 
 On a normal Brain Products / BrainVision launch from Home, Run, or a condition
 re-run, **BrainVision Recording Reminder** asks the operator to confirm Recorder
-is saving on the recording PC. For USB, it also asks the operator to close
-TriggerBox Test IO and Configuration on the Studio PC to free the COM port.
+is saving on the recording PC. For USB, it also asks the operator to fully exit
+TriggerBox Test IO and Configuration on the Studio PC to free the COM port;
+pressing Stop can leave the port occupied.
 **Continue** starts the usual launch checks. **Cancel** (the default) and Escape
 return without starting presentation or reserving a visit. Experiment Test Mode
 and Pilot Study Mode skip the reminder. The dialog is `480x170` minimum and

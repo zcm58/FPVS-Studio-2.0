@@ -95,8 +95,8 @@ def explain_error(
             return ErrorExplanation(
                 "FPVS Studio couldn't connect to the USB TriggerBox.",
                 "Check the USB cable, installed TriggerBox driver and COM port in Settings > "
-                "Recording. Close TriggerBox Configuration/Test IO and other apps using the "
-                "port, then retry.",
+                "Recording. Fully exit TriggerBox Configuration/Test IO and other apps using "
+                "the port, then retry. Pressing Stop can leave the port occupied.",
             )
         return ErrorExplanation(
             "TriggerBox could not finish sending or clearing its trigger signals.",

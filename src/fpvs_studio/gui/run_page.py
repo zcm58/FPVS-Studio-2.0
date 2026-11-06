@@ -509,8 +509,8 @@ class BrainVisionRecordingReminderDialog(QDialog):
         )
         if uses_usb:
             message += (
-                "\n\nClose TriggerBox Test IO and Configuration on this PC so Studio "
-                "can use the COM port."
+                "\n\nFully exit TriggerBox Test IO and Configuration on this PC. "
+                "Stop can leave the COM port occupied."
             )
         self.prompt_label = QLabel(message, self)
         self.prompt_label.setWordWrap(True)

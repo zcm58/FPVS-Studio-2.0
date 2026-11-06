@@ -411,8 +411,9 @@ Brain Products support uses USB TriggerBox rev.02 or TriggerBox Plus with the
 amplifier-specific output cable. It does not connect directly to an amplifier or
 control BrainVision Recorder. Install the TriggerBox software package on the stimulus
 PC to install its USB serial driver and setup/testing utilities. Select the actual
-COM port, close Configuration/Test IO and keep those utilities closed throughout the
-experiment. The installed driver remains available after they close; Studio talks
+COM port, fully exit Configuration/Test IO and keep those utilities closed throughout
+the experiment. Pressing Stop stops cyclic test output; it does not establish that
+the utility released the COM port. The installed driver remains available after they close; Studio talks
 directly to the port. Keep BrainVision Recorder open and saving EEG. On Plus, set
 lower-eight-bit switches to PC. Configure all
 eight Recorder bits as high-active Stimulus inputs for actiCHamp/BrainAmp so codes
@@ -429,7 +430,7 @@ cause in diagnostic details. Common cases are:
 
 | Observed failure | Recovery shown |
 | --- | --- |
-| Access denied or busy | Names the occupied/access-denied COM port; close the TriggerBox software (Configuration/Test IO) if it is open, then try again |
+| Access denied or busy | Names the occupied/access-denied COM port; fully exit TriggerBox Configuration/Test IO and other apps using it, then retry; pressing Stop can leave the port occupied |
 | COM port not found | Reconnect USB, check its current COM number in Device Manager; install/repair the vendor driver if absent |
 | Required settings rejected | Select the actual TriggerBox port and check the vendor driver; Plus requires 2,000,000 baud |
 | Device communication failure or timeout | Check USB/power, reconnect and retry |
@@ -444,6 +445,29 @@ Likewise a process being open would not prove it owns the handle. The successful
 Test IO-to-Recorder test reported for the COM4 incident supports a working driver and
 downstream route, while the simultaneous Studio access denial is consistent with
 exclusive port ownership. Configuration and test utilities must release it first.
+
+Other open serial applications, including another Studio instance, can also hold the
+port. Windows device-access permissions can deny opening it independently of ownership;
+the error alone cannot distinguish these causes. If full exit does not resolve access,
+fully exit extra Studio windows and serial tools, reconnect TriggerBox and check its current
+COM number and driver in Device Manager. If it persists, restart the PC or ask IT to
+check device permissions. A driver stall is possible but is not established by an
+access-denied message. Original rev.02 ports may remain listed when USB is disconnected;
+enumeration alone is not proof of attachment.
+
+There is no supported priority message that evicts a COM-port owner. Windows requires
+exclusive access before Studio can send anything; CPU scheduling priority does not
+grant that access. Studio does not terminate other programs, forcibly close their
+handles, change device permissions or reset drivers to take a port. Microsoft warns
+that forced handle closure can destabilize applications or Windows. For persistent
+failures, IT can inspect the actual open device handles on the affected PC; a process
+list alone does not identify the port owner. See Microsoft's
+[serial ownership](https://learn.microsoft.com/en-us/windows/win32/devio/communications-resource-handles),
+[device access](https://learn.microsoft.com/en-us/windows-hardware/drivers/kernel/controlling-device-access),
+[priority](https://learn.microsoft.com/en-us/windows/win32/procthread/scheduling-priorities)
+and [Handle](https://learn.microsoft.com/en-us/sysinternals/downloads/handle) documentation,
+and Brain Products' [revision guidance](https://www.brainproducts.com/support-resources/differences-between-triggerbox-plus-and-rev-02/).
+
 Disable Recorder's Debouncing for Studio-generated markers unless its effect has
 been deliberately validated: it can discard real closely spaced markers, as the
 vendor [trigger guide, page 6](https://www.brainproducts.com/download/communication-with-the-trigger-port-a-beginners-guide/)
