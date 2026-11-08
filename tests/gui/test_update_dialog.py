@@ -84,7 +84,7 @@ def test_main_window_menus_separate_each_visible_action(
             "Experiment Library...", "Open Participant Results", "Fixation Task Accuracy...",
             "Data Sharing & Comparison...", "Interrupted Sessions…",
         ]),
-        (window.tools_menu, ["Image Resizer", "Trigger Tester"]),
+        (window.tools_menu, ["Image Resizer", "Trigger Tester", "Condition Figure"]),
         (window.import_menu, ["Project Bundle...", "Project Config..."]),
         (window.export_menu, [
             "Project Bundle...", "FPVS Toolbox Config...", "Completed Project Config...",

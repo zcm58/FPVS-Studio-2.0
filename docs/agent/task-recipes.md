@@ -16,6 +16,7 @@ evidence boundaries.
 | Demographics authoring, preview, and participant entry | `core/demographics.py`, `gui/demographics_setup_step.py`, `gui/demographics_form.py`, `runtime/participant_results.py` | [Demographics setup](../GUI_WORKFLOW.md#demographics-setup) |
 | Next blockers and optional description | `gui/setup_wizard_page.py`; `tests/gui/test_setup_project_details.py` | [Home/Setup flow](../GUI_WORKFLOW.md#existing-home-and-setup-flow) |
 | Condition modality, sources and instructions | `gui/condition_setup_step.py`, `gui/document_conditions.py`; `tests/unit/test_condition_modality.py` | [Home/Setup flow](../GUI_WORKFLOW.md#existing-home-and-setup-flow) |
+| Condition Figure and configured stimulus selection | `tools/condition_figure.py`, `tools/condition_figure_project.py`, `gui/condition_figure_dialog.py` | [Condition Figure](../GUI_WORKFLOW.md#condition-figure) |
 | Cognitive Load creation and Masking marker authoring | `gui/create_project_dialog.py`, `gui/condition_modifier_dialog.py` | [Cognitive Load](../COGNITIVE_LOAD_FPVS.md), [Masking](../MASKING.md) |
 | Find Action and condition search | `gui/action_palette.py`, `gui/main_window.py`; `tests/gui/test_condition_search.py` | [Action discovery](../GUI_WORKFLOW.md#action-discovery-and-condition-search) |
 | Manage Projects rename/discovery | `gui/manage_projects_dialog.py`, `gui/controller.py`, `core/project_service.py`; `tests/unit/test_project_service.py` | [Project opening/saving](../GUI_WORKFLOW.md#project-opening-and-saving) |

@@ -42,6 +42,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Completed implementation/release records](exec-plans/completed/)
 - [Configurable demographics](exec-plans/completed/configurable-demographics.md)
 - [Demographics form builder](exec-plans/completed/demographics-form-builder.md)
+- [Condition Figure](exec-plans/completed/condition-figure.md)
+- [Condition Figure waveforms](exec-plans/completed/condition-figure-waveforms.md)
+- [Condition Figure stimulus sequence](exec-plans/completed/condition-figure-sequence.md)
 - [Trigger Tester](exec-plans/completed/trigger-tester.md)
 - [Project Brain Products recording setup](exec-plans/completed/project-brainproducts-recording-setup.md):
   modal setup errors and first-launch project timing confirmation.

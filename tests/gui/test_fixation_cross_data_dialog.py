@@ -151,7 +151,7 @@ def test_view_menu_order_and_action_load_active_project(
     ]
     assert [
         action.text() for action in window.tools_menu.actions() if not action.isSeparator()
-    ] == ["Image Resizer", "Trigger Tester"]
+    ] == ["Image Resizer", "Trigger Tester", "Condition Figure"]
 
     window.fixation_cross_data_action.trigger()
 

@@ -16,7 +16,7 @@ use document headings or `rg -n '^#{1,3} ' <document>` to choose the contract se
 | `repo` | Harness, shared configuration, cross-layer ownership | `AGENTS.md` | `ARCHITECTURE.md` |
 | `macos` | Source bootstrap, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
 | `docs` | Guidance, contracts and plans | `AGENTS.md` | Edited document; `docs/exec-plans/README.md` for plan work |
-| `gui` | PySide6 widgets, controllers, workers, project recording setup, Trigger Tester, app-session settings and nine-step authoring | `src/fpvs_studio/gui/AGENTS.md` | Relevant `docs/GUI_WORKFLOW.md` section; `docs/FRONTEND.md` for design |
+| `gui` | PySide6 widgets, controllers, workers, project recording setup, Tools, app-session settings and nine-step authoring | `src/fpvs_studio/gui/AGENTS.md` | Relevant `docs/GUI_WORKFLOW.md` section; `docs/FRONTEND.md` for design |
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |
 | `compiler` | Compiled runs, sessions, participant reuse policies, scheduling and fixation | `src/fpvs_studio/core/AGENTS.md` | `docs/RUNSPEC.md` for runs or `docs/SESSION_PLAN.md` for sessions |
 | `project-io` | Persistence, configs, bundles, templates and paths | `src/fpvs_studio/core/AGENTS.md` | Relevant persistence/import section in `docs/GUI_WORKFLOW.md` |

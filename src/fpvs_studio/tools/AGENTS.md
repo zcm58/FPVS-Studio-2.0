@@ -2,7 +2,9 @@
 
 ## Scope of this directory
 
-`src/fpvs_studio/tools/` is reserved for future Studio-native utility modules.
+`src/fpvs_studio/tools/` owns Studio-native utility backends. Condition Figure
+resolves configured condition pools in `condition_figure_project.py` and renders
+600-DPI PNGs in `condition_figure.py`. The dialog owns selection and worker lifetime.
 
 The current user-facing `Tools > Image Resizer` page is Studio-native code in
 `src/fpvs_studio/gui/image_resizer_page.py` backed by preprocessing normalization
@@ -14,6 +16,8 @@ services. The imported FPVS Toolbox reference files were archived under
 - Use `docs/GUI_WORKFLOW.md`, `docs/FRONTEND.md`, and
   `tests/gui/test_image_resizer_page.py` for the landed Image Resizer workflow,
   GUI expectations, and smoke coverage.
+- Keep Condition Figure inputs read-only. Use the active project root, compiler
+  asset resolution, and the configured timing. The figure is a schematic.
 - Adapt behavior into FPVS Studio boundaries before exposing it to users.
 - Use `fpvs_studio.preprocessing` for resize, conversion, inspection, derived
   variants, manifests, and deterministic transform metadata.

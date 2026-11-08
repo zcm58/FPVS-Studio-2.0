@@ -50,6 +50,7 @@ from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.components import StatusBadgeLabel, apply_studio_theme
+from fpvs_studio.gui.condition_figure_dialog import ConditionFigureDialog
 from fpvs_studio.gui.condition_recovery_dialog import ConditionRecoveryController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
@@ -197,6 +198,7 @@ class StudioMainWindow(QMainWindow):
         self._project_update_reload_failed = False
         self._setup_wizard_page: SetupWizardPage | None = None
         self._image_resizer_page: ImageResizerPage | None = None
+        self._condition_figure_dialog: ConditionFigureDialog | None = None
         self._trigger_tester: TriggerTesterDialog | None = None
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
         self._bundle_export_result_page: BundleExportResultPage | None = None
@@ -406,6 +408,34 @@ class StudioMainWindow(QMainWindow):
         self._set_home_chrome_visible(True)
         self._apply_utility_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
+
+    def show_condition_figure(self) -> None:
+        if self.is_launch_busy() or self._launch_after_session_seed_ready:
+            self.statusBar().showMessage(
+                "Finish the current launch before opening Condition Figure.", 4000,
+            )
+            return
+        setup = self._setup_wizard_page
+        if setup is not None and setup._condition_image_task_active():
+            self.statusBar().showMessage(
+                "Wait for the current image operation before opening Condition Figure.", 4000,
+            )
+            return
+        if self._condition_figure_dialog is not None:
+            self._condition_figure_dialog.raise_()
+            self._condition_figure_dialog.activateWindow()
+            return
+        dialog = ConditionFigureDialog(self.document.project, self.document.project_root, self)
+        self._condition_figure_dialog = dialog
+        dialog.finished.connect(self._on_condition_figure_closed)
+        dialog.open()
+
+    @Slot(int)
+    def _on_condition_figure_closed(self, _result: int) -> None:
+        dialog = self._condition_figure_dialog
+        self._condition_figure_dialog = None
+        if dialog is not None:
+            dialog.deleteLater()
 
     def show_trigger_tester(self) -> None:
         if self.is_launch_busy() or self._launch_after_session_seed_ready:
@@ -703,6 +733,9 @@ class StudioMainWindow(QMainWindow):
         self.trigger_tester_action = QAction("Trigger Tester", self)
         self.trigger_tester_action.setObjectName("trigger_tester_action")
         self.trigger_tester_action.triggered.connect(self.show_trigger_tester)
+        self.condition_figure_action = QAction("Condition Figure", self)
+        self.condition_figure_action.setObjectName("condition_figure_action")
+        self.condition_figure_action.triggered.connect(self.show_condition_figure)
         accuracy_label = (
             "T1 and T2 Accuracy..."
             if self.document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
@@ -761,6 +794,7 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.project_update_action, "File", "library project version"),
             ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
             ActionEntry(self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi"),
+            ActionEntry(self.condition_figure_action, "Tools", "fpvs sequence image 600 dpi png"),
             ActionEntry(self.check_updates_action, "File", "software version update"),
             ActionEntry(self.report_bug_action, "File", "help bug support issue"),
             ActionEntry(self.request_feature_action, "File", "help suggestion feedback"),
@@ -852,6 +886,7 @@ class StudioMainWindow(QMainWindow):
         self.view_menu.addAction(self.interrupted_sessions_action)
         self.tools_menu.addAction(self.image_resizer_action)
         self.tools_menu.addAction(self.trigger_tester_action)
+        self.tools_menu.addAction(self.condition_figure_action)
 
         # Native menus collapse neighboring separators around hidden actions.
         for menu in (
@@ -1641,6 +1676,7 @@ class StudioMainWindow(QMainWindow):
             self.data_sharing_action,
             self.image_resizer_action,
             self.trigger_tester_action,
+            self.condition_figure_action,
             self.launch_action,
         )
         for action in actions:
@@ -1830,6 +1866,10 @@ class StudioMainWindow(QMainWindow):
     def maybe_save_changes(self) -> bool:
         if self._project_update_reload_failed:
             return True
+        figure_dialog = self._condition_figure_dialog
+        if figure_dialog is not None and figure_dialog.has_active_task:
+            figure_dialog.raise_()
+            return False
         if not self._allow_project_handoff_during_launch():
             return False
         if (self._setup_wizard_page is not None

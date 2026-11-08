@@ -486,6 +486,44 @@ items inside Import and Export. In a visible session, open the menus at Home's
 `760x520` minimum and `1120x720` default in both themes. Check that every label fits
 and neighboring items have one divider. Repeat for Export with Library publishing enabled.
 
+### Condition Figure
+
+Open **Tools > Condition Figure** and select an FPVS condition with a configured
+Base/Oddball stream. **Automatic** fills the illustrated sequence with distinct
+examples from the configured pools and image variant. If a pool runs out of
+unused examples, the figure marks the unfilled slots. The dialog previews up to
+four base examples and one oddball from the sequence. Choose **Manual** to pick
+the four base examples and one oddball that repeat in the figure. Word
+conditions use the configured words.
+
+The figure centers the condition name above the stimulus strip and timing
+plot. For 50% blank presentation, the upper trace pulses once per stimulus
+and the lower trace pulses only for oddballs. Each raised half-cycle is
+centered under its image. The legend below the plot identifies both traces.
+Sinusoidal and continuous presentation show contrast over time with oddball
+slots marked. The labels use the condition's requested presentation rate and
+the oddball rate derived from its cadence. The Studio defaults are 6 Hz and
+1.2 Hz. Attentional Blink and Masking use separate layouts.
+
+Choose a filename and location for the **600-DPI PNG**. Keep the output outside the
+project's stimulus folders. Source resolution and rendering run in a worker.
+Canceling the save dialog leaves the selection and files intact.
+
+Figure lettering uses the bundled Open Sans. At a placed width of 183 mm, the
+title is 7 pt, axis and legend labels are 6 pt, and tick labels are 5 pt. The
+width and size range follow the
+[Nature research figure guide](https://research-figure-guide.nature.com/figures/building-and-exporting-figure-panels/).
+
+For visible acceptance, open the tool from Tools and Find Action at `860x520`
+and `920x560`. In both themes, pick two image conditions with different variants
+or rates. Export in Automatic and check that the previews appear in the PNG
+and each example occurs once. Use a small pool to check the unfilled-slot
+status. Switch to Manual, replace one base and the oddball, and export. Check
+the chosen examples, waveform, oddball positions, and rates. Check that a 50%
+blank plot shows two separate traces with centered pulses and no contrast
+swatches. Repeat with a long condition name, an incomplete condition, and a
+word condition. Check the no-data state and that Cancel preserves the selection.
+
 ### Authoring and project discovery responsiveness
 
 Manage Projects shows its loading state before discovery and project JSON reads run
@@ -679,7 +717,8 @@ correctness, EEG time and incomplete/aborted state. **Export Excel...** writes t
 loaded data to the chosen workbook path using the same backend summary.
 The default SOA/trigger rows are 100 ms / 1, 300 ms / 3 and 500 ms / 5. Historical
 custom codes are shown from recorded data. Other experiment categories retain
-**View > Fixation Task Accuracy...**. Tools contains Image Resizer.
+**View > Fixation Task Accuracy...**. Tools includes Condition Figure, Image Resizer,
+and Trigger Tester.
 Test sessions (participant IDs `0`/`00`) record and display accuracy and are marked
 in the burst table and workbook. The SOA summary includes their completed answers.
 
