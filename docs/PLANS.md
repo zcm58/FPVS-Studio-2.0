@@ -9,7 +9,8 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Full Windows installer, visible packaged checks and immutable GitHub publication |
+| [Studio 2.8.1 release](exec-plans/active/release-2.8.1.md) | Current full Windows installer, exact-source checks, visible packaged checks and immutable publication |
+| [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
 | [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |

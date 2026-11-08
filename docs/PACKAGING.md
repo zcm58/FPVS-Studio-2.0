@@ -65,7 +65,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.8.0`.
+For the current release package, use the PEP 440-compatible package version `2.8.1`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -340,7 +340,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.8.0.exe
+dist\installer\FPVS-Studio-Setup-2.8.1.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
