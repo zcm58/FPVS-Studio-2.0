@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.8.1 release](exec-plans/active/release-2.8.1.md) | Current full Windows installer, exact-source checks, visible packaged checks and immutable publication |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
@@ -47,6 +46,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Condition Figure waveforms](exec-plans/completed/condition-figure-waveforms.md)
 - [Condition Figure stimulus sequence](exec-plans/completed/condition-figure-sequence.md)
 - [Trigger Tester](exec-plans/completed/trigger-tester.md)
+- [Studio 2.8.1 release](exec-plans/completed/release-2.8.1.md)
 - [Project Brain Products recording setup](exec-plans/completed/project-brainproducts-recording-setup.md):
   modal setup errors and first-launch project timing confirmation.
 - [Studio 2.7.4 release](exec-plans/completed/release-2.7.4.md): serial/BioSemi fixes

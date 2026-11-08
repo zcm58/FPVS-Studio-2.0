@@ -75,6 +75,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
+The [2.8.1 release record](exec-plans/completed/release-2.8.1.md) tracks the
+published installer, visible diagnostics, exact-source CI, and public updater verification.
 The [2.7.4 release record](exec-plans/completed/release-2.7.4.md) tracks serial/BioSemi
 recovery fixes, exact-source checks and verified immutable publication.
 The [2.7.3 full-exit guidance release](exec-plans/completed/triggerbox-full-exit-release-2.7.3.md)
