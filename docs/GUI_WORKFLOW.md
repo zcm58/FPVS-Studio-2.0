@@ -500,29 +500,30 @@ The figure centers the condition name above the stimulus strip and timing
 plot. For 50% blank presentation, the upper trace pulses once per stimulus
 and the lower trace pulses only for oddballs. Each raised half-cycle is
 centered under its image. The legend below the plot identifies both traces.
-Sinusoidal and continuous presentation show contrast over time with oddball
-slots marked. The labels use the condition's requested presentation rate and
-the oddball rate derived from its cadence. The Studio defaults are 6 Hz and
-1.2 Hz. Attentional Blink and Masking use separate layouts.
+Continuous presentation shows stimulus-slot timing and an oddball track.
+Sinusoidal presentation adds the contrast scale, modulation curve, and
+contrast thumbnails. The labels use the condition's requested presentation
+rate and the oddball rate derived from its cadence. The Studio defaults
+are 6 Hz and 1.2 Hz. Attentional Blink and Masking use separate layouts.
 
 Choose a filename and location for the **600-DPI PNG**. Keep the output outside the
 project's stimulus folders. Source resolution and rendering run in a worker.
 Canceling the save dialog leaves the selection and files intact.
 
-Figure lettering uses the bundled Open Sans. At a placed width of 183 mm, the
-title is 7 pt, axis and legend labels are 6 pt, and tick labels are 5 pt. The
-width and size range follow the
-[Nature research figure guide](https://research-figure-guide.nature.com/figures/building-and-exporting-figure-panels/).
+Condition Figure follows the [figure generation standard](design-docs/figure-generation.md)
+at a placed width of 183 mm.
 
 For visible acceptance, open the tool from Tools and Find Action at `860x520`
 and `920x560`. In both themes, pick two image conditions with different variants
 or rates. Export in Automatic and check that the previews appear in the PNG
 and each example occurs once. Use a small pool to check the unfilled-slot
 status. Switch to Manual, replace one base and the oddball, and export. Check
-the chosen examples, waveform, oddball positions, and rates. Check that a 50%
-blank plot shows two separate traces with centered pulses and no contrast
-swatches. Repeat with a long condition name, an incomplete condition, and a
-word condition. Check the no-data state and that Cancel preserves the selection.
+the chosen examples, oddball positions, and rates. Check that a 50% blank
+plot shows two separate traces with centered pulses and that continuous
+presentation shows the time axis and oddball track. Check the contrast
+scale and curve on a sinusoidal condition. Repeat with a long condition
+name, an incomplete condition, and a word condition. Check the no-data
+state and that Cancel preserves the selection.
 
 ### Authoring and project discovery responsiveness
 

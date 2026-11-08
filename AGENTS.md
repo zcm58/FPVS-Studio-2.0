@@ -52,6 +52,13 @@ PsychoPy presentation stays behind runtime and engine boundaries.
   Qt execution requires user approval for a safe visible environment; never use
   offscreen Qt locally.
 
+## Figure Generation
+
+- Follow the [figure generation standard](docs/design-docs/figure-generation.md)
+  for exported figures, agent-generated artwork and new figure tools.
+- Omit subtitles and redundant copy. Center a meaningful title when needed,
+  and use the shared print typography, accessible labels and 600-DPI raster floor.
+
 ## Verification and Plans
 
 Use the task index for skills and verification routes. Global web/mobile skills do

@@ -18,6 +18,8 @@ services. The imported FPVS Toolbox reference files were archived under
   GUI expectations, and smoke coverage.
 - Keep Condition Figure inputs read-only. Use the active project root, compiler
   asset resolution, and the configured timing. The figure is a schematic.
+- Follow the [figure generation standard](../../../docs/design-docs/figure-generation.md)
+  and reuse `figure_style.py` for publication export defaults in new renderers.
 - Adapt behavior into FPVS Studio boundaries before exposing it to users.
 - Use `fpvs_studio.preprocessing` for resize, conversion, inspection, derived
   variants, manifests, and deterministic transform metadata.

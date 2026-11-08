@@ -1,4 +1,4 @@
-"""Render an aligned FPVS stimulus strip and contrast schematic as a publication PNG."""
+"""Render an aligned FPVS stimulus strip and timing schematic as a publication PNG."""
 
 from __future__ import annotations
 
@@ -24,26 +24,34 @@ from fpvs_studio.preprocessing.inspection import (
     ImageInspectionError,
     validate_image_files,
 )
+from fpvs_studio.tools.figure_style import (
+    FIGURE_EXPORT_DPI,
+    FIGURE_FONT_FAMILY,
+    FIGURE_LABEL_SIZE_PT,
+    FIGURE_TEXT_COLOR,
+    FIGURE_TICK_SIZE_PT,
+    FIGURE_TITLE_SIZE_PT,
+    pixels_per_placed_point,
+)
 
-FIGURE_DPI = 600
+FIGURE_DPI = FIGURE_EXPORT_DPI
 _WIDTH = 12 * FIGURE_DPI
 _MARGIN = 240
 _CONTRAST_PLOT_LEFT = 1070
 _PLOT_RIGHT = _WIDTH - _MARGIN
 _TILE_SIZE = 480
 _PLOT_HEIGHT = 580
+_CONTINUOUS_TRACK_HEIGHT = 210
 _AXIS_OFFSET = 70
-# Convert final lettering points at 183 mm double-column width to export pixels.
-_PLACED_WIDTH_MM = 183
-_PIXELS_PER_PLACED_POINT = _WIDTH * 25.4 / (_PLACED_WIDTH_MM * 72)
-_TICK_FONT_SIZE = round(5 * _PIXELS_PER_PLACED_POINT)
-_LABEL_FONT_SIZE = round(6 * _PIXELS_PER_PLACED_POINT)
-_TITLE_FONT_SIZE = round(7 * _PIXELS_PER_PLACED_POINT)
+_PIXELS_PER_PLACED_POINT = pixels_per_placed_point(_WIDTH)
+_TICK_FONT_SIZE = round(FIGURE_TICK_SIZE_PT * _PIXELS_PER_PLACED_POINT)
+_LABEL_FONT_SIZE = round(FIGURE_LABEL_SIZE_PT * _PIXELS_PER_PLACED_POINT)
+_TITLE_FONT_SIZE = round(FIGURE_TITLE_SIZE_PT * _PIXELS_PER_PLACED_POINT)
 _WAVE_STROKE = round(_PIXELS_PER_PLACED_POINT)
 _TITLE_TOP = 116
 _TITLE_LINE_HEIGHT = _TITLE_FONT_SIZE + 32
 _TITLE_GAP = 64
-_INK = "#000000"
+_INK = FIGURE_TEXT_COLOR
 _BASE = "#81868B"
 _ODDBALL = "#285FA9"
 _ODDBALL_FRAME = "#C9434C"
@@ -190,7 +198,7 @@ def _place_image(
 
 
 def _font(size: int) -> ImageFont.FreeTypeFont:
-    path = bundled_task_font_path("Open Sans")
+    path = bundled_task_font_path(FIGURE_FONT_FAMILY)
     if path is None:
         raise RuntimeError("Open Sans is missing from the FPVS Studio installation.")
     return ImageFont.truetype(str(filesystem_path(path)), size)
@@ -212,10 +220,11 @@ class _FigureLayout:
     tile_size: int
     strip_top: int
     contrast_top: int
+    plot_height: int
 
     @property
     def contrast_zero(self) -> int:
-        return self.contrast_top + _PLOT_HEIGHT
+        return self.contrast_top + self.plot_height
 
     @property
     def time_axis(self) -> int:
@@ -273,12 +282,14 @@ def _figure_layout(spec: ConditionFigureSpec) -> _FigureLayout:
     name = " ".join(spec.condition_name.split())
     title = tuple(wrap(name if len(name) <= 240 else name[:239].rstrip() + "…", width=55))
     slots = _display_slots(spec.oddball_every_n)
-    left = _MARGIN if spec.duty_cycle_mode == DutyCycleMode.BLANK_50 else _CONTRAST_PLOT_LEFT
+    mode = spec.duty_cycle_mode
+    left = _CONTRAST_PLOT_LEFT if mode == DutyCycleMode.SINUSOIDAL else _MARGIN
     step = (_PLOT_RIGHT - left) / len(slots)
     edges = tuple(round(left + index * step) for index in range(len(slots) + 1))
     size = min(_TILE_SIZE, int(step) - 24)
     strip_top = _TITLE_TOP + (len(title) - 1) * _TITLE_LINE_HEIGHT + _TITLE_FONT_SIZE + _TITLE_GAP
-    return _FigureLayout(title, slots, edges, size, strip_top, strip_top + size + 145)
+    plot_height = _CONTINUOUS_TRACK_HEIGHT if mode == DutyCycleMode.CONTINUOUS else _PLOT_HEIGHT
+    return _FigureLayout(title, slots, edges, size, strip_top, strip_top + size + 145, plot_height)
 
 
 def _draw_figure(
@@ -298,14 +309,17 @@ def _draw_figure(
                   font=title_font, fill=_INK, anchor="mt")
 
     _draw_strip(canvas, draw, spec, layout, samples, tiles)
-    square_wave = spec.duty_cycle_mode == DutyCycleMode.BLANK_50
-    if not square_wave:
+    sinusoidal = spec.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+    if sinusoidal:
         _draw_contrast_scale(canvas, draw, layout, label_font, note_font)
     _draw_time_axis(draw, spec, layout, note_font)
-    if square_wave:
+    if spec.duty_cycle_mode == DutyCycleMode.BLANK_50:
         _draw_square_tracks(draw, spec, layout)
     else:
-        _draw_contrast(draw, spec, layout)
+        if sinusoidal:
+            _draw_sinusoidal_contrast(draw, layout)
+        _draw_oddball_track(draw, spec, layout)
+    if sinusoidal:
         for slot, sample in zip(layout.slots, samples, strict=True):
             if slot is not None and isinstance(sample, Path) and not _is_oddball(
                 slot, spec.oddball_every_n,
@@ -375,7 +389,7 @@ def _draw_time_axis(
 ) -> None:
     axis = layout.time_axis
     middle = (layout.contrast_top + layout.contrast_zero) // 2
-    show_gridline = spec.duty_cycle_mode != DutyCycleMode.BLANK_50
+    show_gridline = spec.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
     ticks: dict[int, int] = {}
     for index, slot in enumerate(layout.slots):
         left, right = layout.edges[index:index + 2]
@@ -418,11 +432,7 @@ def _draw_time_ticks(
         previous_right = center + half_width
 
 
-def _envelope_points(
-    mode: DutyCycleMode, left: int, right: int, top: int, zero: int,
-) -> tuple[tuple[int, int], ...]:
-    if mode == DutyCycleMode.CONTINUOUS:
-        return ((left, top), (right, top))
+def _sinusoidal_points(left: int, right: int, top: int, zero: int) -> tuple[tuple[int, int], ...]:
     return tuple(
         (round(left + (right - left) * index / (len(_SINUSOID) - 1)),
          round(zero - (zero - top) * contrast))
@@ -459,21 +469,19 @@ def _draw_square_tracks(
         draw.line(oddball, fill=_SQUARE_ODDBALL, width=_WAVE_STROKE)
 
 
-def _draw_contrast(
-    draw: ImageDraw.ImageDraw, spec: ConditionFigureSpec, layout: _FigureLayout,
-) -> None:
+def _draw_sinusoidal_contrast(draw: ImageDraw.ImageDraw, layout: _FigureLayout) -> None:
     top, zero = layout.contrast_top, layout.contrast_zero
-    mode = spec.duty_cycle_mode
-    previous: int | None = None
     for index, slot in enumerate(layout.slots):
         if slot is not None:
             left, right = layout.edges[index:index + 2]
-            draw.line(_envelope_points(mode, left, right, top, zero),
+            draw.line(_sinusoidal_points(left, right, top, zero),
                       fill=_BASE, width=_WAVE_STROKE)
-            if previous is not None and mode == DutyCycleMode.CONTINUOUS:
-                draw.line((left, top + 8, left, top + 92), fill=_BASE, width=7)
-        previous = slot
 
+
+def _draw_oddball_track(
+    draw: ImageDraw.ImageDraw, spec: ConditionFigureSpec, layout: _FigureLayout,
+) -> None:
+    top, zero = layout.contrast_top, layout.contrast_zero
     previous_y: int | None = None
     for index, slot in enumerate(layout.slots):
         if slot is None:
@@ -491,31 +499,32 @@ def _draw_legend(
     draw: ImageDraw.ImageDraw, spec: ConditionFigureSpec, y: int, font: ImageFont.FreeTypeFont,
 ) -> None:
     square_wave = spec.duty_cycle_mode == DutyCycleMode.BLANK_50
-    base_name = "Base stimulation" if square_wave else "Stimulus contrast"
+    continuous = spec.duty_cycle_mode == DutyCycleMode.CONTINUOUS
+    if continuous:
+        base_name = "Stimulus rate"
+    else:
+        base_name = "Base stimulation" if square_wave else "Stimulus contrast"
     base_label = f"{base_name}  ·  {spec.base_hz:.6g} Hz"
     oddball_hz = spec.base_hz / spec.oddball_every_n
-    oddball_label = f"Oddball  ·  {oddball_hz:.6g} Hz"
+    oddball_name = "Oddball slots" if continuous else "Oddball"
+    oddball_label = f"{oddball_name}  ·  {oddball_hz:.6g} Hz"
     swatch_width, label_offset, group_gap = 200, 240, 180
+    base_label_offset = 0 if continuous else label_offset
     base_width = ceil(font.getlength(base_label))
     oddball_width = ceil(font.getlength(oddball_label))
-    legend_width = 2 * label_offset + base_width + group_gap + oddball_width
+    legend_width = base_label_offset + base_width + group_gap + label_offset + oddball_width
     first = (_WIDTH - legend_width) // 2
-    second = first + label_offset + base_width + group_gap
+    second = first + base_label_offset + base_width + group_gap
     if square_wave:
         base_points = _square_pulse(first, first + swatch_width, y - 33, y + 33)
-        base_color, oddball_color = _SQUARE_BASE, _SQUARE_ODDBALL
-    else:
-        base_points = _envelope_points(
-            spec.duty_cycle_mode, first, first + swatch_width, y - 33, y + 33,
-        )
-        base_color, oddball_color = _BASE, _ODDBALL
+        draw.line(base_points, fill=_SQUARE_BASE, width=13)
+    elif not continuous:
+        base_points = _sinusoidal_points(first, first + swatch_width, y - 33, y + 33)
+        draw.line(base_points, fill=_BASE, width=13)
+    draw.text((first + base_label_offset, y), base_label, font=font, fill=_INK, anchor="lm")
     oddball_points = _square_pulse(second, second + swatch_width, y - 33, y + 33)
-    for left, label, points, color in (
-        (first, base_label, base_points, base_color),
-        (second, oddball_label, oddball_points, oddball_color),
-    ):
-        draw.line(points, fill=color, width=13)
-        draw.text((left + label_offset, y), label, font=font, fill=_INK, anchor="lm")
+    draw.line(oddball_points, fill=_SQUARE_ODDBALL if square_wave else _ODDBALL, width=13)
+    draw.text((second + label_offset, y), oddball_label, font=font, fill=_INK, anchor="lm")
 
 
 def _draw_contrast_key(

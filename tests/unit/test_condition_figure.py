@@ -41,6 +41,7 @@ def test_exports_real_600_dpi_png_with_aligned_examples_and_timing(tmp_path):
         assert layout.slots == tuple(range(12))
         assert (layout.slots[-1] + 1) / spec.base_hz == 2.0
         centers = _centers(layout)
+        _assert_continuous_track(image, layout)
         # Landscape images retain their proportions. There are red outlines on
         # exactly the oddball slots, and the blue trace spans the same slots.
         for index, center in enumerate(centers):
@@ -105,20 +106,45 @@ def test_words_and_nonstandard_cadence_use_configured_oddball_positions(tmp_path
 
         left, right = layout.edges[:2]
         early = (3 * left + right) // 4
-        late = (left + 3 * right) // 4
         if mode == DutyCycleMode.CONTINUOUS:
-            assert image.getpixel((early, layout.contrast_top)) == ImageColor.getrgb(
-                condition_figure._BASE,
-            )
-            assert image.getpixel((late, layout.contrast_top)) == ImageColor.getrgb(
-                condition_figure._BASE,
-            )
+            _assert_continuous_track(image, layout)
         else:
             mid_y = (layout.contrast_top + layout.contrast_zero) // 2
             assert image.getpixel((early, mid_y)) == ImageColor.getrgb(condition_figure._BASE)
             assert image.getpixel(((left + right) // 2, layout.contrast_top)) == ImageColor.getrgb(
                 condition_figure._BASE,
             )
+
+
+def _assert_continuous_track(image, layout):
+    blue = ImageColor.getrgb(condition_figure._ODDBALL)
+    white = ImageColor.getrgb("white")
+    assert layout.edges[0] == image.width - layout.edges[-1]
+    assert layout.plot_height < condition_figure._PLOT_HEIGHT
+    with image.crop((0, layout.contrast_top - 95, image.width, layout.time_axis - 10)) as track:
+        colors = track.getcolors(maxcolors=2)
+    assert colors is not None
+    assert {color for _, color in colors} == {blue, white}
+
+
+def test_continuous_oddball_track_preserves_axis_breaks(tmp_path):
+    spec = ConditionFigureSpec(
+        "Read words", 6.0, 18, ("chair", "tree", "book", "house"), "boat",
+    )
+    output = tmp_path / "axis-breaks.png"
+    render_condition_figure(spec, output)
+
+    layout = condition_figure._figure_layout(spec)
+    blue = ImageColor.getrgb(condition_figure._ODDBALL)
+    white = ImageColor.getrgb("white")
+    with Image.open(output) as image:
+        for slot, center in zip(layout.slots, _centers(layout), strict=True):
+            if slot is None:
+                assert image.getpixel((center, layout.contrast_top)) == white
+                assert image.getpixel((center, layout.contrast_zero)) == white
+            else:
+                y = layout.contrast_top if slot in (17, 35) else layout.contrast_zero
+                assert image.getpixel((center, y)) == blue
 
 
 def _assert_square_tracks(image, layout, oddball_indices):
