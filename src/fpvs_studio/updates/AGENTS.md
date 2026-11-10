@@ -11,7 +11,10 @@ explicit transfers, and `installer.py` owns the final guarded launch. Release
 identity rules are shared through `validation.py`. The cache/installer protocol and
 remaining Windows acceptance checks are documented in `docs/PACKAGING.md`.
 `patches.py` owns authenticated release JSON, fast candidate selection, and the retained
-read-only full baseline verifier. `helper_client.py` is Studio's subprocess interface;
+read-only full baseline verifier. `helper_client.py` owns application update routing:
+packaged Windows uses the subprocess interface; source and non-Windows copies check
+release metadata only and never offer installer actions. GUI guidance tells source users
+to pull remote changes and restart; Studio does not run Git.
 `helper_protocol.py` bounds messages, `helper_service.py` handles operations and explicit
 handoff acceptance, and `helper_runtime.py` owns registered installation identity, staged
 helper execution, process waits, installation locking, and restart. The independent entry

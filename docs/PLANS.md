@@ -9,6 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [History compatibility and 2.8.2](exec-plans/active/history-updates-release-2.8.2.md) | History encoding compatibility, source/macOS update guidance, participant cursors and verified bugfix release |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |

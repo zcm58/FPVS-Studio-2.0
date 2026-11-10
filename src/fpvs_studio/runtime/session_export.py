@@ -1227,7 +1227,7 @@ def write_group_summary(project_root: Path, output_path: Path) -> Path:
 def _upgrade_csv_header(path: Path, header: list[str]) -> None:
     """Add compatible export fields with an atomic replacement of the old table."""
 
-    with path.open("r", encoding="utf-8", newline="") as handle:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if reader.fieldnames and len(set(reader.fieldnames)) != len(reader.fieldnames):
             raise ValueError(
@@ -1409,7 +1409,7 @@ def _block_accuracy_percentages(
 
 
 def _read_csv_dict_rows(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8", newline="") as handle:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if reader.fieldnames and len(set(reader.fieldnames)) != len(reader.fieldnames):
             raise ValueError(f"{path.name} contains duplicate column names.")

@@ -24,7 +24,7 @@ use document headings or `rg -n '^#{1,3} ' <document>` to choose the contract se
 | `runtime` | Launch, preflight, session flow, scoring and participant results/exports | `src/fpvs_studio/runtime/AGENTS.md` | Relevant `docs/RUNTIME_EXECUTION.md` section; [exports](../RUNTIME_EXECUTION.md#exports) |
 | `engine` | Rendering, response pointers, graphics lifetime and frame playback | `src/fpvs_studio/engines/AGENTS.md` | Relevant `docs/ENGINE_INTERFACE.md` section |
 | `triggers` | Hardware adapters, discovery, shared serial failure classification, vendor recovery, Windows write completion and transport evidence | `src/fpvs_studio/triggers/AGENTS.md` | `docs/RUNTIME_EXECUTION.md#trigger-behavior` |
-| `updates` | Updater protocol, cache, downloads and install handoff | `src/fpvs_studio/updates/AGENTS.md` | `docs/PACKAGING.md#in-app-update-flow` |
+| `updates` | Source/platform routing, updater protocol, cache, downloads and install handoff | `src/fpvs_studio/updates/AGENTS.md` | `docs/PACKAGING.md#in-app-update-flow` |
 | `library` | Catalog, enrollment, submissions and project updates | `src/fpvs_studio/library/AGENTS.md` | Relevant `docs/EXPERIMENT_LIBRARY.md` section |
 | `data-sharing` | Consent, outbox, delivery and comparisons | `src/fpvs_studio/data_sharing/AGENTS.md` | Relevant `docs/DATA_SHARING.md` section |
 | `packaging` | Versions, builds, installers, patches and smoke | `packaging/AGENTS.md` | Relevant `docs/PACKAGING.md` section |

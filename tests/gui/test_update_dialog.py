@@ -9,6 +9,7 @@ from ctypes import addressof, wintypes
 from dataclasses import replace
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QByteArray, QCoreApplication, QEvent, QPoint, Qt, QThread, QTimer
@@ -19,12 +20,15 @@ from tests.gui.helpers import assert_visible_children_within_parent, open_create
 
 from fpvs_studio.gui import application as application_module
 from fpvs_studio.gui import controller as controller_module
+from fpvs_studio.gui import update_dialog as dialog_module
 from fpvs_studio.gui import update_lifecycle as lifecycle_module
+from fpvs_studio.gui import updater_window as updater_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.main_window import _TUTORIALS_URL
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateLifecycle
 from fpvs_studio.gui.updater_window import ApplyUpdateDialog, UpdaterWindow
+from fpvs_studio.updates import helper_client
 from fpvs_studio.updates.models import (
     CacheCleanupResult,
     DownloadedInstaller,
@@ -32,8 +36,15 @@ from fpvs_studio.updates.models import (
     UpdateCancelled,
     UpdateCheckResult,
     UpdateError,
+    UpdateIntegrityError,
     UpdatePhase,
 )
+
+
+@pytest.fixture(autouse=True)
+def _packaged_windows_update_context(monkeypatch):
+    """Existing installer tests explicitly model the packaged Windows app."""
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform="win32", frozen=True))
 
 
 def _available_update(_cancel_event: Event | None = None) -> UpdateCheckResult:
@@ -1277,6 +1288,9 @@ def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(m
     monkeypatch.setattr(application_module, "StudioController", FakeController)
     monkeypatch.setattr(application_module, "update_lifecycle", lambda _app: lifecycle)
     monkeypatch.setattr(
+        application_module, "crash_report_controller", lambda: SimpleNamespace(start=lambda: None),
+    )
+    monkeypatch.setattr(
         application_module.QTimer, "singleShot", lambda _delay, call: pending.append(call)
     )
     with pytest.raises(RuntimeError, match="interrupted"):
@@ -1437,8 +1451,8 @@ def test_apply_late_cancel_cannot_hide_installer_failure(qtbot, deferred_updates
     qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
     jobs[-1].run_callback()
     jobs[-1].finish()
-    assert "update" in window.status_label.text().lower()
-    assert "exit code" not in window.status_label.text()
+    assert "The installer did not complete (exit code 12)." in window.status_label.text()
+    assert "canceled" not in window.status_label.text().lower()
     assert "exit code 12" in window.details_label.toPlainText()
     assert window.repair_button.isVisible()
 
@@ -1503,3 +1517,170 @@ def test_apply_cancel_waits_for_worker_before_close(qtbot, deferred_updates):
     assert "canceled before installation" in window.status_label.text()
     window.close()
     assert not window.isVisible()
+
+
+@pytest.mark.parametrize("platform,frozen", [
+    ("win32", False), ("darwin", False), ("darwin", True), ("linux", False),
+])
+@pytest.mark.parametrize("size", [(680, 600), (760, 620)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_source_update_prompt_preserves_notes_and_has_no_installer_action(
+    qtbot, monkeypatch, tmp_path, platform, frozen, size, background,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform=platform, frozen=frozen))
+    monkeypatch.setattr(dialog_module, "sys", SimpleNamespace(platform=platform))
+    notes = "- Preserve existing recording history.\n- Improve source and macOS update guidance."
+    result = replace(
+        _available_update(), latest_version="2026.12.123rc10", release_notes_summary=notes,
+    )
+    dialog = UpdateDialog(
+        auto_check=False, initial_result=result,
+        download_callback=lambda *_a: pytest.fail("Source updates must not download an installer"),
+        installer_launcher=lambda *_a: pytest.fail("Source updates must not launch an installer"),
+    )
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    qtbot.wait(1)
+    assert dialog.size().toTuple() == size
+    assert "pull the latest changes from the remote Git repository" in dialog.status_label.text()
+    assert "restart Studio" in dialog.status_label.text()
+    assert "2026.12.123rc10" in dialog.latest_version_label.text()
+    assert dialog.notes_label.text() == notes
+    assert dialog.download_button.isHidden() and not dialog.download_button.isEnabled()
+    assert dialog.check_button.isVisible() and dialog.check_button.isEnabled()
+    assert dialog.close_button.text() == "Remind Me Later"
+    assert_visible_children_within_parent(dialog)
+    for label in dialog.findChildren(QLabel):
+        if label.isVisible() and label.wordWrap():
+            assert label.height() + 1 >= label.heightForWidth(label.width())
+    for button in (dialog.check_button, dialog.close_button, dialog.release_notes_button):
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    assert result.installer_asset is not None
+    cached = DownloadedInstaller(tmp_path / "stale.exe", 1, "a" * 64, result.installer_asset)
+    dialog._downloaded_installer = cached
+    dialog.start_download()
+    dialog.install_and_restart()
+    dialog._handle_download_result(cached)
+    assert dialog._job is None and dialog._downloaded_installer is None
+    assert not dialog._download_available()
+    assert not dialog.download_button.isEnabled()
+
+
+@pytest.mark.parametrize("platform,frozen", [("win32", False), ("darwin", False), ("darwin", True)])
+def test_source_startup_update_prompts_to_pull_without_installer(
+    qapp, qtbot, monkeypatch, tmp_path, platform, frozen,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform=platform, frozen=frozen))
+    monkeypatch.setattr(dialog_module, "sys", SimpleNamespace(platform=platform))
+    controller = StudioController(qapp)
+    (tmp_path / "studio").mkdir()
+    controller.save_fpvs_root_dir(tmp_path / "studio")
+    controller._startup_update_check_callback = _available_update
+    dialogs = []
+    monkeypatch.setattr(UpdateDialog, "exec", lambda dialog: dialogs.append(dialog) or 0)
+    controller.show_welcome()
+    qtbot.addWidget(controller.welcome_window)
+    qtbot.waitUntil(lambda: bool(dialogs))
+    dialog = dialogs[0]
+    qtbot.addWidget(dialog)
+    assert "pull the latest changes" in dialog.status_label.text()
+    assert dialog.download_button.isHidden() and not dialog.download_button.isEnabled()
+
+
+@pytest.mark.parametrize("platform,frozen", [("win32", False), ("darwin", False), ("darwin", True)])
+@pytest.mark.parametrize("size", [(680, 660), (760, 680)])
+def test_source_standalone_updates_never_check_registered_install_or_repair(
+    qtbot, deferred_updates, monkeypatch, platform, frozen, size,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform=platform, frozen=frozen))
+    monkeypatch.setattr(dialog_module, "sys", SimpleNamespace(platform=platform))
+    monkeypatch.setattr("fpvs_studio.gui.updater_window.check_update", lambda **_kw: pytest.fail(
+        "Source updates must not inspect a registered Windows installation",
+    ))
+    lifecycle, jobs, _ = deferred_updates
+    window = UpdaterWindow(auto_check=False, lifecycle=lifecycle)
+    qtbot.addWidget(window)
+    window.resize(*size)
+    window.show()
+    window.start_repair_check()
+    assert not jobs
+    assert window.repair_button.isHidden() and not window.repair_button.isEnabled()
+    window._check_callback = _available_update
+    window.start_update_check()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    jobs[-1].run_callback()
+    jobs[-1].finish()
+    assert "pull the latest changes" in window.status_label.text()
+    assert "installer" not in window.status_label.text().lower()
+    assert window.download_button.isHidden() and not window.download_button.isEnabled()
+    assert not window.repair_button.isEnabled()
+    qtbot.wait(1)
+    assert window.size().toTuple() == size
+    assert_visible_children_within_parent(window)
+
+
+def test_source_canceled_check_keeps_pull_guidance_without_download_wording(
+    qtbot, monkeypatch, deferred_updates,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform="darwin", frozen=False))
+    lifecycle, jobs, _ = deferred_updates
+    dialog = UpdateDialog(auto_check=False, check_callback=_available_update, lifecycle=lifecycle)
+    qtbot.addWidget(dialog)
+    dialog.start_update_check()
+    qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
+    jobs[-1].finish(error=UpdateCancelled("Canceled metadata request"))
+    assert "pull the latest changes" in dialog.status_label.text()
+    assert "download" not in dialog.status_label.text().lower()
+    assert dialog.download_button.isHidden() and not dialog.download_button.isEnabled()
+
+
+@pytest.mark.parametrize("platform,frozen", [("win32", False), ("darwin", True)])
+def test_source_apply_entry_shows_pull_guidance_without_opening_installer(
+    qapp, qtbot, monkeypatch, platform, frozen,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform=platform, frozen=frozen))
+    monkeypatch.setattr(updater_module, "QApplication", lambda *_a: qapp)
+    monkeypatch.setattr(updater_module, "binary_stdio", lambda: pytest.fail(
+        "Source mode must not begin an installer handoff",
+    ))
+    boxes = []
+
+    def capture(box):
+        boxes.append(box)
+        qtbot.addWidget(box)
+        return 0
+
+    monkeypatch.setattr(QMessageBox, "exec", capture)
+    assert updater_module.run_updater_gui(apply_mode=True) == 1
+    assert len(boxes) == 1
+    assert "pull the latest changes" in boxes[0].informativeText()
+    assert "download" not in boxes[0].informativeText().lower()
+
+
+@pytest.mark.parametrize("error", [
+    UpdateError("Could not reach GitHub Releases: connection refused"),
+    UpdateIntegrityError("Release metadata could not be verified"),
+])
+def test_source_failed_check_keeps_pull_guidance_without_installer_advice(
+    qtbot, monkeypatch, error,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform="darwin", frozen=False))
+    dialog = UpdateDialog(auto_check=False)
+    qtbot.addWidget(dialog)
+    dialog.resize(680, 600)
+    dialog.show()
+    dialog._handle_task_error(error, "check")
+    qtbot.wait(1)
+    assert "pull the latest changes" in dialog.status_label.text()
+    assert "Check Again" in dialog.notes_label.text()
+    assert "installer" not in dialog.notes_label.text().lower()
+    assert "Repair" not in dialog.notes_label.text()
+    assert str(error) in dialog.notes_label.toolTip()
+    assert not dialog.download_button.isEnabled()
+    assert_visible_children_within_parent(dialog)
+    for label in (dialog.status_label, dialog.notes_label):
+        assert label.height() + 1 >= label.heightForWidth(label.width())

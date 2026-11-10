@@ -1042,6 +1042,11 @@ CSV header migration and shared report writes hold an OS lock under
 up to 30 seconds before reporting a timeout. Reading old history to regenerate a
 summary does not rewrite that history. A future append upgrades its header while
 preserving existing rows and column values.
+History migration, visit lookup and participant reporting accept UTF-8 with or
+without a leading byte-order mark. The marker is encoding metadata, not part of
+the first column name. New writes retain the ordinary UTF-8 comma-separated format;
+unknown or duplicate columns and extra row fields remain errors that preserve the
+original table. Reading and regenerating a summary never normalizes the source file.
 
 ## Exports
 

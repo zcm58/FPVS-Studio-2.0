@@ -1511,8 +1511,9 @@ Studio requires enabling it again. The controller clears the obsolete saved keys
 startup and keeps the current choice in memory.
 Moving a project to the Recycle Bin remains a controller-owned filesystem operation
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
-refresh of the manage list after each attempt. `Check for Updates` delegates to the
-independent updater through `HelperClient`, without blocking the GUI. It shows
+refresh of the manage list after each attempt. In packaged Windows builds,
+`Check for Updates` delegates to the independent updater through `HelperClient`, without
+blocking the GUI. It shows
 current/latest versions, release notes, and the candidate patch/full installer.
 Download and Install verifies the package with progress and continues to installation
 from that one explicit click. There is no separate install button or redundant install
@@ -1525,8 +1526,12 @@ update-check failures show a clear try-again-later message. A silent startup met
 check runs once after the Welcome window is shown; it stays silent unless an update is
 available. Independently, normal application startup schedules offline update-cache
 housekeeping before root-folder onboarding, even with no configured project root or
-network connection. Cache ownership and retention rules belong to the backend; see
-`docs/PACKAGING.md`.
+network connection. Source checkouts and non-Windows platforms use metadata-only release
+checks for both startup and manual notices. Their dialog shows release notes and asks the
+user to close Studio, pull remote changes, and restart. Installer, repair and cache cleanup
+actions are unavailable; error and cancellation states retain source-update guidance.
+Studio does not run Git automatically. Cache ownership, retention and update routing
+rules belong to the backend; see `docs/PACKAGING.md`.
 
 Updater workers belong to an application-level lifecycle coordinator, not the dialog
 that requested them. Close, window X, and Escape cancel a busy operation and keep the

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock
 
@@ -12,7 +14,13 @@ from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSummary
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.core.task_models import TaskPhase, TaskResponseRecord
-from fpvs_studio.runtime import run_worker, session_export, triggers
+from fpvs_studio.runtime import (
+    participant_history,
+    participant_results,
+    run_worker,
+    session_export,
+    triggers,
+)
 from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryRecorder,
     query_condition_recovery,
@@ -53,6 +61,105 @@ def _execute(root, plan, worker):
             "export_mode": "compact", "serial_enabled": False, "experiment_test_mode": True,
         },
     )
+
+
+@pytest.mark.parametrize("export_mode", ["full", "compact"])
+@pytest.mark.parametrize("layout", ["current", "legacy", "reordered"])
+def test_session_preserves_bom_history_across_launch_and_retry(execution, export_mode, layout):
+    root, plan = execution
+    first = _execute(root, plan, RuntimeWorker(StubEngine({})))
+    path = root / "logs" / session_export.SESSION_CONDITION_HISTORY_FILENAME
+    old_rows = _read_csv_rows(path)
+    header = list(session_export.SESSION_CONDITION_HISTORY_HEADER)
+    if layout == "legacy":
+        header = header[:-2]
+    elif layout == "reordered":
+        header.remove("participant_number")
+        header.insert(0, "participant_number")
+    for row in old_rows:
+        row["logged_at_utc"] = "2024-01-02T03:04:05+00:00"
+        row["project_name"] = 'Existing, "β" study'
+    buffer = io.StringIO(newline="")
+    writer = csv.DictWriter(buffer, fieldnames=header, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(old_rows)
+    path.write_bytes(buffer.getvalue().encode("utf-8-sig"))
+    original = path.read_bytes()
+
+    # Reading summaries and visit identity must not rewrite the canonical history.
+    for reader in (session_export._read_csv_dict_rows, participant_results._csv):
+        assert reader(path) == [{column: row[column] for column in header} for row in old_rows]
+    summaries = participant_history._iter_session_condition_history_summaries(root)
+    assert len(summaries) == 1
+    assert summaries[0][1].participant_number == first.participant_number == "0007"
+    assert path.read_bytes() == original
+
+    second = RuntimeWorker(StubEngine({})).execute_session(
+        root, plan, root / "runs" / "second", participant_number="0007",
+        participant_session_number=2,
+        runtime_options={
+            "export_mode": export_mode, "serial_enabled": False, "experiment_test_mode": True,
+        },
+    )
+    assert not second.aborted
+    for _ in range(2):
+        session_export.append_session_condition_history(root, plan, second, refresh_reports=False)
+        rows = _read_csv_rows(path)
+        assert len(rows) == len(old_rows) * 2
+        for before, retained in zip(old_rows, rows[:len(old_rows)], strict=True):
+            assert {column: retained[column] for column in header} == {
+                column: before[column] for column in header
+            }
+        assert {row["participant_session_number"] for row in rows[len(old_rows):]} == {"2"}
+
+
+@pytest.mark.parametrize("bom", [False, True])
+@pytest.mark.parametrize("invalid", ["unknown", "duplicate", "extra_value", "semicolon"])
+def test_incompatible_history_is_never_discarded(tmp_path, bom, invalid):
+    path = tmp_path / session_export.SESSION_CONDITION_HISTORY_FILENAME
+    header = ["participant_session_number", "run_id", "value"]
+    existing_header = header.copy()
+    values = ["1", "existing", "keep me"]
+    delimiter = ","
+    if invalid == "unknown":
+        existing_header.append("unrecognized_data")
+        values.append("must not be dropped")
+    elif invalid == "duplicate":
+        existing_header.append("value")
+        values.append("must not be dropped")
+    elif invalid == "extra_value":
+        values.append("must not be dropped")
+    else:
+        delimiter = ";"
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, delimiter=delimiter)
+    writer.writerow(existing_header)
+    writer.writerow(values)
+    path.write_bytes(buffer.getvalue().encode("utf-8-sig" if bom else "utf-8"))
+    original = path.read_bytes()
+    with pytest.raises(ValueError):
+        session_export._commit_numbered_rows(
+            path, header, [[2, "new", "new value"]],
+            identity=("participant_session_number", "run_id"),
+        )
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_bom_history_migration_keeps_original_on_replace_failure(tmp_path, monkeypatch):
+    path = tmp_path / session_export.SESSION_CONDITION_HISTORY_FILENAME
+    path.write_text("run_id\r\nexisting\r\n", encoding="utf-8-sig", newline="")
+    original = path.read_bytes()
+    monkeypatch.setattr(
+        session_export, "replace_file_atomically", Mock(side_effect=PermissionError("file open")),
+    )
+    with pytest.raises(PermissionError, match="file open"):
+        session_export._commit_numbered_rows(
+            path, ["participant_session_number", "run_id"], [[2, "new"]],
+            identity=("participant_session_number", "run_id"),
+        )
+    assert path.read_bytes() == original
+    assert not list(tmp_path.glob(".*.tmp"))
 
 
 @pytest.mark.parametrize("failure", ["feedback", "completion", "cleanup"])

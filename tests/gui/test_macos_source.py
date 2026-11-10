@@ -99,9 +99,17 @@ def test_local_test_display_confirmation_preserves_input_and_fits(
 def test_mac_source_has_test_mode_and_no_hardware_onboarding(monkeypatch):
     monkeypatch.setattr(controller, "sys", SimpleNamespace(platform="darwin"))
     assert controller.experiment_test_mode_available() is True
-    host = SimpleNamespace(_startup_update_check_started=False)
+    timers = []
+    monkeypatch.setattr(controller, "QTimer", SimpleNamespace(
+        singleShot=lambda delay, callback: timers.append((delay, callback)),
+    ))
+    host = SimpleNamespace(
+        _startup_update_check_started=False, startup_update_checks_enabled=True,
+        _start_startup_update_check=Mock(),
+    )
     controller.StudioController._schedule_startup_update_check(host)
-    assert host._startup_update_check_started is False
+    assert host._startup_update_check_started is True
+    assert timers == [(0, host._start_startup_update_check)]
     host._startup_cache_cleanup_started = False
     controller.StudioController.start_update_cache_housekeeping(host)
     assert host._startup_cache_cleanup_started is False
@@ -118,20 +126,25 @@ def test_mac_test_settings_describe_required_local_display_check(qtbot, monkeypa
     assert "verifies the local display" in dialog.attentional_blink_pilot_mode_checkbox.toolTip()
 
 
-def test_mac_update_dialog_explains_source_updates_without_checking(qtbot, monkeypatch):
+def test_mac_update_dialog_checks_release_and_explains_source_updates(qtbot, monkeypatch):
     monkeypatch.setattr(update_dialog, "sys", SimpleNamespace(platform="darwin"))
-    callback = Mock(side_effect=AssertionError("Windows updater must not start"))
-    dialog = update_dialog.UpdateDialog(check_callback=callback)
+    result = update_dialog.UpdateCheckResult(
+        "2.8.1", "2.8.2", True, None, "History fix", None, False,
+    )
+    callback = Mock(return_value=result)
+    dialog = update_dialog.UpdateDialog(auto_check=False, check_callback=callback)
     qtbot.addWidget(dialog)
     dialog.show()
     QApplication.processEvents()
     assert_visible_children_within_parent(dialog)
     assert dialog.title_label.text() == "macOS source updates"
     assert dialog.download_button.isHidden()
-    assert dialog.check_button.isHidden()
+    assert dialog.check_button.isVisible()
     dialog.start_update_check()
+    qtbot.waitUntil(lambda: dialog._job is None)
     dialog.start_download()
-    callback.assert_not_called()
+    callback.assert_called_once()
+    assert "pull the latest changes" in dialog.status_label.text()
 
 
 @pytest.mark.parametrize("accepted", [True, False])

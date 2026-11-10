@@ -65,7 +65,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.8.1`.
+For the current release package, use the PEP 440-compatible package version `2.8.2`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -75,6 +75,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
+The [2.8.2 release plan](exec-plans/active/history-updates-release-2.8.2.md) tracks
+history encoding compatibility, source update guidance, and the reported memory-task cursor audit.
 The [2.8.1 release record](exec-plans/completed/release-2.8.1.md) tracks the
 published installer, visible diagnostics, exact-source CI, and public updater verification.
 The [2.7.4 release record](exec-plans/completed/release-2.7.4.md) tracks serial/BioSemi
@@ -342,7 +344,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.8.1.exe
+dist\installer\FPVS-Studio-Setup-2.8.2.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and
@@ -541,16 +543,21 @@ uninstall registration still belong to the user's installed application.
 
 ## In-App Update Flow
 
-Installed users can use `File > Check for Updates`. FPVS Studio also runs one silent
-startup check after the Welcome window appears. Both routes call `HelperClient` from
-the existing app-owned worker lifecycle. A private helper process checks GitHub Releases
+Users can use `File > Check for Updates`. FPVS Studio also runs one silent
+startup check after the Welcome window appears. Packaged Windows builds call `HelperClient`
+from the existing app-owned worker lifecycle. A private helper process checks GitHub Releases
 and returns current/latest versions, notes, and a candidate package type/size without a
 full installation scan. The user chooses `Download and Install` to authorize the
 selected package's verified download and ensuing installation in one action. The
 helper verifies its GitHub SHA-256 and size as part of transfer/reuse.
-Source development uses the same entry in a separate Python process; packaged Studio
-requires the bundled helper. A source process cannot identify itself as the installed
-Studio process for an installation handoff.
+Packaged Windows Studio requires the bundled helper. Source checkouts, including Windows
+`src` launches, and all non-Windows platforms check only published release metadata in an
+app-owned worker. Their update notice asks the user to close Studio, pull recent remote
+Git changes, and restart; Studio does not run Git or change the checkout. Release notes and
+manual rechecking remain available. Installer download, cached-installer continuation,
+repair, and installer-cache housekeeping are disabled for these copies. The standalone
+updater follows the same rule and refuses an installer handoff outside packaged Windows.
+Release checks compare published versions, not untagged commits on the remote branch.
 Manual update-check failures show a clear try-again-later message. Startup checks stay
 silent unless an update is available.
 

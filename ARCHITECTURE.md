@@ -96,6 +96,8 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
   timing are distinct evidence. Software tests never qualify wiring or EEG timing.
 - The updater never edits projects. Explicit Download and Install preserves the Save
   gate and verified helper handoff; Inno owns baseline/target verification and mutation.
+  `updates/helper_client.py` routes source and non-Windows copies to release metadata
+  checks with manual Git update guidance; installer actions require packaged Windows.
 - `tests/unit/test_import_boundaries.py` checks internal dependency rules without
   importing production modules.
 

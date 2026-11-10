@@ -38,7 +38,11 @@ from fpvs_studio.gui.update_lifecycle import (
     update_lifecycle,
 )
 from fpvs_studio.support.error_explanations import explain_error
-from fpvs_studio.updates.helper_client import HelperClient
+from fpvs_studio.updates.helper_client import (
+    HelperClient,
+    check_app_updates,
+    installer_updates_supported,
+)
 from fpvs_studio.updates.models import (
     DownloadedInstaller,
     InstallerAsset,
@@ -50,10 +54,14 @@ _LOGGER = logging.getLogger(__name__)
 _MINIMUM_SIZE = (680, 600)
 _DEFAULT_SIZE = (760, 620)
 _PROGRESS_MAXIMUM = 1000
+SOURCE_UPDATE_INSTRUCTIONS = (
+    "To update this source checkout, close Studio, pull the latest changes from "
+    "the remote Git repository, then restart Studio."
+)
 
 
 def _check_update(progress: ProgressReporter, cancel_event: Event) -> UpdateCheckResult:
-    return HelperClient().check(
+    return check_app_updates(
         __version__, cancel_event=cancel_event, phase_callback=lambda phase: progress(phase, None)
     )
 
@@ -78,7 +86,7 @@ def _launch_update(downloaded: DownloadedInstaller, cancel_event: Event) -> obje
 
 
 class UpdateDialog(QDialog):
-    """Check GitHub Releases and guide the user through an installer update."""
+    """Check releases and explain the update route for this installation."""
 
     def __init__(
         self,
@@ -104,6 +112,7 @@ class UpdateDialog(QDialog):
         self.resize(*_DEFAULT_SIZE)
 
         self._check_callback = check_callback
+        self._installer_updates_enabled = installer_updates_supported()
         self._check_task = check_task
         self._download_callback = download_callback
         self._installer_launcher = installer_launcher
@@ -124,9 +133,8 @@ class UpdateDialog(QDialog):
 
         self._build_ui()
         self._set_idle_state()
-        if sys.platform == "darwin":
+        if not self._installer_updates_enabled:
             self._show_source_updates()
-            return
         if initial_result is not None:
             self.show_update_result(initial_result)
         elif auto_check:
@@ -211,9 +219,6 @@ class UpdateDialog(QDialog):
 
     @Slot()
     def start_update_check(self) -> None:
-        if sys.platform == "darwin":
-            self._show_source_updates()
-            return
         if (
             self._disposed.is_set()
             or self._job is not None
@@ -246,7 +251,7 @@ class UpdateDialog(QDialog):
 
     @Slot()
     def start_download(self) -> None:
-        if sys.platform == "darwin":
+        if not self._installer_updates_enabled:
             return
         if (
             self._disposed.is_set()
@@ -276,7 +281,8 @@ class UpdateDialog(QDialog):
     @Slot()
     def install_and_restart(self) -> None:
         if (
-            self._disposed.is_set()
+            not self._installer_updates_enabled
+            or self._disposed.is_set()
             or self._job is not None
             or self._preparing_install
             or self._downloaded_installer is None
@@ -383,7 +389,16 @@ class UpdateDialog(QDialog):
         else:
             self._set_notes_text("Release notes will appear when an update is available.")
 
-        if result.update_available:
+        if not self._installer_updates_enabled:
+            availability = (
+                "A newer Studio release is available."
+                if result.update_available else "No newer published release was found."
+            )
+            self.latest_version_label.setText(f"Latest release: {result.latest_version}")
+            self.status_label.setText(f"{availability}\n\n{SOURCE_UPDATE_INSTRUCTIONS}")
+            self.download_button.setEnabled(False)
+            self._set_close_button_text("Remind Me Later" if result.update_available else "Close")
+        elif result.update_available:
             asset = result.installer_asset
             verified_asset = asset is not None and asset.sha256 is not None
             if verified_asset:
@@ -421,6 +436,9 @@ class UpdateDialog(QDialog):
 
     @Slot(object)
     def _handle_download_result(self, result: object) -> None:
+        if not self._installer_updates_enabled:
+            self._downloaded_installer = None
+            return
         if not isinstance(result, DownloadedInstaller):
             self._handle_task_error(
                 TypeError("Update download returned an unexpected result."), "download"
@@ -446,9 +464,15 @@ class UpdateDialog(QDialog):
         explanation = explain_error(
             title, str(error), error=error if isinstance(error, BaseException) else None,
         )
-        self.status_label.setText(explanation.summary)
-        self._set_notes_text(explanation.advice)
-        self.notes_label.setToolTip(f"{explanation.advice}\n\nTechnical details:\n{error}")
+        advice = explanation.advice if self._installer_updates_enabled else (
+            "Check your internet connection and try Check Again."
+        )
+        self.status_label.setText(
+            explanation.summary if self._installer_updates_enabled else
+            f"{explanation.summary}\n\n{SOURCE_UPDATE_INSTRUCTIONS}"
+        )
+        self._set_notes_text(advice)
+        self.notes_label.setToolTip(f"{advice}\n\nTechnical details:\n{error}")
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
@@ -481,7 +505,11 @@ class UpdateDialog(QDialog):
 
     def _handle_task_cancelled(self) -> None:
         self._downloaded_installer = None
-        self.status_label.setText("The update operation was canceled. Retry starts from zero.")
+        self.status_label.setText(
+            "The update operation was canceled. Retry starts from zero."
+            if self._installer_updates_enabled else
+            f"The update check was canceled.\n\n{SOURCE_UPDATE_INSTRUCTIONS}"
+        )
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
@@ -491,7 +519,8 @@ class UpdateDialog(QDialog):
     def _download_available(self) -> bool:
         asset = None if self._result is None else self._result.installer_asset
         return bool(
-            self._result is not None
+            self._installer_updates_enabled
+            and self._result is not None
             and self._result.update_available
             and asset is not None
             and asset.sha256 is not None
@@ -505,18 +534,16 @@ class UpdateDialog(QDialog):
         self._set_close_button_text("Close")
 
     def _show_source_updates(self) -> None:
-        self.title_label.setText("macOS source updates")
-        self.status_label.setText("Update your source checkout with Studio closed.")
-        self.latest_version_label.hide()
-        self.notes_heading_label.setText("Source environment")
-        self.notes_label.setText(
-            "Pull changes from the remote Git repository, then run "
-            "bash scripts/macos-source.sh setup "
-            "to update this checkout's dependencies. Use the same Studio version "
-            "on your Mac and Windows lab PC when transferring projects."
+        self.title_label.setText(
+            "macOS source updates" if sys.platform == "darwin" else "Source updates"
         )
-        self.release_notes_button.hide()
-        self.check_button.hide()
+        self.status_label.setText(SOURCE_UPDATE_INSTRUCTIONS)
+        self.status_label.setToolTip(
+            "After pulling, follow the updated checkout's setup instructions "
+            "if dependencies changed. "
+            "On macOS, use Setup Mac.command."
+        )
+        self.download_button.setEnabled(False)
         self.download_button.hide()
 
     def _set_busy_state(self, status_text: str) -> None:
@@ -558,6 +585,8 @@ class UpdateDialog(QDialog):
             "Canceling the update operation and waiting for it to finish safely. "
             "Incomplete downloads are discarded; a retry starts from zero. "
             "A network check may need to reach its timeout."
+            if self._installer_updates_enabled else
+            "Canceling the release check. Waiting for the network request to stop safely."
         )
         if self._job is not None:
             self._job.cancel()

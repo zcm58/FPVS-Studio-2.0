@@ -5,12 +5,18 @@ from __future__ import annotations
 import logging
 import queue
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from threading import Event, Thread
 from typing import Any
 
 from fpvs_studio.updates.cache_io import check_cancel
+from fpvs_studio.updates.github_releases import (
+    DEFAULT_RELEASES_API_URL,
+    fetch_release_metadata,
+    select_update_from_releases,
+)
 from fpvs_studio.updates.helper_protocol import (
     asset_to_dict,
     download_from_dict,
@@ -34,6 +40,30 @@ _MAX_OPERATION_SECONDS = 35 * 60
 _MAX_HANDOFF_SECONDS = 120
 _CANCEL_GRACE_SECONDS = 15
 _LOG = logging.getLogger(__name__)
+
+
+def installer_updates_supported() -> bool:
+    """Only a bundled Windows app can update itself with the Windows installer."""
+    return sys.platform == "win32" and bool(getattr(sys, "frozen", False))
+
+
+def check_app_updates(
+    current_version: str,
+    *,
+    cancel_event: Event | None = None,
+    phase_callback: Callable[[UpdatePhase], None] | None = None,
+) -> UpdateCheckResult:
+    """Check source releases without selecting or preparing a Windows installer."""
+    check_cancel(cancel_event)
+    if installer_updates_supported():
+        return HelperClient().check(
+            current_version, cancel_event=cancel_event, phase_callback=phase_callback,
+        )
+    releases = fetch_release_metadata(DEFAULT_RELEASES_API_URL, cancel_event=cancel_event)
+    check_cancel(cancel_event)
+    # Source updates need release versions and notes, never Windows package metadata.
+    source_releases = [{**release, "assets": []} for release in releases]
+    return select_update_from_releases(source_releases, current_version=current_version)
 
 
 def _spawn(command: list[str]) -> subprocess.Popen[bytes]:

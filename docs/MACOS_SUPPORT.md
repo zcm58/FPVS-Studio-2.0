@@ -136,6 +136,10 @@ chosen revision (for example, `git pull --ff-only` on an unmodified tracking bra
 then rerun `setup` and `verify`. An editable installation does not refresh changed
 dependency requirements automatically. The Windows executable installer and repair
 workflow are not Mac source updates.
+Startup notices and `File > Check for Updates` compare published release versions and
+show instructions to pull remote changes and restart Studio. They retain release notes
+but never offer a Windows installer or repair action. Studio does not run Git automatically;
+the check does not report untagged commits on the remote branch.
 
 Choose a local FPVS Studio Root Folder. Mac source testing uses the explicit local
 Test/Pilot path and null trigger output; it must retain native display verification,

@@ -166,7 +166,7 @@ def _json(path: Path) -> dict[str, Any]:
 def _csv(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         return []
-    with path.open(encoding="utf-8", newline="") as handle:
+    with path.open(encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if reader.fieldnames and len(reader.fieldnames) != len(set(reader.fieldnames)):
             raise ValueError(f"{path.name} has duplicate column names.")
