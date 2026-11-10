@@ -67,6 +67,7 @@ visible GUI acceptance or physical display qualification.
 | Roots, dialogs, persistence or import/export paths | `.agents/skills/project-path-audit/SKILL.md` |
 | Protected legacy boundaries | `.agents/skills/legacy-boundary-review/SKILL.md` |
 | Existing PsychoPy experiment migration | `.agents/skills/fpvs-psychopy-migration/SKILL.md` |
+| GitHub bug diagnosis, verified fixes and serial issue monitoring | `.agents/skills/github-issue-fix/SKILL.md` |
 
 Read the selected skill completely. A passing invariant audit is sufficient evidence
 for that invariant; it does not replace focused or precommit checks. Keep detailed

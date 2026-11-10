@@ -40,6 +40,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Serial GitHub issue workflow](exec-plans/completed/github-issue-workflow.md):
+  reusable diagnosis skill, durable queue and five-minute desktop watcher.
 - [Configurable demographics](exec-plans/completed/configurable-demographics.md)
 - [Demographics form builder](exec-plans/completed/demographics-form-builder.md)
 - [Condition Figure](exec-plans/completed/condition-figure.md)

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Issue Fix"
+  short_description: "Reproduce, fix and verify Studio bug reports."
+  default_prompt: "Use $github-issue-fix to investigate this Studio issue, verify a focused fix, and summarize the result."
