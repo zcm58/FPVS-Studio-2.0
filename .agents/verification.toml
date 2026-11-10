@@ -5,7 +5,6 @@ qt_registry = "tests/qt_test_files.txt"
 checks = ["gc"]
 tests = [
   "tests/unit/test_harness_docs.py",
-  "tests/unit/test_issue_queue.py",
   "tests/unit/test_import_boundaries.py",
   "tests/unit/test_qt_test_registry.py",
   "tests/unit/test_verification_driver.py",
@@ -23,7 +22,6 @@ include = [
   "tests/platform_adapters.py",
   "tests/unit/test_platform_adapters.py",
   "tests/unit/test_harness_docs.py",
-  "tests/unit/test_issue_queue.py",
   "tests/unit/test_import_boundaries.py",
   "tests/unit/test_qt_test_registry.py",
   "tests/unit/test_verification_driver.py",

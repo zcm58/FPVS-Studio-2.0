@@ -7,14 +7,6 @@ repository-relative. Select affected focused scopes, then repo precommit for sha
 behavior. Qt and real hardware/service checks retain their existing approval and
 evidence boundaries.
 
-## GitHub Issues and Automatic Bug Fixes
-
-Use [the issue workflow](github-issue-workflow.md) and
-`.agents/skills/github-issue-fix/SKILL.md`. The coordinator owns the durable queue
-in `.agents/scripts/issue_queue.py`; each Sol worker owns one report. Queue changes
-use repo focused verification and `tests/unit/test_issue_queue.py`. Application
-fixes use their actual owning scope and preserve private report evidence.
-
 ## GUI, Setup and Project Paths
 
 | Task | First source/test | Current contract |

@@ -12,8 +12,6 @@ PsychoPy presentation stays behind runtime and engine boundaries.
   `docs/PLANS.md` to find the relevant active plan; completed plans are history.
 - Run the selected focused verification before broad inspection. Expand context
   only for implicated symbols, failures or cross-layer behavior.
-- For reported GitHub bugs or the issue watcher, use the
-  [issue workflow](docs/agent/github-issue-workflow.md).
 - Preserve unrelated changes, persisted formats, processing order and workflows.
   Do not read output, environments, caches, builds or archives without task need.
   Untracked files and retained output are user-owned.
