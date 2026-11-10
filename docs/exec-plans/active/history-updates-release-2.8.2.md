@@ -131,3 +131,17 @@ and destination ownership before each attempt. Ten regressions cover temporary
 and persistent locks, unrelated errors, cancellation and a competing destination;
 eight failed before the repair. Both implicated modules pass 121 tests with two
 existing Windows symlink-permission skips.
+
+The broader main-checkout tests also exposed two plain-path existence checks before
+bundle JSON reads. A 264-character manifest path returned false from ordinary
+`Path.is_file()` but true through the core Windows path adapter; the 255-character
+project path still passed both. These prechecks require the existing adapter too.
+This is a separate reproduced Windows long-path defect, not an effect of the rename
+retry. The short-checkout project-I/O route passed 825 tests with three skips before
+this final boundary repair; new long-path regressions and final verification follow.
+Both prechecks now use the core adapter. Four regressions cover existing and missing
+project/manifest files beyond 260 characters; two failed before the repair. The
+default long-checkout project-I/O route now passes 829 tests with three existing
+Windows symlink-permission skips, including all 17 previously failing update cases.
+Targeted Ruff, compilation and mypy pass. Automatic execution review blocked removing
+the generated `Userszcm58fpvstmppjio-lock/` test folder; it is retained untracked.

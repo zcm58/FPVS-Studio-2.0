@@ -550,7 +550,7 @@ def _notify_import_progress(
 
 def _load_project_for_bundle(project_root: Path) -> ProjectFile:
     path = project_json_path(project_root)
-    if not path.is_file():
+    if not filesystem_path(path).is_file():
         raise ProjectBundleError(f"Project bundle export requires {PROJECT_FILENAME}.")
     try:
         return load_project_file(path, maximum_bytes=MAX_BUNDLE_PROJECT_JSON_BYTES)
@@ -562,7 +562,7 @@ def _load_project_for_bundle(project_root: Path) -> ProjectFile:
 
 def _load_manifest_for_bundle(project_root: Path) -> StimulusManifest:
     path = stimulus_manifest_path(project_root)
-    if not path.is_file():
+    if not filesystem_path(path).is_file():
         raise ProjectBundleError("Project bundle export requires stimuli/manifest.json.")
     try:
         return read_json_file(

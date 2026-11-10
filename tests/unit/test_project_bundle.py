@@ -1059,6 +1059,43 @@ def test_recording_device_and_port_survive_project_bundle(
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
+@pytest.mark.parametrize("kind", ["project", "manifest"])
+@pytest.mark.parametrize("present", [False, True])
+def test_bundle_metadata_loaders_support_long_paths(
+    tmp_path, sample_project, monkeypatch, kind, present,
+):
+    root = tmp_path
+    while len(str(root)) <= 270:
+        root /= "long-project-folder"
+    _save_bundle_ready_project(root, sample_project)
+    relative_path = "project.json" if kind == "project" else "stimuli/manifest.json"
+    path = root / relative_path
+    assert len(str(path)) > 260
+    if not present:
+        filesystem_path(path).unlink()
+    original_is_file = Path.is_file
+
+    def is_file_without_long_path_policy(candidate):
+        value = str(candidate)
+        if len(value) > 260 and not value.startswith("\\\\?\\"):
+            return False
+        return original_is_file(candidate)
+
+    monkeypatch.setattr(Path, "is_file", is_file_without_long_path_policy)
+    loader = (
+        project_bundle_module._load_project_for_bundle
+        if kind == "project" else project_bundle_module._load_manifest_for_bundle
+    )
+    if not present:
+        with pytest.raises(ProjectBundleError, match=f"requires {relative_path}"):
+            loader(root)
+    elif kind == "project":
+        assert loader(root).meta.project_id == sample_project.meta.project_id
+    else:
+        assert loader(root).project_id == sample_project.meta.project_id
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
 @pytest.mark.parametrize("long_bundle", [False, True])
 def test_bundle_transfer_without_windows_long_path_policy(
     tmp_path, sample_project, sample_project_root, monkeypatch, long_bundle,
