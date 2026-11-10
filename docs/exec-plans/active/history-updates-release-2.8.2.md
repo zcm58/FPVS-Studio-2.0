@@ -95,3 +95,39 @@ Windows symlink-permission skip. The approved visible reporting/error sweep pass
 80 tests with one native-Cocoa skip; safe GUI-focused checks passed 180 tests.
 Long-text redaction now avoids repeated rescanning, and a regression proves private
 home-directory path tails are removed while traceback module filenames remain useful.
+
+The feedback service implementation `c0854416` passed 33 tests and both deployment
+dry runs. Staging preserved and reconstructed a near-1 MiB synthetic payload with
+all 256 KiB of diagnostics. Production migration 0005 and Worker version
+`bee800f6-2c43-466e-b5dd-528a179e4571` were deployed; the downloaded module matches
+the committed bundle, all 17 bindings were preserved, and desktop health returned
+HTTP 200 with intake enabled. Existing accepted reports retain their prior privacy.
+No synthetic production issue or email was sent, and production CPU headroom is
+not qualified by the local tests.
+
+A read-only operations check found the maintenance heartbeat had stopped on
+October 22, before this release. One documented generation-based restart restored
+it, and its next automatic cycle advanced after 306 seconds. Retention counters
+were consistent, with no overdue records or unfinished delivery. The original
+stoppage's cause remains unknown; this records operational recovery, not a scheduler
+code fix. The service deployment and recovery receipts are pushed through `c8b7dd0`.
+
+## Final verification follow-up
+
+Two complete precommit runs each passed 5,857 tests and 24 subtests with 33 skips,
+but failed at different project-import directory commits with Windows access denied.
+The same denial also reproduced in the isolated Library module. An instrumented
+failure found no open Python streams or current-process file handles under staging;
+with garbage collection disabled, the identical rename succeeded after a brief wait.
+Independent review found no deterministic stream, image or archive lifetime leak.
+The process responsible for the temporary denial remains unknown.
+
+This reproduced release blocker adds one narrowly scoped repair: retry only brief
+Windows directory-rename access/sharing failures, preserving the non-overwriting
+commit, cancellation and persistent-error behavior. Focused regressions and a new
+exact-source precommit/CI pass are required before packaging the final candidate.
+The repair uses the existing 150 ms Windows-lock budget and rechecks cancellation
+and destination ownership before each attempt. Ten regressions cover temporary
+and persistent locks, unrelated errors, cancellation and a competing destination;
+eight failed before the repair. Both implicated modules pass 121 tests with two
+existing Windows symlink-permission skips.

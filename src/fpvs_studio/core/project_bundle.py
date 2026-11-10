@@ -10,11 +10,13 @@ from __future__ import annotations
 import errno
 import hashlib
 import io
+import logging
 import re
 import shutil
 import stat
 import struct
 import tempfile
+import time
 import uuid
 import zipfile
 from collections.abc import Callable, Iterator
@@ -92,6 +94,7 @@ from fpvs_studio.preprocessing.source_files import is_finder_metadata_file
 PROJECT_BUNDLE_SUFFIX = ".fpvsbundle"
 BUNDLE_MANIFEST_FILENAME = "fpvs_bundle.json"
 IMPORT_STAGING_DIRNAME = "import-staging"
+LOGGER = logging.getLogger(__name__)
 _BUNDLE_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _DEFAULT_VALIDATION_REFRESH_HZ = 60.0
 MAX_BUNDLE_PAYLOAD_FILES = 50_000
@@ -493,8 +496,23 @@ def import_project_bundle(
                 raise ProjectBundleCancelled(str(error)) from error
             if installed.state == "installed":
                 raise ProjectBundleError(installed.message)
-        _check_cancelled(cancel_event)
-        staged_project_root.rename(filesystem_path(target_dir))
+        for delay in (0.01, 0.02, 0.04, 0.08, None):
+            _check_cancelled(cancel_event)
+            if filesystem_path(target_dir).exists():
+                raise ProjectBundleError(f"Imported project target already exists: {target_dir}")
+            try:
+                staged_project_root.rename(filesystem_path(target_dir))
+                break
+            except OSError as exc:
+                if getattr(exc, "winerror", None) not in {5, 32, 33} or delay is None:
+                    raise
+                LOGGER.debug(
+                    "Windows bundle commit lock for %s; retrying in %.2f s", target_dir, delay,
+                )
+                if cancel_event is None:
+                    time.sleep(delay)
+                else:
+                    cancel_event.wait(delay)
         _notify_import_progress(progress_callback, "complete")
         return ProjectScaffold(project_root=target_dir, project=project)
     except ProjectBundleError:

@@ -1428,6 +1428,9 @@ configured Studio root is persisted and loaded as an absolute path; import desti
 never fall back to the application working directory. Bundle reads, collision checks
 and destination creation use the core Windows path adapter, including long source and
 receiving paths; the returned project location retains the ordinary configured path.
+The final folder rename retries brief Windows access/sharing locks for at most
+150 ms. It remains cancellable between attempts, never replaces an existing project,
+and reports persistent access failures without committing an incomplete import.
 Opening project/manifest JSON, root-folder selection/preferences, recent projects,
 restart discovery, template storage and image-readiness signatures reuse that adapter.
 Disk-full and permission errors identify the storage action needed to retry.
