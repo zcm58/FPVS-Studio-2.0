@@ -15,9 +15,9 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from fpvs_studio import __version__
 
-MAX_LOG_BYTES = 96 * 1024
+MAX_LOG_BYTES = 256 * 1024
 MAX_DESCRIPTION_BYTES = 16 * 1024
-MAX_PAYLOAD_BYTES = 128 * 1024
+MAX_PAYLOAD_BYTES = 1024 * 1024
 MAX_FEATURE_CHARACTERS = 4000
 MAX_FEATURE_PAYLOAD_BYTES = 32 * 1024
 ReportKind = Literal["bug", "feature"]
@@ -64,9 +64,11 @@ class Report(BaseModel):
         ):
             errors["email"] = "Enter a valid reply email or leave it blank."
         if include_logs and len(self.diagnostics.encode("utf-8")) > MAX_LOG_BYTES:
-            errors["diagnostics"] = "Error logs must fit within 96 KiB; edit or exclude them."
+            errors["diagnostics"] = "Error logs must fit within 256 KiB; edit or exclude them."
         if len(self.payload(include_logs=include_logs)) > MAX_PAYLOAD_BYTES:
-            errors["happened"] = "The complete report must fit within 128 KiB."
+            errors["diagnostics" if include_logs and self.diagnostics else "happened"] = (
+                "The complete report exceeds 1 MiB. Shorten or exclude its error logs."
+            )
         return errors
 
     def payload(self, *, include_logs: bool = True) -> bytes:
@@ -125,6 +127,7 @@ class Draft(BaseModel):
     model_config = ConfigDict(extra="forbid")
     report: Report = Field(default_factory=Report)
     include_logs: bool = True
+    accepted_error: str = ""
     updated_at: str = Field(default_factory=utc_now)
     delivery: Delivery = "editing"
     receipt_token: str = Field(

@@ -19,7 +19,12 @@ reproduced compatibility defects from an unconfirmed diagnosis of that exact fil
    four-of-eight image-memory workflow and shared response renderer;
    preserve intentional stimulus/feedback cursor hiding and existing response semantics.
    Do not claim a cursor repair without reproducing a production defect.
-4. Run focused, visible approved checks and exact-source precommit/CI. Build and
+4. Retain reviewed session logs alongside the reported traceback, with a clear
+   256 KiB diagnostic cap. Deliver every accepted byte to the private GitHub issue,
+   using numbered comments when needed. Preserve redaction, explicit submission,
+   receipt identity and automatic-crash privacy. Verify and deploy the corresponding
+   feedback-service change before publishing the desktop release.
+5. Run focused, visible approved checks and exact-source precommit/CI. Build and
    publish 2.8.2 through the draft/hash/immutable-release workflow, then verify public
    downloads, attestations and updater selection. Record source-update behavior too.
 
@@ -61,11 +66,32 @@ from the application or force-close another application's serial port.
   was run directly; changed tracked Python files passed Ruff separately.
 - Runtime-focused checks passed 1,113 tests with four symlink-permission skips;
   one existing checkpoint assertion exceeded the Windows path limit in the long
-  test checkout. The same test passed with a shorter temporary path. Repeat the
-  complete route in the clean, short release checkout before publication.
+  test checkout. The complete route passed 1,114 tests with four skips in the clean,
+  short release checkout. The initial precommit invocation used the system Python
+  for a nested audit; rerun with the approved Python environment on PATH for final source.
 - Twelve new cursor regressions cover the built-in four-of-eight memory-selection
   task at simulated 100%, 125%, 150% and 200% content scaling. A bounded native
   renderer check passed windowed 1280x720 and fullscreen 1920x1080 at actual
   100% scaling, with nine framebuffer pointer observations per mode, selection
   revision and successful Submit. This does not qualify the reporter's Windows 10
   machine. Production cursor behavior remains unchanged.
+
+## Reporting follow-up
+
+The user explicitly added complete reasonable-sized GitHub error logs to 2.8.2.
+Three visible regression tests reproduce losing collected session context when
+accepting the popup error or refreshing logs. The feedback service also truncates
+diagnostics to 2,048 bytes before constructing the GitHub issue. The coordinated
+change retains the existing diagnostics field and receipt protocol, raises manual
+limits to 256 KiB diagnostics / 1 MiB payload / 4 MiB local draft, and delivers
+long text through resumable numbered GitHub comments. Existing logging retention,
+feature limits, automatic-crash payloads and manual consent remain separate.
+The larger local draft bound accommodates escaped text and a persisted accepted
+error without rejecting an otherwise valid report before submission. Independent
+review added coverage for repeated long errors, draft restart/refresh, another error
+arriving during collection, and starting a second report in the same process.
+Support/client/automatic-crash regression checks passed 131 tests with one existing
+Windows symlink-permission skip. The approved visible reporting/error sweep passed
+80 tests with one native-Cocoa skip; safe GUI-focused checks passed 180 tests.
+Long-text redaction now avoids repeated rescanning, and a regression proves private
+home-directory path tails are removed while traceback module filenames remain useful.

@@ -113,21 +113,27 @@ def test_technical_failures_keep_plain_primary_text_and_complete_details(qtbot, 
     assert_visible_children_within_parent(box)
 
 
+@pytest.mark.parametrize("packaged_windows", [False, True])
 def test_standalone_updater_startup_error_has_recovery_and_expandable_diagnostics(
-    qtbot, monkeypatch,
+    qtbot, monkeypatch, packaged_windows,
 ):
-    from fpvs_studio.gui.updater_window import _show_startup_error
+    from fpvs_studio.gui import updater_window
 
     shown = []
     monkeypatch.setattr(QMessageBox, "exec", lambda box: shown.append(box))
+    monkeypatch.setattr(updater_window, "installer_updates_supported", lambda: packaged_windows)
     error = PermissionError(errno.EACCES, "Permission denied", "C:/Studio/installer.exe")
-    _show_startup_error(error)
+    updater_window._show_startup_error(error)
     assert len(shown) == 1
     box = shown[0]
     qtbot.addWidget(box)
     primary = box.text() + " " + box.informativeText()
     assert "[Errno" not in primary
-    assert "full installer" in box.informativeText()
+    if packaged_windows:
+        assert "full installer" in box.informativeText()
+    else:
+        assert "pull the latest changes" in box.informativeText()
+        assert "installer" not in box.informativeText()
     assert str(error) in box.detailedText()
 
 
@@ -243,11 +249,8 @@ def test_parallel_driver_prompt_preserves_details_and_fits(
     QApplication.processEvents()
     assert details_button.isVisible()
     assert_visible_children_within_parent(box)
-    if sys.platform == "darwin":
-        # QMessageBox chooses its content width on Mac even in widget mode.
-        assert box.width() >= box.minimumSizeHint().width()
-    else:
-        assert box.width() >= 580
+    # QMessageBox owns its content width and can replace a requested minimum on show.
+    assert box.width() >= box.minimumSizeHint().width()
     assert box.width() <= box.screen().availableGeometry().width()
     for label in box.findChildren(QLabel):
         if not label.isVisible() or not label.text():

@@ -86,6 +86,29 @@ def test_feature_submission_uses_shared_receipts_and_minimal_payload():
     assert "diagnostics" not in calls[1]
 
 
+def test_manual_submission_keeps_large_reviewed_log_and_exact_intent_hash():
+    report = Draft(report=Report(
+        title="Synthetic renderer failure", happened="The task stopped.",
+        diagnostics="FIRST LOG ENTRY\n" + "Synthetic session event\n" * 9000 + "LAST LOG ENTRY",
+    ))
+    calls = []
+
+    def transport(method, url, data, headers):
+        calls.append(data)
+        if url.endswith("/v1/intents"):
+            return intent().model_dump_json().encode()
+        return json.dumps({"report_id": str(report.report.report_id), "state": "received"}).encode()
+
+    client = ReportClient(SERVICE_ORIGIN, transport=transport)
+    grant = client.create_intent(report, Event())
+    report.delivery = "uncertain"
+    report.service_url = SERVICE_ORIGIN
+    assert client.submit(report, grant, Event()).state == "received"
+    assert calls[1] == report.report.payload()
+    assert json.loads(calls[0])["payload_sha256"] == hashlib.sha256(calls[1]).hexdigest()
+    assert json.loads(calls[1])["diagnostics"] == report.report.diagnostics
+
+
 def draft():
     return Draft(
         report=Report(

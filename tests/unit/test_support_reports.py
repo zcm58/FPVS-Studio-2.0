@@ -20,7 +20,7 @@ from fpvs_studio.support.diagnostics import (
     collect_diagnostics,
     redact,
 )
-from fpvs_studio.support.models import MAX_LOG_BYTES, Draft, Report
+from fpvs_studio.support.models import MAX_LOG_BYTES, MAX_PAYLOAD_BYTES, Draft, Report
 from fpvs_studio.support.storage import DraftStore, export_report
 
 
@@ -223,6 +223,188 @@ def test_validation_counts_utf8_and_optional_email():
     assert "diagnostics" not in report.problems(include_logs=False)
 
 
+def test_manual_report_caps_include_json_escaping_and_larger_draft(tmp_path):
+    assert MAX_LOG_BYTES == 256 * 1024
+    assert MAX_PAYLOAD_BYTES == 1024 * 1024
+    report = Report(title="Synthetic failure", happened="Stopped.", diagnostics="界" * 80000)
+    assert report.problems() == {}
+    draft = Draft(report=report)
+    store = DraftStore(tmp_path)
+    store.save(draft)
+    saved = store.load_latest()
+    assert saved is not None and saved.report == draft.report
+    assert saved.receipt_token == draft.receipt_token
+    report.diagnostics = "\x00" * MAX_LOG_BYTES
+    assert len(report.payload()) > MAX_PAYLOAD_BYTES
+    assert report.problems()
+    assert report.problems(include_logs=False) == {}
+
+
+def test_accepted_error_roundtrips_locally_without_changing_locked_report_payload(tmp_path):
+    draft = Draft(
+        report=Report(title="Saved error", happened="Stopped.", diagnostics="Reviewed logs"),
+        accepted_error="Accepted redacted traceback", delivery="uncertain",
+    )
+    payload = draft.report.payload()
+    digest = draft.report.digest()
+    store = DraftStore(tmp_path)
+    store.save(draft)
+    restored = store.load_latest()
+    assert restored is not None and restored.locked
+    assert restored.accepted_error == draft.accepted_error
+    assert restored.report.payload() == payload
+    assert restored.report.digest() == digest
+    assert "accepted_error" not in json.loads(payload)
+    legacy = draft.model_dump(mode="json")
+    legacy.pop("accepted_error")
+    assert Draft.model_validate(legacy).accepted_error == ""
+
+
+def test_valid_report_with_fully_escaped_error_context_still_saves(tmp_path):
+    draft = Draft(
+        report=Report(
+            title="Synthetic error", happened="Stopped.",
+            diagnostics="\x00" * 130000 + "x" * 130000,
+        ),
+        accepted_error="\x00" * MAX_LOG_BYTES,
+    )
+    assert draft.report.problems() == {}
+    assert len(draft.report.payload()) < MAX_PAYLOAD_BYTES
+    assert len(draft.model_dump_json().encode()) > 2 * 1024 * 1024
+    store = DraftStore(tmp_path)
+    store.save(draft)
+    restored = store.load_latest()
+    assert restored is not None
+    assert restored.report == draft.report and restored.accepted_error == draft.accepted_error
+
+
+def test_error_context_combines_with_session_logs_without_losing_either():
+    text = diagnostics.combine_diagnostics(
+        "Launch began\nRenderer ready\npassword=private-log-secret",
+        'Traceback:\nFile "C:\\Users\\private\\worker.py", line 8\nRuntimeError: failed',
+    )
+    assert "Launch began" in text and "Renderer ready" in text
+    assert "Traceback:" in text and "RuntimeError: failed" in text and "worker.py" in text
+    assert "private" not in text
+
+
+def test_large_error_and_logs_both_remain_represented_with_explicit_omission():
+    text = diagnostics.combine_diagnostics(
+        "Old log line\n" * 40000 + "LATEST SESSION EVENT",
+        "Old traceback line\n" * 40000 + "FINAL ERROR CAUSE",
+    )
+    assert len(text.encode()) <= MAX_LOG_BYTES
+    assert "LATEST SESSION EVENT" in text and "FINAL ERROR CAUSE" in text
+    assert "omitted" in text
+
+
+@pytest.mark.parametrize(
+    "error", ["Short error", "Traceback line\n" * 14000, "界" * 150000],
+    ids=["short", "large", "unicode"],
+)
+def test_combining_same_error_is_idempotent_and_preserves_available_context(error):
+    logs = "Retained session context"
+    combined = diagnostics.combine_diagnostics(logs, error)
+    assert diagnostics.combine_diagnostics(combined, error) == combined
+    assert logs in combined
+    if len((logs + error).encode()) < MAX_LOG_BYTES - 128:
+        assert error in combined
+
+
+def test_repeated_error_with_new_oversized_logs_keeps_traceback_and_latest_context():
+    error = "SENTINEL ERROR TRACEBACK"
+    merged = diagnostics.combine_diagnostics("Old session line\n" * 11000, error)
+    merged += "Fresh session line\n" * 11000 + "LATEST CONTEXT"
+    result = diagnostics.combine_diagnostics(merged, error)
+    assert len(result.encode()) <= MAX_LOG_BYTES
+    assert error in result and "LATEST CONTEXT" in result
+
+
+def test_active_session_collection_flushes_queue_and_excludes_newer_peer_logs(tmp_path):
+    session = DiagnosticLogging(tmp_path)
+    session.start()
+    try:
+        assert session.ready.wait(2)
+        folder = tmp_path / "logs"
+        prefix = f"session-{session.session_id}"
+        (folder / f"{prefix}.log.2").write_text("OLDEST SESSION EVENT\n", encoding="utf-8")
+        (folder / f"{prefix}.log.1").write_text("MIDDLE SESSION EVENT\n", encoding="utf-8")
+        (folder / f"{prefix}-native.log").write_text(
+            'File "C:\\Users\\private\\native.py", line 7\ntoken=private-native-secret\n',
+            encoding="utf-8",
+        )
+        peer = folder / ("session-" + "b" * 32 + ".log")
+        peer.write_text("ANOTHER PROCESS MUST NOT APPEAR", encoding="utf-8")
+        os.utime(peer, (2100000000, 2100000000))
+        session.logger.warning("JUST QUEUED CURRENT SESSION EVENT")
+        text = collect_diagnostics(tmp_path)
+        assert "Current Studio session" in text
+        assert text.index("OLDEST SESSION EVENT") < text.index("MIDDLE SESSION EVENT")
+        assert text.index("MIDDLE SESSION EVENT") < text.index("JUST QUEUED CURRENT SESSION EVENT")
+        assert "Native traceback" in text and "native.py" in text
+        assert "private" not in text and "ANOTHER PROCESS" not in text
+    finally:
+        session.close()
+
+
+def test_without_active_capture_collection_labels_only_latest_retained_session(tmp_path):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    old = folder / ("session-" + "a" * 32 + ".log")
+    latest = folder / ("session-" + "b" * 32 + ".log")
+    old.write_text("OLD SESSION MUST NOT APPEAR", encoding="utf-8")
+    latest.write_text("LATEST RETAINED SESSION", encoding="utf-8")
+    os.utime(old, (1000000000, 1000000000))
+    os.utime(latest, (1100000000, 1100000000))
+    text = collect_diagnostics(tmp_path)
+    assert "Latest retained Studio session" in text
+    assert "LATEST RETAINED SESSION" in text and "OLD SESSION" not in text
+
+
+def test_collection_retains_both_log_kinds_when_large_and_discards_partial_secret_line(tmp_path):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    prefix = "session-" + "a" * 32
+    (folder / f"{prefix}.log").write_text(
+        "password=" + "PRIVATE" * MAX_LOG_BYTES + "\nLATEST ORDINARY EVENT\n", encoding="utf-8",
+    )
+    (folder / f"{prefix}-native.log").write_text(
+        "Earlier native frame\n" * 10000 + "LATEST NATIVE FRAME\n", encoding="utf-8",
+    )
+    text = collect_diagnostics(tmp_path)
+    assert len(text.encode()) <= MAX_LOG_BYTES
+    assert "LATEST ORDINARY EVENT" in text and "LATEST NATIVE FRAME" in text
+    assert "omitted" in text and "PRIVATE" not in text
+
+
+def test_collection_warns_when_queued_records_are_not_ready(tmp_path, monkeypatch):
+    session = DiagnosticLogging(tmp_path)
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    (folder / f"session-{session.session_id}.log").write_text("Retained event\n", encoding="utf-8")
+    monkeypatch.setattr(session, "flush", lambda: False)
+    monkeypatch.setattr(diagnostics, "_active_logging", session)
+    text = collect_diagnostics(tmp_path)
+    assert "Retained event" in text
+    assert "queued application messages were not ready" in text
+
+
+def test_collection_does_not_read_a_file_replaced_after_owned_metadata_check(tmp_path, monkeypatch):
+    folder = tmp_path / "logs"
+    folder.mkdir()
+    log = folder / ("session-" + "a" * 32 + ".log")
+    log.write_text("Original log", encoding="utf-8")
+    outside = tmp_path / "user-owned.txt"
+    outside.write_text("OUTSIDE CONTENT MUST NOT APPEAR", encoding="utf-8")
+    original = Path.open
+
+    def redirected(path, *args, **kwargs):
+        return original(outside if path == storage.filesystem_path(log) else path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", redirected)
+    assert "OUTSIDE CONTENT" not in collect_diagnostics(tmp_path)
+
+
 def test_redaction_preserves_trace_module_but_removes_common_private_values():
     source = (
         'File "C:\\Users\\Researcher\\secret-project\\worker.py", line 8\n'
@@ -243,6 +425,13 @@ def test_redaction_preserves_trace_module_but_removes_common_private_values():
         "/home/alice",
     ):
         assert secret not in safe
+
+
+def test_home_path_redaction_hides_private_tail_but_keeps_traceback_module():
+    private_path = Path.home() / "PRIVATE_PROJECT_FOLDER" / "private_file.csv"
+    safe = redact(f'Cannot write {private_path}\nFile "{private_path}", line 8')
+    assert "PRIVATE_PROJECT_FOLDER" not in safe
+    assert 'File "<path>/private_file.csv", line 8' in safe
 
 
 @pytest.mark.parametrize(
@@ -353,7 +542,7 @@ def test_collection_keeps_healthy_logs_when_peer_disappears_before_open(tmp_path
     folder = tmp_path / "logs"
     folder.mkdir()
     healthy = folder / ("session-" + "a" * 32 + ".log")
-    vanished = folder / ("session-" + "b" * 32 + ".log")
+    vanished = folder / ("session-" + "a" * 32 + ".log.1")
     healthy.write_text("Healthy diagnostic", encoding="utf-8")
     vanished.write_text("Vanished diagnostic", encoding="utf-8")
     original = Path.open

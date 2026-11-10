@@ -249,7 +249,112 @@ def test_repeat_open_preserves_draft_and_new_error_requires_action(reporter):
     assert dialog.diagnostics_edit.toPlainText() == "Reviewed logs"
     dialog.use_pending_error()
     assert dialog.happened_edit.toPlainText() == "My carefully written report"
-    assert dialog.diagnostics_edit.toPlainText() == "New traceback"
+    assert "Reviewed logs" in dialog.diagnostics_edit.toPlainText()
+    assert "New traceback" in dialog.diagnostics_edit.toPlainText()
+
+
+def test_error_report_keeps_collected_session_context(qtbot, qapp, tmp_path, monkeypatch):
+    logs = (
+        "FIRST SESSION ENTRY\n" + "Rendering and input diagnostic\n" * 3000 + "LAST SESSION ENTRY"
+    )
+    monkeypatch.setattr(module, "update_lifecycle", lambda _app: FakeLifecycle())
+    monkeypatch.setattr(module, "collect_diagnostics", lambda _root: logs)
+    controller = module.BugReportController(qapp, root=tmp_path, client=ReportClient())
+    controller.show("Launch Error", "Complete traceback\nLAST ERROR FRAME", "The session failed.")
+    qtbot.addWidget(controller.dialog)
+    controller._job.complete()
+    dialog = controller.dialog
+    text = dialog.diagnostics_edit.toPlainText()
+    assert logs in text
+    assert "Complete traceback\nLAST ERROR FRAME" in text
+    dialog.use_pending_error()
+    assert dialog.diagnostics_edit.toPlainText() == text
+    dialog.include_logs.setChecked(False)
+    assert json.loads(dialog.snapshot().report.payload(include_logs=False))["diagnostics"] == ""
+    controller._dirty = False
+    controller._autosave.stop()
+    dialog.close()
+    controller.deleteLater()
+
+
+def test_refresh_keeps_accepted_error_without_accepting_pending_error(reporter, monkeypatch):
+    dialog = reporter.dialog
+    reporter.show("Launch Error", "Accepted traceback")
+    dialog.use_pending_error()
+    reporter.show("Other error", "Unaccepted traceback")
+    monkeypatch.setattr(module, "collect_diagnostics", lambda _root: "Complete refreshed session")
+    reporter._action("refresh")
+    reporter._job.complete()
+    text = dialog.diagnostics_edit.toPlainText()
+    assert "Complete refreshed session" in text
+    assert "Accepted traceback" in text
+    assert "Unaccepted traceback" not in text
+
+
+def test_accepting_new_error_collects_current_logs_for_existing_draft(reporter, monkeypatch):
+    dialog = reporter.dialog
+    dialog.diagnostics_edit.setPlainText("Previously reviewed context")
+    dialog.happened_edit.setPlainText("Keep my explanation")
+    monkeypatch.setattr(
+        module, "collect_diagnostics", lambda _root: "Current session before failure",
+    )
+    reporter.show("New Error", "New complete traceback")
+    dialog.context_button.click()
+    assert dialog.diagnostics_edit.isReadOnly()
+    reporter._job.complete()
+    text = dialog.diagnostics_edit.toPlainText()
+    assert "Previously reviewed context" in text
+    assert "Current session before failure" in text
+    assert "New complete traceback" in text
+    assert dialog.happened_edit.toPlainText() == "Keep my explanation"
+    assert not dialog.diagnostics_edit.isReadOnly()
+
+
+def test_refresh_after_draft_reload_preserves_accepted_error(reporter, monkeypatch):
+    dialog = reporter.dialog
+    reporter.show("Launch Error", "Saved complete traceback")
+    dialog.use_pending_error()
+    saved = dialog.snapshot()
+    reporter.store().save(saved)
+    dialog.set_draft(reporter.store().load_latest())
+    monkeypatch.setattr(module, "collect_diagnostics", lambda _root: "New current session logs")
+    reporter._action("refresh")
+    reporter._job.complete()
+    assert "Saved complete traceback" in dialog.diagnostics_edit.toPlainText()
+    assert "New current session logs" in dialog.diagnostics_edit.toPlainText()
+
+
+def test_error_arriving_during_collection_does_not_replace_selected_error(reporter, monkeypatch):
+    dialog = reporter.dialog
+    monkeypatch.setattr(module, "collect_diagnostics", lambda _root: "Current session logs")
+    reporter.show("First Error", "First chosen traceback", "First description")
+    dialog.context_button.click()
+    reporter.show("Later Error", "Later unchosen traceback", "Later description")
+    reporter._job.complete()
+    text = dialog.diagnostics_edit.toPlainText()
+    assert "First chosen traceback" in text
+    assert "Later unchosen traceback" not in text
+    assert dialog.happened_edit.toPlainText() == "First description"
+    assert dialog.context_button.isVisible()
+    dialog.context_button.click()
+    reporter._job.complete()
+    assert "Later unchosen traceback" in dialog.diagnostics_edit.toPlainText()
+    assert not dialog.context_button.isVisible()
+
+
+@pytest.mark.parametrize("action", ["new", "discard"])
+def test_new_bug_draft_collects_current_session_logs(reporter, monkeypatch, action):
+    dialog = reporter.dialog
+    previous = dialog.snapshot()
+    if action == "new":
+        previous.delivery = "submitted"
+        dialog.set_delivery(previous)
+    monkeypatch.setattr(module, "collect_diagnostics", lambda _root: "New draft session logs")
+    reporter._action(action)
+    reporter._job.complete()
+    assert dialog.snapshot().report.report_id != previous.report.report_id
+    assert dialog.diagnostics_edit.toPlainText() == "New draft session logs"
+    assert dialog.snapshot().accepted_error == ""
 
 
 def test_error_prefill_is_submittable_without_reproduction_note(qtbot):
