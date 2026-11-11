@@ -27,7 +27,7 @@ use document headings or `rg -n '^#{1,3} ' <document>` to choose the contract se
 | `updates` | Source/platform routing, updater protocol, cache, downloads and install handoff | `src/fpvs_studio/updates/AGENTS.md` | `docs/PACKAGING.md#in-app-update-flow` |
 | `library` | Catalog, enrollment, submissions and project updates | `src/fpvs_studio/library/AGENTS.md` | Relevant `docs/EXPERIMENT_LIBRARY.md` section |
 | `data-sharing` | Consent, outbox, delivery and comparisons | `src/fpvs_studio/data_sharing/AGENTS.md` | Relevant `docs/DATA_SHARING.md` section |
-| `packaging` | Versions, builds, installers, patches and smoke | `packaging/AGENTS.md` | Relevant `docs/PACKAGING.md` section |
+| `packaging` | Versions, builds, DLL origins, installers, patches and smoke | `packaging/AGENTS.md` | Relevant `docs/PACKAGING.md` section |
 
 Publishing also requires `src/fpvs_studio/developer/AGENTS.md`. For backend changes,
 follow the owning sibling repository's guidance instead of loading desktop contracts.

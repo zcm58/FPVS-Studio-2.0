@@ -8,9 +8,10 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "script_helpers.ps1")
 . (Join-Path $PSScriptRoot "build_paths.ps1")
+. (Join-Path $PSScriptRoot "build_environment.ps1")
 $BuildPaths = Get-PackagingBuildPaths -RepoRoot $RepoRoot -BuildLabel $BuildLabel
 $Python = Resolve-RepoPython -RepoRoot $RepoRoot
-$UpdaterWorkRoot = Join-Path (Split-Path -Parent $BuildPaths.WorkRoot) "pyinstaller-updater"
+$UpdaterWorkRoot = $BuildPaths.UpdaterWorkRoot
 $UpdaterRoot = Join-Path $BuildPaths.BundleRoot "Updater"
 $null = Assert-PackagingOutputPath -RepoRoot $RepoRoot -TargetPath $UpdaterWorkRoot
 $null = Assert-PackagingOutputPath -RepoRoot $RepoRoot -TargetPath $UpdaterRoot
@@ -36,8 +37,8 @@ try {
 
     Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $UpdaterWorkRoot
     Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $UpdaterRoot
-    Invoke-NativeChecked -File $Python -Arguments @(
-        "-m", "PyInstaller", "--noconfirm", "--clean",
+    Invoke-PackagingPyInstaller -Python $Python -Arguments @(
+        "--noconfirm", "--clean",
         "--workpath", $UpdaterWorkRoot,
         "--distpath", $UpdaterRoot,
         "packaging\pyinstaller\fpvs_updater.spec"
@@ -45,6 +46,12 @@ try {
     $updaterExe = Join-Path $UpdaterRoot "FPVS Studio Updater.exe"
     if (-not (Test-Path -LiteralPath $updaterExe -PathType Leaf)) {
         throw "Expected updater executable was not created: $updaterExe"
+    }
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        Invoke-NativeChecked -File $Python -Arguments @(
+            (Join-Path $PSScriptRoot "check_build_dll_origins.py"),
+            "--updater-toc", $BuildPaths.UpdaterDllToc
+        )
     }
 
     # This diagnostic loads only the updater backend: no Qt window, network,

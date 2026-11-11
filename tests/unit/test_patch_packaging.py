@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 SCRIPTS = Path(__file__).resolve().parents[2] / "scripts"
-for name in ("build_installer_inventory", "build_patch"):
+for name in ("build_installer_inventory", "build_patch", "check_build_dll_origins"):
     spec = importlib.util.spec_from_file_location(name, SCRIPTS / f"{name}.py")
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -22,6 +22,7 @@ for name in ("build_installer_inventory", "build_patch"):
     spec.loader.exec_module(module)
 patch = sys.modules["build_patch"]
 inventory = sys.modules["build_installer_inventory"]
+origins = sys.modules["check_build_dll_origins"]
 
 
 def _write_tree(root: Path, files: dict[str, bytes]) -> None:
@@ -187,13 +188,9 @@ def test_linked_baseline_refused(inputs: dict, tmp_path: Path) -> None:
         patch.prepare_patch(**inputs)
 
 
-def test_junction_target_subdirectory_refused(inputs: dict, tmp_path: Path) -> None:
+def _make_junction(junction: Path, outside: Path) -> None:
     if os.name != "nt":
         pytest.skip("Native Windows junction fixture")
-    outside = tmp_path / "outside"
-    outside.mkdir()
-    (outside / "sentinel").write_bytes(b"preserve")
-    junction = inputs["bundle_root"] / "linked"
     environment = dict(os.environ, PATCH_LINK=str(junction), PATCH_TARGET=str(outside))
     completed = subprocess.run(
         [
@@ -207,6 +204,14 @@ def test_junction_target_subdirectory_refused(inputs: dict, tmp_path: Path) -> N
         timeout=15,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_junction_target_subdirectory_refused(inputs: dict, tmp_path: Path) -> None:
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / "sentinel").write_bytes(b"preserve")
+    junction = inputs["bundle_root"] / "linked"
+    _make_junction(junction, outside)
     try:
         with pytest.raises(inventory.InventoryError, match="unsafe directory"):
             patch.prepare_patch(**inputs)
@@ -243,6 +248,127 @@ def test_release_manifest_binds_actual_installer_bytes(inputs: dict, tmp_path: P
     assert manifest.with_suffix(".json.sha256").read_text().startswith(
         inventory.sha256_file(manifest)
     )
+
+
+def _write_build_toc(
+    path: Path, kind: str, rows: list[tuple[str, str, str]],
+) -> None:
+    document = (rows,) if kind == "studio" else (
+        "FPVS Studio Updater.pkg", {"BINARY": True}, rows, "python310.dll", False,
+        False, False, [], None, None, None,
+    )
+    path.write_text(repr(document), encoding="utf-8")
+
+
+@pytest.mark.parametrize("kind", ["studio", "updater"])
+def test_dll_origin_audit_accepts_native_files_from_both_python_roots(
+    tmp_path: Path, kind: str,
+) -> None:
+    environment = tmp_path / "venv"
+    base = tmp_path / "python"
+    _write_tree(environment, {"Lib/module.pyd": b"extension"})
+    _write_tree(base, {"DLLs/runtime.dll": b"runtime"})
+    toc = tmp_path / "build.toc"
+    _write_build_toc(toc, kind, [
+        ("module.pyd", str(environment / "Lib/module.pyd"), "EXTENSION"),
+        ("runtime.dll", str(base / "DLLs/runtime.dll"), "BINARY"),
+    ])
+    audit = origins.audit_toc(toc, kind, (environment.resolve(), base.resolve()))
+    assert audit.native_files == 2
+    assert audit.sha256 == hashlib.sha256(toc.read_bytes()).hexdigest()
+
+
+@pytest.mark.parametrize("kind", ["studio", "updater"])
+def test_dll_origin_audit_rejects_external_dlls_even_as_data(
+    tmp_path: Path, kind: str,
+) -> None:
+    environment = tmp_path / "venv"
+    foreign = tmp_path / "venv-other"
+    _write_tree(environment, {"runtime.dll": b"trusted"})
+    _write_tree(foreign, {"runtime.dll": b"foreign"})
+    toc = tmp_path / "build.toc"
+    _write_build_toc(toc, kind, [
+        ("runtime.dll", str(environment / "runtime.dll"), "BINARY"),
+        ("foreign.dll", str(foreign / "runtime.dll"), "DATA"),
+    ])
+    with pytest.raises(origins.NativeOriginError, match="outside approved Python paths"):
+        origins.audit_toc(toc, kind, (environment.resolve(),))
+
+
+def test_dll_origin_audit_resolves_junction_before_checking_containment(tmp_path: Path) -> None:
+    environment = tmp_path / "venv"
+    outside = tmp_path / "outside"
+    environment.mkdir()
+    _write_tree(outside, {"runtime.dll": b"foreign"})
+    link = environment / "linked"
+    _make_junction(link, outside)
+    try:
+        toc = tmp_path / "build.toc"
+        _write_build_toc(toc, "studio", [("runtime.dll", str(link / "runtime.dll"), "BINARY")])
+        with pytest.raises(origins.NativeOriginError, match="outside approved Python paths"):
+            origins.audit_toc(toc, "studio", (environment.resolve(),))
+    finally:
+        os.rmdir(link)
+
+
+@pytest.mark.parametrize(
+    ("contents", "message"),
+    [
+        ("__import__('os').getcwd()", "Malformed PyInstaller TOC"),
+        ("([], [], [])", "Unexpected studio PyInstaller TOC format"),
+        ("([('bad', 'row')],)", "Malformed PyInstaller TOC row"),
+        ("([],)", "No native files were found"),
+        ("([('a.dll', 'relative.dll', 'BINARY')],)", "Native source is not absolute"),
+    ],
+)
+def test_dll_origin_audit_fails_closed_on_bad_toc(
+    tmp_path: Path, contents: str, message: str,
+) -> None:
+    toc = tmp_path / "build.toc"
+    toc.write_text(contents, encoding="utf-8")
+    with pytest.raises(origins.NativeOriginError, match=message):
+        origins.audit_toc(toc, "studio", (tmp_path.resolve(),))
+
+
+def test_dll_origin_audit_refuses_missing_toc(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        origins.audit_toc(tmp_path / "missing.toc", "studio", (tmp_path.resolve(),))
+
+
+@pytest.mark.parametrize("change", ["asset", "extra", "missing", "toc", "receipt", "absent"])
+def test_installer_build_receipt_detects_changed_evidence(tmp_path: Path, change: str) -> None:
+    full = "FPVS-Studio-Setup-2.8.1.exe"
+    manifest = "FPVS-Studio-Update-2.8.1.json"
+    sparse = "FPVS-Studio-Patch-2.8.0-to-2.8.1.exe"
+    installer = tmp_path / "installer"
+    _write_tree(installer, {
+        name: name.encode()
+        for artifact in (full, manifest, sparse)
+        for name in (artifact, f"{artifact}.sha256")
+    })
+    studio = origins.TocAudit(2, "1" * 64)
+    updater = origins.TocAudit(2, "2" * 64)
+    receipt = tmp_path / "receipt.json"
+    origins.check_receipt(receipt, installer, studio, updater, write=True)
+    origins.check_receipt(receipt, installer, studio, updater, write=False)
+    assert set(json.loads(receipt.read_bytes())["assets"]) == {
+        full, f"{full}.sha256", manifest, f"{manifest}.sha256", sparse, f"{sparse}.sha256",
+    }
+    if change == "asset":
+        # Same-size content changes must also fail verification.
+        (installer / full).write_bytes(b"x" * len(full))
+    elif change == "extra":
+        (installer / "unexpected.exe.sha256").write_bytes(b"unexpected")
+    elif change == "missing":
+        (installer / f"{sparse}.sha256").unlink()
+    elif change == "toc":
+        updater = origins.TocAudit(2, "3" * 64)
+    elif change == "receipt":
+        receipt.write_bytes(b"invalid JSON")
+    else:
+        receipt.unlink()
+    with pytest.raises((FileNotFoundError, origins.NativeOriginError)):
+        origins.check_receipt(receipt, installer, studio, updater, write=False)
 
 
 def test_native_patch_recovery_and_commit_guards_are_present() -> None:

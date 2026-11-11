@@ -42,7 +42,9 @@ Core owns randomized block membership and occurrence identity; see the
 `src/fpvs_studio/updater_main.py` is the separate updater entry. Its windows live in
 GUI; it excludes experiment runtime/engine dependencies. `packaging/` owns
 PyInstaller/Inno builds, release assets, installed-file reconciliation and patch
-application. `tests/` contains unit/integration and registered Qt coverage.
+application. The Windows build scripts own the PyInstaller environment and
+[pre-upload DLL origin verification](docs/PACKAGING.md#direct-patch-releases).
+`tests/` contains unit/integration and registered Qt coverage.
 
 External ownership: private sibling `../OpenFPVS` owns the OpenFPVS website, Library
 service and Results backend. Private `zcm58/FPVS-Studio-Feedback` owns report intake

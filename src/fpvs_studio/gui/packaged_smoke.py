@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from collections.abc import Callable
 from dataclasses import replace
 from importlib import import_module
 from pathlib import Path
@@ -159,6 +160,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         pilot.setChecked(True)
         pilot.setChecked(False)
     pilot_mode_toggle_ok = pilot_toggled == [True, False]
+    settings_layout = _settings_layout_report(app, settings, smoke_root)
     settings.close()
     app.processEvents()
     online_workflows = _online_workflow_report(app, smoke_root)
@@ -180,6 +182,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
             and pilot_mode_visible
             and pilot_mode_fits
             and pilot_mode_toggle_ok
+            and settings_layout["ok"]
             and online_workflows["ok"]
         ),
         "app_version": __version__,
@@ -197,6 +200,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         "pilot_mode_visible": pilot_mode_visible,
         "pilot_mode_fits": pilot_mode_fits,
         "pilot_mode_toggle_ok": pilot_mode_toggle_ok,
+        "settings_layout": settings_layout,
         "psychopy_user_dirs": psychopy_user_dirs,
         "frozen": True,
         "qt_settings_paths": qt_settings_paths,
@@ -223,11 +227,177 @@ def _isolate_qt_settings(smoke_root: Path) -> dict[str, str]:
     return paths
 
 
+def _visible_layout_issues(dialog: Any) -> list[str]:
+    """Check the same widget, text and contrast bounds across packaged dialogs."""
+    from PySide6.QtGui import QPalette
+    from PySide6.QtWidgets import QAbstractButton, QLabel, QWidget
+
+    from fpvs_studio.gui.design_system import contrast_ratio, resolve_studio_theme
+
+    issues = []
+    theme = resolve_studio_theme(dialog.palette())
+    for child in dialog.findChildren(QWidget):
+        parent = child.parentWidget()
+        if parent is None or not child.isVisible():
+            continue
+        bounds = child.geometry()
+        name = child.objectName() or type(child).__name__
+        if (bounds.left() < -1 or bounds.top() < -1
+                or bounds.right() > parent.width() + 1
+                or bounds.bottom() > parent.height() + 1):
+            issues.append(f"{name} exceeds its parent: {bounds.getRect()}")
+        if isinstance(child, QAbstractButton) and child.text():
+            if child.width() < child.fontMetrics().horizontalAdvance(child.text()):
+                issues.append(f"{name} truncates button text")
+        if isinstance(child, QLabel) and child.text():
+            foreground = child.palette().color(QPalette.ColorRole.WindowText).name()
+            if contrast_ratio(foreground, theme.page_background) < 4.5:
+                issues.append(f"{name} has insufficient label contrast: {foreground}")
+            needed = child.heightForWidth(child.width()) if child.wordWrap() else 0
+            if needed > child.height():
+                issues.append(f"{name} clips wrapped label text")
+    return issues
+
+
+def _wait_for_verification_state(condition: Callable[[], bool]) -> bool:
+    """Allow bounded native event delivery during an approved GUI smoke check."""
+    from PySide6.QtCore import QEventLoop, QTimer
+
+    if condition():
+        return True
+    loop = QEventLoop()
+    poll = QTimer(loop)
+    deadline = QTimer(loop)
+    deadline.setSingleShot(True)
+
+    def check() -> None:
+        if condition():
+            loop.quit()
+
+    poll.timeout.connect(check)
+    deadline.timeout.connect(loop.quit)
+    poll.start(10)
+    deadline.start(1000)
+    loop.exec()
+    poll.stop()
+    deadline.stop()
+    return condition()
+
+
+def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[str, Any]:
+    """Exercise compiled Settings pages and native wheel scrolling with isolated data."""
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QApplication, QDialogButtonBox
+
+    categories = ["General", "Recording", "Appearance", "Workspace", "Advanced", "Diagnostics"]
+    actual_categories = [settings.navigation.item(index).text()
+                         for index in range(settings.navigation.count())]
+    screenshots = smoke_root / "settings-layout"
+    screenshots.mkdir(parents=True, exist_ok=True)
+    pages = []
+    scrolling = []
+    original_status = settings.crash_reports_status.text()
+    original_palette = app.palette()
+    try:
+        for theme, dark in (("light", False), ("dark", True)):
+            app.setPalette(_verification_palette(dark=dark))
+            for size in ((860, 560), (1000, 680)):
+                settings.resize(*size)
+                for index, category in enumerate(actual_categories):
+                    settings.navigation.setCurrentRow(index)
+                    app.processEvents()
+                    page = settings.pages.currentWidget()
+                    checks = {
+                        "size_matches": settings.size().toTuple() == size,
+                        "selected_page_matches": settings.pages.currentIndex() == index,
+                        "heading_matches": settings.page_title.text() == category,
+                        "page_visible": page.isVisible(),
+                        "no_horizontal_scroll": page.horizontalScrollBar().maximum() == 0,
+                    }
+                    issues = _visible_layout_issues(settings)
+                    screenshot = screenshots / f"{theme}-{category.lower()}-{size[0]}x{size[1]}.png"
+                    saved = settings.grab().save(str(screenshot))
+                    pages.append({
+                        "category": category, "theme": theme, "size": list(size),
+                        "checks": checks, "layout_issues": issues, "screenshot": str(screenshot),
+                        "ok": saved and not issues and all(checks.values()),
+                    })
+
+            settings.resize(860, 560)
+            settings.navigation.setCurrentRow(categories.index("Diagnostics"))
+            settings.crash_reports_status.setText("\n".join(
+                f"Attempt {index}: The report is waiting for a connection and will be retried."
+                for index in range(1, 31)
+            ))
+            app.processEvents()
+            page = settings.pages.currentWidget()
+            viewport = page.viewport()
+            scrollbar = page.verticalScrollBar()
+            overflow_ready = _wait_for_verification_state(
+                lambda target=scrollbar: target.maximum() > 0,
+            )
+            scrollbar.setValue(0)
+            sidebar = settings.navigation.parentWidget()
+            close_button = settings.button_box.button(QDialogButtonBox.StandardButton.Close)
+            fixed_widgets = (sidebar, settings.navigation, settings.page_title, close_button)
+            fixed_geometry = [widget.geometry() for widget in fixed_widgets]
+            position = viewport.rect().center()
+            wheel = QWheelEvent(
+                QPointF(position), QPointF(viewport.mapToGlobal(position)),
+                QPoint(), QPoint(0, -120),
+                Qt.MouseButton.NoButton, Qt.KeyboardModifier.NoModifier,
+                Qt.ScrollPhase.NoScrollPhase, False,
+            )
+            QApplication.sendEvent(viewport, wheel)
+            wheel_moved = _wait_for_verification_state(
+                lambda target=scrollbar: target.value() > 0,
+            )
+            scrollbar.setValue(scrollbar.maximum())
+            app.processEvents()
+            bottom = settings.crash_reports_status.mapTo(
+                viewport, settings.crash_reports_status.rect().bottomRight(),
+            )
+            checks = {
+                "vertical_overflow": overflow_ready,
+                "no_horizontal_scroll": page.horizontalScrollBar().maximum() == 0,
+                "wheel_moved": wheel_moved,
+                "last_content_visible": 0 <= bottom.y() < viewport.height(),
+                "navigation_and_close_fixed": [widget.geometry() for widget in fixed_widgets]
+                == fixed_geometry,
+                "fixed_controls_reachable": all(
+                    widget.isVisible()
+                    and settings.rect().contains(widget.mapTo(settings, widget.rect().topLeft()))
+                    and settings.rect().contains(
+                        widget.mapTo(settings, widget.rect().bottomRight()),
+                    )
+                    for widget in fixed_widgets
+                ),
+            }
+            settings.navigation.setCurrentRow(categories.index("General"))
+            settings.navigation.setCurrentRow(categories.index("Diagnostics"))
+            app.processEvents()
+            checks["scroll_position_retained"] = scrollbar.value() == scrollbar.maximum()
+            screenshot = screenshots / f"{theme}-diagnostics-scrolled-860x560.png"
+            saved = settings.grab().save(str(screenshot))
+            scrolling.append({"theme": theme, "checks": checks, "screenshot": str(screenshot),
+                              "ok": saved and all(checks.values())})
+            settings.crash_reports_status.setText(original_status)
+            app.processEvents()
+    finally:
+        app.setPalette(original_palette)
+        app.processEvents()
+    return {
+        "ok": actual_categories == categories and all(page["ok"] for page in pages)
+        and all(report["ok"] for report in scrolling),
+        "categories": actual_categories, "pages": pages, "scrolling": scrolling,
+    }
+
+
 def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
     """Render synthetic dialog states without a controller, credentials or HTTP."""
     from PySide6.QtCore import Qt, QTimer
-    from PySide6.QtGui import QPalette
-    from PySide6.QtWidgets import QAbstractButton, QDialog, QLabel, QMessageBox, QWidget
+    from PySide6.QtWidgets import QDialog, QMessageBox
 
     from fpvs_studio.core.data_sharing import SharingStudyChoice
     from fpvs_studio.core.library_origin import LibraryProjectOrigin
@@ -235,8 +405,6 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
     from fpvs_studio.gui.design_system import (
         DARK_STUDIO_THEME,
         LIGHT_STUDIO_THEME,
-        contrast_ratio,
-        resolve_studio_theme,
     )
     from fpvs_studio.gui.library_dialog import LibraryDialog
     from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
@@ -251,30 +419,9 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
         dialog.resize(*size)
         dialog.show()
         app.processEvents()
-        issues = []
-        theme = resolve_studio_theme(dialog.palette())
+        issues = _visible_layout_issues(dialog)
         if dialog.size().toTuple() != size:
             issues.append(f"Requested {size}; rendered {dialog.size().toTuple()}")
-        for child in dialog.findChildren(QWidget):
-            parent = child.parentWidget()
-            if parent is None or not child.isVisible():
-                continue
-            bounds = child.geometry()
-            name = child.objectName() or type(child).__name__
-            if (bounds.left() < -1 or bounds.top() < -1
-                    or bounds.right() > parent.width() + 1
-                    or bounds.bottom() > parent.height() + 1):
-                issues.append(f"{name} exceeds its parent: {bounds.getRect()}")
-            if isinstance(child, QAbstractButton) and child.text():
-                if child.width() < child.fontMetrics().horizontalAdvance(child.text()):
-                    issues.append(f"{name} truncates button text")
-            if isinstance(child, QLabel) and child.text():
-                foreground = child.palette().color(QPalette.ColorRole.WindowText).name()
-                if contrast_ratio(foreground, theme.page_background) < 4.5:
-                    issues.append(f"{name} has insufficient label contrast: {foreground}")
-                needed = child.heightForWidth(child.width()) if child.wordWrap() else 0
-                if needed > child.height():
-                    issues.append(f"{name} clips wrapped label text")
         screenshot = screenshots / f"{dialog.objectName()}-{state}-{size[0]}x{size[1]}.png"
         saved = dialog.grab().save(str(screenshot))
         reports.append({

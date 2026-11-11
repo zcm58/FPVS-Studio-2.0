@@ -24,6 +24,11 @@ $BuildUpdaterScript = Join-Path $PSScriptRoot "build_updater.ps1"
 $InventoryScript = Join-Path $PSScriptRoot "build_installer_inventory.py"
 $LegacyInventoryPath = Join-Path $RepoRoot "packaging\inventory\published-legacy-inventory.json"
 $InventoryOutputDir = $BuildPaths.InventoryRoot
+$DllAuditArguments = @(
+    (Join-Path $PSScriptRoot "check_build_dll_origins.py"),
+    "--studio-toc", $BuildPaths.StudioDllToc,
+    "--updater-toc", $BuildPaths.UpdaterDllToc
+)
 
 function Invoke-Native {
     param(
@@ -144,12 +149,18 @@ try {
     if (-not (Test-Path -LiteralPath $SpecPath)) {
         throw "Inno Setup script was not found: $SpecPath"
     }
+    if (Test-Path -LiteralPath $BuildPaths.DllAuditReceipt -PathType Leaf) {
+        Remove-Item -LiteralPath $BuildPaths.DllAuditReceipt -Force
+    }
     Assert-BundleInput
     Write-Output "Building the independent FPVS Studio updater before final bundle inventory..."
     & $BuildUpdaterScript -BuildLabel $BuildLabel -AllowVisibleGui:$AllowVisibleGui
     if ($LASTEXITCODE -ne 0) {
         throw "Command failed with exit code ${LASTEXITCODE}: $BuildUpdaterScript"
     }
+    Invoke-Native -File $Python -Arguments $DllAuditArguments
+    $dllTocPaths = @($BuildPaths.StudioDllToc, $BuildPaths.UpdaterDllToc)
+    $auditedTocHashes = @(Get-FileHash -LiteralPath $dllTocPaths -Algorithm SHA256)
     if (-not $SkipSmoke) {
         Write-Output "Running packaged app smoke check before installer build..."
         Invoke-PackagedSmoke
@@ -220,6 +231,14 @@ try {
         $manifestArguments += @("--patch-build", $patchBuild)
     }
     Invoke-Native -File $Python -Arguments $manifestArguments
+    $finalTocHashes = @(Get-FileHash -LiteralPath $dllTocPaths -Algorithm SHA256)
+    if (Compare-Object $auditedTocHashes $finalTocHashes -Property Path,Hash) {
+        throw "PyInstaller native origin tables changed during installer compilation. Rebuild the installer."
+    }
+    Invoke-Native -File $Python -Arguments ($DllAuditArguments + @(
+        "--installer-dir", $InstallerOutputDir,
+        "--write-receipt", $BuildPaths.DllAuditReceipt
+    ))
 
     Write-Output ""
     Write-Output "FPVS Studio installer built successfully:"

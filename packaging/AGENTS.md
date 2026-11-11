@@ -19,6 +19,10 @@ settings, templates, or runtime/session contracts.
   baseline inventories and the complete target bundle. Use the shared Inno script's
   patch mode; preserve the complete target ownership manifest and full installer.
 - Keep build outputs under ignored `build/` and `dist/` paths.
+- Keep the restricted PyInstaller process PATH and audit both native origin
+  tables before installer compilation. Run the
+  [pre-upload check](../docs/PACKAGING.md#direct-patch-releases) on the exact
+  build label selected for release.
 - Keep packaging dependencies in the `packaging` optional dependency group.
 - Keep app-version changes centralized in `pyproject.toml`; `src/fpvs_studio/__init__.py`
   must read `__version__` from source-tree `pyproject.toml` when present and fall back

@@ -10,7 +10,9 @@ function Assert-PackagingBuildLabel {
         throw "BuildLabel must be 1-64 ASCII letters/digits, dots, underscores or hyphens; start with a letter/digit and do not end with a dot."
     }
     if ($BuildLabel -match '\A(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|\z)' -or
-        $BuildLabel -in @("build", "dist", "pyinstaller", "installer", "installer-inventory")) {
+        $BuildLabel -in @(
+            "build", "dist", "pyinstaller", "pyinstaller-updater", "installer", "installer-inventory"
+        )) {
         throw "BuildLabel is a reserved Windows or packaging-output name: $BuildLabel"
     }
 }
@@ -75,12 +77,18 @@ function Get-PackagingBuildPaths {
     }
     $paths = [pscustomobject]@{
         WorkRoot = Join-Path $buildRoot "pyinstaller"
+        UpdaterWorkRoot = Join-Path $buildRoot "pyinstaller-updater"
         DistRoot = $distRoot
         BundleRoot = Join-Path $distRoot "FPVS Studio"
         InstallerRoot = Join-Path $distRoot "installer"
         InventoryRoot = Join-Path $buildRoot "installer-inventory"
+        StudioDllToc = Join-Path $buildRoot "pyinstaller\fpvs_studio\COLLECT-00.toc"
+        UpdaterDllToc = Join-Path $buildRoot "pyinstaller-updater\fpvs_updater\PKG-00.toc"
+        DllAuditReceipt = Join-Path $buildRoot "installer-inventory\dll-origin-audit.json"
     }
-    foreach ($target in @($paths.WorkRoot, $paths.BundleRoot, $paths.InstallerRoot, $paths.InventoryRoot)) {
+    foreach ($target in @(
+        $paths.WorkRoot, $paths.UpdaterWorkRoot, $paths.BundleRoot, $paths.InstallerRoot, $paths.InventoryRoot
+    )) {
         $null = Assert-PackagingOutputPath -RepoRoot $RepoRoot -TargetPath $target
     }
     return $paths

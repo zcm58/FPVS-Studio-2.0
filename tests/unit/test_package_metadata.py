@@ -302,6 +302,19 @@ def test_build_exe_fails_on_stale_installed_package_metadata() -> None:
     assert "Package version drift before PyInstaller build" in BUILD_EXE_TEXT
 
 
+def test_windows_pyinstaller_stages_use_restricted_path_and_check_origins() -> None:
+    updater = (REPO_ROOT / "scripts" / "build_updater.ps1").read_text(encoding="utf-8")
+    for script, toc_argument in (
+        (BUILD_EXE_TEXT, '"--studio-toc", $BuildPaths.StudioDllToc'),
+        (updater, '"--updater-toc", $BuildPaths.UpdaterDllToc'),
+    ):
+        assert '. (Join-Path $PSScriptRoot "build_environment.ps1")' in script
+        assert script.index("Invoke-PackagingPyInstaller") < script.index(
+            '"check_build_dll_origins.py"'
+        ) < script.index(toc_argument)
+    assert updater.index('"--updater-toc"') < updater.index('"--packaging-check"')
+
+
 def test_installer_reconciles_exact_owned_files_only_after_success() -> None:
     assert "[InstallDelete]" not in INNO_SCRIPT_TEXT
     assert "UninstallLogMode=append" in INNO_SCRIPT_TEXT
@@ -478,7 +491,10 @@ def test_build_stages_share_safe_labeled_paths_before_resolving_python() -> None
         assert "[string]$BuildLabel" in script
         assert '. (Join-Path $PSScriptRoot "build_paths.ps1")' in script
         assert script.index("Get-PackagingBuildPaths") < script.index("Resolve-RepoPython")
-        assert "Remove-Item" not in script
+    assert "Remove-Item" not in BUILD_EXE_TEXT
+    assert "Remove-Item" not in BUILD_INSTALLER_TEXT.replace(
+        "Remove-Item -LiteralPath $BuildPaths.DllAuditReceipt -Force", "",
+    )
     assert '$bundleRoot = $BuildPaths.BundleRoot' in BUILD_EXE_TEXT
     assert '$exePath = Join-Path $BuildPaths.BundleRoot "FPVS Studio.exe"' in BUILD_EXE_TEXT
     assert re.search(r'"--workpath",\s+\$BuildPaths.WorkRoot', BUILD_EXE_TEXT)
@@ -496,6 +512,25 @@ def test_build_stages_share_safe_labeled_paths_before_resolving_python() -> None
     assert BUILD_PATHS_TEXT.index("Get-ChildItem -LiteralPath $directory") < (
         BUILD_PATHS_TEXT.index("Remove-Item -LiteralPath $target")
     )
+
+
+def test_installer_requires_native_audit_before_compilation_and_records_receipt() -> None:
+    script = BUILD_INSTALLER_TEXT
+    assert script.index("Remove-Item -LiteralPath $BuildPaths.DllAuditReceipt") < script.index(
+        "\n    Assert-BundleInput"
+    )
+    assert script.index("Invoke-Native -File $Python -Arguments $DllAuditArguments") < (
+        script.index("Invoke-Native -File $isccPath")
+    )
+    assert script.index("Invoke-Native -File $Python -Arguments $manifestArguments") < (
+        script.index('"--write-receipt", $BuildPaths.DllAuditReceipt')
+    )
+    check = (REPO_ROOT / "scripts" / "check_release_dll_origins.ps1").read_text(encoding="utf-8")
+    assert "Get-PackagingBuildPaths -RepoRoot $RepoRoot -BuildLabel $BuildLabel" in check
+    assert '"--studio-toc", $BuildPaths.StudioDllToc' in check
+    assert '"--updater-toc", $BuildPaths.UpdaterDllToc' in check
+    assert '"--installer-dir", $BuildPaths.InstallerRoot' in check
+    assert '"--verify-receipt", $BuildPaths.DllAuditReceipt' in check
 
 
 def _run_build_path_helper(root: Path, command: str, **variables: str) -> object:
@@ -530,6 +565,52 @@ def _run_build_path_helper(root: Path, command: str, **variables: str) -> object
     return json.loads(completed.stdout)
 
 
+def test_pyinstaller_path_is_restricted_and_restored(tmp_path: Path) -> None:
+    inherited = str(tmp_path / "unrelated DLLs")
+    command = """
+        . './scripts/script_helpers.ps1'
+        . './scripts/build_environment.ps1'
+        $env:Path = $env:FPVS_BUILD_TEST_PATH
+        function Invoke-NativeChecked {
+            param([string]$File, [string[]]$Arguments)
+            if ('--fail' -in $Arguments) { throw 'PyInstaller failed' }
+            [pscustomobject]@{ path = $env:Path; file = $File; arguments = $Arguments }
+        }
+        $python = $env:FPVS_BUILD_TEST_PYTHON
+        $during = Invoke-PackagingPyInstaller -Python $python -Arguments @('--clean')
+        $afterSuccess = $env:Path
+        $failure = $null
+        try {
+            Invoke-PackagingPyInstaller -Python $python -Arguments @('--fail')
+        } catch {
+            $failure = $_.Exception.Message
+        }
+        [pscustomobject]@{
+            during = $during
+            afterSuccess = $afterSuccess
+            afterFailure = $env:Path
+            failure = $failure
+        } | ConvertTo-Json -Depth 4 -Compress
+    """
+    actual = _run_build_path_helper(
+        tmp_path, command, FPVS_BUILD_TEST_PATH=inherited, FPVS_BUILD_TEST_PYTHON=sys.executable,
+    )
+    assert isinstance(actual, dict)
+    assert actual["afterSuccess"] == actual["afterFailure"] == inherited
+    assert actual["failure"] == "PyInstaller failed"
+    assert actual["during"]["file"] == sys.executable
+    assert actual["during"]["arguments"] == ["-m", "PyInstaller", "--clean"]
+    windows = Path(os.environ["SystemRoot"])
+    assert {Path(path) for path in actual["during"]["path"].split(os.pathsep)} == {
+        Path(sys.executable).parent,
+        Path(sys.prefix),
+        Path(sys.base_prefix),
+        windows,
+        windows / "System32",
+        windows / "System32" / "Wbem",
+    }
+
+
 def test_build_paths_keep_defaults_and_isolate_beta_outputs(tmp_path: Path) -> None:
     actual = _run_build_path_helper(
         tmp_path,
@@ -542,10 +623,14 @@ def test_build_paths_keep_defaults_and_isolate_beta_outputs(tmp_path: Path) -> N
         dist = tmp_path / "dist" / label
         assert paths == {
             "WorkRoot": str(build / "pyinstaller"),
+            "UpdaterWorkRoot": str(build / "pyinstaller-updater"),
             "DistRoot": str(dist),
             "BundleRoot": str(dist / "FPVS Studio"),
             "InstallerRoot": str(dist / "installer"),
             "InventoryRoot": str(build / "installer-inventory"),
+            "StudioDllToc": str(build / "pyinstaller" / "fpvs_studio" / "COLLECT-00.toc"),
+            "UpdaterDllToc": str(build / "pyinstaller-updater" / "fpvs_updater" / "PKG-00.toc"),
+            "DllAuditReceipt": str(build / "installer-inventory" / "dll-origin-audit.json"),
         }
 
 
@@ -555,7 +640,7 @@ def test_build_labels_reject_unsafe_and_reserved_components(tmp_path: Path) -> N
         "beta.", "beta ", " beta", "beta:test", "be ta", ".beta", "beta*", "beta?",
         "beta\n", "béta", "a" * 65, "CON", "con.txt", "PRN", "AUX", "NUL.tar",
         "COM1", "lpt9.txt", "CONIN$", "CONOUT$", "build", "dist", "pyinstaller",
-        "INSTALLER", "installer-inventory",
+        "INSTALLER", "installer-inventory", "pyinstaller-updater",
     ]
     results = _run_build_path_helper(
         tmp_path,
@@ -809,7 +894,7 @@ def test_installer_builds_and_checks_updater_before_final_ownership_inventory() 
     script = (REPO_ROOT / "scripts" / "build_updater.ps1").read_text(encoding="utf-8")
     assert script.index("Get-PackagingBuildPaths") < script.index("Resolve-RepoPython")
     assert 'Join-Path $BuildPaths.BundleRoot "Updater"' in script
-    assert '"pyinstaller-updater"' in script
+    assert "$UpdaterWorkRoot = $BuildPaths.UpdaterWorkRoot" in script
     assert '"--packaging-check"' in script
     assert "-WindowStyle Hidden" in script
     assert "$report.version -ne $appVersion" in script

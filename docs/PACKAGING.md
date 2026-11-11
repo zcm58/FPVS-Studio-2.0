@@ -39,11 +39,17 @@ needs no external Python or service checkout. Publishing still requires the owne
 noninteractive Git credentials (or explicit GH_TOKEN); credentials are never bundled.
 See [developer publishing](EXPERIMENT_LIBRARY.md#developer-publishing-in-studio).
 
-For release builds, compare native-library source paths in PyInstaller's
-`Analysis-00.toc` with the authenticated published baseline. Exclude unrelated
-application directories from the build process's `PATH`, while retaining verified
-native dependency paths. Package-version pins alone do not prevent PyInstaller from
-collecting support DLLs from another installed application.
+The Windows Studio and updater build scripts run PyInstaller with a process-local
+`PATH` containing the selected Python directories and standard Windows directories.
+The scripts restore the caller's `PATH` after PyInstaller exits. Inno Setup
+compiler discovery continues to support the caller's `PATH` and explicit
+compiler paths.
+
+The DLL origin audit checks the Studio `COLLECT-00.toc` and updater `PKG-00.toc`
+for the actual native files selected by PyInstaller. Native sources must resolve
+under the selected Python environment or its base installation. The installer
+stage checks both tables before the Studio smoke and compilation. For release acceptance,
+also compare the bundled native files with the authenticated published baseline.
 
 The Windows Studio bundle excludes optional `threadpoolctl`, matching the published
 runtime. Merely importing that module sets `KMP_DUPLICATE_LIB_OK` when unset and can
@@ -65,7 +71,7 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.8.2`.
+For the current release package, use the PEP 440-compatible package version `2.9.0`.
 The GitHub Release title can use a friendlier beta label, but the release tag and
 installer filename must use the exact package version.
 
@@ -75,6 +81,8 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
+The [2.9.0 release record](exec-plans/active/release-2.9.0.md) tracks the Settings sidebar,
+scrollable category pages and guarded Windows packaging checks.
 The [2.8.2 release record](exec-plans/completed/history-updates-release-2.8.2.md) tracks
 history compatibility, source updates, reviewed logs and Windows bundle fixes,
 with exact-source, packaged and immutable public release verification.
@@ -479,8 +487,23 @@ arrays of manifest paths and hashes. `-AllowVisibleGui` requires an approved nat
 Windows session for packaged checks; offscreen execution is rejected. `-SkipSmoke` may
 stage artifacts while that check is pending, but does not establish release acceptance.
 
-Upload the generated full installer, every patch installer, and update JSON to the same
-GitHub release, initially as a draft. Example assets:
+Before uploading, run the DLL origin check from the build checkout with the
+same Python environment and build label. For an unlabeled build, omit
+`-BuildLabel`.
+
+```powershell
+.\scripts\check_release_dll_origins.ps1 -BuildLabel release-candidate
+```
+
+The installer stage writes `dll-origin-audit.json` under its ignored
+`build/.../installer-inventory/` directory after compilation and manifest
+generation. The pre-upload check rechecks the native sources and requires
+matching TOC and release asset hashes. If the receipt is missing or a file
+differs, rebuild through the standard executable and installer stages.
+Keep the receipt as local build evidence.
+
+Upload the verified full installer, every patch installer, update JSON, and
+SHA-256 sidecars to the same GitHub release, initially as a draft. Example assets:
 
 ```text
 FPVS-Studio-Setup-1.5.2.exe

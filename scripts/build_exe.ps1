@@ -8,6 +8,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 . (Join-Path $PSScriptRoot "script_helpers.ps1")
 . (Join-Path $PSScriptRoot "build_paths.ps1")
+. (Join-Path $PSScriptRoot "build_environment.ps1")
 $BuildPaths = Get-PackagingBuildPaths -RepoRoot $RepoRoot -BuildLabel $BuildLabel
 $Python = Resolve-RepoPython -RepoRoot $RepoRoot
 
@@ -92,9 +93,7 @@ try {
     Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $BuildPaths.WorkRoot
     Remove-PackagingOutput -RepoRoot $RepoRoot -TargetPath $BuildPaths.BundleRoot
 
-    Invoke-NativeChecked -File $Python -Arguments @(
-        "-m",
-        "PyInstaller",
+    Invoke-PackagingPyInstaller -Python $Python -Arguments @(
         "--noconfirm",
         "--clean",
         "--workpath",
@@ -107,6 +106,12 @@ try {
     $exePath = Join-Path $BuildPaths.BundleRoot "FPVS Studio.exe"
     if (-not (Test-Path -LiteralPath $exePath)) {
         throw "Expected packaged executable was not created: $exePath"
+    }
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        Invoke-NativeChecked -File $Python -Arguments @(
+            (Join-Path $PSScriptRoot "check_build_dll_origins.py"),
+            "--studio-toc", $BuildPaths.StudioDllToc
+        )
     }
     Assert-BundledPackageMetadataVersion -ExpectedVersion $appVersion
 
