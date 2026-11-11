@@ -189,7 +189,9 @@ import logging
 assert Version(version("psychopy"))
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logging.getLogger("fpvs_studio.setup").info("Studio imports and engine installation verified.")'
-    "$venv_python" scripts/macos_pycharm.py "$repo_root" "$venv_python"
+    if [ "${FPVS_SKIP_PYCHARM_CONFIG:-0}" != 1 ]; then
+      "$venv_python" scripts/macos_pycharm.py "$repo_root" "$venv_python"
+    fi
     echo
     echo "Setup complete. Double-click Run Mac.command to open Studio."
     echo "Optional: quit PyCharm, then use Open in PyCharm Mac.command to open this project."

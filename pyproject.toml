@@ -55,6 +55,7 @@ engine = [
   "ujson>=5.13.0,<6.0",
 ]
 dev = [
+  "tomli>=2,<3; sys_platform == 'darwin' and python_version < '3.11'",
   "mypy>=1.10,<2.0",
   "pytest>=9.0.3,<10.0",
   "pytest-qt>=4.4,<5.0",

@@ -96,29 +96,45 @@ install packages into Studio's virtual environment. The same short error can als
 hide an import failure in one of PsychoPy's dependencies; the full traceback is
 needed to distinguish these cases.
 
-1. Close Studio. In PyCharm, open `scripts/macos_repair_environment.py` from the
-   complete Studio checkout and create a Run configuration for that file.
-2. Select the **same Python interpreter as FPVS Studio (Mac)** for this helper.
-   Setup uses `.venv3.10/bin/python`, or `.venv/bin/python` when reusing that
-   environment. A new right-click Run configuration may initially select a
-   different interpreter from the existing Studio configuration.
-3. Run the helper without parameters to install/refresh the declared requirements.
-   Add `--check` to its parameters for diagnostics without package installation.
-4. Wait for **Environment checks passed**, then restart Studio with the same
-   interpreter and retry Test/Pilot. On failure, retain the console output,
-   including the first error and the complete chained traceback.
+1. Update the complete Studio checkout, including its `scripts/` folder, and close
+   Studio. In PyCharm, run `scripts/macos_repair_environment.py` without parameters.
+   The helper can start from the wrong project interpreter; no manual interpreter
+   selection is required.
+2. Wait for the checks and any repair. The helper automatically selects Setup Mac's
+   `.venv3.10/bin/python` or reused `.venv/bin/python`, verifies native Python 3.10,
+   checks the engine, and fixes the project and Studio run configurations.
+3. If PyCharm needs to reload its interpreter settings, the helper starts a separate
+   finishing process, requests a normal quit, and reopens the same app/project after
+   configuring it. Respond to any save prompt. A canceled quit is respected; it does
+   not count as a completed repair. Wait for the final completion message, then run
+   **FPVS Studio (Mac)** and retry Test/Pilot.
 
-The helper logs the exact interpreter, Python version, CPU and checkout. It
-requires Setup's native Python 3.10 virtual environment and stops before changing
-packages if PyCharm is using another environment. It preserves the venv executable
-path, runs pip through that interpreter, installs `requirements-macos.txt`, and
-checks dependency consistency, installed source location/version, declared
-base/dev/engine requirements and the engine's actual lazy imports in a fresh
-isolated process. After a source update, run the repair to refresh dependency
-metadata; check-only mode validates the installed metadata's requirements.
-It does not change IDE settings or create a presentation window. Successful imports
-do not qualify display refresh timing. Intel build-tool failures should be resolved
-through **Setup Mac.command**, which owns Apple/Rust/OpenSSL provisioning.
+A healthy environment skips installation. Missing or broken dependencies use the
+existing Mac setup workflow and `requirements-macos.txt`; no packages are installed
+into an unrelated launching interpreter. An incompatible environment, or one still
+broken after installation, is preserved under `.fpvs-macos/environment-backups/`
+before a fresh setup attempt. Environments are not deleted. Setup continues to own
+native Python and Apple/Rust/OpenSSL provisioning. Network, permission or build-tool
+failures are reported explicitly and can require user action.
+
+The helper checks dependency consistency, installed source location/version, both
+installed metadata and the checkout's current base/dev/engine requirements, and
+actual engine-owned lazy imports in a fresh isolated process. PyCharm configuration
+runs under the verified Python and uses the owning IDE's actual settings location,
+including a custom configuration directory. Settings changes are backed up; other
+SDKs, projects and unrelated Run configurations are preserved. Only recognized
+Studio/repair configurations have their interpreter fields updated.
+
+IDE settings are changed only after the relevant PyCharm process has exited. The
+finishing job keeps its log and result in `.fpvs-macos/pycharm-repair/`, so the outcome
+survives the IDE restart. A pending finishing job is not a success report. If repair
+fails, retain the console output or that job's log, including the original traceback.
+
+Add `--check` for diagnostics without installation, backups, IDE changes or restart.
+It checks the automatically selected environment and reports unresolved IDE settings.
+No presentation window is created; successful imports do not qualify display refresh
+timing. The automatic restart workflow still requires native Mac acceptance; local
+Windows tests exercise it with controlled process/filesystem substitutes.
 
 For a manual install from the checkout root, using the same interpreter as Studio:
 

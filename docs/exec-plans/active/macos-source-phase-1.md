@@ -37,6 +37,64 @@ Success is this workflow, using the same Studio version on both computers:
 
 ### PyCharm environment repair (2026-11-11)
 
+Follow-up authorized on 2026-11-11: make the helper a one-click macOS repair.
+It must select Setup Mac's environment independently of the launching interpreter,
+check before installing, repair dependencies when needed, and configure PyCharm's
+project and Studio run interpreters automatically. Reuse Mac setup for native
+Python/build-tool provisioning. Preserve an incompatible environment in a bounded
+checkout-owned backup rather than deleting it. Check-only mode must not mutate.
+
+PyCharm settings must be written only while its owning IDE process is closed.
+When repair requires an IDE restart, an independent finishing process requests
+normal quit, waits for actual exit, applies backed-up settings, and reopens the
+same app/project. Save/cancel prompts remain honored; a timeout or canceled quit
+must report failure/pending, never successful configuration. Identify the active
+IDE profile, including custom config paths, and repair recognized Studio run
+configurations while preserving unrelated projects/settings. Report completion
+outside the IDE console so the outcome survives restart.
+
+The follow-up is implemented. The helper probes the canonical venv in a child
+process, validates current source requirements (including changes without a version
+bump), and runs Setup with IDE writes deferred. Failed checks trigger installation
+and at most one fresh-environment retry; previous environments are retained. The
+PyCharm helper runs under the verified Python while retaining the original launcher
+prefix/version for live-IDE mismatch detection. It discovers the actual IDE profile,
+refreshes existing SDK versions, repairs recognized run configurations, and keeps
+unrelated settings/arguments intact.
+
+Restart jobs have bounded ownership and waits, reuse pending requests, preserve
+backups, honor normal-quit cancellation, and report failure even when result-file
+persistence fails. No settings are edited while the target IDE profile is open.
+Check-only mode does not install, back up, configure or restart.
+
+Follow-up verification on 2026-11-11:
+
+- Baseline Mac focused route: 1565 passed, 26 native/platform checks skipped.
+- Environment repair tests: 73 passed. PyCharm/setup tests: 34 passed, 14
+  native/symlink checks skipped. The combined setup/source tooling run passed
+  113 tests with 18 skips before the final two reporting-failure regressions,
+  which subsequently passed in the PyCharm/setup module.
+- Both helper modules passed Ruff, compilation and mypy. Documentation focused
+  route: 13 passed after keeping architecture routing within its word budget.
+- Independent reviews found and repaired stale live-IDE state, repeated finishing
+  jobs, rejected-job output writes, stale SDK versions, and result-reporting errors.
+- Repository precommit (`-Workers 4`): 6031 passed, 34 platform-related skips;
+  changed-file Ruff/compilation, both platform mypy passes and repository audits
+  passed. No native macOS, Qt, package installation or IDE restart was executed
+  on this Windows development host.
+
+Native acceptance remains separate: launch from an incorrect interpreter, verify
+automatic selection/repair and PyCharm reopening, then repeat with a healthy setup
+and verify no install/restart. Exercise canceled quit, check-only mode and repeated
+Run clicks; compare unrelated SDK/project settings and inspect retained job results.
+Finally rerun Studio Test/Pilot and its real display preflight on the Mac.
+
+Follow-up files: the two Mac Python helpers, `scripts/macos-source.sh`, their two
+unit-test modules, `pyproject.toml` (Mac-only TOML reader for source validation),
+`docs/MACOS_SUPPORT.md`, `ARCHITECTURE.md`, `docs/agent/agent-index.md`, and this plan.
+
+Initial helper implementation and verification follow.
+
 The user requested a file that a researcher can run in PyCharm to diagnose and
 repair the environment after an engine-dependency preflight error. Add a standard-
 library helper under `scripts/` that identifies the exact interpreter, requires the
