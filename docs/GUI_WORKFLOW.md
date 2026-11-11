@@ -1,7 +1,7 @@
 # GUI Workflow
 
-Settings > Diagnostics exposes default-on automatic crash reporting at the existing
-Settings minimum/default sizes. The Diagnostics tab fits 700x560 and 700x650 with
+Settings > Diagnostics exposes default-on automatic crash reporting at the shared
+`860x560` minimum and `1000x680` default sizes. The Diagnostics page fits these sizes with
 wrapped preference, registration, enabled and error states. The switch stays usable
 while connecting; closing Settings preserves the choice and does not interrupt
 background registration. Network and storage run through the application-owned
@@ -285,7 +285,7 @@ The [runtime contract](RUNTIME_EXECUTION.md#session-flow) owns timeout/cleanup r
 ### Experiment Library
 
 **View > Experiment Library...** and **Create Project > Download from library** open
-the same whole-project browser. **Settings > Experiment Library / Manage Access...** exposes its
+the same whole-project browser. **Settings > Workspace > Experiment Library / Manage Access...** exposes its
 lab-code enrollment and device-disconnect controls. Search/select an experiment, then
 **Download and set up experiment** verifies its archive and reuses the normal
 destination review, new-folder import and display-settings flow. Imported projects are
@@ -315,9 +315,9 @@ until review/import completion. Details, access/storage boundaries and the full 
 acceptance path are in [Experiment Library](EXPERIMENT_LIBRARY.md).
 
 Library minimum/default sizes are `900x640` / `1040x760`. Welcome has four project
-actions at `760x520` minimum and `1120x720` default. Settings with Library access uses
-`700x604`, `700x694` with Test Mode, or `700x764` with AB Pilot Mode; these are also
-its default sizes. Check long content and every connection/progress state in both
+actions at `760x520` minimum and `1120x720` default. Settings uses `860x560` minimum
+and `1000x680` default sizes, including Library, Test Mode and AB Pilot Mode controls.
+Check long content and every connection/progress state in both
 themes. Registered Qt coverage remains opt-in in an approved visible environment.
 
 ### Local project entry points
@@ -448,13 +448,25 @@ pull changes from the remote repository and rerun the source setup helper.
 
 ## Settings appearance and layout
 
-Settings keeps General, Advanced, Recording and Diagnostics tabs with plain section
-widgets and no nested cards or outer tab-pane border. Tab content aligns to 16 px
-insets; section headings and 20 px section gaps establish the hierarchy. General
-starts with an inline `Appearance` heading and an exclusive `Light` / `Dark` / `Auto`
-button toggle. Advanced uses `Developer tools`; Recording separates `Computer default`
-and `This project`; Diagnostics uses `Crash reporting`. Existing control identities,
-actions, eligibility and immediate-save behavior remain unchanged.
+Settings uses a left navigation column with General, Recording, Appearance, Workspace,
+Advanced and Diagnostics selections. A native `QListWidget` supports mouse and keyboard
+selection, and the current category heading appears above its controls on the right.
+The sidebar's Settings heading and the selected category title establish the hierarchy.
+Plain section widgets use the shared dialog styles and theme tokens.
+
+General contains Participant runs and eligible Local experiment testing controls.
+Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle. Workspace owns
+root-folder setup, condition templates and eligible Experiment Library access. Recording
+groups `Computer default` and `This project`. Advanced contains `Developer tools`,
+and Diagnostics contains `Crash reporting`. Existing control identities, eligibility,
+callbacks and immediate-save behavior carry through category changes. Page selection
+preserves entered values and inline error or status information.
+
+The content uses a stacked page area with vertical scrolling when its content needs
+additional space. Navigation and Close stay reachable while the selected page scrolls.
+The layout prevents horizontal clipping and exposes long paths through their existing
+tooltips. Welcome and open-project Settings share an `860x560` minimum and `1000x680`
+default size across Library, Test Mode and AB Pilot Mode eligibility.
 
 Theme selection applies immediately and persists for this computer in
 `appearance/theme_mode`. Missing or invalid values resolve to `Auto`. Auto's tooltip
@@ -469,10 +481,9 @@ If the theme callback fails, Settings restores the previous selected button and 
 `Theme could not be saved. Try again.` inline. Successful selection clears that error;
 no routine success paragraph or additional confirmation is shown.
 
-Retain the existing minimum/default sizes: `700x560` normally, `700x650` with Test Mode
-and `700x720` with AB Pilot Mode. Library access adds 44 px (`700x604`, `700x694`,
-`700x764`). Visible acceptance covers every tab in Light, Dark and Auto, longest paths,
-relevant unavailable/error states, keyboard selection and no clipping. Verify selection
+Visible acceptance covers every category at the minimum/default sizes in Light, Dark
+and Auto, longest paths, relevant unavailable/error states, keyboard selection and
+no clipping. Verify selection
 survives closing/reopening Settings and controller restart; check deterministic OS
 notifications without changing the host's global OS setting; report native observation
 separately. Theme-only edits must preserve
@@ -1151,7 +1162,7 @@ Other unsaved setup edits remain pending. Project Recording Setup is disabled wi
 an open project. The obsolete `recording/backend` and `recording/unicorn_udp_port`
 preferences remain ignored.
 
-The same Recording tab shows **Default for this computer** and **Change Default…**,
+The same Recording page shows **Default for this computer** and **Change Default…**,
 available without an open project. Its editor uses the existing recording fields
 and saves a typed JSON preference at `recording/default_configuration` in the app's
 local user-profile QSettings store. Root-folder changes do not reset this preference.
@@ -1294,8 +1305,8 @@ the selected device independently of ActiveThree's shared serial transport.
 Test/Pilot remains no-output for all choices.
 The [runtime contract](RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
 owns pulse/low-interval scheduling, errors and hardware acceptance.
-The additional Settings tab preserves the existing parent size budgets documented
-above; Run retains the `1120x720` main-window minimum, and Home supports `760x520`. Registered
+The Recording page uses the shared Settings size budgets documented above.
+Run retains the `1120x720` main-window minimum, and Home supports `760x520`. Registered
 `tests/gui/test_recording_setup.py` covers Apply/Cancel, project reopen/switch, failed saves, invalid saved
 choices/ports, fake asynchronous discovery, manual overrides, amplifier/rate pulse
 validation and wrapping in both themes. It also checks that both launch surfaces
@@ -1396,8 +1407,9 @@ import, inspection, or materialization actions.
 
 **Settings > Advanced > Enable developer mode** accepts the developer password and
 saves an app preference. Close and reopen Studio to apply enabling or disabling; no
-project switch activates a pending change. General retains the ordinary workspace,
-participant, Test Mode and AB Pilot Mode controls. The Advanced tab provides masked
+project switch activates a pending change. General retains participant, Test Mode and
+AB Pilot Mode controls, and Workspace provides root-folder and Library actions.
+The Advanced page provides masked
 password entry, inline incorrect-password feedback, Cancel and restart-required status.
 
 With developer mode active, **File > Export > Publish to Experiment Library...** checks
@@ -1953,7 +1965,7 @@ this manual review and is not run by ordinary local verification.
 
 ### Attentional Blink Pilot Study Mode
 
-For an open AB study on Windows/Linux, Settings > Enable Pilot Study Mode
+For an open AB study on Windows/Linux, Settings > General > Enable Pilot Study Mode
 (Attentional Blink) enables local pilots with participant number and the project's
 demographics questionnaire. It defaults off, persists for this computer,
 and takes precedence over Test Mode only in AB. Other categories retain Test Mode's
@@ -1965,8 +1977,8 @@ refresh/graphics verification, and preserves fullscreen playback and compiled ti
 T1/T2 accuracy includes pilots; Bursts over time marks them Pilot. Hover the participant
 cell for standard demographics. Export Excel includes those fields and Pilot columns.
 The project participant workbook includes the visit's full questionnaire answers.
-Settings with Pilot and Library access uses 700 x 764 minimum/default; the tab bar
-adds 40 pixels to the previous single-page layout.
+Settings with Pilot and Library access shares the `860x560` minimum and `1000x680`
+default sizes, with pilot controls on General and Library access on Workspace.
 
 Recording persistence manual acceptance: open one Unicorn and one BioSemi project;
 confirm Home and Run agree after switching and restarting. Change a device through

@@ -15,6 +15,7 @@ from tests.gui.helpers import (
     assert_visible_children_within_parent,
     open_created_project,
     prepare_compile_ready_project,
+    select_settings_category,
 )
 
 from fpvs_studio.core.enums import ExperimentCategory, RunMode
@@ -1382,7 +1383,7 @@ def test_settings_recording_subdialog_persists_only_apply(
         on_recording_configuration_changed=saved.append,
     )
     qtbot.addWidget(dialog)
-    dialog.tabs.setCurrentIndex(2)
+    select_settings_category(dialog, "Recording")
     dialog.show()
     def fake_exec(child):
         child.backend_combo.setCurrentIndex(child.backend_combo.findData(backend))
@@ -1948,7 +1949,7 @@ def test_recording_settings_failed_save_preserves_accepted_device(
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.tabs.setCurrentIndex(2)
+    select_settings_category(dialog, "Recording")
     dialog.show()
 
     def fake_exec(child):
@@ -1957,10 +1958,11 @@ def test_recording_settings_failed_save_preserves_accepted_device(
         return child.result()
 
     monkeypatch.setattr(RecordingSetupDialog, "exec", fake_exec)
+    initial_summary = dialog.recording_summary.text()
     dialog.recording_setup_button.click()
     QApplication.processEvents()
     recording_errors.assert_called_once_with(dialog, "Save Recording Setup Error", error)
-    assert "ActiveTwo" in dialog.recording_summary.text()
+    assert dialog.recording_summary.text() == initial_summary
     assert not dialog.recording_summary.toolTip()
     assert dialog._recording_configuration == original
     _assert_labels_fit(dialog)

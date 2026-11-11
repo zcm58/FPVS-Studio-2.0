@@ -139,7 +139,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         attentional_blink_pilot_mode_available=experiment_test_mode_available(),
         on_attentional_blink_pilot_mode_changed=pilot_toggled.append,
     )
-    settings.resize(700, 680)
+    settings.resize(1000, 680)
     settings.show()
     app.processEvents()
     checkbox = settings.experiment_test_mode_checkbox

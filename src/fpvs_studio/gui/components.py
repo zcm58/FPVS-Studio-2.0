@@ -1163,13 +1163,46 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.text_secondary};
         font-size: {FONT_SIZE_BODY}px;
     }}
-    QTabWidget#settings_tabs::pane {{
-        background-color: transparent;
+    QFrame#settings_sidebar {{
+        background-color: {theme.surface};
         border: none;
-        border-radius: 0;
+        border-right: 1px solid {theme.border_soft};
     }}
-    QTabWidget#settings_tabs QTabBar::tab {{
+    QListWidget#settings_navigation {{
         background-color: transparent;
+        color: {theme.text_primary};
+        border: none;
+        outline: none;
+        font-size: {FONT_SIZE_CONTROL}px;
+    }}
+    QListWidget#settings_navigation::item {{
+        padding: 10px 12px;
+        margin-bottom: 4px;
+        border-left: 3px solid transparent;
+        border-radius: 6px;
+    }}
+    QListWidget#settings_navigation::item:hover {{
+        background-color: {theme.surface_elevated};
+    }}
+    QListWidget#settings_navigation::item:selected {{
+        background-color: {theme.surface_alt};
+        color: {theme.text_primary};
+        border-left-color: {theme.primary};
+    }}
+    QListWidget#settings_navigation::item:selected:focus {{
+        border: 1px solid {theme.focus_ring};
+        border-left: 3px solid {theme.primary};
+        padding: 9px 11px;
+    }}
+    QStackedWidget#settings_pages,
+    QScrollArea[settingsPageScroll="true"],
+    QWidget#settings_page_viewport {{
+        background-color: transparent;
+    }}
+    QLabel[settingsPageTitle="true"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_PAGE_TITLE}px;
+        font-weight: 700;
     }}
     QLabel[settingsSectionTitle="true"] {{
         color: {theme.text_primary};

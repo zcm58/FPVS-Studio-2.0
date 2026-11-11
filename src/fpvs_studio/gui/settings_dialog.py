@@ -13,12 +13,15 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
-    QGridLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QPushButton,
-    QTabWidget,
+    QScrollArea,
+    QSizePolicy,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -92,10 +95,8 @@ class AppSettingsDialog(QDialog):
         self.setObjectName("fpvs_root_settings_dialog")
         self.setWindowTitle("Settings")
         self.setModal(True)
-        minimum_height = 610 if experiment_test_mode_available else 520
-        self.setMinimumSize(700, 680 if attentional_blink_pilot_mode_available else minimum_height)
-        self.setMinimumHeight(self.minimumHeight() + 40)
-        self.resize(self.minimumSize())
+        self.setMinimumSize(860, 560)
+        self.resize(1000, 680)
 
         self._developer_mode_active = developer_mode_active
         self._on_theme_mode_changed = on_theme_mode_changed
@@ -130,18 +131,27 @@ class AppSettingsDialog(QDialog):
         self._on_experiment_test_mode_changed = on_experiment_test_mode_changed
         self._on_attentional_blink_pilot_mode_changed = on_attentional_blink_pilot_mode_changed
 
-        self.header = DialogHeader(
-            "Settings",
-            "Preferences for this computer. Changes are saved immediately.",
-            parent=self,
-        )
+        sidebar = QFrame(self)
+        sidebar.setObjectName("settings_sidebar")
+        sidebar.setFixedWidth(200)
+        self.header = DialogHeader("Settings", "", parent=sidebar)
+        self.header.subtitle_label.hide()
+        self.navigation = QListWidget(sidebar)
+        self.navigation.setObjectName("settings_navigation")
+        self.navigation.setAccessibleName("Settings categories")
+        self.navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.pages = QStackedWidget(self)
+        self.pages.setObjectName("settings_pages")
+        self.page_title = QLabel(self)
+        self.page_title.setObjectName("settings_page_title")
+        self.page_title.setProperty("settingsPageTitle", "true")
         appearance = QWidget(self)
         appearance.setObjectName("settings_appearance_section")
         appearance_layout = QVBoxLayout(appearance)
         appearance_layout.setContentsMargins(0, 0, 0, 0)
         appearance_layout.setSpacing(8)
         appearance_row = QHBoxLayout()
-        appearance_row.addWidget(_section_title("Appearance", appearance))
+        appearance_row.addWidget(_section_title("Color theme", appearance))
         appearance_row.addStretch(1)
         theme_toggle = QWidget(appearance)
         theme_toggle.setAccessibleName("Color theme")
@@ -186,7 +196,6 @@ class AppSettingsDialog(QDialog):
         workspace_layout = QVBoxLayout(workspace)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(8)
-        workspace_layout.addWidget(_section_title("Workspace", workspace))
         workspace_actions = QHBoxLayout()
         workspace_actions.setSpacing(12)
         self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
@@ -212,9 +221,6 @@ class AppSettingsDialog(QDialog):
         self.library_button.setVisible(on_show_library is not None)
         self.library_button.clicked.connect(self._show_library)
         workspace_layout.addWidget(self.library_button)
-        if on_show_library is not None:
-            self.setMinimumHeight(self.minimumHeight() + 44)
-            self.resize(self.minimumSize())
         participant = QWidget(self)
         participant.setObjectName("settings_participant_section")
         participant.setProperty("settingsSection", "true")
@@ -332,40 +338,24 @@ class AppSettingsDialog(QDialog):
         mark_secondary_action(self.button_box.button(QDialogButtonBox.StandardButton.Close))
         self.button_box.rejected.connect(self.reject)
 
-        self.version_value = QLabel(f"FPVS Studio version {__version__}", self)
+        self.version_value = QLabel(f"FPVS Studio version {__version__}", sidebar)
         self.version_value.setObjectName("app_version_value")
         self.version_value.setProperty("dialogHelp", "true")
-        self.version_value.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.version_value.setWordWrap(True)
 
-        footer_layout = QGridLayout()
-        footer_layout.setContentsMargins(0, 0, 0, 0)
-        footer_layout.setColumnStretch(0, 1)
-        footer_layout.setColumnStretch(1, 1)
-        footer_layout.setColumnStretch(2, 1)
-        footer_layout.addWidget(self.version_value, 0, 1, Qt.AlignmentFlag.AlignCenter)
-        footer_layout.addWidget(self.button_box, 0, 2, Qt.AlignmentFlag.AlignRight)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
-        layout.addWidget(self.header)
-        self.tabs = QTabWidget(self)
-        self.tabs.setObjectName("settings_tabs")
-        self.tabs.setDocumentMode(True)
-        general = QWidget(self.tabs)
+        general = QWidget(self)
+        general.setObjectName("settings_general_page")
         general_layout = QVBoxLayout(general)
-        general_layout.setContentsMargins(16, 16, 16, 0)
+        general_layout.setContentsMargins(0, 0, 0, 0)
         general_layout.setSpacing(20)
-        general_layout.addWidget(appearance)
-        general_layout.addWidget(workspace)
         general_layout.addWidget(participant)
         if developer is not None:
             general_layout.addWidget(developer)
         general_layout.addStretch(1)
-        self.tabs.addTab(general, "General")
-        recording = QWidget(self.tabs)
+        recording = QWidget(self)
+        recording.setObjectName("settings_recording_page")
         recording_layout = QVBoxLayout(recording)
-        recording_layout.setContentsMargins(16, 16, 16, 16)
+        recording_layout.setContentsMargins(0, 0, 0, 0)
         recording_layout.setSpacing(8)
         recording_layout.addWidget(_section_title("Computer default", recording))
         self.default_recording_summary = QLabel(recording)
@@ -413,9 +403,10 @@ class AppSettingsDialog(QDialog):
         recording_layout.addWidget(recording_help)
         self._refresh_recording_summaries()
         recording_layout.addStretch(1)
-        advanced = QWidget(self.tabs)
+        advanced = QWidget(self)
+        advanced.setObjectName("settings_advanced_page")
         advanced_layout = QVBoxLayout(advanced)
-        advanced_layout.setContentsMargins(16, 16, 16, 16)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
         advanced_layout.setSpacing(12)
         advanced_layout.addWidget(_section_title("Developer tools", advanced))
         self.developer_mode_checkbox = QCheckBox("Enable developer mode", advanced)
@@ -457,11 +448,10 @@ class AppSettingsDialog(QDialog):
         self.developer_status.setWordWrap(True)
         advanced_layout.addWidget(self.developer_status)
         advanced_layout.addStretch(1)
-        self.tabs.addTab(advanced, "Advanced")
-        self.tabs.addTab(recording, "Recording")
-        diagnostics = QWidget(self.tabs)
+        diagnostics = QWidget(self)
+        diagnostics.setObjectName("settings_diagnostics_page")
         diagnostics_layout = QVBoxLayout(diagnostics)
-        diagnostics_layout.setContentsMargins(16, 16, 16, 16)
+        diagnostics_layout.setContentsMargins(0, 0, 0, 0)
         diagnostics_layout.setSpacing(12)
         diagnostics_layout.addWidget(_section_title("Crash reporting", diagnostics))
         self.crash_reports_checkbox = QCheckBox("Automatically send crash reports", diagnostics)
@@ -495,11 +485,70 @@ class AppSettingsDialog(QDialog):
         self.crash_reports_status.setWordWrap(True)
         diagnostics_layout.addWidget(self.crash_reports_status)
         diagnostics_layout.addStretch(1)
-        self.tabs.addTab(diagnostics, "Diagnostics")
         self._refresh_developer_status()
-        layout.addWidget(self.tabs, 1)
-        layout.addLayout(footer_layout)
+
+        self._category_focus_controls = [
+            self.detailed_run_exports_checkbox,
+            self.default_recording_setup_button,
+            self.theme_buttons["light"],
+            self.root_folder_setup_button,
+            self.developer_mode_checkbox,
+            self.crash_reports_checkbox,
+        ]
+        for name, page in (
+            ("General", general),
+            ("Recording", recording),
+            ("Appearance", appearance),
+            ("Workspace", workspace),
+            ("Advanced", advanced),
+            ("Diagnostics", diagnostics),
+        ):
+            # A page keeps its controls and scroll position when categories change.
+            scroll = QScrollArea(self.pages)
+            scroll.setObjectName(f"settings_{name.lower()}_scroll")
+            scroll.setProperty("settingsPageScroll", "true")
+            scroll.viewport().setObjectName("settings_page_viewport")
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidgetResizable(True)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            scroll.setWidget(page)
+            page.setAutoFillBackground(False)
+            scroll.viewport().setAutoFillBackground(False)
+            scroll.setAlignment(Qt.AlignmentFlag.AlignTop)
+            self.pages.addWidget(scroll)
+            self.navigation.addItem(name)
+        # These compact sections remain anchored below their page heading.
+        appearance_layout.addStretch(1)
+        workspace_layout.addStretch(1)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(16, 24, 16, 20)
+        sidebar_layout.setSpacing(20)
+        sidebar_layout.addWidget(self.header)
+        sidebar_layout.addWidget(self.navigation, 1)
+        sidebar_layout.addWidget(self.version_value)
+        content = QWidget(self)
+        content.setObjectName("settings_content")
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(28, 24, 28, 20)
+        content_layout.setSpacing(20)
+        content_layout.addWidget(self.page_title)
+        content_layout.addWidget(self.pages, 1)
+        content_layout.addWidget(self.button_box)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(sidebar)
+        layout.addWidget(content, 1)
+        for checkbox in self.findChildren(QCheckBox):
+            checkbox.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        self.navigation.currentRowChanged.connect(self._select_category)
+        self.navigation.setCurrentRow(0)
         apply_dialog_theme(self)
+
+    def _select_category(self, index: int) -> None:
+        self.pages.setCurrentIndex(index)
+        self.page_title.setText(self.navigation.item(index).text())
+        QWidget.setTabOrder(self.navigation, self._category_focus_controls[index])
 
     def _set_theme_mode(self, mode: str) -> None:
         if mode == self._theme_mode:

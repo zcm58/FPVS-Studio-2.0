@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtGui import QColor, QPalette, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -12,9 +12,10 @@ from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QPushButton,
+    QScrollArea,
     QWidget,
 )
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import assert_visible_children_within_parent, select_settings_category
 
 from fpvs_studio.gui.components import SectionCard
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
@@ -39,13 +40,14 @@ def _assert_visible_settings_text_fits(dialog: AppSettingsDialog) -> None:
 
 
 @pytest.mark.parametrize(
-    ("test_mode", "pilot_mode", "library", "height"),
-    [(False, False, False, 560), (True, False, False, 650), (True, True, True, 764)],
+    ("test_mode", "pilot_mode", "library"),
+    [(False, False, False), (True, False, False), (True, True, True)],
     ids=["ordinary", "test-mode", "pilot-and-library"],
 )
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
-def test_settings_sections_fit_minimum_size(
-    qtbot, tmp_path, test_mode, pilot_mode, library, height, background,
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
+def test_settings_categories_fit_minimum_and_default_sizes(
+    qtbot, tmp_path, test_mode, pilot_mode, library, background, size,
 ) -> None:
     root_path = tmp_path / ("Long research project root " * 5)
     dialog = AppSettingsDialog(
@@ -62,18 +64,23 @@ def test_settings_sections_fit_minimum_size(
         ),
     )
     qtbot.addWidget(dialog)
-    assert dialog.size() == dialog.minimumSize()
-    assert dialog.minimumSize().toTuple() == (700, height)
+    assert dialog.minimumSize().toTuple() == (860, 560)
+    assert dialog.size().toTuple() == (1000, 680)
+    dialog.resize(*size)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
     dialog.show()
     QApplication.processEvents()
 
-    assert dialog.tabs.documentMode()
-    assert [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())] == [
-        "General", "Advanced", "Recording", "Diagnostics",
+    assert [dialog.navigation.item(index).text() for index in range(dialog.navigation.count())] == [
+        "General", "Recording", "Appearance", "Workspace", "Advanced", "Diagnostics",
     ]
+    assert dialog.navigation.currentRow() == dialog.pages.currentIndex() == 0
+    assert dialog.page_title.text() == "General"
+    assert dialog.navigation.mapTo(dialog, dialog.navigation.rect().topRight()).x() < (
+        dialog.pages.mapTo(dialog, dialog.pages.rect().topLeft()).x()
+    )
     section_names = [
         "settings_appearance_section", "settings_workspace_section", "settings_participant_section",
     ]
@@ -93,20 +100,29 @@ def test_settings_sections_fit_minimum_size(
     assert not dialog.detailed_run_exports_checkbox.isChecked()
     assert "participant_summary.xlsx" in dialog.detailed_run_exports_checkbox.toolTip()
     assert "always saved" in dialog.detailed_run_exports_checkbox.toolTip()
-    assert "saved immediately" in dialog.header.subtitle_label.text()
-    for index in range(dialog.tabs.count()):
-        dialog.tabs.setCurrentIndex(index)
-        QApplication.processEvents()
-        assert dialog.size().toTuple() == (700, height), dialog.tabs.tabText(index)
+    for index in range(dialog.navigation.count()):
+        category = dialog.navigation.item(index).text()
+        select_settings_category(dialog, category)
+        assert dialog.pages.currentIndex() == index
+        assert dialog.size().toTuple() == size, category
         _assert_visible_settings_text_fits(dialog)
-        page = dialog.tabs.currentWidget()
+        page = dialog.pages.currentWidget()
+        assert isinstance(page, QScrollArea)
+        assert page.horizontalScrollBar().maximum() == 0, category
         titles = [
             label for label in page.findChildren(QLabel)
             if label.isVisible() and label.property("settingsSectionTitle") == "true"
         ]
-        assert titles, dialog.tabs.tabText(index)
+        if category != "Workspace":
+            assert titles, category
         title_left_edges = {label.mapTo(page, label.rect().topLeft()).x() for label in titles}
-        assert len(title_left_edges) == 1, dialog.tabs.tabText(index)
+        assert len(title_left_edges) <= 1, category
+        page.verticalScrollBar().setValue(page.verticalScrollBar().maximum())
+        QApplication.processEvents()
+        _assert_visible_settings_text_fits(dialog)
+        assert page.widget().mapTo(page.viewport(), page.widget().rect().bottomRight()).y() <= (
+            page.viewport().height()
+        ), category
 
 
 @pytest.mark.parametrize("initial_mode", ["light", "dark", "auto"])
@@ -116,6 +132,7 @@ def test_theme_choices_are_exclusive_and_apply_immediately(qtbot, tmp_path, init
         fpvs_root_dir=tmp_path, theme_mode=initial_mode, on_theme_mode_changed=changes.append,
     )
     qtbot.addWidget(dialog)
+    select_settings_category(dialog, "Appearance")
     dialog.show()
     QApplication.processEvents()
 
@@ -163,6 +180,7 @@ def test_theme_save_failure_restores_selection_and_can_retry(
         fpvs_root_dir=tmp_path, theme_mode="auto", on_theme_mode_changed=save,
     )
     qtbot.addWidget(dialog)
+    select_settings_category(dialog, "Appearance")
     dialog.show()
     qtbot.mouseClick(dialog.theme_buttons["dark"], Qt.MouseButton.LeftButton)
     assert attempts == ["dark"]
@@ -171,7 +189,7 @@ def test_theme_save_failure_restores_selection_and_can_retry(
     assert dialog.theme_status.isVisible()
     assert "Try again" in dialog.theme_status.text()
     QApplication.processEvents()
-    assert dialog.size().toTuple() == (700, 560)
+    assert dialog.size().toTuple() == (1000, 680)
     _assert_visible_settings_text_fits(dialog)
 
     dialog.theme_buttons["dark"].setFocus()
@@ -207,9 +225,110 @@ def test_settings_root_details_follow_new_root_selection(qtbot, tmp_path) -> Non
         on_show_root_folder_setup=lambda _: updated_root,
     )
     qtbot.addWidget(dialog)
+    select_settings_category(dialog, "Workspace")
     dialog.show()
     qtbot.mouseClick(dialog.root_folder_setup_button, Qt.MouseButton.LeftButton)
     assert dialog.root_folder_setup_button.toolTip() == str(updated_root)
+
+
+def test_settings_navigation_supports_mouse_keyboard_and_keeps_saved_choices(qtbot, tmp_path):
+    export_changes = []
+    theme_changes = []
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        on_detailed_run_exports_changed=export_changes.append,
+        on_theme_mode_changed=theme_changes.append,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    qtbot.mouseClick(dialog.detailed_run_exports_checkbox, Qt.MouseButton.LeftButton)
+    appearance = dialog.navigation.findItems("Appearance", Qt.MatchFlag.MatchExactly)[0]
+    qtbot.mouseClick(
+        dialog.navigation.viewport(), Qt.MouseButton.LeftButton,
+        pos=dialog.navigation.visualItemRect(appearance).center(),
+    )
+    assert dialog.page_title.text() == "Appearance"
+    qtbot.mouseClick(dialog.theme_buttons["dark"], Qt.MouseButton.LeftButton)
+    dialog.navigation.setFocus()
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Up)
+    assert dialog.page_title.text() == "Recording"
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Up)
+    assert dialog.page_title.text() == "General"
+    assert dialog.pages.currentIndex() == 0
+    assert dialog.detailed_run_exports_checkbox.isChecked()
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Down)
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Down)
+    assert dialog.page_title.text() == "Appearance"
+    assert dialog.theme_buttons["dark"].isChecked()
+    assert export_changes == [True]
+    assert theme_changes == ["dark"]
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Tab)
+    page = dialog.pages.currentWidget()
+    assert page is dialog.focusWidget() or page.isAncestorOf(dialog.focusWidget())
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    assert not dialog.isVisible()
+    assert export_changes == [True]
+    assert theme_changes == ["dark"]
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_settings_long_page_scrolls_with_wheel_while_navigation_and_close_stay_fixed(
+    qtbot, tmp_path, background,
+):
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        automatic_crash_reports_status="\n".join(
+            f"Attempt {index}: The report is waiting for a connection and will be retried."
+            for index in range(1, 31)
+        ),
+    )
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(860, 560)
+    select_settings_category(dialog, "Diagnostics")
+    dialog.show()
+    QApplication.processEvents()
+    page = dialog.pages.currentWidget()
+    assert isinstance(page, QScrollArea)
+    scrollbar = page.verticalScrollBar()
+    assert scrollbar.maximum() > 0
+    assert page.horizontalScrollBar().maximum() == 0
+    assert scrollbar.value() == 0
+    sidebar = dialog.navigation.parentWidget()
+    close_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Close)
+    fixed_widgets = (sidebar, dialog.navigation, dialog.page_title, close_button)
+    fixed_geometry = [widget.geometry() for widget in fixed_widgets]
+    viewport = page.viewport()
+    position = viewport.rect().center()
+    wheel = QWheelEvent(
+        QPointF(position), QPointF(viewport.mapToGlobal(position)),
+        QPoint(), QPoint(0, -120), Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier, Qt.ScrollPhase.NoScrollPhase, False,
+    )
+    QApplication.sendEvent(viewport, wheel)
+    qtbot.waitUntil(lambda: scrollbar.value() > 0)
+    scrollbar.setValue(scrollbar.maximum())
+    QApplication.processEvents()
+    status_bottom = dialog.crash_reports_status.mapTo(
+        viewport, dialog.crash_reports_status.rect().bottomRight(),
+    )
+    assert 0 <= status_bottom.y() < viewport.height()
+    assert dialog.page_title.text() == dialog.navigation.currentItem().text() == "Diagnostics"
+    assert [widget.geometry() for widget in fixed_widgets] == fixed_geometry
+    for widget in fixed_widgets:
+        assert widget.isVisible()
+        assert dialog.rect().contains(widget.mapTo(dialog, widget.rect().topLeft()))
+        assert dialog.rect().contains(widget.mapTo(dialog, widget.rect().bottomRight()))
+    assert_visible_children_within_parent(sidebar)
+    assert_visible_children_within_parent(dialog.button_box)
+    select_settings_category(dialog, "General")
+    select_settings_category(dialog, "Diagnostics")
+    assert scrollbar.value() == scrollbar.maximum()
+    qtbot.mouseClick(close_button, Qt.MouseButton.LeftButton)
+    assert not dialog.isVisible()
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
@@ -232,7 +351,7 @@ def test_advanced_developer_mode_geometry_and_password(qtbot, tmp_path, backgrou
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.tabs.setCurrentIndex(1)
+    select_settings_category(dialog, "Advanced")
     dialog.show()
     if state in {"password", "wrong", "pending"}:
         dialog.developer_mode_checkbox.click()
@@ -268,7 +387,7 @@ def test_password_enter_enables_once_without_closing_settings(qtbot, tmp_path):
         return password == "developer"
     dialog = AppSettingsDialog(fpvs_root_dir=tmp_path, on_developer_mode_changed=enable)
     qtbot.addWidget(dialog)
-    dialog.tabs.setCurrentIndex(1)
+    select_settings_category(dialog, "Advanced")
     dialog.show()
     dialog.developer_mode_checkbox.click()
     qtbot.keyClicks(dialog.developer_password, "developer")

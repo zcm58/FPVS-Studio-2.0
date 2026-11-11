@@ -10,7 +10,7 @@ import pytest
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication, QLabel
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import assert_visible_children_within_parent, select_settings_category
 
 from fpvs_studio.gui import crash_report_controller as module
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
@@ -58,7 +58,7 @@ class FakeLifecycle(QObject):
         return job
 
 
-@pytest.mark.parametrize("size", [(700, 560), (700, 650)])
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)])
 @pytest.mark.parametrize("state", ["off", "registering", "enabled", "error"])
 def test_settings_diagnostics_fit_and_bind(qtbot, tmp_path, size, state):
     changes = []
@@ -69,7 +69,7 @@ def test_settings_diagnostics_fit_and_bind(qtbot, tmp_path, size, state):
     qtbot.addWidget(dialog)
     assert dialog.crash_reports_checkbox.isChecked()
     dialog.resize(*size)
-    dialog.tabs.setCurrentIndex(dialog.tabs.count() - 1)
+    select_settings_category(dialog, "Diagnostics")
     messages = {
         "off": "Automatic reporting is off. Access revocation will be retried when connected.",
         "registering": "Automatic crash reporting is on by default. Connecting in the background…",
@@ -82,7 +82,7 @@ def test_settings_diagnostics_fit_and_bind(qtbot, tmp_path, size, state):
     dialog.show()
     qtbot.wait(25)
     assert_visible_children_within_parent(dialog)
-    for label in dialog.tabs.currentWidget().findChildren(QLabel):
+    for label in dialog.pages.currentWidget().findChildren(QLabel):
         assert label.height() >= label.heightForWidth(label.width())
     assert dialog.crash_reports_checkbox.isEnabled()  # Opt-out never waits for HTTP.
     dialog.crash_reports_checkbox.click()
@@ -442,7 +442,7 @@ def test_real_worker_keeps_gui_responsive_and_retains_opt_out_after_settings_clo
         fpvs_root_dir=tmp_path, on_automatic_crash_reports_changed=value.configure
     )
     qtbot.addWidget(dialog)
-    dialog.tabs.setCurrentIndex(dialog.tabs.count() - 1)
+    select_settings_category(dialog, "Diagnostics")
     value.changed.connect(dialog.set_crash_reporting_state)
     dialog.show()
     try:

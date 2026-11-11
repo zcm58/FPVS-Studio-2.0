@@ -11,7 +11,11 @@ import pytest
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
-from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
+from tests.gui.helpers import (
+    assert_visible_children_within_parent,
+    open_created_project,
+    select_settings_category,
+)
 
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.gui import controller as controller_module
@@ -518,8 +522,9 @@ def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path,
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("developer", [False, True])
 @pytest.mark.parametrize("uses_default", [False, True])
-def test_recording_settings_fit_existing_sizes(
-    qtbot, tmp_path, background, developer, uses_default,
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)])
+def test_recording_settings_fit_sidebar_sizes(
+    qtbot, tmp_path, background, developer, uses_default, size,
 ):
     resets = []
     dialog = AppSettingsDialog(
@@ -536,13 +541,11 @@ def test_recording_settings_fit_existing_sizes(
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.tabs.setCurrentIndex(next(
-        index for index in range(dialog.tabs.count()) if dialog.tabs.tabText(index) == "Recording"
-    ))
-    dialog.resize(700, 650 if developer else 560)
+    select_settings_category(dialog, "Recording")
+    dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
-    assert dialog.size().toTuple() == (700, 650 if developer else 560)
+    assert dialog.size().toTuple() == size
     assert_visible_children_within_parent(dialog)
     for button in dialog.findChildren(QPushButton):
         if button.isVisible():

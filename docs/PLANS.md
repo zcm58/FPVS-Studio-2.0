@@ -130,6 +130,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
   flat Settings and persisted Light/Dark/Auto implemented; precommit and focused/visible
   checks passed, with optional Welcome test-order and native/scaling limits recorded.
 - [Setup visual layout and hierarchy](exec-plans/completed/setup-visual-layout.md):
+- [Settings sidebar navigation](exec-plans/completed/settings-sidebar.md):
+  six category pages, independently scrollable content and retained preferences;
+  focused, precommit and 99 visible Windows cases passed at minimum/default sizes.
   all eight pages visually reviewed in both themes, balanced workspaces and 57 focused
   visible sizing checks; safe-suite transient Windows access failure recorded.
 - [Drag-and-drop randomized condition blocks](exec-plans/completed/randomized-block-condition-editor.md):

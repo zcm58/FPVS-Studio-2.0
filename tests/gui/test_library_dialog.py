@@ -9,7 +9,11 @@ from types import SimpleNamespace
 import pytest
 from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
-from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
+from tests.gui.helpers import (
+    assert_visible_children_within_parent,
+    open_created_project,
+    select_settings_category,
+)
 from tests.unit.test_library_installations import project as installed_project
 
 from fpvs_studio.core.library_installations import scan_library_projects
@@ -651,6 +655,7 @@ def test_settings_library_entry_and_main_view_action(controller, qtbot, tmp_path
         attentional_blink_pilot_mode_available=True,
     )
     qtbot.addWidget(dialog)
+    select_settings_category(dialog, "Workspace")
     dialog.show()
     QApplication.processEvents()
     assert_visible_children_within_parent(dialog)

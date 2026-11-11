@@ -8,7 +8,11 @@ from unittest.mock import Mock
 import pytest
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QDialog
-from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
+from tests.gui.helpers import (
+    assert_visible_children_within_parent,
+    open_created_project,
+    select_settings_category,
+)
 
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.serialization import load_project_file
@@ -67,9 +71,7 @@ def test_settings_biosemi_apply_updates_only_saved_port_and_device_and_keeps_dra
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.tabs.setCurrentIndex(next(
-        index for index in range(dialog.tabs.count()) if dialog.tabs.tabText(index) == "Recording"
-    ))
+    select_settings_category(dialog, "Recording")
     dialog.show()
     dialog._show_recording_setup()
     QApplication.processEvents()
@@ -88,7 +90,7 @@ def test_settings_biosemi_apply_updates_only_saved_port_and_device_and_keeps_dra
     assert "serial_port" not in document.recording_configuration
     assert "COM193" in dialog.recording_summary.text()
     assert dialog._biosemi_serial_baudrate == 57600
-    assert (dialog.width(), dialog.height()) == (700, 560)
+    assert (dialog.width(), dialog.height()) == (1000, 680)
     assert_visible_children_within_parent(dialog)
     assert dialog.recording_summary.height() >= dialog.recording_summary.heightForWidth(
         dialog.recording_summary.width(),
@@ -106,22 +108,30 @@ def test_settings_biosemi_cancel_or_save_failure_retains_port_device_and_context
     document = _document(tmp_path)
     before = document.project_file_path.read_bytes()
     contexts = _stub_recording_dialog(monkeypatch, accepted=failure)
-    save = Mock(side_effect=OSError("project is read-only"))
+    error = OSError("project is read-only")
+    save = Mock(side_effect=error)
+    popup = Mock()
+    monkeypatch.setattr(settings_module, "_show_error_dialog", popup)
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path, recording_configuration=document.recording_configuration,
         biosemi_serial_port="COM7", biosemi_serial_baudrate=57600,
         on_recording_configuration_changed=save,
     )
     qtbot.addWidget(dialog)
+    initial_summary = dialog.recording_summary.text()
     dialog._show_recording_setup()
     assert save.call_count == int(failure)
+    assert popup.call_count == int(failure)
+    if failure:
+        popup.assert_called_once_with(dialog, "Save Recording Setup Error", error)
     assert document.project_file_path.read_bytes() == before
     assert dialog._biosemi_serial_port == "COM7"
     assert dialog._recording_configuration == document.recording_configuration
+    assert dialog.recording_summary.text() == initial_summary
     dialog._show_recording_setup()
     assert contexts[-1][1]["biosemi_serial_port"] == "COM7"
-    if failure:
-        assert "not saved" in dialog.recording_summary.text()
+    assert save.call_count == popup.call_count == 2 * int(failure)
+    assert dialog.recording_summary.text() == initial_summary
 
 
 def test_recording_document_failure_keeps_port_and_unrelated_drafts(qapp, tmp_path, monkeypatch):

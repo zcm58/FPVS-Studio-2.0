@@ -590,7 +590,7 @@ depends on the configured service/GitHub access; signed catalogs are separate wo
 Developer tools ship in both source and installed builds and default to disabled.
 Open **Settings > Advanced**, select **Enable developer mode**, enter `developer`,
 and select **Enable**. Close and reopen FPVS Studio before the publishing action
-appears under **File > Export**. Disabling also requires a restart. The Advanced tab
+appears under **File > Export**. Disabling also requires a restart. The Advanced page
 shows the saved preference and whether a restart is pending; incorrect passwords or
 canceling an unlock never enable it. No automatic restart interrupts unsaved work.
 

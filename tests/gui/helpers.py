@@ -9,7 +9,7 @@ from typing import Any
 
 from PIL import Image
 from PySide6.QtCore import QObject, QPoint, Qt, Signal
-from PySide6.QtWidgets import QListWidget, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QListWidget, QMessageBox, QWidget
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
@@ -162,6 +162,16 @@ def assert_visible_children_within_parent(root: QWidget) -> None:
         assert top_left.y() >= -1, bounds
         assert bottom_right.x() <= parent.width() + 1, bounds
         assert bottom_right.y() <= parent.height() + 1, bounds
+
+
+def select_settings_category(dialog: Any, category: str) -> None:
+    """Select a Settings page by its user-facing navigation label."""
+
+    matches = dialog.navigation.findItems(category, Qt.MatchFlag.MatchExactly)
+    assert len(matches) == 1, category
+    dialog.navigation.setCurrentItem(matches[0])
+    QApplication.processEvents()
+    assert dialog.page_title.text() == category
 
 
 def find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) -> int:

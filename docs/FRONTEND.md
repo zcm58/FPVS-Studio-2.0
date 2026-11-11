@@ -147,8 +147,11 @@ interaction.
   result page until the user opens/copies the destination or selects Done. Bundle export
   can assign a distinct project name to the portable copy without changing the open
   project, and imports always target the configured absolute FPVS Studio Root Folder.
-- Settings uses a flat header/section/control hierarchy without nested cards. Its
-  exclusive Light/Dark/Auto toggle applies a persisted computer preference immediately;
+- Settings uses a left category column and a right content page with a category heading
+  and plain sections. General, Recording, Appearance, Workspace, Advanced and Diagnostics
+  support mouse and keyboard navigation. The content scrolls vertically when needed
+  while navigation and Close remain reachable. Its exclusive Light/Dark/Auto toggle
+  on Appearance applies a persisted computer preference immediately.
   Auto follows the OS theme. Existing root/template, run export, Recording Reminder,
   Test/Pilot, recording, developer and diagnostics workflows retain their eligibility
   and callbacks. App preferences remain outside project files. Shared dialog headers

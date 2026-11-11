@@ -26,6 +26,7 @@ from tests.gui.helpers import (
     _list_widget_text,
     _open_created_project,
     assert_visible_children_within_parent,
+    select_settings_category,
 )
 
 from fpvs_studio import __version__
@@ -1268,7 +1269,7 @@ def test_settings_dialog_displays_app_version(qtbot, tmp_path: Path) -> None:
     version_value = dialog.findChild(QLabel, "app_version_value")
     assert version_value is not None
     assert version_value.text() == f"FPVS Studio version {__version__}"
-    assert version_value.alignment() & Qt.AlignmentFlag.AlignHCenter
+    assert version_value.alignment() & Qt.AlignmentFlag.AlignLeft
 
 
 def test_settings_dialog_root_folder_setup_button_updates_root_label(
@@ -1296,6 +1297,7 @@ def test_settings_dialog_root_folder_setup_button_updates_root_label(
     assert root_value_label is None
     assert setup_button is not None
 
+    select_settings_category(dialog, "Workspace")
     qtbot.mouseClick(setup_button, Qt.MouseButton.LeftButton)
 
     assert callback_parents == [dialog]
@@ -1412,6 +1414,7 @@ def test_settings_dialog_manage_templates_button_triggers_callback(
 
     manage_button = dialog.findChild(QPushButton, "manage_condition_templates_button")
     assert manage_button is not None
+    select_settings_category(dialog, "Workspace")
     qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
     assert callback_calls == 1
 
@@ -1433,7 +1436,7 @@ def test_settings_dialog_detailed_run_exports_checkbox_triggers_callback(
 
     checkbox = dialog.findChild(QCheckBox, "detailed_run_exports_checkbox")
     assert checkbox is not None
-    assert checkbox.text() == "Save detailed runs folder after each participant run"
+    assert checkbox.text() == "Save detailed timing and trigger CSVs"
     assert checkbox.isChecked() is False
 
     qtbot.mouseClick(checkbox, Qt.MouseButton.LeftButton)
@@ -1531,7 +1534,7 @@ def test_settings_dialog_experiment_test_mode_is_explicit_and_fits(
         on_experiment_test_mode_changed=captured_values.append,
     )
     qtbot.addWidget(dialog)
-    dialog.resize(700, 360)
+    dialog.resize(860, 560)
     dialog.show()
     QApplication.processEvents()
 
@@ -2420,7 +2423,7 @@ def test_pilot_settings_toggle_and_layout(qtbot, tmp_path):
         on_attentional_blink_pilot_mode_changed=values.append,
     )
     qtbot.addWidget(dialog)
-    dialog.resize(700, 680)
+    dialog.resize(860, 560)
     dialog.show()
     QApplication.processEvents()
     checkbox = dialog.attentional_blink_pilot_mode_checkbox
