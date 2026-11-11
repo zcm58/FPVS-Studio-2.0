@@ -65,7 +65,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Effective frequency/duration and ordering | `core/condition_timing.py`, `core/session_ordering.py` |
 | Common display frame grid for mixed image rates | `core/validation.py`; shared by authoring, readiness and compilation |
 | Independent participant reuse policies and randomization domains | `core/randomization.py`; [contract](docs/SESSION_PLAN.md#independent-randomization) |
-| Task definitions and condition modifiers | `core/task_models.py`, `core/condition_modifiers.py` |
+| Task definitions and condition modifiers | `core/task_models.py`, `core/condition_modifiers.py`; [task layout](docs/ENGINE_INTERFACE.md#modular-task-rendering) |
 | Optional single-target fixation onset window | `core/compiler_fixation.py`; compiled frame events remain the runtime contract |
 | Library mouse-task compatibility floor | `core/library_publish.py`; final prepared-bundle verification rechecks it |
 | Manifest schemas and persistence | `preprocessing/models.py`, `preprocessing/manifest.py` |

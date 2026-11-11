@@ -792,6 +792,47 @@ def test_exact_prompt_and_item_geometry_resolve_from_degrees(
     assert apple.size_px[0] > apple.size_px[1]
 
 
+def test_window_fraction_geometry_uses_the_live_viewport_without_recalibrating_degrees(
+    sample_project, sample_project_root,
+) -> None:
+    run = _compiled_run(sample_project, sample_project_root)
+    calibration = run.display.model_copy()
+    step = _choice_step().model_copy(update={
+        "prompt_unit": PresentationUnit.WINDOW_HEIGHT_FRACTION,
+        "prompt_x": 0.12,
+        "prompt_y": 0.27,
+        "prompt_width": 0.8,
+        "prompt_height": 0.05,
+    })
+    step.items[-1].unit = PresentationUnit.WINDOW_HEIGHT_FRACTION
+    step.items[-1].x = 0.3
+    step.items[-1].width = 0.15
+    step.items[-1].height = 0.1
+    engine = _TaskEngine(
+        [TaskEngineInput(selected_item_ids=("apple",))],
+        {"current_display_size_px": (1200, 800)},
+    )
+    run_task_modules(
+        engine, [_module(step)], project_root=sample_project_root, run_spec=run,
+        block_index=0, global_order_index=0,
+    )
+
+    rendered = engine.rendered_steps[0]
+    assert rendered.prompt_position_px == pytest.approx((96, 216))
+    assert rendered.prompt_width_px == pytest.approx(640)
+    assert rendered.prompt_height_px == pytest.approx(40)
+    assert rendered.items[-1].position_px == pytest.approx((240, 0))
+    assert rendered.items[-1].size_px == pytest.approx((120, 80))
+    assert run.display == calibration
+
+    calibrated_engine = _TaskEngine([TaskEngineInput(selected_item_ids=("apple",))])
+    run_task_modules(
+        calibrated_engine, [_module(step)], project_root=sample_project_root, run_spec=run,
+        block_index=0, global_order_index=0,
+    )
+    assert rendered.items[0] == calibrated_engine.rendered_steps[0].items[0]
+
+
 def test_timed_feedback_accepts_escape_only() -> None:
     step = ResolvedTaskStep(
         task_id="recognition",
@@ -1341,16 +1382,21 @@ def test_responsive_grid_uses_authored_columns_without_overlap(
         columns=2,
         items=[
             TaskDisplayItem(
-                item_id=f"item-{index}",
-                modality=TaskItemModality.TEXT,
-                text=f"Item {index}",
-            )
-            for index in range(4)
+                item_id="wide", modality=TaskItemModality.IMAGE, image_path="stimuli/wide.png",
+                width=0.6, height=0.2, unit=PresentationUnit.WINDOW_HEIGHT_FRACTION,
+            ),
+            TaskDisplayItem(item_id="label", modality=TaskItemModality.TEXT, text="A long label"),
+            TaskDisplayItem(
+                item_id="default", modality=TaskItemModality.IMAGE,
+                image_path="stimuli/default.png",
+            ),
+            TaskDisplayItem(item_id="last", modality=TaskItemModality.TEXT, text="Last"),
         ],
         random_seed=1,
-        realized_item_order=[f"item-{index}" for index in range(4)],
     )
-    engine = _TaskEngine([TaskEngineInput(key="space")])
+    engine = _TaskEngine(
+        [TaskEngineInput(key="space")], {"current_display_size_px": (1200, 800)},
+    )
 
     outcome = run_task_modules(
         engine,
@@ -1362,10 +1408,61 @@ def test_responsive_grid_uses_authored_columns_without_overlap(
     )
 
     assert outcome.aborted is False
-    positions = [item.position_px for item in engine.rendered_steps[0].items]
+    items = engine.rendered_steps[0].items
+    positions = [item.position_px for item in items]
     assert len(set(positions)) == 4
     assert positions[0][0] == positions[2][0]
     assert positions[0][1] != positions[2][1]
+    assert positions[0] == pytest.approx((-120, 72))
+    assert positions[-1] == pytest.approx((120, -72))
+    assert items[0].size_px == pytest.approx((216, 72))
+    assert items[1].size_px is not None
+    assert items[1].size_px[0] == pytest.approx(216)
+    assert items[2].size_px == pytest.approx((103.68, 103.68))
+
+
+def test_question_choice_and_rating_spacing_use_the_live_viewport(
+    sample_project, sample_project_root,
+) -> None:
+    step = TaskStepSpec(
+        step_id="questions", kind=TaskStepKind.QUESTIONNAIRE, random_seed=1,
+        questions=[
+            TaskQuestion(
+                question_id="choice", kind=TaskQuestionKind.SINGLE_CHOICE, prompt="Which?",
+                options=[
+                    TaskOption(option_id="a", label="A", image_path="stimuli/a.png"),
+                    TaskOption(option_id="b", label="A text-only option"),
+                ],
+            ),
+            TaskQuestion(
+                question_id="rating", kind=TaskQuestionKind.RATING, prompt="How certain?",
+                min_value=1, max_value=5, step=1,
+            ),
+        ],
+    )
+    engine = _TaskEngine(
+        [
+            TaskEngineInput(selected_item_ids=("a",)),
+            TaskEngineInput(selected_item_ids=("rating-4",)),
+        ],
+        {"current_display_size_px": (1200, 800)},
+    )
+    outcome = run_task_modules(
+        engine, [_module(step)], project_root=sample_project_root,
+        run_spec=_compiled_run(sample_project, sample_project_root),
+        block_index=0, global_order_index=0,
+    )
+
+    assert not outcome.aborted
+    choice, rating = engine.rendered_steps
+    assert choice.items[0].position_px == pytest.approx((-120, 0))
+    assert choice.items[0].size_px == pytest.approx((92.16, 92.16))
+    assert choice.items[1].size_px is not None
+    assert choice.items[2].size_px is not None
+    assert choice.items[1].size_px[0] == pytest.approx(216)
+    assert choice.items[2].size_px[0] == pytest.approx(216)
+    assert rating.items[0].position_px == pytest.approx((-264, 0))
+    assert rating.items[0].text_height_px == pytest.approx(25.6)
 
 
 def test_explicit_single_choice_and_rating_submit_selected_item() -> None:

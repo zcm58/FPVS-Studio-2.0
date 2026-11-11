@@ -216,10 +216,14 @@ response latency, so the engine must not claim physical display-onset accuracy f
 
 ## Modular task rendering
 
-Runtime converts authored degrees or window-height fractions into calibrated pixel
-positions and sizes before calling the engine. Exact layouts preserve authored
-coordinates; responsive layouts arrive as already-positioned grids. The PsychoPy task
-renderer supports instructions, study displays, single/multiple image or text choices,
+Runtime converts authored degrees into nominal task pixels. Window-height fractions
+and responsive grids use the realized presentation viewport when available.
+Responsive grids bound image and shape sizes and text wrapping to their cells.
+Before the first flip, the PsychoPy task renderer uniformly reduces positioned
+content that exceeds the viewport's usable area, including choice hitboxes and
+positioned prompts. The same fit applies in Test/Pilot and recording. Timed FPVS
+stimulus geometry uses its own calibrated rendering path.
+The task renderer supports instructions, study displays, single/multiple image or text choices,
 short/long text, numeric input, rating scales, raw keys, and unskippable timed feedback.
 It applies the resolved Arial or Open Sans family to headings, prompts, item and option
 labels, editable response text, validation messages, submit controls, and footers. Arial

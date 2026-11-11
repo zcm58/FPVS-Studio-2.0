@@ -100,6 +100,9 @@ class _TaskScreenStimuli:
         self._properties: dict[str, dict[str, Any]] = {}
 
     def draw(self, slot: str, kind: str, **properties: Any) -> None:
+        self.prepare(slot, kind, **properties).draw()
+
+    def prepare(self, slot: str, kind: str, **properties: Any) -> Any:
         stimulus = self.stimuli.get(slot)
         if stimulus is None:
             stimulus = getattr(self._visual, kind)(self._window, **properties)
@@ -110,7 +113,7 @@ class _TaskScreenStimuli:
                 if value != previous_properties[name]:
                     setattr(stimulus, name, value)
         self._properties[slot] = properties
-        stimulus.draw()
+        return stimulus
 
 
 def render_task_step(
@@ -139,6 +142,7 @@ def render_task_step(
     screen_stimuli = _TaskScreenStimuli(visual, window)
     failed = False
     try:
+        step = _fit_task_content(window, step, item_stimuli, screen_stimuli)
         return _render_prepared_task_step(
             visual=visual, core=core, event=event, window=window, keyboard=keyboard,
             step=step, item_stimuli=item_stimuli, screen_stimuli=screen_stimuli,
@@ -658,6 +662,118 @@ def _text_box_value(text_box: Any | None, *, fallback: str = "") -> str:
     return str(value)
 
 
+def _fit_task_content(
+    window: Any,
+    step: ResolvedTaskStep,
+    item_stimuli: dict[str, Any],
+    screen_stimuli: _TaskScreenStimuli,
+) -> ResolvedTaskStep:
+    """Fit positioned content before the first flip, using the drawable viewport."""
+    width, height = _window_width(window), _window_height(window)
+    # Leave space for the viewport-relative prompt, footer and submit control.
+    top = height * 0.475
+    bottom = height * 0.475
+    prompt_position = step.prompt_position_px
+    prompt = step.prompt or step.body or step.heading
+    if prompt_position is None and (step.body or step.prompt):
+        two_prompts = bool(step.body and step.prompt and step.body != step.prompt)
+        top = height * (0.13 if two_prompts else 0.22)
+    elif step.heading and (prompt_position is None or step.heading != prompt):
+        top = height * 0.32
+    if _has_submit_control(step):
+        bottom = height * 0.25
+    elif step.show_footer:
+        bottom = height * 0.38
+
+    boxes = [_task_item_bounds(item, item_stimuli[item.item_id]) for item in step.items]
+    prompt_properties = None
+    if prompt_position is not None and prompt:
+        prompt_properties = _task_body_properties(window, step, prompt)
+        stimulus = screen_stimuli.prepare("body", "TextStim", **prompt_properties)
+        wrap = float(prompt_properties["wrapWidth"])
+        text_height = float(prompt_properties["height"])
+        text_width, glyph_height = getattr(stimulus, "boundingBox", (wrap, text_height))
+        prompt_x = prompt_position[0] + _text_content_offset_x(stimulus, "center")
+        boxes.append((prompt_x, prompt_position[1], text_width, glyph_height))
+    if not boxes:
+        return step
+
+    horizontal = max(abs(x) + item_width / 2 for x, _, item_width, _ in boxes)
+    upper = max(y + item_height / 2 for _, y, _, item_height in boxes)
+    lower = max(-y + item_height / 2 for _, y, _, item_height in boxes)
+    scale = min(
+        1.0, width * 0.475 / max(1.0, horizontal),
+        top / max(1.0, upper), bottom / max(1.0, lower),
+    )
+    if scale >= 1.0:
+        return step
+
+    LOGGER.info(
+        "Fitting task %s/%s to %.0fx%.0f at %.3f scale",
+        step.task_id, step.step_id, width, height, scale,
+    )
+    fitted_items = []
+    for item in step.items:
+        x, y = item.position_px
+        position = (x * scale, y * scale)
+        stimulus = item_stimuli[item.item_id]
+        size = item.size_px
+        stimulus.pos = position
+        if item.image_path is not None or item.shape is not None:
+            width_px, height_px = size if size is not None else stimulus.size
+            size = (width_px * scale, height_px * scale)
+            stimulus.size = size
+            if item.shape is not None:
+                stimulus.lineWidth = item.line_width_px * scale
+        else:
+            if size is not None:
+                size = (size[0] * scale, size[1] * scale)
+            stimulus.height = item.text_height_px * scale
+            wrap_width = getattr(stimulus, "wrapWidth", None)
+            if wrap_width is not None:
+                stimulus.wrapWidth = float(wrap_width) * scale
+        fitted_items.append(replace(
+            item, position_px=position, size_px=size,
+            text_height_px=item.text_height_px * scale,
+            line_width_px=item.line_width_px * scale,
+        ))
+    if prompt_position is not None and prompt_properties is not None:
+        return replace(
+            step, items=tuple(fitted_items),
+            prompt_position_px=(prompt_position[0] * scale, prompt_position[1] * scale),
+            prompt_height_px=float(prompt_properties["height"]) * scale,
+            prompt_width_px=float(prompt_properties["wrapWidth"]) * scale,
+        )
+    return replace(step, items=tuple(fitted_items))
+
+
+def _task_item_bounds(
+    item: ResolvedTaskItem, stimulus: Any,
+) -> tuple[float, float, float, float]:
+    x, y = item.position_px
+    if item.image_path is not None or item.shape is not None:
+        width, height = item.size_px if item.size_px is not None else stimulus.size
+        stroke = item.line_width_px if item.shape is not None else 0.0
+        return x, y, width + stroke, height + stroke
+    metrics = getattr(stimulus, "boundingBox", None)
+    if metrics is None:
+        width, height = _item_hitbox(item)
+    else:
+        width, height = metrics
+        x += _text_content_offset_x(stimulus, item.text_alignment)
+    return x, y, width, height
+
+
+def _task_body_properties(window: Any, step: ResolvedTaskStep, body: str) -> dict[str, Any]:
+    height = _window_height(window)
+    return dict(
+        text=body, font=step.font_family, units="pix", color="white", autoLog=False,
+        height=step.prompt_height_px or max(22.0, height * 0.031),
+        pos=step.prompt_position_px or (0, height * 0.27),
+        wrapWidth=step.prompt_width_px or _window_width(window) * 0.9,
+    )
+
+
 def _draw_step(
     *,
     visual: Any,
@@ -689,18 +805,7 @@ def _draw_step(
         )
     body = exact_primary_text or step.body or step.prompt
     if body:
-        prompt_position = step.prompt_position_px or (0, window_height * 0.27)
-        drawables.draw(
-            "body", "TextStim",
-            text=body,
-            font=step.font_family,
-            units="pix",
-            height=step.prompt_height_px or max(22.0, window_height * 0.031),
-            pos=prompt_position,
-            wrapWidth=step.prompt_width_px or _window_width(window) * 0.9,
-            color="white",
-            autoLog=False,
-        )
+        drawables.draw("body", "TextStim", **_task_body_properties(window, step, body))
     if (
         exact_primary_text is not None
         and step.prompt
@@ -1032,7 +1137,9 @@ def _item_at_position(
         stimulus = (stimuli or {}).get(item.item_id)
         contains = getattr(stimulus, "contains", None)
         if callable(contains):
-            hit_x = _text_hit_test_x(item, stimulus, x)
+            hit_x = x
+            if item.image_path is None and item.shape is None:
+                hit_x -= _text_content_offset_x(stimulus, item.text_alignment)
             try:
                 if bool(contains((hit_x, y), units="pix")):
                     return item
@@ -1050,33 +1157,30 @@ def _item_at_position(
     return None
 
 
-def _text_hit_test_x(item: ResolvedTaskItem, stimulus: Any, x: float) -> float:
-    """Align native TextStim containment with its rendered wrapping frame.
+def _text_content_offset_x(stimulus: Any, alignment: str) -> float:
+    """Locate the center of rendered TextStim content within its wrapping frame.
 
     PsychoPy centers ``contains`` on the content width, while Pyglet positions
     left/right aligned glyphs within the center-anchored wrapping frame. It also
-    left-aligns overflowing lines. Translate the point instead of guessing label
-    width or changing the drawing.
+    left-aligns overflowing lines.
     """
-    if item.image_path is not None or item.shape is not None:
-        return x
     bounding_box = getattr(stimulus, "boundingBox", None)
     wrapping_width = getattr(stimulus, "_wrapWidthPix", None)
-    if item.text_alignment == "center" and (bounding_box is None or wrapping_width is None):
-        return x
+    if alignment == "center" and (bounding_box is None or wrapping_width is None):
+        return 0.0
     if bounding_box is None or wrapping_width is None:
         raise RuntimeError("Aligned text hit-testing requires rendered wrapping-frame metrics.")
     content_width = float(bounding_box[0])
     frame_width = float(wrapping_width)
     if not isfinite(content_width) or not isfinite(frame_width) or frame_width <= 0:
         raise RuntimeError("Text hit-testing requires finite, positive wrapping-frame metrics.")
-    if item.text_alignment == "center" and content_width <= frame_width:
-        return x
+    if alignment == "center" and content_width <= frame_width:
+        return 0.0
     content_left = -(frame_width // 2.0)
     # Pyglet left-aligns an overflowing line regardless of the requested alignment.
-    if item.text_alignment == "right" and content_width <= frame_width:
+    if alignment == "right" and content_width <= frame_width:
         content_left += frame_width - content_width
-    return x - (content_left + content_width / 2.0)
+    return content_left + content_width / 2.0
 
 
 def _point_in_box(

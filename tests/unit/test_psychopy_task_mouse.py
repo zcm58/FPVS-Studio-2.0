@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from fpvs_studio.core.display_geometry import visual_angle_width_px
 from fpvs_studio.engines.base import ResolvedTaskItem, ResolvedTaskStep
 from fpvs_studio.engines.psychopy_tasks import render_task_step
 
@@ -45,6 +46,7 @@ class _Handle:
 class _Stimulus:
     def __init__(self, window, **properties):
         self.pos = properties.get("pos", (0, 0))
+        self.size = properties.get("size") or (160, 60)
 
     def draw(self):
         pass
@@ -294,6 +296,106 @@ def test_click_mapping_tracks_current_window_size_and_scale(tmp_path):
 
     assert result.selected_item_ids == ("lamp-target",)
     assert result.mouse_position_px == pytest.approx((200, -120))
+    _assert_handlers_released(screen)
+
+
+@pytest.mark.parametrize("scale", [1.0, 1.25, 1.5])
+@pytest.mark.parametrize(("screen_width_cm", "already_fits"), [(31.0, False), (52.0, True)])
+def test_image_grid_fits_fullscreen_and_retains_native_hit_testing(
+    tmp_path, scale, screen_width_cm, already_fits,
+):
+    screen = _Screen(scale=scale)
+    screen.size = (1920, 1080)
+
+    def px(degrees):
+        if degrees == 0:
+            return 0
+        magnitude = visual_angle_width_px(
+            degrees=abs(degrees),
+            viewing_distance_cm=80.0,
+            screen_width_cm=screen_width_cm,
+            screen_width_px=1920,
+        )
+        return magnitude if degrees > 0 else -magnitude
+
+    # Creatine's exact image recognition layout, resolved at the two calibrations.
+    image_size = (px(5), px(4))
+    image_items = tuple(
+        ResolvedTaskItem(
+            item_id, image_path=f"stimuli/task-assets/recognition/{item_id}.png",
+            position_px=(px(x), px(y)),
+            size_px=image_size, selectable=item_id.endswith("-target"),
+        )
+        for item_id, x, y in (
+            ("apple-target", -10, 0), ("calculator-target", 8, 0),
+            ("glasses-target", -10, -5), ("purse-target", 8, -5),
+            ("guitar-foil", -4, 0), ("accordion-foil", 2, 0),
+            ("artichoke-foil", -4, -5), ("jeans-foil", 2, -5),
+        )
+    )
+    prompt = ResolvedTaskItem(
+        "recognition-prompt", text="Which objects were you asked to remember?",
+        position_px=(0, px(6)), text_height_px=px(1),
+    )
+    drawn_images = []
+    drawn_prompt = []
+    click_position = None
+
+    class _Image(_Stimulus):
+        def draw(self):
+            nonlocal click_position
+            if not drawn_images:
+                # Click just inside the visible apple's right edge. On the smaller
+                # monitor this lies outside the apple's original calibrated bounds.
+                click_position = (self.pos[0] + self.size[0] / 2 - 1, self.pos[1])
+                screen.actions = [None, ("click", click_position, 1)]
+            if not screen.flips:
+                drawn_images.append((tuple(self.pos), tuple(self.size)))
+
+        def contains(self, position, *, units):
+            assert units == "pix"
+            return all(
+                abs(coordinate - center) <= extent / 2
+                for coordinate, center, extent in zip(position, self.pos, self.size, strict=True)
+            )
+
+    class _Prompt(_Stimulus):
+        def __init__(self, window, **properties):
+            super().__init__(window, **properties)
+            self.height = properties["height"]
+            self.wrapWidth = properties["wrapWidth"]
+
+        @property
+        def boundingBox(self):  # noqa: N802
+            return (10 * self.height, self.height)
+
+        def draw(self):
+            if not screen.flips:
+                drawn_prompt.append((tuple(self.pos), self.height))
+
+    screen.visual.ImageStim = _Image
+    screen.visual.TextStim = _Prompt
+    step = replace(_recognition_step(), items=(prompt, *image_items))
+    result = screen.render(tmp_path, step=step)
+
+    assert result.selected_item_ids == ("apple-target",)
+    assert click_position is not None
+    assert result.mouse_position_px == pytest.approx(click_position)
+    assert len(drawn_images) == len(image_items)
+    fit = drawn_images[0][1][0] / image_size[0]
+    if already_fits:
+        assert fit == 1.0
+    else:
+        assert 0.0 < fit < 1.0
+        assert click_position[0] > image_items[0].position_px[0] + image_size[0] / 2
+    for item, (position, size) in zip(image_items, drawn_images, strict=True):
+        assert position == pytest.approx(tuple(value * fit for value in item.position_px))
+        assert size == pytest.approx(tuple(value * fit for value in image_size))
+        assert abs(position[0]) + size[0] / 2 < 1920 / 2
+        assert abs(position[1]) + size[1] / 2 < 1080 / 2
+    (prompt_position, prompt_height), = drawn_prompt
+    assert prompt_position == pytest.approx((0, prompt.position_px[1] * fit))
+    assert prompt_height == pytest.approx(prompt.text_height_px * fit)
     _assert_handlers_released(screen)
 
 

@@ -136,6 +136,30 @@ def test_long_static_task_reuses_one_stimulus_per_text_slot(tmp_path):
     assert screen.text_draws.count("Body") == 120
 
 
+def test_positioned_task_prompt_fits_before_its_first_flip(tmp_path):
+    screen = _Screen()
+    screen.size = (640, 360)
+    screen.actions = [None]
+    step = ResolvedTaskStep(
+        task_id="study", step_id="prompt", kind="instruction",
+        body="Study these objects.", prompt_position_px=(0, 210),
+        prompt_height_px=42, prompt_width_px=620, show_footer=False, duration_frames=1,
+    )
+
+    render_task_step(
+        visual=screen.visual, core=screen.core, event=screen.event, window=screen,
+        keyboard=screen.keyboard, project_root=tmp_path, step=step,
+        is_aborted=lambda: False, set_aborted=lambda: None,
+    )
+
+    (prompt,) = screen.created_text
+    scale = prompt.height / 42
+    assert 0 < scale < 1
+    assert prompt.pos == pytest.approx((0, 210 * scale))
+    assert prompt.wrapWidth == pytest.approx(620 * scale)
+    assert prompt.pos[1] + prompt.height * 1.3 / 2 < screen.size[1] / 2
+
+
 def test_changing_numeric_task_reuses_response_and_validation_text(tmp_path):
     screen = _Screen()
     screen.actions = [("key", "return"), *[("key", "1")] * 100, ("key", "return")]
@@ -284,6 +308,7 @@ def test_task_images_release_native_buffers_on_every_exit(monkeypatch, tmp_path,
 
     class ImageStim:
         def __init__(self, *args, **kwargs):
+            self.size = (64, 64)
             self._pixbuffID = len(created) + 1
             self._listID = len(created) + 11
             self.clear_count = 0
@@ -441,7 +466,7 @@ def test_task_cleanup_attempts_every_item_and_reports_failures(monkeypatch, tmp_
 
         return SimpleNamespace(
             _pixbuffID=1 if name == "a" else 2, draw=draw,
-            clearTextures=clear_textures,
+            clearTextures=clear_textures, size=(64, 64),
         )
 
     screen.visual.ImageStim = image_stim

@@ -336,6 +336,9 @@ def _run_step(
     backward_counting: BackwardCountingSession,
     terminal: bool = False,
 ) -> list[TaskResponseRecord]:
+    viewport_size_px = engine.current_display_size_px()
+    if viewport_size_px is None:
+        viewport_size_px = (run_spec.display.screen_width_px, run_spec.display.screen_height_px)
     if step.kind == TaskStepKind.QUESTIONNAIRE:
         records: list[TaskResponseRecord] = []
         for question in step.questions:
@@ -354,6 +357,7 @@ def _run_step(
                         step,
                         question,
                         run_spec=run_spec,
+                        viewport_size_px=viewport_size_px,
                         forbidden_ids=forbidden_ids,
                     ),
                     project_root,
@@ -393,6 +397,7 @@ def _run_step(
                 module,
                 step,
                 run_spec=run_spec,
+                viewport_size_px=viewport_size_px,
                 forbidden_ids=forbidden_ids,
                 clear_after_duration=terminal,
             ),
@@ -444,6 +449,7 @@ def _resolved_step(
     step: TaskStepSpec,
     *,
     run_spec: RunSpec,
+    viewport_size_px: tuple[int, int],
     forbidden_ids: set[str] | None = None,
     clear_after_duration: bool = False,
 ) -> ResolvedTaskStep:
@@ -454,8 +460,10 @@ def _resolved_step(
         step,
         ordered_items,
         run_spec=run_spec,
+        viewport_size_px=viewport_size_px,
         forbidden_ids=forbidden_ids,
     )
+    viewport_height_px = viewport_size_px[1]
     return ResolvedTaskStep(
         task_id=module.task_id,
         step_id=step.step_id,
@@ -479,9 +487,15 @@ def _resolved_step(
         maximum_selections=step.max_selections,
         submission_mode=step.submission_mode.value,
         submit_label=step.submit_label,
-        prompt_position_px=_prompt_position_px(step, run_spec=run_spec),
-        prompt_height_px=_prompt_height_px(step, run_spec=run_spec),
-        prompt_width_px=_prompt_width_px(step, run_spec=run_spec),
+        prompt_position_px=_prompt_position_px(
+            step, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        ),
+        prompt_height_px=_prompt_height_px(
+            step, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        ),
+        prompt_width_px=_prompt_width_px(
+            step, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        ),
         show_footer=step.show_footer,
         background_rgb=(run_spec.scene_stream.background_rgb if run_spec.scene_stream else None),
     )
@@ -493,12 +507,13 @@ def _resolved_question_step(
     question: TaskQuestion,
     *,
     run_spec: RunSpec,
+    viewport_size_px: tuple[int, int],
     forbidden_ids: set[str] | None = None,
 ) -> ResolvedTaskStep:
     if question.kind == TaskQuestionKind.RATING:
         items, _rating_values = _rating_items(
             question,
-            run_spec=run_spec,
+            viewport_size_px=viewport_size_px,
             forbidden_ids=forbidden_ids,
         )
     else:
@@ -510,7 +525,7 @@ def _resolved_question_step(
         ordered_options = [options_by_id[option_id] for option_id in order]
         items = _question_option_items(
             ordered_options,
-            run_spec=run_spec,
+            viewport_size_px=viewport_size_px,
             forbidden_ids=forbidden_ids,
             columns=step.columns,
         )
@@ -520,6 +535,7 @@ def _resolved_question_step(
     maximum = question.max_selections
     if question.kind == TaskQuestionKind.SINGLE_CHOICE:
         maximum = 1
+    viewport_height_px = viewport_size_px[1]
     return ResolvedTaskStep(
         task_id=module.task_id,
         step_id=step.step_id,
@@ -543,9 +559,15 @@ def _resolved_question_step(
         submission_mode=step.submission_mode.value,
         submit_label=step.submit_label,
         question_id=question.question_id,
-        prompt_position_px=_prompt_position_px(step, run_spec=run_spec),
-        prompt_height_px=_prompt_height_px(step, run_spec=run_spec),
-        prompt_width_px=_prompt_width_px(step, run_spec=run_spec),
+        prompt_position_px=_prompt_position_px(
+            step, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        ),
+        prompt_height_px=_prompt_height_px(
+            step, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        ),
+        prompt_width_px=_prompt_width_px(
+            step, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        ),
         show_footer=step.show_footer,
         background_rgb=(run_spec.scene_stream.background_rgb if run_spec.scene_stream else None),
     )
@@ -564,51 +586,75 @@ def _prompt_position_px(
     step: TaskStepSpec,
     *,
     run_spec: RunSpec,
+    viewport_height_px: int,
 ) -> tuple[float, float] | None:
     if step.layout_mode.value != "exact":
         return None
     return (
-        _layout_value_px(step.prompt_x, step.prompt_unit, run_spec=run_spec, signed=True,
-                         degree_geometry=step.degree_geometry),
-        _layout_value_px(step.prompt_y, step.prompt_unit, run_spec=run_spec, signed=True,
-                         degree_geometry=step.degree_geometry),
+        _layout_value_px(
+            step.prompt_x, step.prompt_unit, run_spec=run_spec,
+            viewport_height_px=viewport_height_px, signed=True,
+            degree_geometry=step.degree_geometry,
+        ),
+        _layout_value_px(
+            step.prompt_y, step.prompt_unit, run_spec=run_spec,
+            viewport_height_px=viewport_height_px, signed=True,
+            degree_geometry=step.degree_geometry,
+        ),
     )
 
 
-def _prompt_height_px(step: TaskStepSpec, *, run_spec: RunSpec) -> float | None:
+def _prompt_height_px(
+    step: TaskStepSpec, *, run_spec: RunSpec, viewport_height_px: int,
+) -> float | None:
     if step.prompt_height is None:
         return None
-    return _layout_value_px(step.prompt_height, step.prompt_unit, run_spec=run_spec,
-                            degree_geometry=step.degree_geometry)
+    return _layout_value_px(
+        step.prompt_height, step.prompt_unit, run_spec=run_spec,
+        viewport_height_px=viewport_height_px, degree_geometry=step.degree_geometry,
+    )
 
 
-def _prompt_width_px(step: TaskStepSpec, *, run_spec: RunSpec) -> float | None:
+def _prompt_width_px(
+    step: TaskStepSpec, *, run_spec: RunSpec, viewport_height_px: int,
+) -> float | None:
     if step.prompt_width is None:
         return None
-    return _layout_value_px(step.prompt_width, step.prompt_unit, run_spec=run_spec,
-                            degree_geometry=step.degree_geometry)
+    return _layout_value_px(
+        step.prompt_width, step.prompt_unit, run_spec=run_spec,
+        viewport_height_px=viewport_height_px, degree_geometry=step.degree_geometry,
+    )
 
 
 def _resolved_display_item(
     item: TaskDisplayItem,
     *,
     run_spec: RunSpec,
+    viewport_height_px: int,
     selectable: bool | None = None,
     degree_geometry: Literal["visual_angle", "linear"] = "visual_angle",
 ) -> ResolvedTaskItem:
-    x_px = _layout_value_px(item.x, item.unit, run_spec=run_spec, signed=True,
-                            degree_geometry=degree_geometry)
-    y_px = _layout_value_px(item.y, item.unit, run_spec=run_spec, signed=True,
-                            degree_geometry=degree_geometry)
+    x_px = _layout_value_px(
+        item.x, item.unit, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        signed=True, degree_geometry=degree_geometry,
+    )
+    y_px = _layout_value_px(
+        item.y, item.unit, run_spec=run_spec, viewport_height_px=viewport_height_px,
+        signed=True, degree_geometry=degree_geometry,
+    )
     width_px = (
-        _layout_value_px(item.width, item.unit, run_spec=run_spec,
-                         degree_geometry=degree_geometry)
+        _layout_value_px(
+            item.width, item.unit, run_spec=run_spec, viewport_height_px=viewport_height_px,
+            degree_geometry=degree_geometry,
+        )
         if item.width is not None
         else None
     )
     height_px = (
-        _layout_value_px(item.height, item.unit, run_spec=run_spec,
-                         degree_geometry=degree_geometry)
+        _layout_value_px(
+            item.height, item.unit, run_spec=run_spec, viewport_height_px=viewport_height_px,
+            degree_geometry=degree_geometry,
+        )
         if item.height is not None
         else None
     )
@@ -629,6 +675,7 @@ def _resolved_display_item(
             1.0,
             PresentationUnit.DEGREES,
             run_spec=run_spec,
+            viewport_height_px=viewport_height_px,
             degree_geometry=degree_geometry,
         ),
         selectable=item.selectable if selectable is None else selectable,
@@ -645,14 +692,19 @@ def _resolved_display_items(
     items: list[TaskDisplayItem],
     *,
     run_spec: RunSpec,
+    viewport_size_px: tuple[int, int] | None = None,
     forbidden_ids: set[str] | None = None,
 ) -> tuple[ResolvedTaskItem, ...]:
     """Resolve exact coordinates or place authored items in a responsive grid."""
 
+    if viewport_size_px is None:
+        viewport_size_px = (run_spec.display.screen_width_px, run_spec.display.screen_height_px)
+    viewport_width_px, viewport_height_px = viewport_size_px
     resolved = [
         _resolved_display_item(
             item,
             run_spec=run_spec,
+            viewport_height_px=viewport_height_px,
             selectable=item.selectable and item.item_id not in (forbidden_ids or set()),
             degree_geometry=step.degree_geometry,
         )
@@ -663,11 +715,13 @@ def _resolved_display_items(
 
     column_count = min(step.columns or min(4, len(resolved)), len(resolved))
     row_count = (len(resolved) + column_count - 1) // column_count
-    x_spacing = run_spec.display.screen_width_px * 0.2
-    y_spacing = run_spec.display.screen_height_px * 0.18
+    x_spacing = viewport_width_px * 0.2
+    y_spacing = viewport_height_px * 0.18
+    cell_width_px = (x_spacing if column_count > 1 else viewport_width_px) * 0.9
+    cell_height_px = (y_spacing if row_count > 1 else viewport_height_px) * 0.9
     default_image_size = min(x_spacing * 0.72, y_spacing * 0.72)
     placed: list[ResolvedTaskItem] = []
-    for index, (authored, item) in enumerate(zip(items, resolved, strict=True)):
+    for index, item in enumerate(resolved):
         column = index % column_count
         row = index // column_count
         position_px = (
@@ -675,7 +729,14 @@ def _resolved_display_items(
             ((row_count - 1) / 2.0 - row) * y_spacing,
         )
         size_px = item.size_px
-        if authored.modality.value == "image" and size_px is None:
+        if item.text is not None:
+            width, height = size_px or (cell_width_px, item.text_height_px * 1.8)
+            size_px = (min(width, cell_width_px), height)
+        elif size_px is not None:
+            width, height = size_px
+            scale = 1.0 / max(1.0, width / cell_width_px, height / cell_height_px)
+            size_px = (width * scale, height * scale)
+        elif item.image_path is not None:
             size_px = (default_image_size, default_image_size)
         placed.append(replace(item, position_px=position_px, size_px=size_px))
     return tuple(placed)
@@ -684,7 +745,7 @@ def _resolved_display_items(
 def _question_option_items(
     options: list[TaskOption],
     *,
-    run_spec: RunSpec,
+    viewport_size_px: tuple[int, int],
     forbidden_ids: set[str] | None = None,
     columns: int | None = None,
 ) -> tuple[ResolvedTaskItem, ...]:
@@ -693,10 +754,13 @@ def _question_option_items(
         return ()
     column_count = min(columns or min(4, count), count)
     rows = (count + column_count - 1) // column_count
-    x_spacing = run_spec.display.screen_width_px * 0.2
-    y_spacing = run_spec.display.screen_height_px * 0.16
+    viewport_width_px, viewport_height_px = viewport_size_px
+    x_spacing = viewport_width_px * 0.2
+    y_spacing = viewport_height_px * 0.16
+    cell_width_px = (x_spacing if column_count > 1 else viewport_width_px) * 0.9
     image_size = min(x_spacing * 0.72, y_spacing * 0.72)
-    text_height = max(20.0, run_spec.display.screen_height_px * 0.032)
+    text_height = max(20.0, viewport_height_px * 0.032)
+    label_height = max(16.0, text_height * 0.72)
     resolved: list[ResolvedTaskItem] = []
     for index, option in enumerate(options):
         column = index % column_count
@@ -709,7 +773,10 @@ def _question_option_items(
                 text=None if option.image_path is not None else option.label,
                 image_path=option.image_path,
                 position_px=(x_px, y_px),
-                size_px=(image_size, image_size) if option.image_path is not None else None,
+                size_px=(
+                    (image_size, image_size) if option.image_path is not None
+                    else (cell_width_px, text_height * 1.8)
+                ),
                 text_height_px=text_height,
                 selectable=(
                     option.selectable and option.option_id not in (forbidden_ids or set())
@@ -722,7 +789,8 @@ def _question_option_items(
                     item_id=f"__fpvs-label-{option.option_id}",
                     text=option.label,
                     position_px=(x_px, y_px - image_size * 0.66),
-                    text_height_px=max(16.0, text_height * 0.72),
+                    size_px=(cell_width_px, label_height * 1.8),
+                    text_height_px=label_height,
                 )
             )
     return tuple(resolved)
@@ -731,7 +799,7 @@ def _question_option_items(
 def _rating_items(
     question: TaskQuestion,
     *,
-    run_spec: RunSpec,
+    viewport_size_px: tuple[int, int],
     forbidden_ids: set[str] | None = None,
 ) -> tuple[tuple[ResolvedTaskItem, ...], dict[str, float]]:
     assert question.min_value is not None
@@ -748,11 +816,12 @@ def _rating_items(
             f"Rating question '{question.question_id}' has more than 100 response ticks."
         )
     values = [round(question.min_value + index * step, 10) for index in range(tick_count)]
+    viewport_width_px, viewport_height_px = viewport_size_px
     x_spacing = min(
-        run_spec.display.screen_width_px * 0.11,
-        run_spec.display.screen_width_px * 0.75 / max(1, len(values)),
+        viewport_width_px * 0.11,
+        viewport_width_px * 0.75 / max(1, len(values)),
     )
-    text_height = max(20.0, run_spec.display.screen_height_px * 0.032)
+    text_height = max(20.0, viewport_height_px * 0.032)
     items: list[ResolvedTaskItem] = []
     mapping: dict[str, float] = {}
     for index, numeric_value in enumerate(values):
@@ -793,11 +862,12 @@ def _layout_value_px(
     unit: PresentationUnit,
     *,
     run_spec: RunSpec,
+    viewport_height_px: int,
     signed: bool = False,
     degree_geometry: Literal["visual_angle", "linear"] = "visual_angle",
 ) -> float:
     if unit == PresentationUnit.WINDOW_HEIGHT_FRACTION:
-        return float(value) * float(run_spec.display.screen_height_px)
+        return float(value) * viewport_height_px
     if degree_geometry == "linear":
         return (
             float(value) * 0.017455 * run_spec.display.viewing_distance_cm

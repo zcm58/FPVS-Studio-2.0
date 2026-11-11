@@ -982,7 +982,9 @@ The authoring window is organized around two user-facing modes:
   - instruction, study and choice displays expose editable item tables and can opt into exact
     center-origin PsychoPy geometry; exact items support degrees of visual angle or
     fractions of window height and per-item position and size. Study/choice displays
-    default to responsive grids. Choice behavior retains selectable/scored targets,
+    default to responsive grids. During presentation, task layouts use the actual
+    fullscreen viewport and oversized positioned content scales down to fit.
+    This applies in Test/Pilot and recording. Choice behavior retains selectable/scored targets,
     one-valid-choice completion, duplicate choices across repeats, explicit submission,
     retries, and randomized display order
   - text items offer Left, Center and Right alignment within their authored width;
