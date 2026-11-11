@@ -259,11 +259,11 @@ def _visible_layout_issues(dialog: Any) -> list[str]:
     return issues
 
 
-def _wait_for_verification_state(condition: Callable[[], bool]) -> bool:
-    """Allow bounded native event delivery during an approved GUI smoke check."""
+def _wait_for_positive_scroll_value(read_value: Callable[[], int]) -> bool:
+    """Allow bounded native scrollbar event delivery during GUI smoke checks."""
     from PySide6.QtCore import QEventLoop, QTimer
 
-    if condition():
+    if read_value() > 0:
         return True
     loop = QEventLoop()
     poll = QTimer(loop)
@@ -271,7 +271,7 @@ def _wait_for_verification_state(condition: Callable[[], bool]) -> bool:
     deadline.setSingleShot(True)
 
     def check() -> None:
-        if condition():
+        if read_value() > 0:
             loop.quit()
 
     poll.timeout.connect(check)
@@ -281,7 +281,7 @@ def _wait_for_verification_state(condition: Callable[[], bool]) -> bool:
     loop.exec()
     poll.stop()
     deadline.stop()
-    return condition()
+    return read_value() > 0
 
 
 def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[str, Any]:
@@ -334,9 +334,7 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
             page = settings.pages.currentWidget()
             viewport = page.viewport()
             scrollbar = page.verticalScrollBar()
-            overflow_ready = _wait_for_verification_state(
-                lambda target=scrollbar: target.maximum() > 0,
-            )
+            overflow_ready = _wait_for_positive_scroll_value(scrollbar.maximum)
             scrollbar.setValue(0)
             sidebar = settings.navigation.parentWidget()
             close_button = settings.button_box.button(QDialogButtonBox.StandardButton.Close)
@@ -350,9 +348,7 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
                 Qt.ScrollPhase.NoScrollPhase, False,
             )
             QApplication.sendEvent(viewport, wheel)
-            wheel_moved = _wait_for_verification_state(
-                lambda target=scrollbar: target.value() > 0,
-            )
+            wheel_moved = _wait_for_positive_scroll_value(scrollbar.value)
             scrollbar.setValue(scrollbar.maximum())
             app.processEvents()
             bottom = settings.crash_reports_status.mapTo(
