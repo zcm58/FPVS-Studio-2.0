@@ -32,6 +32,18 @@ persistence. Local Qt execution remains opt-in; no live service is used.
 
 ## Desktop scope
 
+### macOS source repair reports
+
+The [macOS repair helper](MACOS_SUPPORT.md) offers **Send Error Report** and
+**Copy Log** after its checks and any PyCharm restart. Its recovery code lives in
+that single script and uses the standard library to implement this same manual
+protocol when Studio's dependencies cannot import. Payload compatibility tests
+check it against `support.models.Report` and `Draft`. Browser verification,
+approved-origin enforcement and durable ambiguous-delivery receipts still apply.
+It sends only the helper's diagnostic capture and its associated PyCharm finishing
+job, not arbitrary IDE session logs. Per-run logs/receipts stay in the checkout's
+`.fpvs-macos/diagnostics/`; see the Mac guide for bounds and recovery actions.
+
 ### Automatic crash reports
 
 Settings > Diagnostics offers **Automatically send crash reports**, on by default

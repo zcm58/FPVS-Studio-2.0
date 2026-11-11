@@ -30,6 +30,11 @@ def no_native_processes(monkeypatch):
         raise AssertionError("Tests must replace every native subprocess.")
 
     monkeypatch.setattr(repair.subprocess, "run", unexpected)
+    monkeypatch.setattr(repair, "_offer_report", lambda *args: None, raising=False)
+    monkeypatch.setattr(repair.platform, "system", lambda: "Darwin")
+    monkeypatch.setattr(repair.platform, "release", lambda: "25.0.0")
+    monkeypatch.setattr(repair.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(repair.platform, "mac_ver", lambda: ("26.0", (), "arm64"))
 
 
 def _checkout(tmp_path: Path, environment: str = ".venv3.10") -> tuple[Path, Path]:
@@ -443,14 +448,14 @@ def test_pending_ide_handoff_does_not_report_full_success(monkeypatch, mac_check
     assert "Repair complete" not in caplog.text
 
 
-def test_failed_ide_configuration_cannot_report_ready(monkeypatch, mac_checkout, caplog):
+def test_failed_ide_configuration_cannot_report_ready(monkeypatch, mac_checkout):
     root, _python, _launcher = mac_checkout
     _fake_flow(monkeypatch, root, ide=ValueError("IDE profile could not be determined"))
     monkeypatch.setattr(repair, "__file__", str(root / "scripts/macos_repair_environment.py"))
-    with caplog.at_level(logging.INFO, logger=repair._LOGGER.name):
-        assert repair.main([]) == 1
-    assert "could not be determined" in caplog.text
-    assert "Checks complete" not in caplog.text
+    assert repair.main([]) == 1
+    log = next((root / ".fpvs-macos/diagnostics").glob("*/repair.log")).read_text()
+    assert "could not be determined" in log
+    assert "Checks complete" not in log
 
 
 @pytest.mark.parametrize("failed", ["check", "-c"])

@@ -387,6 +387,8 @@ tests = [
   "tests/unit/test_macos_source_tooling.py",
   "tests/unit/test_macos_bootstrap.py",
   "tests/unit/test_macos_environment_repair.py",
+  "tests/unit/test_macos_repair_diagnostics.py",
+  "tests/unit/test_macos_repair_reporting.py",
   "tests/unit/test_macos_bundle_handoff.py",
   "tests/unit/test_macos_document_runtime.py",
   "tests/unit/test_macos_retina.py",

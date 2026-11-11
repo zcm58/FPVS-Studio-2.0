@@ -127,10 +127,29 @@ Studio/repair configurations have their interpreter fields updated.
 
 IDE settings are changed only after the relevant PyCharm process has exited. The
 finishing job keeps its log and result in `.fpvs-macos/pycharm-repair/`, so the outcome
-survives the IDE restart. A pending finishing job is not a success report. If repair
-fails, retain the console output or that job's log, including the original traceback.
+survives the IDE restart. A pending finishing job is not a success report.
 
-Add `--check` for diagnostics without installation, backups, IDE changes or restart.
+The same helper contains diagnostic capture and reporting, using only Python's
+standard library so they also work when Studio cannot import. Each run saves a
+private `repair.log` under `.fpvs-macos/diagnostics/<run>/`. It records source version
+and file fingerprints, launching/selected interpreter details, dependency versions,
+streamed setup/check output, exit codes, durations and full chained tracebacks.
+Common credentials, email addresses and home-directory names are redacted. It does
+not collect research files or the IDE's unrelated session logs. If PyCharm restarts,
+a bounded continuation of the same helper collects that finishing job's final log
+and result before offering reporting.
+
+After success or failure, **Send Error Report** starts the existing Studio manual
+reporting flow with the log included; browser verification may require a quick
+interaction. Nothing uploads until that button is clicked. **Copy Log** provides
+pasteable diagnostics instead. Uploads retain up to 256 KiB of startup and final log text;
+clipboard copies retain up to 1 MiB, with an omission notice when truncated. The
+full captured log stays on disk. Private receipt state is stored alongside it;
+uncertain delivery offers **Check Status** and does not automatically resend.
+The console prints a `--report-log` argument for reopening these actions later.
+
+Add `--check` for diagnostics without installation, environment backups, IDE changes
+or restart. It still saves a diagnostic log and offers the same reporting actions.
 It checks the automatically selected environment and reports unresolved IDE settings.
 No presentation window is created; successful imports do not qualify display refresh
 timing. The automatic restart workflow still requires native Mac acceptance; local

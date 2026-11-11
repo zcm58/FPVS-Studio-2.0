@@ -35,6 +35,39 @@ Success is this workflow, using the same Studio version on both computers:
 
 ## Scope and boundaries
 
+### Repair diagnostics and reporting (2026-11-11)
+
+Authorized follow-up: keep all new diagnostics and reporting implementation in
+`scripts/macos_repair_environment.py`. Retain private per-run logs, including
+subprocess output and full exceptions, and offer native **Send Error Report** and
+**Copy Log** actions after both normal completion and the existing IDE restart.
+Use the existing manual reporting service and its browser verification; no upload
+before an explicit click. The standard-library-only implementation must work even
+with broken Studio dependencies and preserve ambiguous-delivery receipt state.
+
+Implementation adds checkout-owned `.fpvs-macos/diagnostics/<run>/` logs and private
+receipt/continuation state, credential redaction, phase durations, exit status and
+bounded observation of the existing PyCharm finishing job. Check-only mode leaves
+environment/IDE settings unchanged while retaining diagnostics. No new runtime
+module, dependency or service endpoint is introduced. Focused tests mock native UI,
+processes and reporting transport; native Mac dialogs/restart and live browser
+verification remain external acceptance, with no real reports sent during tests.
+
+Verification: Mac focused route passed 1,689 tests with 27 native/platform skips;
+the five final redaction/early-failure regressions also passed in the 46-test
+diagnostic module. Both platform type checks for the helper and the updated harness
+configuration passed. Repository precommit passed 6,102 tests with 34 platform
+skips, plus changed-file lint/compilation, both application type-check passes,
+repository audits and documentation hygiene. No Qt, native Mac process/UI or live
+report delivery was executed. An audit rejected a literal synthetic Windows home
+path in a redaction test; constructing that fixture with `PureWindowsPath` resolved
+it without changing the behavior under test.
+
+The native acceptance path is to run the helper in PyCharm, inspect the saved log,
+copy it, then explicitly send a test report through browser verification; repeat
+after a failed check and a restart, and exercise an offline submission/status check
+without duplicate delivery.
+
 ### PyCharm environment repair (2026-11-11)
 
 Follow-up authorized on 2026-11-11: make the helper a one-click macOS repair.
@@ -42,7 +75,8 @@ It must select Setup Mac's environment independently of the launching interprete
 check before installing, repair dependencies when needed, and configure PyCharm's
 project and Studio run interpreters automatically. Reuse Mac setup for native
 Python/build-tool provisioning. Preserve an incompatible environment in a bounded
-checkout-owned backup rather than deleting it. Check-only mode must not mutate.
+checkout-owned backup rather than deleting it. Check-only mode must not mutate
+environment or IDE settings.
 
 PyCharm settings must be written only while its owning IDE process is closed.
 When repair requires an IDE restart, an independent finishing process requests
