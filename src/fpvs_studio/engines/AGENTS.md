@@ -24,6 +24,8 @@ this package imports PsychoPy, lazily. Start with the relevant section of
 - Keep task clocks/input separate from playback. `escape` aborts. Preserve keyboard
   and visible click submission, resolved labels and per-question input clearing.
   Native mouse handlers retain press/release events and clean up between screens.
+  Fit positioned task content and hitboxes together against the drawable viewport
+  before the first flip. Timed FPVS stimuli use calibrated display geometry.
 - Export strict timing misses as QC metadata unless runtime policy requires abort.
   Transport submission never proves receiver integrity or physical EEG timing.
 

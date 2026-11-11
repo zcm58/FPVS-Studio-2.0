@@ -57,6 +57,9 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   entry. Use the shared modal error for Recording Setup and keep progress inline.
   Do not add a manual Unicorn checkbox or claim hardware receipt. See Recording and
   launch sections in `docs/GUI_WORKFLOW.md` before changing this surface.
+- `trigger_tester.py` owns temporary port selection, checks and digit sends. Use
+  [Trigger Tester](../../../docs/GUI_WORKFLOW.md#trigger-tester) for discovery and
+  reconnect behavior. Normal launch resolves saved recording settings independently.
 
 ## Design and Acceptance
 

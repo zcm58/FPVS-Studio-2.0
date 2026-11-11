@@ -71,16 +71,13 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-For the current release package, use the PEP 440-compatible package version `2.9.1`.
-The GitHub Release title can use a friendlier beta label, but the release tag and
-installer filename must use the exact package version.
+Use the exact package version in the GitHub tag and installer filename. Lead the
+release notes with a short user-facing bullet that fits Studio's What's New preview.
+Add detail in later bullets when it helps users understand the release. Record
+build and verification evidence in the release plan.
 
-Write release notes only as short Markdown bullet points, with one brief user-facing
-change per bullet. Prefer 2â€“3 short phrases totaling at most 240 characters when
-possible so the notes fit Studio's What's New preview. Do not add headings,
-paragraphs, nested bullets, verification summaries or installer instructions.
-Retain detailed audit evidence and check boundaries in the release record instead.
-
+The [3.0.0 release record](exec-plans/active/release-3.0.0.md) tracks the
+Recorder 2 support announcement and Windows publication.
 The [2.9.1 release record](exec-plans/completed/release-2.9.1.md) tracks fullscreen
 task fitting and verified Windows publication.
 The [2.9.0 release record](exec-plans/completed/release-2.9.0.md) tracks the Settings sidebar,
@@ -322,10 +319,9 @@ scripts\build_release.cmd -AllowVisibleGui
 ```
 
 The wrapper builds the PyInstaller bundle first, then builds the setup EXE from that
-fresh bundle. The default release build refreshes editable package dependencies with `pip` before
-PyInstaller runs. In Codex or any sandboxed runner, start `.\scripts\build_release.ps1`
-with elevated network permissions so dependency resolution can fetch build backend
-packages such as `hatchling` instead of failing and needing a second run.
+fresh bundle. The default release build refreshes editable package dependencies with `pip`
+before PyInstaller runs. Use the pinned environment and `-SkipInstall` for a release
+rebuild with matching installed package metadata.
 
 When iterating after dependencies are already installed, use:
 
@@ -355,7 +351,7 @@ Then build the setup EXE:
 Expected output for the current package:
 
 ```text
-dist\installer\FPVS-Studio-Setup-2.9.1.exe
+dist\installer\FPVS-Studio-Setup-<version>.exe
 ```
 
 The installer build validates that the PyInstaller bundle has an `_internal` folder and

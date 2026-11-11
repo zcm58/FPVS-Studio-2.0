@@ -264,9 +264,9 @@ The PsychoPy implementation:
 
 ## Trigger behavior
 
-[Trigger Tester](GUI_WORKFLOW.md#trigger-tester) uses the transport adapters directly
-for operator-selected digits outside runtime playback. The manual idle write for
-`0` is separate from normal experiment marker validation.
+[Trigger Tester](GUI_WORKFLOW.md#trigger-tester) checks temporary port selections
+and uses the transport adapters for operator-selected digits. Normal acquisition
+uses saved recording settings. Digit `0` is a manual idle write.
 
 - runtime passes a logged trigger backend through the engine seam
 - when serial output is enabled, runtime opens the configured serial port before the
@@ -291,9 +291,8 @@ for operator-selected digits outside runtime playback. The manual idle write for
   Character-onset measurements remain relative to the first stream flip. The marker
   flip is separate from warmup and excluded from the nine-second stimulus duration;
   a write failure aborts before the stream. Legacy marker timing is unchanged.
-- new FPVS Studio projects default to BioSemi-compatible serial output on `COM3`;
-  condition starts use each condition's configured trigger code and every oddball onset
-  uses project trigger code `55`
+- BioSemi's project serial port defaults to `COM3`. Condition starts use the configured
+  condition code, and oddball onsets use project trigger code `55`
 - the `oddball_onset` marker code is locked to `55`; a nonstandard oddball marker code
   is only valid when the project or `.fpvsconfig` explicitly records
   `allow_nonstandard_oddball_trigger_code=true` in response to user direction
@@ -1519,7 +1518,7 @@ The supported runtime uses normal session mode. `LaunchSettings` has no producti
 Boolean gate; presentation, trigger, connected-refresh verification, and timing-QC
 behavior use explicit runtime settings.
 
-In the current v1 runtime:
+In session mode:
 
 - runtime summaries use `run_mode="session"`
 - the backward-compatible `RuntimeMetadata.test_mode` export field remains present and
@@ -1527,9 +1526,9 @@ In the current v1 runtime:
 - GUI launch fixes PsychoPy playback to fullscreen presentation
 - session order is randomized within each block using the current random order seed
 - every condition waits for the participant to press Space before playback starts
-- recording launches always use BioSemi-compatible serial output with the project's
-  port and baudrate (new projects default to `COM3`); oddball onset output is locked to
-  marker code `55` unless the project records an explicit nonstandard-code override
+- recording launches use the resolved project or computer-default transport, with
+  BioSemi's port and baud rate owned by the project. The [trigger contract](#trigger-behavior)
+  defines the oddball code and explicit override
 - completion screens retain the explicit 0.5-second auto-dismiss duration
 - GUI launches use report-only timing misses, a `1.5`-frame-interval miss threshold,
   strict post-settle warmup QC, a 240-frame timing warmup, and production graphics-memory

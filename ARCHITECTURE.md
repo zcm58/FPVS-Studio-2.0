@@ -72,7 +72,8 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Portable paths and project persistence | `core/paths.py`, `core/project_service.py` |
 | Studio–Toolbox configs | `core/project_config.py`, `core/project_config_legacy.py`; [format](docs/PROJECT_CONFIG.md) |
 | Guarded current-project Library replacement | `core/project_bundle_update.py`; ordinary imports never replace projects |
-| Recording | `gui/recording_dialog.py` shared editor/launch review, `gui/settings_dialog.py` inline project/default saves, `gui/document_runtime.py`, `runtime/recording.py`, `runtime/acquisition_evidence.py` |
+| Recording setup and launch | `gui/recording_dialog.py`, `gui/settings_dialog.py`, `gui/document_runtime.py`, `runtime/recording.py`, `runtime/acquisition_evidence.py` |
+| Trigger Tester | `gui/trigger_tester.py`, `triggers/manual.py` and port discovery |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
 | Settings category navigation and preferences | `gui/settings_dialog.py`, `gui/controller.py`; [layout and persistence](docs/GUI_WORKFLOW.md#settings-appearance-and-layout) |
@@ -119,13 +120,10 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 
 ## Task Context Recipes
 
-Navigation: [task index](docs/agent/agent-index.md), [topic recipes](docs/agent/task-recipes.md),
-active `docs/PLANS.md`, and full `docs/index.md`.
+[Topic recipes](docs/agent/task-recipes.md) locate less obvious owners and focused tests.
 
 ## Verification and Documentation Freshness
 
-The task index owns verification routes. Types target all-source Windows first,
-then secondary Mac adapters. GitHub adds macOS source and cross-OS bundle
-checks alongside documentation publishing. Update this map and nearest guide when
-ownership or boundaries change; keep behavior in canonical contracts. Measured debt
-belongs in `docs/exec-plans/tech-debt-tracker.md`; versions live in `pyproject.toml`.
+Use the task index for verification routes. Update this map and the nearest guide
+when ownership changes. Keep behavior in canonical contracts, measured debt in
+`docs/exec-plans/tech-debt-tracker.md`, and the version in `pyproject.toml`.

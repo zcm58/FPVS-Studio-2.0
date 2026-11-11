@@ -17,21 +17,15 @@
   for explicit manual reset and must not be emitted for condition or oddball events.
 - Keep unavailable hardware behavior explicit; do not add silent fallbacks that hide
   failed trigger emission.
-- Automatic TriggerBox discovery reads named COM-port metadata only. Explicit Detect
-  may open and close recognized candidates and an explicitly selected manual COM port
-  on the app-owned worker to check access; manual ports do not imply device identity;
-  never issue probe reads, marker writes or explicit reset/flush calls. Close constructed
-  connections on failure/cancellation, stop between candidates, and retain manual
-  selection. Metadata and successful port access do not prove identity or marker receipt.
-- `serial_port_access.py` owns generic metadata enumeration and shared byte-free
-  open/close checks. BioSemi Recording Setup uses the user-selected port at the
-  project's baudrate (normally 115200). Trigger Tester can also check a uniquely
-  BioSemi-named port or a single COM port added during an operator-guided reconnect.
-  Use metadata for discovery and never infer BioSemi identity from a generic name,
-  adapter chipset or openable port. TriggerBox retains its named-candidate
-  filter (plus the explicit manual selection) and fixed baudrate while reusing the
-  access helper. Denied access means the port may be owned by another program; report
-  exclusive ownership and retry guidance without claiming a specific owner was found.
+- Discovery reads port metadata. `serial_port_access.py` owns byte-free open/close
+  checks on the app-owned worker. Preserve cancellation, cleanup and manual selection.
+  TriggerBox Recording Setup checks named candidates and the selected port on Detect.
+  BioSemi Recording Setup checks the selected port at the project baud rate.
+- Trigger Tester checks one port per attempt. Automatic detection uses a unique
+  named TriggerBox or BioSemi interface. BioSemi also supports operator-guided
+  reconnect when one COM port appears and no others change. The configured BioSemi
+  port is available when there is no named match. A generic name, chipset or
+  successful open does not establish identity or marker receipt.
 - `serial_errors.py` classifies native/serialized serial failures without naming an
   owner. `biosemi_errors.py` and `brainproducts_errors.py` share vendor-specific
   recovery wording between setup and launch. BioSemi recovery names the USB Trigger

@@ -1177,12 +1177,12 @@ This wording/token update retains backend eligibility, Test/Pilot bypasses and t
 persisted `launch/require_biosemi_recording_confirmation` and
 `launch/show_sophia_mode_ticker` preference keys.
 
-Project recording configuration is validated before participant collection. **Settings > Recording**
-directly edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree,
-Brain Products / BrainVision (TriggerBox/Plus), or Unicorn Recorder
-UDP choice. Unicorn exposes its loopback port; BioSemi exposes an editable serial-port
-selector; Brain Products exposes an editable detected-port list, amplifier, EEG
-sampling rate and pulse width. **Apply to Project** atomically saves `settings.recording` and, for
+Studio validates recording configuration before participant collection. **Settings > Recording**
+edits the project's BioSemi ActiveTwo/ActiveThree, Brain Products TriggerBox/Plus,
+actiCHamp parallel, or Unicorn Recorder UDP selection. BioSemi uses a serial-port
+selector, TriggerBox uses its own detected-port list, parallel uses an I/O address,
+and Unicorn uses a loopback port. Both Brain Products options expose sampling rate
+and pulse width. **Apply to Project** atomically saves `settings.recording` and, for
 BioSemi, the selected `settings.triggers.serial_port` in that project's
 `project.json`. Editing fields or changing Settings categories does not save them.
 Closing Settings discards unapplied recording edits; failed saves retain the displayed
@@ -1244,13 +1244,11 @@ including compact sessions. Changing the PC default afterward does not relabel e
 recordings. Invalid newest snapshots or acquisition-era evidence without a completed
 handoff surface an error. Only sessions without acquisition artifacts retain the
 legacy full-run plan-only export path. Authoring-only exports remain unchanged.
-The optional typed settings contain `recording_backend` (`serial`,
-`biosemi_active_three`, `brainproducts_triggerbox`, or `unicorn_udp`),
-`unicorn_udp_port` (integer 1-65535, default 1000), `brainproducts_serial_port`
-(nonblank text, default COM3) and `brainproducts_pulse_width_ms` (integer 1-1000,
-default 10), plus optional `brainproducts_amplifier` (`actichamp`, `brainamp`, `liveamp`)
-and `brainproducts_sampling_rate_hz` (positive integer or unset). Existing projects
-with unset amplifier/rate remain readable; select both before normal TriggerBox launch.
+The typed `recording_backend` values are `serial`, `biosemi_active_three`,
+`brainproducts_triggerbox`, `brainproducts_parallel`, and `unicorn_udp`.
+`core/models.py::ProjectRecordingSettings` owns defaults and ranges, including
+`brainproducts_parallel_address` and the transport-specific port fields. Select the
+amplifier and sampling rate before normal TriggerBox launch. Parallel selects actiCHamp.
 Malformed saved configurations are rejected on load. Choosing another recording device
 preserves BioSemi's serial settings. Editing its port preserves the project baudrate
 and all other trigger fields; no recording choice changes compiled experiment timing.

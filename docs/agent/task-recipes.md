@@ -23,6 +23,7 @@ evidence boundaries.
 | Manage Projects rename/discovery | `gui/manage_projects_dialog.py`, `gui/controller.py`, `core/project_service.py`; `tests/unit/test_project_service.py` | [Project opening/saving](../GUI_WORKFLOW.md#project-opening-and-saving) |
 | Opening, hidden-page refresh and stale jobs | `gui/controller.py`, `gui/document.py`; `tests/gui/test_frontend_responsiveness.py`, `tests/gui/test_hidden_page_refresh.py` | [Responsiveness](../GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness) |
 | Windows long paths and scaled display | `core/paths.py`, affected I/O caller; `tests/unit/test_bundle_open_setup.py` | [Security](../SECURITY.md), relevant [GUI workflow](../GUI_WORKFLOW.md) section |
+| Windows source setup and PyCharm | `Setup Windows.cmd`, `scripts/setup_windows.ps1`, `scripts/windows_pycharm.py`; `tests/unit/test_windows_source_setup.py` | [Windows source setup](../ENVIRONMENT.md#windows-source-setup) |
 | Retained image/AB editors and category repair | `core/experiment_design.py`, `gui/attentional_blink_stream_designer.py`, `gui/attentional_blink_character_size.py` | [Categories](../EXPERIMENT_CATEGORIES.md), [designer](../VISUAL_EXPERIMENT_DESIGNER.md) |
 
 Use the GUI scope for interactions, project-io for persistence and core/compiler for
@@ -39,6 +40,7 @@ caches are scoped to an update; do not cache mutable project validation across e
 | Independent participant reuse choices and pending launch snapshot | `core/randomization.py`, `gui/randomization_editor.py`, document/main-window launch coordination | [Independent randomization](../SESSION_PLAN.md#independent-randomization) |
 | Exact saved condition arrangements | `core/session_ordering.py`, `gui/condition_order_dialog.py` | [Saved arrangements](../SESSION_PLAN.md#saved-condition-arrangements) |
 | Task numeric precision and tolerance | `core/task_models.py`, `runtime/task_runner.py`, `engines/psychopy_tasks.py`; `tests/unit/test_runtime_tasks.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
+| Fullscreen task grids and fitted hitboxes | `runtime/task_runner.py`, `engines/psychopy_tasks.py`; `tests/unit/test_runtime_tasks.py`, `tests/unit/test_psychopy_task_mouse.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
 | Mouse choices, visible pointers and handlers | `engines/psychopy_tasks.py`, `engines/psychopy_task_cursor.py`; `tests/unit/test_psychopy_task_mouse.py`, `tests/unit/test_psychopy_task_cursor.py`, `tests/unit/test_psychopy_task_hitboxes.py` | [Task rendering](../ENGINE_INTERFACE.md#modular-task-rendering) |
 | Participant instructions, transitions and feedback text layout | `engines/psychopy_text_screens.py`; `tests/unit/test_psychopy_text_screens.py` | [Engine rendering](../ENGINE_INTERFACE.md#boundary-rules) |
 | Basic before/after questions and readable CSV | `core/post_questions.py`, `runtime/post_condition_responses.py` | [Questions](../POST_CONDITION_QUESTIONS.md) |
@@ -58,20 +60,18 @@ The engine focused route covers first-flip mouse capture, retained press/release
 pixel coordinates, text alignment and per-screen handler cleanup without opening a
 presentation window. Projects have no pointer setting; verify affected grids visibly
 on the presentation machine. Windows/Pyglet mouse responses use a frame-rendered
-pointer; verify movement and click alignment, since native visibility flags cannot
-prove that the participant sees it. Native capture first shipped in Studio 2.5.0; first-flip
-capture and text hit-testing repairs ship in 2.5.7.
-`core/library_publish.py::require_library_task_compatibility` and final publisher
-verification require 2.5.7 for new publications with bound mouse-response tasks.
-Use engine and Library focused routes when changing this guarantee.
+pointer; verify movement and click alignment visibly. `core/library_publish.py` and
+final publisher verification enforce the 2.5.7 compatibility floor for new Library
+publications with bound mouse-response tasks.
 
 ## Recording, Recovery and Native Lifetime
 
 | Task | First source/test | Current contract |
 | --- | --- | --- |
-| Computer default/project EEG selection | `gui/recording_dialog.py`, `gui/document.py`, `gui/controller.py`, `runtime/recording.py` | Relevant [GUI workflow](../GUI_WORKFLOW.md) recording section |
-| BioSemi selected-port checks | `gui/biosemi_port_selector.py`, `triggers/serial_port_access.py` | [Trigger behavior](../RUNTIME_EXECUTION.md#trigger-behavior) |
-| ActiveThree/TriggerBox discovery, errors and pulse limits | `core/brainproducts.py`, `triggers/brainproducts_discovery.py`, `triggers/brainproducts_errors.py`, `triggers/brainproducts_backend.py`; `tests/unit/test_brainproducts_trigger_backend.py` | [ActiveThree/TriggerBox](../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox) |
+| Computer default/project EEG selection | `gui/recording_dialog.py`, `gui/settings_dialog.py`, `runtime/recording.py` | Relevant [GUI workflow](../GUI_WORKFLOW.md) recording section |
+| BioSemi Recording Setup port checks | `gui/biosemi_port_selector.py`, `triggers/serial_port_access.py` | [Trigger behavior](../RUNTIME_EXECUTION.md#trigger-behavior) |
+| Trigger Tester named ports, BioSemi reconnect and digits | `gui/trigger_tester.py`, `triggers/biosemi_discovery.py`, `triggers/brainproducts_discovery.py`; `tests/gui/test_trigger_tester.py` | [Trigger Tester](../GUI_WORKFLOW.md#trigger-tester) |
+| TriggerBox errors and pulse limits | `core/brainproducts.py`, `triggers/brainproducts_errors.py`, `triggers/brainproducts_backend.py`; `tests/unit/test_brainproducts_trigger_backend.py` | [ActiveThree/TriggerBox](../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox) |
 | actiCHamp parallel output | `triggers/parallel_backend.py`, `triggers/parallel_discovery.py`, `gui/parallel_port_selector.py` | [Parallel output](../RUNTIME_EXECUTION.md#actichamp-parallel-port-output) |
 | Unicorn Recorder readiness/UDP | `runtime/unicorn_recorder.py`, `runtime/unicorn_recorder_windows.py`, `triggers/unicorn_udp_backend.py` | [Unicorn contract](../RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending), active Unicorn plan |
 | Completed Toolbox handoff | `core/recording_hardware.py`, `core/project_config.py`, `runtime/acquisition_evidence.py` | [Completed handoff](../RUNTIME_EXECUTION.md#completed-toolbox-handoff), active integration plan |

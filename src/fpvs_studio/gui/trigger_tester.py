@@ -84,7 +84,7 @@ class TriggerTesterDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
+        layout.setSpacing(10)
         form = QFormLayout()
         self.output_combo = QComboBox(self)
         self.output_combo.setPlaceholderText("Select an output")

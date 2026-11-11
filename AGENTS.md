@@ -5,16 +5,14 @@ PsychoPy presentation stays behind runtime and engine boundaries.
 
 ## Efficient Working Route
 
-- Fast path before broad reads: check `git status --short --branch`, then use
-  [the task index](docs/agent/agent-index.md) to select one scope, its package guide
-  and one relevant contract section. `ARCHITECTURE.md` is the package/dependency map.
-- Read nested `AGENTS.md` files governing edited paths. For non-trivial work, use
-  `docs/PLANS.md` to find the relevant active plan; completed plans are history.
-- Run the selected focused verification before broad inspection. Expand context
-  only for implicated symbols, failures or cross-layer behavior.
-- Preserve unrelated changes, persisted formats, processing order and workflows.
-  Do not read output, environments, caches, builds or archives without task need.
-  Untracked files and retained output are user-owned.
+- Fast path before broad reads: check `git status --short --branch`. Use the
+  [task index](docs/agent/agent-index.md) for one scope, its nested `AGENTS.md`
+  and one contract section. Use `ARCHITECTURE.md` to resolve ownership.
+- Run focused verification before expanding to implicated symbols, failures or
+  cross-layer behavior. Find the relevant active plan in `docs/PLANS.md`.
+- Preserve unrelated edits, persisted formats, processing order and workflows. Read
+  generated output, environments or archives only as needed. Untracked files and
+  retained output are user-owned.
 
 ## Contract Boundaries
 
@@ -61,22 +59,19 @@ PsychoPy presentation stays behind runtime and engine boundaries.
 
 ## Verification and Plans
 
-Use the task index for skills and verification routes. Global web/mobile skills do
-not establish desktop architecture. Feature-sized or cross-layer work uses a current
-`docs/exec-plans/` plan; keep its status/location accurate and archive completed work.
+Use the task index for skills and verification. Keep a current `docs/exec-plans/`
+plan for feature-sized or cross-layer work and archive it when complete.
 
 ```powershell
 ./scripts/verify.ps1 -Scope <scope> -Tier focused
 ./scripts/verify.ps1 -Scope repo -Tier precommit
 ```
 
-The driver selects `.venv3.10`, then `.venv`, then compatible current Python.
-`focused` runs scope checks plus changed-file Ruff/compilation; `precommit` adds
-audits, mypy and safe non-Qt tests. Run precommit for shared behavior changes.
-`full` includes Qt and requires the visible-environment approval above. Use `-List`
-to inspect steps and `-CheckConfig` after harness changes. GitHub runs documentation
-publishing plus the macOS source/install/adapter and cross-OS bundle lane. Local
-precommit remains required; CI does not qualify physical display timing or EEG.
+The driver selects `.venv3.10`, `.venv`, then compatible current Python. Run
+`precommit` for shared behavior changes. Use `-List` to inspect steps and
+`-CheckConfig` after harness edits. GitHub runs Windows precommit, macOS source
+and cross-OS bundle checks, and docs publishing. Local verification and physical
+display/EEG acceptance have separate evidence.
 
 ## Documentation Freshness
 
