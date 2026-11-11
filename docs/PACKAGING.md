@@ -81,7 +81,7 @@ possible so the notes fit Studio's What's New preview. Do not add headings,
 paragraphs, nested bullets, verification summaries or installer instructions.
 Retain detailed audit evidence and check boundaries in the release record instead.
 
-The [2.9.0 release record](exec-plans/active/release-2.9.0.md) tracks the Settings sidebar,
+The [2.9.0 release record](exec-plans/completed/release-2.9.0.md) tracks the Settings sidebar,
 scrollable category pages and guarded Windows packaging checks.
 The [2.8.2 release record](exec-plans/completed/history-updates-release-2.8.2.md) tracks
 history compatibility, source updates, reviewed logs and Windows bundle fixes,

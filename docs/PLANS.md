@@ -9,7 +9,6 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 2.9.0 release](exec-plans/active/release-2.9.0.md) | Settings sidebar and scrollable pages; source, packaged and public-release verification in progress |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
@@ -51,6 +50,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
   history encoding, source/macOS updates, reviewed logs and Windows bundle fixes
   published immutable/latest; exact-source, packaged and public verification passed.
 - [Studio 2.8.1 release](exec-plans/completed/release-2.8.1.md)
+- [Studio 2.9.0 release](exec-plans/completed/release-2.9.0.md):
+  scrollable Settings, guarded packaging, exact-source CI and verified immutable release.
 - [Packaging DLL origin checks](exec-plans/completed/packaging-dll-origins.md)
 - [Project Brain Products recording setup](exec-plans/completed/project-brainproducts-recording-setup.md):
   modal setup errors and first-launch project timing confirmation.
