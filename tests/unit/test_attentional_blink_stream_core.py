@@ -8,6 +8,7 @@ from itertools import islice
 
 import pytest
 from pydantic import ValidationError
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 
 from fpvs_studio.core.attentional_blink_stream import (
     describe_attentional_blink_stream,
@@ -348,12 +349,12 @@ def test_stream_project_and_config_roundtrip_preserve_schema_and_no_isi_source(
     assert loaded == stream_project
     assert loaded.conditions[0].isi_stimulus_set_id is None
     config = export_project_config(loaded, None)
-    assert config.schema_version == "1.3.0"
+    assert config.format_version == 2
     config_path = tmp_path / "study.fpvsconfig"
     write_project_config(config_path, config)
     restored = read_project_config(config_path)
     imported = create_project_from_config(tmp_path / "imported", restored).project
-    assert imported.schema_version == ProjectSchemaVersion.V1_5
+    assert imported.schema_version == ProjectSchemaVersion.V1_17
     assert imported.settings.protocol.base_hz == rate
     assert imported.conditions[0].attentional_blink == (
         stream_project.conditions[0].attentional_blink
@@ -370,8 +371,7 @@ def test_old_schema_cannot_claim_to_support_letter_stream(stream_project):
     project_data["schema_version"] = "1.4.0"
     with pytest.raises(ValidationError, match="schema 1.5.0"):
         ProjectFile.model_validate(project_data)
-    config_data = export_project_config(stream_project, None).model_dump()
-    config_data["schema_version"] = "1.2.0"
+    config_data = legacy_config_payload(export_project_config(stream_project, None), '1.2.0')
     with pytest.raises(ValidationError, match="schema 1.3.0"):
         ProjectConfigFile.model_validate(config_data)
     run_data = compile_run_spec(stream_project, refresh_hz=60).model_dump()

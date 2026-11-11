@@ -35,6 +35,7 @@ below are a catalog, not a required reading list.
 - Experiment contribution preferences and comparisons: `DATA_SHARING.md` and
   [active acceptance plan](exec-plans/active/remote-experiment-results-reporting.md)
 - Completed Studio/Toolbox handoffs and shared-study integration:
+  [config format](PROJECT_CONFIG.md) and
   [active integration plan](exec-plans/active/studio-toolbox-integration.md)
 
 ## Runtime Contracts

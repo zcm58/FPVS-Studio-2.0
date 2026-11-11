@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 import sys
 from collections.abc import Callable
+from html import escape
 from math import isfinite
 from typing import Any
 
@@ -116,6 +117,7 @@ __all__ = [
     "mark_secondary_action",
     "mark_destructive_action",
     "mark_welcome_action",
+    "set_action_link_text",
     "non_home_shell_stylesheet",
     "refresh_widget_style",
     "section_card_stylesheet",
@@ -864,6 +866,17 @@ def refresh_widget_style(widget: QWidget) -> None:
 def _set_widget_property(widget: QWidget, name: str, value: str) -> None:
     widget.setProperty(name, value)
     refresh_widget_style(widget)
+
+
+def set_action_link_text(label: QLabel, text: str, *, target: str) -> None:
+    """Render escaped, theme-colored text for an internal label action."""
+
+    theme = _resolved_theme(label.palette())
+    label.setTextFormat(Qt.TextFormat.RichText)
+    label.setText(
+        f'<a href="{escape(target, quote=True)}" style="color: {theme.primary};">'
+        f'{escape(text)}</a>',
+    )
 
 
 def mark_primary_action(button: QPushButton) -> None:

@@ -875,8 +875,11 @@ Core's `recording_hardware.py` owns the hardware declarations. Saved
 use the same exact Toolbox IDs/versions where a supported profile is declared.
 Legacy missing fields stay readable;
 recording-setting saves add the declaration without rewriting an opened project.
-The existing project/config/execution envelope versions are retained because this is
-optional metadata. `toolbox.handoff_schema_version` is `"1.0"`.
+Current configs use the shared revision-2
+[exchange envelope](PROJECT_CONFIG.md). Internal project/execution and acquisition
+profile versions retain their existing meaning. Historical
+`toolbox.handoff_schema_version="1.0"` declarations remain readable; current
+writers omit that redundant config marker.
 
 | Recording choice | Profile / montage / decoder version 1.0 | Reference |
 | --- | --- | --- |
@@ -1394,6 +1397,9 @@ but embed hashed modular-task media together with task definitions so those work
 remain portable. They never contain participant task responses. A config does not
 replace the authoritative artifacts under `runs/`, and runtime does not consume
 `.fpvsconfig` during playback.
+Both setup and completed exports use the same
+[revision-2 format](PROJECT_CONFIG.md); historical readers normalize earlier
+config revisions without changing internal runtime contracts.
 
 ### Attentional Blink recall results
 
@@ -1645,7 +1651,9 @@ Recovery uses retained seeds/events and never resolves a fresh triplet for an ex
 ## Saved-order provenance
 
 Compiled sessions, schema1.4 session results, full/compact condition/history CSVs and
-completed Config1.13 snapshots record the actual `ordering_policy`. `saved_no_adjacent`
+completed config snapshots record the actual `ordering_policy`. Historical configs
+introduced it in revision 1.13; current exports use the shared format.
+`saved_no_adjacent`
 identifies an exact chosen list; `pooled_no_adjacent` identifies seed-generated order.
 The condition-order seed remains provenance and does not alone describe a manually
 arranged list. Entry order and chronological condition presentation identity are retained.

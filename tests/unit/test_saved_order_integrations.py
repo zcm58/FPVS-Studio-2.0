@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from tests.unit.runtime_launcher_helpers import StubEngine
+from tests.unit.studio_handoff_fixtures import read_legacy_config
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.condition_modifiers import assign_modifier
@@ -86,12 +87,12 @@ def _rows(path):
 def test_saved_order_config_and_public_project_roundtrip(sample_project, tmp_path, mode):
     project = _project_with_order(sample_project, mode=mode)
     config = export_project_config(project, None)
-    assert config.schema_version == "1.13.0"
+    assert config.format_version == 2
     path = tmp_path / "order.fpvsconfig"
     write_project_config(path, config)
     restored = create_project_from_config(tmp_path / "received", read_project_config(path))
     loaded = load_project_file(restored.project_root / "project.json")
-    assert loaded.schema_version == ProjectSchemaVersion.V1_15
+    assert loaded.schema_version == ProjectSchemaVersion.V1_17
     assert loaded.settings.session.saved_condition_order == ORDER
     assert loaded.settings.session.randomization_mode == mode
     assert loaded.settings.session.stimulus_seed == 72
@@ -100,7 +101,7 @@ def test_saved_order_config_and_public_project_roundtrip(sample_project, tmp_pat
 
 def test_absent_saved_order_preserves_old_source_format(sample_project, tmp_path):
     config = export_project_config(sample_project, None)
-    assert config.schema_version == "1.2.0"
+    assert config.format_version == 2
     assert "saved_condition_order" not in config.session.model_dump()
     path = tmp_path / "legacy.json"
     save_project_file(sample_project, path)
@@ -156,10 +157,10 @@ def test_inactive_stale_order_roundtrips_as_draft_and_new_compilation_ignores_it
 
 def test_saved_order_capability_rejected_before_import_writes(sample_project, tmp_path):
     config = export_project_config(_project_with_order(sample_project), None)
-    invalid = config.model_copy(update={"schema_version": "1.12.0"})
+
     destination = tmp_path / "received"
-    with pytest.raises(ProjectConfigError, match="requires config schema 1.13"):
-        create_project_from_config(destination, invalid)
+    with pytest.raises(ProjectConfigError, match="require config schema 1.13"):
+        create_project_from_config(destination, read_legacy_config(config, "1.12.0", tmp_path))
     assert not destination.exists()
 
 
@@ -268,7 +269,7 @@ def test_completed_config_keeps_actual_saved_order_when_source_has_a_new_saved_c
     write_json_file(completed / "session_plan.json", plan)
     project.settings.session.saved_condition_order = ALTERNATIVE_ORDER
     config = export_project_config(project, sample_project_root, completed_session_dir=completed)
-    assert config.schema_version == "1.13.0"
+    assert config.format_version == 2
     assert config.session.saved_condition_order == ALTERNATIVE_ORDER
     assert config.completed_session.ordering_policy == "saved_no_adjacent"
     assert config.completed_session.block_orders == [ORDER]

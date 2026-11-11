@@ -155,6 +155,7 @@ tests = [
   "tests/unit/test_project_bundle_update.py",
   "tests/unit/test_library_publish.py",
   "tests/unit/test_project_config.py",
+  "tests/unit/test_studio_handoff_v2.py",
   "tests/unit/test_project_service.py",
   "tests/unit/test_cognitive_load_presets.py",
   "tests/unit/test_attentional_blink_presets.py",
@@ -385,6 +386,7 @@ tests = [
   "tests/unit/test_macos_display.py",
   "tests/unit/test_macos_source_tooling.py",
   "tests/unit/test_macos_bootstrap.py",
+  "tests/unit/test_macos_environment_repair.py",
   "tests/unit/test_macos_bundle_handoff.py",
   "tests/unit/test_macos_document_runtime.py",
   "tests/unit/test_macos_retina.py",
@@ -432,6 +434,7 @@ full_tests = ["tests/gui", "tests/integration/test_psychopy_engine.py"]
 include = [
   "scripts/macos-source.sh",
   "scripts/macos_pycharm.py",
+  "scripts/macos_repair_environment.py",
   "*Mac.command",
   "requirements-macos.txt",
   "src/fpvs_studio/runtime/macos_display.py",

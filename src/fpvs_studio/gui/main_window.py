@@ -157,6 +157,7 @@ class StudioMainWindow(QMainWindow):
         on_request_settings: Callable[[], None],
         on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
+        on_request_recording_settings: Callable[[], None] | None = None,
         on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_request_library: Callable[[], None] | None = None,
         on_request_library_publish: Callable[[], None] | None = None,
@@ -175,6 +176,7 @@ class StudioMainWindow(QMainWindow):
         self._on_request_import_project_config = on_request_import_project_config
         self._on_request_import_project_bundle = on_request_import_project_bundle
         self._on_request_settings = on_request_settings
+        self._on_request_recording_settings = on_request_recording_settings or on_request_settings
         self._on_request_library = on_request_library
         self._on_request_library_publish = on_request_library_publish
         self._on_request_library_submission = on_request_library_submission
@@ -259,6 +261,13 @@ class StudioMainWindow(QMainWindow):
             edit_setup=lambda: self.show_setup_wizard(allow_step_jumps=True),
             complete_setup=self.show_incomplete_setup_wizard,
         )
+        self.home_page.recording_summary.linkActivated.connect(
+            lambda _target: self._request_recording_settings(),
+        )
+        self.settings_action.changed.connect(
+            lambda: self.home_page.recording_summary.setEnabled(self.settings_action.isEnabled()),
+        )
+        self.home_page.recording_summary.setEnabled(self.settings_action.isEnabled())
         self.home_page.project_update_button.clicked.connect(self.project_update_action.trigger)
         self.project_update_action.changed.connect(
             lambda: self.home_page.project_update_button.setEnabled(
@@ -1996,6 +2005,14 @@ class StudioMainWindow(QMainWindow):
 
     def _request_settings(self) -> None:
         self._on_request_settings()
+
+    def _request_recording_settings(self) -> None:
+        if (
+            self.settings_action.isEnabled()
+            and not self.is_launch_busy()
+            and not self._launch_after_session_seed_ready
+        ):
+            self._on_request_recording_settings()
 
     def _request_library(self) -> None:
         if self._on_request_library is not None and self._allow_project_handoff_during_launch():

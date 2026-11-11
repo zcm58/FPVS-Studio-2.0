@@ -250,7 +250,7 @@ def test_study_saved_and_config_imported_without_character_loss(tmp_path):
     assert restored == scaffold.project
     assert not restored.settings.fixation_task.show_cross
     config = export_project_config(restored, project_root=scaffold.project_root)
-    assert config.schema_version == "1.3.0"
+    assert config.format_version == 2
     imported = create_project_from_config(tmp_path, config)
     assert imported.project.conditions == restored.conditions
     assert imported.project.stimulus_sets == restored.stimulus_sets

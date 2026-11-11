@@ -19,6 +19,8 @@ from typing import Any, Literal
 
 from pydantic import (
     Field,
+    JsonValue,
+    ModelWrapValidatorHandler,
     SerializerFunctionWrapHandler,
     StrictInt,
     StrictStr,
@@ -85,7 +87,10 @@ from fpvs_studio.core.paths import (
     task_assets_root,
 )
 from fpvs_studio.core.post_questions import validate_post_question_bindings
-from fpvs_studio.core.presentation import legacy_project_presentation_settings
+from fpvs_studio.core.project_config_legacy import (
+    normalize_legacy_config_payload,
+    validate_legacy_config_revision,
+)
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
@@ -101,28 +106,12 @@ from fpvs_studio.core.serialization import (
 from fpvs_studio.core.session_ordering import validate_saved_condition_order
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.task_assets import owned_image_references
-from fpvs_studio.core.task_models import (
-    task_requires_scene_schema,
-    task_requires_text_alignment_schema,
-)
 from fpvs_studio.core.trigger_codes import validate_oddball_trigger_code_policy
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetManifest
 
-CONFIG_SCHEMA_VERSION = "1.2.0"
-LETTER_STREAM_CONFIG_SCHEMA_VERSION = "1.3.0"
-MODIFIER_CONFIG_SCHEMA_VERSION: Literal["1.4.0"] = "1.4.0"
-SCENE_CONFIG_SCHEMA_VERSION: Literal["1.5.0"] = "1.5.0"
-CATCH_CONFIG_SCHEMA_VERSION: Literal["1.6.0"] = "1.6.0"
-CONDITION_CATCH_CONFIG_SCHEMA_VERSION: Literal["1.7.0"] = "1.7.0"
-MASKING_EVENT_CONFIG_SCHEMA_VERSION: Literal["1.8.0"] = "1.8.0"
-CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION: Literal["1.9.0"] = "1.9.0"
-CONDITION_DURATION_CONFIG_SCHEMA_VERSION: Literal["1.10.0"] = "1.10.0"
-CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION: Literal["1.11.0"] = "1.11.0"
-RANDOMIZATION_CONFIG_SCHEMA_VERSION: Literal["1.12.0"] = "1.12.0"
-SAVED_ORDER_CONFIG_SCHEMA_VERSION: Literal["1.13.0"] = "1.13.0"
-POST_QUESTIONS_CONFIG_SCHEMA_VERSION: Literal["1.14.0"] = "1.14.0"
-BLOCK_ORDER_CONFIG_SCHEMA_VERSION: Literal["1.15.0"] = "1.15.0"
+HANDOFF_FORMAT: Literal["fpvs-handoff"] = "fpvs-handoff"
+HANDOFF_FORMAT_VERSION: Literal[2] = 2
 PROJECT_CONFIG_SUFFIX = ".fpvsconfig"
 _CONFIG_FILENAME_RE = re.compile(r"[^a-z0-9]+")
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -147,8 +136,8 @@ class ProjectConfigProducer(FPVSBaseModel):
     """Application metadata for the config producer."""
 
     application: str = "FPVS Studio"
-    version: str = __version__
-    exported_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    version: str = Field(min_length=1)
+    exported_at: datetime | None = None
 
 
 class ProjectConfigProject(FPVSBaseModel):
@@ -358,7 +347,7 @@ class ProjectConfigToolbox(FPVSBaseModel):
     project_title: str
     event_map: dict[str, StrictInt] = Field(default_factory=dict)
     oddball_trigger_code: StrictInt = Field(ge=1, le=255)
-    handoff_schema_version: Literal["1.0"] | None = None
+    handoff_schema_version: Literal["1.0"] | None = Field(default=None, exclude=True)
     acquisition_profile: AcquisitionProfile | None = None
     experiment_id: str | None = None
     experiment_version: str | None = None
@@ -539,14 +528,14 @@ class ProjectConfigTaskAsset(FPVSBaseModel):
 class ProjectConfigFile(FPVSBaseModel):
     """Top-level Studio `.fpvsconfig` interchange file."""
 
-    schema_version: Literal[
-        "1.2.0", "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
-        "1.10.0", "1.11.0", "1.12.0", "1.13.0", "1.14.0", "1.15.0",
-    ] = "1.2.0"
+    format: Literal["fpvs-handoff"]
+    format_version: Literal[2]
+    kind: Literal["setup", "completed_session"]
+    metadata: dict[str, JsonValue] = Field(default_factory=dict)
     experiment_category: ExperimentCategory = Field(
         default=ExperimentCategory.FPVS_ODDBALL, frozen=True
     )
-    producer: ProjectConfigProducer = Field(default_factory=ProjectConfigProducer)
+    producer: ProjectConfigProducer
     project: ProjectConfigProject
     conditions: list[ProjectConfigCondition] = Field(default_factory=list)
     condition_defaults: ConditionDefaults | None = None
@@ -557,25 +546,43 @@ class ProjectConfigFile(FPVSBaseModel):
     display: ProjectConfigDisplay
     presentation: ProjectPresentationSettings = Field(default_factory=ProjectPresentationSettings)
     recording: ProjectRecordingSettings | None = None
-    protocol: ProjectConfigProtocol = Field(default_factory=ProjectConfigProtocol)
+    protocol: ProjectConfigProtocol
     session: ProjectConfigSession
     triggers: ProjectConfigTriggers
     toolbox: ProjectConfigToolbox
     stimulus_provenance: ProjectConfigStimulusProvenance | None = None
     completed_session: ProjectConfigCompletedSession | None = None
 
-    @model_validator(mode="before")
+    @model_validator(mode="wrap")
     @classmethod
-    def infer_legacy_category(cls, value: object) -> object:
-        return with_inferred_experiment_category(value)
+    def normalize_legacy(
+        cls, value: Any, handler: ModelWrapValidatorHandler[ProjectConfigFile],
+    ) -> ProjectConfigFile:
+        payload, legacy_version = normalize_legacy_config_payload(value)
+        config = handler(with_inferred_experiment_category(payload))
+        if legacy_version is not None:
+            validate_legacy_config_revision(config, legacy_version)
+        return config
+
+    @field_validator("format_version", mode="before")
+    @classmethod
+    def validate_format_revision(cls, value: object) -> object:
+        if type(value) is not int or value != HANDOFF_FORMAT_VERSION:
+            raise ValueError(
+                f"Unsupported FPVS handoff format revision: {value!r}. Expected integer 2."
+            )
+        return value
+
+    @model_validator(mode="after")
+    def validate_document_kind(self) -> ProjectConfigFile:
+        expected = "completed_session" if self.completed_session is not None else "setup"
+        if self.kind != expected:
+            raise ValueError(f"Handoff kind must be {expected!r} for its completion content.")
+        return self
 
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
         if any(task.simple_post_questions for task in self.task_modules):
-            if self.schema_version not in {
-                POST_QUESTIONS_CONFIG_SCHEMA_VERSION, BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Post-condition Questions require config schema 1.14.0.")
             for condition in self.conditions:
                 validate_post_question_bindings(
                     pre_bindings=condition.pre_task_bindings,
@@ -586,18 +593,10 @@ class ProjectConfigFile(FPVSBaseModel):
                             if self.completed_session is not None else None)
         if (self.session.condition_ordering is not None
                 or completed_policy in {"randomized_blocks", "saved_randomized_blocks"}):
-            if self.schema_version != BLOCK_ORDER_CONFIG_SCHEMA_VERSION:
-                raise ValueError("Randomized condition blocks require config schema 1.15.0.")
             if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
                 raise ValueError(
                     "Randomized condition blocks are unavailable for Attentional-Blink."
                 )
-        if saved_order is not None or completed_policy is not None:
-            if self.schema_version not in {
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Saved order/provenance requires config schema 1.13.0.")
         if saved_order is not None:
             masking_tasks = {task_id for modifier in self.condition_modifiers
                              if modifier.masking is not None for task_id in modifier.pre_task_ids}
@@ -618,12 +617,6 @@ class ProjectConfigFile(FPVSBaseModel):
             self.completed_session is not None
             and self.completed_session.randomization_seeds is not None
         )):
-            if self.schema_version not in {
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Randomization controls require config schema 1.12.0.")
             masking_tasks = {task_id for modifier in self.condition_modifiers
                              if modifier.masking is not None for task_id in modifier.pre_task_ids}
             if (self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
@@ -639,12 +632,6 @@ class ProjectConfigFile(FPVSBaseModel):
         if has_presentation_counts:
             if self.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
                 raise ValueError("Presentation counts are unavailable for Attentional-Blink.")
-            if self.schema_version not in {
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION, RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Presentation counts require config schema 1.11.0.")
             masking_pre_tasks = {
                 task_id for modifier in self.condition_modifiers if modifier.masking is not None
                 for task_id in modifier.pre_task_ids
@@ -670,100 +657,6 @@ class ProjectConfigFile(FPVSBaseModel):
             condition.base_hz is not None for condition in self.conditions
         ):
             raise ValueError("Condition frequency overrides are unavailable for Attentional-Blink.")
-        if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
-               for item in self.conditions) and self.schema_version not in {
-                   "1.3.0", "1.4.0", "1.5.0", "1.6.0", "1.7.0", "1.8.0", "1.9.0",
-                   "1.10.0", "1.11.0", "1.12.0", "1.13.0", "1.14.0", "1.15.0",
-               }:
-            raise ValueError("Letter-stream configs require schema 1.3.0 or newer.")
-        if (self.condition_modifiers or any(task.image_memory for task in self.task_modules)):
-            if self.schema_version not in {
-                MODIFIER_CONFIG_SCHEMA_VERSION, SCENE_CONFIG_SCHEMA_VERSION,
-                CATCH_CONFIG_SCHEMA_VERSION,
-                CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
-                MASKING_EVENT_CONFIG_SCHEMA_VERSION,
-                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
-                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Condition modifiers require config schema 1.4.0 or newer.")
-        if (any(modifier.masking is not None for modifier in self.condition_modifiers)
-                or any(task_requires_scene_schema(task) for task in self.task_modules)):
-            if self.schema_version not in {
-                SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
-                CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
-                MASKING_EVENT_CONFIG_SCHEMA_VERSION,
-                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
-                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Native scene workflows require config schema 1.5.0.")
-        if any(modifier.masking is not None and modifier.masking.catch_trial is not None
-               for modifier in self.condition_modifiers):
-            if self.schema_version not in {
-                CATCH_CONFIG_SCHEMA_VERSION, CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
-                MASKING_EVENT_CONFIG_SCHEMA_VERSION,
-                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
-                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Masking catch trials require config schema 1.6.0.")
-        if any(condition.masking_catch for condition in self.conditions) or any(
-            task_requires_text_alignment_schema(task) for task in self.task_modules
-        ):
-            if self.schema_version not in {
-                CONDITION_CATCH_CONFIG_SCHEMA_VERSION, MASKING_EVENT_CONFIG_SCHEMA_VERSION,
-                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
-                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError(
-                    "Catch conditions and task text alignment require config schema 1.7.0."
-                )
-        if any(modifier.masking is not None and modifier.masking.event_triggers is not None
-               for modifier in self.condition_modifiers):
-            if self.schema_version not in {
-                MASKING_EVENT_CONFIG_SCHEMA_VERSION, CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
-                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Masking event triggers require config schema 1.8.0.")
-        if any(condition.base_hz is not None for condition in self.conditions):
-            if self.schema_version not in {
-                CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION, CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Condition frequency overrides require config schema 1.9.0.")
-        if any(condition.stream_duration_seconds is not None for condition in self.conditions) or (
-            self.condition_defaults is not None
-            and self.condition_defaults.stream_duration_seconds is not None
-        ):
-            if self.schema_version not in {
-                CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-                CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-                RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-                SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-            }:
-                raise ValueError("Stream duration overrides require config schema 1.10.0.")
         referenced = set(owned_image_references(self.task_modules, self.condition_modifiers))
         embedded = [(asset.task_id, asset.relative_path) for asset in self.task_assets]
         if len(embedded) != len(set(embedded)):
@@ -801,45 +694,10 @@ def export_project_config(
         _read_completed_session_plan(completed_session_dir) if completed_session_dir else None
     )
     return ProjectConfigFile(
-        schema_version=(
-            BLOCK_ORDER_CONFIG_SCHEMA_VERSION
-            if project.settings.session.condition_ordering is not None or (
-                session_plan is not None and session_plan.ordering_policy in {
-                    "randomized_blocks", "saved_randomized_blocks",
-                }
-            ) else POST_QUESTIONS_CONFIG_SCHEMA_VERSION
-            if any(task.simple_post_questions for task in project.task_modules)
-            else SAVED_ORDER_CONFIG_SCHEMA_VERSION
-            if project.settings.session.saved_condition_order is not None
-            or (session_plan is not None and session_plan.ordering_policy is not None)
-            else RANDOMIZATION_CONFIG_SCHEMA_VERSION
-            if project.settings.session.randomization_mode is not None
-            or (session_plan is not None and session_plan.randomization_seeds is not None)
-            else CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION
-            if any(item.presentation_count is not None for item in project.conditions)
-            or project.settings.condition_defaults.presentation_count is not None
-            else CONDITION_DURATION_CONFIG_SCHEMA_VERSION
-            if any(item.stream_duration_seconds is not None for item in project.conditions)
-            or project.settings.condition_defaults.stream_duration_seconds is not None
-            else CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION
-            if any(condition.base_hz is not None for condition in project.conditions)
-            else MASKING_EVENT_CONFIG_SCHEMA_VERSION if any(
-                modifier.masking is not None and modifier.masking.event_triggers is not None
-                for modifier in project.condition_modifiers
-            ) else CONDITION_CATCH_CONFIG_SCHEMA_VERSION if any(
-                condition.masking_catch for condition in project.conditions
-            ) or any(task_requires_text_alignment_schema(task) for task in project.task_modules)
-            else CATCH_CONFIG_SCHEMA_VERSION if any(
-                modifier.masking is not None and modifier.masking.catch_trial is not None
-                for modifier in project.condition_modifiers
-            ) else SCENE_CONFIG_SCHEMA_VERSION if (
-                any(modifier.masking is not None for modifier in project.condition_modifiers)
-                or any(task_requires_scene_schema(task) for task in project.task_modules)
-            ) else MODIFIER_CONFIG_SCHEMA_VERSION if project.condition_modifiers
-            or any(task.image_memory for task in project.task_modules)
-            else "1.3.0" if any(isinstance(item.attentional_blink, AttentionalBlinkStreamSettings)
-                           for item in project.conditions) else "1.2.0"
-        ),
+        format=HANDOFF_FORMAT,
+        format_version=HANDOFF_FORMAT_VERSION,
+        kind="completed_session" if session_plan is not None else "setup",
+        producer=ProjectConfigProducer(version=__version__, exported_at=datetime.now(timezone.utc)),
         experiment_category=project.experiment_category,
         condition_defaults=(
             project.settings.condition_defaults.model_copy(deep=True)
@@ -983,22 +841,20 @@ def completed_toolbox_config(
             list(manual_removed_electrodes) if manual_removed_electrodes is not None else None
         ),
     })
-    updates: dict[str, object] = {"completed_session": completed}
-    if completed.randomization_seeds is not None:
-        updates["schema_version"] = RANDOMIZATION_CONFIG_SCHEMA_VERSION
-    if completed.ordering_policy is not None:
-        updates["schema_version"] = (
-            BLOCK_ORDER_CONFIG_SCHEMA_VERSION
-            if completed.ordering_policy in {"randomized_blocks", "saved_randomized_blocks"}
-            or config.session.condition_ordering is not None
-            else SAVED_ORDER_CONFIG_SCHEMA_VERSION
-        )
-    return config.model_copy(deep=True, update=updates)
+    return ProjectConfigFile.model_validate({
+        **config.model_dump(mode="python"),
+        "kind": "completed_session",
+        "completed_session": completed.model_dump(mode="python"),
+    })
 
 
 def write_project_config(path: Path, config: ProjectConfigFile) -> None:
     """Write a `.fpvsconfig` file as UTF-8 JSON."""
 
+    try:
+        config = ProjectConfigFile.model_validate(config.model_dump(mode="python"))
+    except ValueError as exc:
+        raise ProjectConfigError(f"Project config failed validation: {exc}") from exc
     _require_config_category(config)
     path.parent.mkdir(parents=True, exist_ok=True)
     atomic_text_write(
@@ -1021,48 +877,6 @@ def read_project_config(path: Path) -> ProjectConfigFile:
         raise ProjectConfigError(f"Project config is not valid JSON: {path}") from exc
     if not isinstance(raw_payload, dict):
         raise ProjectConfigError("Project config must contain a JSON object.")
-    raw_version = raw_payload.get("schema_version")
-    if raw_version == "1.0.0":
-        display_payload = raw_payload.get("display", {})
-        if not isinstance(display_payload, dict):
-            raise ProjectConfigError("Legacy project config display must be an object.")
-        width_degrees = float(display_payload.get("stimulus_width_degrees", 5.0))
-        raw_payload["presentation"] = legacy_project_presentation_settings(
-            width_degrees,
-            pre_stream_fixation_seconds=0.0,
-        ).model_dump(mode="json")
-        conditions_payload = raw_payload.get("conditions", [])
-        if isinstance(conditions_payload, list):
-            for condition_payload in conditions_payload:
-                if isinstance(condition_payload, dict):
-                    condition_payload.setdefault("presentation", {})
-    if raw_version in {"1.0.0", "1.1.0"}:
-        conditions_payload = raw_payload.get("conditions", [])
-        if isinstance(conditions_payload, list):
-            for condition_payload in conditions_payload:
-                if isinstance(condition_payload, dict):
-                    condition_payload.setdefault("pre_task_bindings", [])
-                    condition_payload.setdefault("post_task_bindings", [])
-        raw_payload.setdefault("task_modules", [])
-        raw_payload.setdefault("task_assets", [])
-        raw_payload["schema_version"] = CONFIG_SCHEMA_VERSION
-        raw_version = CONFIG_SCHEMA_VERSION
-    if raw_version not in {
-        CONFIG_SCHEMA_VERSION, LETTER_STREAM_CONFIG_SCHEMA_VERSION, MODIFIER_CONFIG_SCHEMA_VERSION,
-        SCENE_CONFIG_SCHEMA_VERSION, CATCH_CONFIG_SCHEMA_VERSION,
-        CONDITION_CATCH_CONFIG_SCHEMA_VERSION,
-        MASKING_EVENT_CONFIG_SCHEMA_VERSION,
-        CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION,
-        CONDITION_DURATION_CONFIG_SCHEMA_VERSION,
-        CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION,
-        RANDOMIZATION_CONFIG_SCHEMA_VERSION,
-        SAVED_ORDER_CONFIG_SCHEMA_VERSION, POST_QUESTIONS_CONFIG_SCHEMA_VERSION,
-                BLOCK_ORDER_CONFIG_SCHEMA_VERSION,
-    }:
-        raise ProjectConfigError(
-            "Unsupported project config schema version: "
-            f"{raw_version!r}. Expected a supported version from 1.2.0 through 1.15.0."
-        )
     try:
         return ProjectConfigFile.model_validate(raw_payload)
     except ValidationError as exc:
@@ -1105,32 +919,9 @@ def create_project_from_config(parent_dir: Path, config: ProjectConfigFile) -> P
         destination.write_bytes(payload)
 
     project = ProjectFile(
-        schema_version=(
-            ProjectSchemaVersion.V1_17
-            if config.schema_version == BLOCK_ORDER_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_16
-            if config.schema_version == POST_QUESTIONS_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_15
-            if config.schema_version == SAVED_ORDER_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_14
-            if config.schema_version == RANDOMIZATION_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_13
-            if config.schema_version == CONDITION_PRESENTATION_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_12
-            if config.schema_version == CONDITION_DURATION_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_11
-            if config.schema_version == CONDITION_FREQUENCY_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_10
-            if config.schema_version == MASKING_EVENT_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_9
-            if config.schema_version == CONDITION_CATCH_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_8 if config.schema_version == CATCH_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_7 if config.schema_version == SCENE_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_6
-            if config.schema_version == MODIFIER_CONFIG_SCHEMA_VERSION
-            else ProjectSchemaVersion.V1_5 if config.schema_version == "1.3.0"
-            else ProjectSchemaVersion.V1_4
-        ),
+        # Imported authoring state uses the current internal project contract.
+        # Its version is independent from the shared interchange revision.
+        schema_version=ProjectSchemaVersion.V1_17,
         experiment_category=config.experiment_category,
         meta=ProjectMeta(
             project_id=project_id,
@@ -1466,7 +1257,6 @@ def _toolbox_config(
         project_title=project.meta.name,
         event_map=event_map,
         oddball_trigger_code=oddball_trigger_code,
-        handoff_schema_version="1.0",
         acquisition_profile=acquisition_profile_for_recording(recording_backend),
         experiment_id=origin.item_id if origin else project.meta.project_id,
         experiment_version=origin.installed_version if origin else None,

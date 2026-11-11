@@ -88,6 +88,53 @@ PyCharm is optional; Run Mac.command launches the shared application directly.
 For a nonstandard IDE install, set
 `FPVS_PYCHARM_APP` to its `.app` path when invoking the shell helper.
 
+### Repairing the PyCharm environment
+
+If Test/Pilot says PsychoPy is not installed, check the interpreter used by the
+Studio run configuration. Installing the separate PsychoPy application does not
+install packages into Studio's virtual environment. The same short error can also
+hide an import failure in one of PsychoPy's dependencies; the full traceback is
+needed to distinguish these cases.
+
+1. Close Studio. In PyCharm, open `scripts/macos_repair_environment.py` from the
+   complete Studio checkout and create a Run configuration for that file.
+2. Select the **same Python interpreter as FPVS Studio (Mac)** for this helper.
+   Setup uses `.venv3.10/bin/python`, or `.venv/bin/python` when reusing that
+   environment. A new right-click Run configuration may initially select a
+   different interpreter from the existing Studio configuration.
+3. Run the helper without parameters to install/refresh the declared requirements.
+   Add `--check` to its parameters for diagnostics without package installation.
+4. Wait for **Environment checks passed**, then restart Studio with the same
+   interpreter and retry Test/Pilot. On failure, retain the console output,
+   including the first error and the complete chained traceback.
+
+The helper logs the exact interpreter, Python version, CPU and checkout. It
+requires Setup's native Python 3.10 virtual environment and stops before changing
+packages if PyCharm is using another environment. It preserves the venv executable
+path, runs pip through that interpreter, installs `requirements-macos.txt`, and
+checks dependency consistency, installed source location/version, declared
+base/dev/engine requirements and the engine's actual lazy imports in a fresh
+isolated process. After a source update, run the repair to refresh dependency
+metadata; check-only mode validates the installed metadata's requirements.
+It does not change IDE settings or create a presentation window. Successful imports
+do not qualify display refresh timing. Intel build-tool failures should be resolved
+through **Setup Mac.command**, which owns Apple/Rust/OpenSSL provisioning.
+
+For a manual install from the checkout root, using the same interpreter as Studio:
+
+```bash
+.venv3.10/bin/python -m pip install --requirement requirements-macos.txt
+.venv3.10/bin/python scripts/macos_repair_environment.py --check
+```
+
+Substitute `.venv/bin/python` when that is the configured environment. The narrower
+install is `python -m pip install -e '.[engine]'` with Studio's Python; `engine`
+is an extra declared by this project, not a package to install as `pip install engine`.
+Using the interpreter's `-m pip` selects the environment being modified, as described
+in the [pip user guide](https://pip.pypa.io/en/stable/user_guide/#running-pip).
+
+### Terminal setup and updates
+
 Terminal alternatives, from the checkout:
 
 ```bash

@@ -1012,7 +1012,7 @@ class StudioController(QObject):
             window = self.main_window
             QTimer.singleShot(0, lambda: on_opened() if self.main_window is window else None)
 
-    def show_settings_dialog(self) -> None:
+    def show_settings_dialog(self, *, initial_category: str = "General") -> None:
         """Show application-level settings, including the FPVS Studio root folder."""
 
         if not self.ensure_fpvs_root_configured():
@@ -1028,6 +1028,7 @@ class StudioController(QObject):
         automatic_reports = crash_report_controller()
         dialog = AppSettingsDialog(
             fpvs_root_dir=root_dir,
+            initial_category=initial_category,
             theme_mode=self.load_theme_mode(),
             on_theme_mode_changed=self.set_theme_mode,
             default_recording_configuration=self.load_default_recording_configuration(),
@@ -1277,6 +1278,9 @@ class StudioController(QObject):
             on_request_import_project_config=self.show_import_project_config_dialog,
             on_request_import_project_bundle=self.show_import_project_bundle_dialog,
             on_request_settings=self.show_settings_dialog,
+            on_request_recording_settings=lambda: self.show_settings_dialog(
+                initial_category="Recording",
+            ),
             on_request_library=self.show_library,
             on_request_library_submission=self.show_library_submission,
             on_request_project_update=self.show_project_versions,

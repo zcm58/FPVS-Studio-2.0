@@ -156,7 +156,9 @@ retaining every image file, source set and ordinary setting. Saving remains expl
 - `core/attentional_blink_presets.py` assembles the default burst study and recall task.
   `core/attentional_blink_stream.py` describes the exact character grid;
   `core/compiler_attentional_blink_stream.py` compiles native character events.
-- Letter streams use project schema `1.5.0`, `.fpvsconfig` and `RunSpec` `1.3.0`.
+- Letter streams use project schema `1.5.0` and `RunSpec` `1.3.0`. Current
+  `.fpvsconfig` exports use the shared [revision-2 format](PROJECT_CONFIG.md);
+  historical letter-stream configs used `1.3.0`.
   Legacy records remain decodable; retired image-pair layouts cannot run.
   Template-library schema `1.2.0` preserves explicit layout in custom profile copies.
 - The existing engine text cache and frame loop render character events. Runtime

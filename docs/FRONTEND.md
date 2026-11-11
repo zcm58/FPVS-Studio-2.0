@@ -168,7 +168,9 @@ interaction.
   AB previews share derived descriptions within one edit only. Manage Projects scans
   through the app-owned job lifecycle with loading, close and retry states; see
   [GUI responsiveness](GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness).
-- Settings > Recording exposes project BioSemi/TriggerBox serial-port selection.
+- Settings > Recording embeds the shared hardware editor with Apply to Project,
+  Save Default Settings and Use Computer Default actions, without nested editors.
+  It exposes project BioSemi/TriggerBox serial-port selection.
   actiCHamp parallel output has a separate hexadecimal address selector with
   metadata-only Windows detection and shared sampling-rate/pulse controls.
   Other serial parameters, display selection and fullscreen policy remain

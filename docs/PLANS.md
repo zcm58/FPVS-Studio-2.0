@@ -40,6 +40,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Inline Recording settings](exec-plans/completed/inline-recording-settings.md):
+  hardware fields and project/default save actions share one Settings page; safe
+  focused/precommit checks passed, with visible Qt acceptance unperformed.
 - [Configurable demographics](exec-plans/completed/configurable-demographics.md)
 - [Demographics form builder](exec-plans/completed/demographics-form-builder.md)
 - [Condition Figure](exec-plans/completed/condition-figure.md)
@@ -135,10 +138,10 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Settings hierarchy and theme preference](exec-plans/completed/settings-hierarchy-and-theme.md):
   flat Settings and persisted Light/Dark/Auto implemented; precommit and focused/visible
   checks passed, with optional Welcome test-order and native/scaling limits recorded.
-- [Setup visual layout and hierarchy](exec-plans/completed/setup-visual-layout.md):
 - [Settings sidebar navigation](exec-plans/completed/settings-sidebar.md):
   six category pages, independently scrollable content and retained preferences;
   focused, precommit and 99 visible Windows cases passed at minimum/default sizes.
+- [Setup visual layout and hierarchy](exec-plans/completed/setup-visual-layout.md):
   all eight pages visually reviewed in both themes, balanced workspaces and 57 focused
   visible sizing checks; safe-suite transient Windows access failure recorded.
 - [Drag-and-drop randomized condition blocks](exec-plans/completed/randomized-block-condition-editor.md):

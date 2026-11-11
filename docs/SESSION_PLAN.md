@@ -244,7 +244,9 @@ The session exports should preserve:
 
 ### Presentation-count compatibility and recovery
 
-Editable explicit counts use Project 1.13/config 1.11; count defaults use the narrow
+Editable explicit counts use Project 1.13; historical configs introduced them in
+1.11. Current configs share the [revision-2 envelope](PROJECT_CONFIG.md).
+Count defaults use the narrow
 template-library 1.4 schema. Omitted counts preserve saved global totals without
 rewriting source projects merely on load. Fresh ordinary compilation applies the new
 ordering rule even to inherited totals. Historical compiled plans retain their stored
@@ -262,7 +264,8 @@ Optional `randomization_modes` records independent `condition_order`, `stimulus`
 `fixation` choices. Absent category choices inherit the overall mode. The overall mode
 is fixed only when all categories are fixed; otherwise it is new.
 Legacy null settings resolve compatibly without rewriting the source project on load.
-Explicit settings use Project 1.14/config 1.12 and require the complete validated triplet.
+Explicit settings use Project 1.14 and require the complete validated triplet.
+Historical configs added them in 1.12; current configs retain them in revision 2.
 
 Ordinary SessionPlan 1.7 records `randomization_mode`, `randomization_seeds` and
 `randomization_algorithm_version`, plus optional `randomization_modes`. Each RunSpec 1.7
@@ -284,7 +287,8 @@ contracts and are outside these three controls.
 ## Explicit randomized condition blocks
 
 `SessionSettings.condition_ordering="randomized_blocks"` selects the explicit block
-experiment design in Project `1.17.0` and config `1.15.0`. Absence preserves the legacy
+experiment design in Project `1.17.0`. Historical configs introduced it in `1.15.0`;
+current configs retain it in the shared revision-2 format. Absence preserves the legacy
 pooled design and is omitted during serialization. Existing `block_count` remains the
 fallback total for conditions without an authored `presentation_count`; it is never
 multiplied into explicit totals. Native AB rejects this ordinary-FPVS setting. Masking
@@ -349,7 +353,8 @@ A selected subset with two or more conditions that removes needed separators is
 rejected rather than reshuffled. A single-condition subset retains every occurrence.
 Historical plans and exact-occurrence recovery retain their original order/provenance.
 
-Saved-source fields use Project 1.15/config 1.13 and are omitted when absent. They are
+Saved-source fields use Project 1.15 and are omitted when absent. Historical configs
+introduced them in 1.13; current configs retain them in revision 2. They are
 project/session state, never condition-template defaults. Canonical ordering identity
 includes an active exact list and ignores an inactive New-mode list.
 

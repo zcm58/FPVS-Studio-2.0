@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 import pytest
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
@@ -94,23 +95,23 @@ def test_config_roundtrip_retains_shared_rate_and_explicit_override(
     path = tmp_path / "frequency.fpvsconfig"
     write_project_config(path, config)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.9.0"
+    assert payload["format_version"] == 2
     assert payload["protocol"]["base_hz"] == 6
     assert "base_hz" not in payload["conditions"][0]
     assert payload["conditions"][1]["base_hz"] == 4
     scaffold = create_project_from_config(tmp_path / "imported", read_project_config(path))
     restored = scaffold.project
-    assert restored.schema_version == ProjectSchemaVersion.V1_11
+    assert restored.schema_version == ProjectSchemaVersion.V1_17
     assert restored.settings.protocol.base_hz == 6
     assert [condition.base_hz for condition in restored.conditions] == [None, 4, None, None]
     reopened = load_project_file(scaffold.project_root / "project.json")
-    assert reopened.schema_version == ProjectSchemaVersion.V1_11
+    assert reopened.schema_version == ProjectSchemaVersion.V1_17
     assert [condition.base_hz for condition in reopened.conditions] == [None, 4, None, None]
 
 
 def test_inherited_config_keeps_legacy_version_and_payload_shape(sample_project) -> None:
     config = export_project_config(sample_project, project_root=None)
-    assert config.schema_version == "1.2.0"
+    assert config.format_version == 2
     assert all("base_hz" not in row for row in config.model_dump()["conditions"])
 
 
@@ -119,8 +120,7 @@ def test_config_override_requires_new_schema_without_rewriting_original(
 ) -> None:
     sample_project.conditions[0].base_hz = 4
     config = export_project_config(sample_project, project_root=None)
-    payload = config.model_dump(mode="json")
-    payload["schema_version"] = "1.8.0"
+    payload = legacy_config_payload(config, '1.8.0')
     path = tmp_path / "wrong-version.fpvsconfig"
     original = json.dumps(payload)
     path.write_text(original, encoding="utf-8")
@@ -160,8 +160,7 @@ def test_config_rejects_ab_override_before_creating_import_files(tmp_path, has_s
 @pytest.mark.parametrize("rate", [0, -1, float("inf"), float("nan")])
 def test_config_rejects_invalid_condition_frequency(sample_project, tmp_path, rate) -> None:
     config = export_project_config(sample_project, project_root=None)
-    payload = config.model_dump(mode="json")
-    payload["schema_version"] = "1.9.0"
+    payload = legacy_config_payload(config, '1.9.0')
     payload["conditions"][0]["base_hz"] = rate
     path = tmp_path / "invalid-frequency.fpvsconfig"
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -237,7 +236,7 @@ def test_masking_compile_and_config_retain_effective_condition_rate(
     assert run.condition.oddball_hz == 0.8
     assert run.display.frames_per_stimulus == 15
     config = export_project_config(project, project_root=None)
-    assert config.schema_version == "1.9.0"
+    assert config.format_version == 2
     assert config.conditions[0].base_hz == 4
 
 

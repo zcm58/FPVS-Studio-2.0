@@ -227,10 +227,10 @@ def _isolate_qt_settings(smoke_root: Path) -> dict[str, str]:
     return paths
 
 
-def _visible_layout_issues(dialog: Any) -> list[str]:
+def _visible_layout_issues(dialog: Any, *, allow_vertical_scroll: bool = False) -> list[str]:
     """Check the same widget, text and contrast bounds across packaged dialogs."""
     from PySide6.QtGui import QPalette
-    from PySide6.QtWidgets import QAbstractButton, QLabel, QWidget
+    from PySide6.QtWidgets import QAbstractButton, QLabel, QScrollArea, QWidget
 
     from fpvs_studio.gui.design_system import contrast_ratio, resolve_studio_theme
 
@@ -242,9 +242,16 @@ def _visible_layout_issues(dialog: Any) -> list[str]:
             continue
         bounds = child.geometry()
         name = child.objectName() or type(child).__name__
-        if (bounds.left() < -1 or bounds.top() < -1
+        scroll = parent.parentWidget()
+        scrolling_content = (
+            allow_vertical_scroll and isinstance(scroll, QScrollArea)
+            and scroll.widget() is child and scroll.viewport() is parent
+        )
+        if (bounds.left() < -1
                 or bounds.right() > parent.width() + 1
-                or bounds.bottom() > parent.height() + 1):
+                or (not scrolling_content and (
+                    bounds.top() < -1 or bounds.bottom() > parent.height() + 1
+                ))):
             issues.append(f"{name} exceeds its parent: {bounds.getRect()}")
         if isinstance(child, QAbstractButton) and child.text():
             if child.width() < child.fontMetrics().horizontalAdvance(child.text()):
@@ -315,7 +322,7 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
                         "page_visible": page.isVisible(),
                         "no_horizontal_scroll": page.horizontalScrollBar().maximum() == 0,
                     }
-                    issues = _visible_layout_issues(settings)
+                    issues = _visible_layout_issues(settings, allow_vertical_scroll=True)
                     screenshot = screenshots / f"{theme}-{category.lower()}-{size[0]}x{size[1]}.png"
                     saved = settings.grab().save(str(screenshot))
                     pages.append({

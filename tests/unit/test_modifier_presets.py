@@ -184,7 +184,7 @@ def test_modifier_config_and_bundle_retain_media_and_definitions(tmp_path):
     save_project_file(project, scaffold.project_root / "project.json")
     assert load_project_file(scaffold.project_root / "project.json") == project
     config = export_project_config(project, scaffold.project_root)
-    assert config.schema_version == "1.4.0"
+    assert config.format_version == 2
     config_path = tmp_path / "study.fpvsconfig"
     write_project_config(config_path, config)
     restored = create_project_from_config(tmp_path / "c", read_project_config(config_path))

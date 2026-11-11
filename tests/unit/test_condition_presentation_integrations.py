@@ -8,6 +8,7 @@ import json
 import pytest
 from pydantic import ValidationError
 from tests.unit.runtime_launcher_helpers import StubEngine
+from tests.unit.studio_handoff_fixtures import legacy_config_payload, read_legacy_config
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.compiler_limits import CompilationLimits, validate_compilation_workload
@@ -99,12 +100,12 @@ def test_presentation_counts_config_public_project_roundtrip(sample_project, tmp
     project.conditions[1].base_hz = 4
     project.settings.condition_defaults.presentation_count = 2
     config = export_project_config(project, project_root=None)
-    assert config.schema_version == "1.11.0"
+    assert config.format_version == 2
     path = tmp_path / "presentations.fpvsconfig"
     write_project_config(path, config)
     imported = create_project_from_config(tmp_path / "received", read_project_config(path))
     reopened = load_project_file(imported.project_root / "project.json")
-    assert reopened.schema_version == ProjectSchemaVersion.V1_13
+    assert reopened.schema_version == ProjectSchemaVersion.V1_17
     assert [condition.presentation_count for condition in reopened.conditions] == [3, 2]
     assert reopened.settings.session.block_count == 17
     assert reopened.settings.condition_defaults.presentation_count == 2
@@ -119,7 +120,7 @@ def test_legacy_config_omits_count_and_keeps_continuous_sequence_semantics(
     sample_project.conditions[0].sequence_count = 2
     sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 144
     config = export_project_config(sample_project, project_root=None)
-    assert config.schema_version == "1.2.0"
+    assert config.format_version == 2
     assert "presentation_count" not in config.conditions[0].model_dump()
     restored = create_project_from_config(tmp_path, config).project
     assert restored.conditions[0].presentation_count is None
@@ -129,8 +130,7 @@ def test_legacy_config_omits_count_and_keeps_continuous_sequence_semantics(
 
 @pytest.mark.parametrize("value", [0, -1, True, 2.0, "2"])
 def test_config_counts_reject_non_positive_or_non_integer_values(sample_project, value):
-    payload = export_project_config(sample_project, None).model_dump()
-    payload["schema_version"] = "1.11.0"
+    payload = legacy_config_payload(export_project_config(sample_project, None), '1.11.0')
     payload["conditions"][0]["presentation_count"] = value
     from fpvs_studio.core.project_config import ProjectConfigFile
     with pytest.raises(ValidationError):
@@ -143,13 +143,13 @@ def test_presentation_capability_rejected_before_import_writes(sample_project, t
     if placement == "defaults":
         project.conditions = []
         project.settings.condition_defaults.presentation_count = 3
-    config = export_project_config(project, None).model_copy(update={"schema_version": "1.10.0"})
+    config = export_project_config(project, None)
     target = tmp_path / "received"
     with pytest.raises(ProjectConfigError, match="counts require config schema 1.11"):
-        create_project_from_config(target, config)
+        create_project_from_config(target, read_legacy_config(config, "1.10.0", tmp_path))
     assert not target.exists()
     path = tmp_path / "unsupported.fpvsconfig"
-    path.write_text(config.model_dump_json(), encoding="utf-8")
+    path.write_text(json.dumps(legacy_config_payload(config, "1.10.0")), encoding="utf-8")
     before = path.read_bytes()
     with pytest.raises(ProjectConfigError, match="counts require config schema 1.11"):
         read_project_config(path)

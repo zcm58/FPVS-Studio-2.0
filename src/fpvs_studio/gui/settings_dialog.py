@@ -31,11 +31,12 @@ from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
     mark_error_text,
+    mark_primary_action,
     mark_secondary_action,
 )
 from fpvs_studio.gui.recording_dialog import (
     RECORDING_HARDWARE_CHOICES,
-    RecordingSetupDialog,
+    RecordingSetupEditor,
     recording_preference_summary,
 )
 from fpvs_studio.gui.window_helpers import _show_error_dialog
@@ -56,6 +57,7 @@ class AppSettingsDialog(QDialog):
         self,
         *,
         fpvs_root_dir: Path,
+        initial_category: str = "General",
         theme_mode: str = "auto",
         on_theme_mode_changed: Callable[[str], None] | None = None,
         default_recording_configuration: dict[str, object] | None = None,
@@ -356,52 +358,61 @@ class AppSettingsDialog(QDialog):
         recording.setObjectName("settings_recording_page")
         recording_layout = QVBoxLayout(recording)
         recording_layout.setContentsMargins(0, 0, 0, 0)
-        recording_layout.setSpacing(8)
-        recording_layout.addWidget(_section_title("Computer default", recording))
-        self.default_recording_summary = QLabel(recording)
-        self.default_recording_summary.setWordWrap(True)
-        self.default_recording_summary.setObjectName("settings_default_recording_summary")
-        recording_layout.addWidget(self.default_recording_summary)
-        self.default_recording_setup_button = QPushButton("Change Default…", recording)
-        self.default_recording_setup_button.setObjectName("settings_default_recording_setup")
-        mark_secondary_action(self.default_recording_setup_button)
-        self.default_recording_setup_button.setEnabled(
-            on_default_recording_configuration_changed is not None,
-        )
-        self.default_recording_setup_button.clicked.connect(self._show_default_recording_setup)
-        recording_layout.addWidget(self.default_recording_setup_button)
-        recording_layout.addSpacing(8)
-        recording_layout.addWidget(_section_title("This project", recording))
+        recording_layout.setSpacing(12)
         self.recording_summary = QLabel(recording_preference_summary(
             self._recording_configuration,
         ), recording)
         self.recording_summary.setObjectName("settings_recording_summary")
         self.recording_summary.setWordWrap(True)
         recording_layout.addWidget(self.recording_summary)
-        self.recording_setup_button = QPushButton("Recording Setup…", recording)
-        self.recording_setup_button.setObjectName("settings_recording_setup")
-        mark_secondary_action(self.recording_setup_button)
-        self.recording_setup_button.setEnabled(on_recording_configuration_changed is not None)
-        self.recording_setup_button.clicked.connect(self._show_recording_setup)
+        self._recording_editor_host = QWidget(recording)
+        self._recording_editor_layout = QVBoxLayout(self._recording_editor_host)
+        self._recording_editor_layout.setContentsMargins(0, 0, 0, 0)
+        self.recording_editor = self._create_recording_editor()
+        self._recording_editor_layout.addWidget(self.recording_editor)
+        recording_layout.addWidget(self._recording_editor_host)
+        self.apply_recording_button = QPushButton("Apply to Project", recording)
+        self.apply_recording_button.setObjectName("settings_apply_recording")
+        self.apply_recording_button.setAutoDefault(False)
+        mark_primary_action(self.apply_recording_button)
+        self.apply_recording_button.setVisible(on_recording_configuration_changed is not None)
+        self.apply_recording_button.clicked.connect(self._apply_recording_setup)
+        self.save_default_recording_button = QPushButton("Save Default Settings", recording)
+        self.save_default_recording_button.setObjectName("settings_save_default_recording")
+        self.save_default_recording_button.setAutoDefault(False)
+        mark_secondary_action(self.save_default_recording_button)
+        self.save_default_recording_button.setEnabled(
+            on_default_recording_configuration_changed is not None,
+        )
+        self.save_default_recording_button.setToolTip(
+            "Save the displayed hardware settings for this computer. Projects with an override "
+            "keep their settings. The BioSemi serial port remains project-specific."
+        )
+        self.save_default_recording_button.clicked.connect(self._save_default_recording_setup)
+        save_recording_row = QHBoxLayout()
+        save_recording_row.addWidget(self.apply_recording_button)
+        save_recording_row.addWidget(self.save_default_recording_button)
+        save_recording_row.addStretch(1)
+        recording_layout.addLayout(save_recording_row)
         self.use_default_recording_button = QPushButton("Use Computer Default", recording)
         self.use_default_recording_button.setObjectName("settings_use_default_recording")
+        self.use_default_recording_button.setAutoDefault(False)
         mark_secondary_action(self.use_default_recording_button)
-        self.use_default_recording_button.clicked.connect(self._use_default_recording_setup)
-        project_recording_buttons = QHBoxLayout()
-        project_recording_buttons.addWidget(self.recording_setup_button)
-        project_recording_buttons.addWidget(self.use_default_recording_button)
-        recording_layout.addLayout(project_recording_buttons)
-        recording_help = QLabel(
-            "Choose BioSemi ActiveTwo/ActiveThree, Brain Products / BrainVision, "
-            "or Unicorn Recorder UDP. "
-            "Unicorn launches require Recorder to be open and recording. "
-            "The computer default applies to projects without an override. "
-            "Recording Setup saves an override for the open project.", recording,
+        self.use_default_recording_button.setVisible(on_recording_configuration_changed is not None)
+        self.use_default_recording_button.setToolTip(
+            "Remove this project's recording override and replace the displayed edits with "
+            "the computer default. The project's BioSemi serial port is preserved."
         )
-        recording_help.setObjectName("settings_recording_help")
-        recording_help.setWordWrap(True)
-        recording_layout.addWidget(recording_help)
+        self.use_default_recording_button.clicked.connect(self._use_default_recording_setup)
+        recording_layout.addWidget(
+            self.use_default_recording_button, 0, Qt.AlignmentFlag.AlignLeft,
+        )
+        self.default_recording_summary = QLabel(recording)
+        self.default_recording_summary.setWordWrap(True)
+        self.default_recording_summary.setObjectName("settings_default_recording_summary")
+        recording_layout.addWidget(self.default_recording_summary)
         self._refresh_recording_summaries()
+        self.finished.connect(lambda _result: self.recording_editor.cancel())
         recording_layout.addStretch(1)
         advanced = QWidget(self)
         advanced.setObjectName("settings_advanced_page")
@@ -489,7 +500,7 @@ class AppSettingsDialog(QDialog):
 
         self._category_focus_controls = [
             self.detailed_run_exports_checkbox,
-            self.default_recording_setup_button,
+            self.recording_editor.backend_combo,
             self.theme_buttons["light"],
             self.root_folder_setup_button,
             self.developer_mode_checkbox,
@@ -542,7 +553,10 @@ class AppSettingsDialog(QDialog):
         for checkbox in self.findChildren(QCheckBox):
             checkbox.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         self.navigation.currentRowChanged.connect(self._select_category)
-        self.navigation.setCurrentRow(0)
+        matches = self.navigation.findItems(initial_category, Qt.MatchFlag.MatchExactly)
+        if not matches:
+            raise ValueError(f"Unknown Settings category: {initial_category!r}")
+        self.navigation.setCurrentItem(matches[0])
         apply_dialog_theme(self)
 
     def _select_category(self, index: int) -> None:
@@ -578,30 +592,52 @@ class AppSettingsDialog(QDialog):
         )
         self.crash_reports_status.setText(status)
 
-    def _show_recording_setup(self) -> None:
-        dialog = RecordingSetupDialog(
-            self._recording_configuration, self,
+    def _create_recording_editor(self) -> RecordingSetupEditor:
+        project_open = self._on_recording_configuration_changed is not None
+        return RecordingSetupEditor(
+            (self._recording_configuration if project_open
+             else self._default_recording_configuration),
+            self._recording_editor_host,
+            computer_default=not project_open,
             biosemi_serial_port=self._biosemi_serial_port,
             biosemi_serial_baudrate=self._biosemi_serial_baudrate,
         )
-        if dialog.exec() != int(QDialog.DialogCode.Accepted):
+
+    def _reload_recording_editor(self) -> None:
+        previous = self.recording_editor
+        previous.cancel()
+        self._recording_editor_layout.removeWidget(previous)
+        previous.hide()
+        previous.deleteLater()
+        self.recording_editor = self._create_recording_editor()
+        self._recording_editor_layout.addWidget(self.recording_editor)
+        self._category_focus_controls[1] = self.recording_editor.backend_combo
+        if self.navigation.currentRow() == 1:
+            QWidget.setTabOrder(self.navigation, self.recording_editor.backend_combo)
+
+    def _apply_recording_setup(self) -> None:
+        if self._on_recording_configuration_changed is None:
             return
-        configuration = dialog.configuration
+        try:
+            configuration = self.recording_editor.validated_configuration()
+        except ValueError as exc:
+            _show_error_dialog(self, "Recording Setup Error", exc)
+            return
         port = self._biosemi_serial_port
         payload = dict(configuration)
         if configuration.get("recording_backend") in ("serial", "biosemi_active_three"):
-            port = dialog.biosemi_serial_port
+            port = self.recording_editor.biosemi_serial_port
             payload["serial_port"] = port
-        if self._on_recording_configuration_changed is not None:
-            try:
-                self._on_recording_configuration_changed(payload)
-            except (ValueError, OSError) as exc:
-                _LOGGER.exception("Could not save project recording settings")
-                _show_error_dialog(self, "Save Recording Setup Error", exc)
-                return
+        try:
+            self._on_recording_configuration_changed(payload)
+        except (ValueError, OSError) as exc:
+            _LOGGER.exception("Could not save project recording settings")
+            _show_error_dialog(self, "Save Recording Setup Error", exc)
+            return
         self._recording_configuration = configuration
         self._biosemi_serial_port = port
         self._recording_uses_default = False
+        self.recording_editor.retain_reviewed_selection()
         self._refresh_recording_summaries()
 
     def _refresh_recording_summaries(self) -> None:
@@ -612,9 +648,9 @@ class AppSettingsDialog(QDialog):
             (label for label, value in RECORDING_HARDWARE_CHOICES if value == backend),
             "Choose EEG hardware",
         )
-        self.default_recording_summary.setText(label)
+        self.default_recording_summary.setText(f"Computer default: {label}")
         if self._on_recording_configuration_changed is None:
-            text = "Open a project to override the computer default."
+            text = "Settings for this computer"
         else:
             summary = recording_preference_summary({
                 **self._recording_configuration, "serial_port": self._biosemi_serial_port,
@@ -627,14 +663,13 @@ class AppSettingsDialog(QDialog):
             and not self._recording_uses_default,
         )
 
-    def _show_default_recording_setup(self) -> None:
-        dialog = RecordingSetupDialog(
-            self._default_recording_configuration, self, computer_default=True,
-        )
-        if dialog.exec() != int(QDialog.DialogCode.Accepted):
-            return
-        configuration = dialog.configuration
+    def _save_default_recording_setup(self) -> None:
         if self._on_default_recording_configuration_changed is None:
+            return
+        try:
+            configuration = self.recording_editor.validated_configuration(computer_default=True)
+        except ValueError as exc:
+            _show_error_dialog(self, "Recording Setup Error", exc)
             return
         try:
             self._on_default_recording_configuration_changed(configuration)
@@ -643,8 +678,9 @@ class AppSettingsDialog(QDialog):
             _show_error_dialog(self, "Save Default Recording Setup Error", exc)
             return
         self._default_recording_configuration = configuration
-        if self._recording_uses_default:
+        if self._recording_uses_default or self._on_recording_configuration_changed is None:
             self._recording_configuration = dict(configuration)
+        self.recording_editor.retain_reviewed_selection()
         self._refresh_recording_summaries()
 
     def _use_default_recording_setup(self) -> None:
@@ -658,6 +694,7 @@ class AppSettingsDialog(QDialog):
             return
         self._recording_uses_default = True
         self._recording_configuration = dict(self._default_recording_configuration)
+        self._reload_recording_editor()
         self._refresh_recording_summaries()
 
     def _refresh_developer_status(self) -> None:

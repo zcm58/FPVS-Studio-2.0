@@ -8,8 +8,8 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QObject, QSettings, Qt, Signal
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QLabel
+from PySide6.QtGui import QColor, QPalette, QTextDocument
+from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QLabel, QScrollArea
 from tests.gui.helpers import (
     ImmediateProgressTask,
     assert_visible_children_within_parent,
@@ -145,15 +145,25 @@ def _unconfigured_triggerbox(**overrides):
     })
 
 
+def _label_plain_text(label: QLabel) -> str:
+    if label.textFormat() != Qt.TextFormat.RichText:
+        return label.text()
+    text = QTextDocument()
+    text.setHtml(label.text())
+    return text.toPlainText()
+
+
 def _assert_labels_fit(widget) -> None:
-    assert_visible_children_within_parent(widget)
+    assert_visible_children_within_parent(
+        widget, allow_scroll_content=isinstance(widget, AppSettingsDialog),
+    )
     for label in widget.findChildren(QLabel):
         if not label.isVisible():
             continue
         if label.wordWrap():
             assert label.height() >= label.heightForWidth(label.width())
         else:
-            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+            assert label.width() >= label.fontMetrics().horizontalAdvance(_label_plain_text(label))
     for checkbox in widget.findChildren(QCheckBox):
         if checkbox.isVisible():
             assert checkbox.width() >= checkbox.sizeHint().width()
@@ -1373,7 +1383,7 @@ def test_switch_from_invalid_device_draft_applies_last_valid_inactive_values(
 @pytest.mark.parametrize("backend", [
     "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
 ])
-def test_settings_recording_subdialog_persists_only_apply(
+def test_settings_recording_editor_persists_only_apply(
     qtbot, tmp_path, monkeypatch, accepted, backend,
 ):
     saved = []
@@ -1385,22 +1395,19 @@ def test_settings_recording_subdialog_persists_only_apply(
     qtbot.addWidget(dialog)
     select_settings_category(dialog, "Recording")
     dialog.show()
-    def fake_exec(child):
-        child.backend_combo.setCurrentIndex(child.backend_combo.findData(backend))
-        child.port_edit.setText("2345")
-        child.brainproducts_port_edit.setText("COM123")
-        child.brainproducts_pulse_edit.setText("20")
-        _select_triggerbox_timing(child)
-        child.accept() if accepted else child.reject()
-        return child.result()
-    monkeypatch.setattr(RecordingSetupDialog, "exec", fake_exec)
-    dialog.recording_setup_button.click()
+    editor = dialog.recording_editor
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
+    editor.port_edit.setText("2345")
+    editor.brainproducts_port_edit.setText("COM123")
+    editor.brainproducts_pulse_edit.setText("20")
+    _select_triggerbox_timing(editor)
+    if accepted:
+        dialog.apply_recording_button.click()
+        assert dialog.isVisible()
+    else:
+        dialog.reject()
     QApplication.processEvents()
     _assert_labels_fit(dialog)
-    help_label = dialog.findChild(QLabel, "settings_recording_help")
-    assert help_label is not None
-    assert "require Recorder to be open and recording" in help_label.text()
-    assert "blocked until" not in help_label.text()
     if accepted:
         assert saved == [{
             "recording_backend": backend,
@@ -1432,6 +1439,207 @@ def test_settings_recording_subdialog_persists_only_apply(
         assert "legacy" in dialog.recording_summary.text()
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)])
+@pytest.mark.parametrize("configuration", [
+    {"recording_backend": "serial"},
+    {"recording_backend": "biosemi_active_three"},
+    _triggerbox_configuration(),
+    _parallel_configuration(),
+    {"recording_backend": "unicorn_udp", "unicorn_udp_port": 65535},
+])
+def test_inline_recording_controls_and_save_actions_fit_settings(
+    qtbot, tmp_path, background, size, configuration,
+):
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        initial_category="Recording",
+        recording_configuration=configuration,
+        on_recording_configuration_changed=lambda _configuration: None,
+        on_default_recording_configuration_changed=lambda _configuration: None,
+        on_use_default_recording_configuration=lambda: None,
+    )
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert dialog.size().toTuple() == size
+    assert dialog.recording_editor.backend_combo.isVisible()
+    assert not dialog.findChildren(RecordingSetupDialog)
+    scroll = dialog.pages.currentWidget()
+    assert isinstance(scroll, QScrollArea)
+    assert scroll.horizontalScrollBar().maximum() == 0
+    for button in (
+        dialog.apply_recording_button,
+        dialog.save_default_recording_button,
+        dialog.use_default_recording_button,
+    ):
+        scroll.ensureWidgetVisible(button)
+        QApplication.processEvents()
+        assert button.isVisible()
+        assert button.width() >= button.sizeHint().width()
+        assert scroll.viewport().rect().contains(button.mapTo(
+            scroll.viewport(), button.rect().center(),
+        ))
+        _assert_labels_fit(dialog)
+    assert dialog.size().toTuple() == size
+
+
+def test_inline_recording_draft_survives_category_changes_without_saving(
+    qtbot, tmp_path,
+):
+    project_save = Mock()
+    default_save = Mock()
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, initial_category="Recording",
+        recording_configuration={"recording_backend": "serial"},
+        on_recording_configuration_changed=project_save,
+        on_default_recording_configuration_changed=default_save,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    editor = dialog.recording_editor
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("unicorn_udp"))
+    editor.port_edit.setText("4321")
+    select_settings_category(dialog, "General")
+    select_settings_category(dialog, "Recording")
+    assert dialog.recording_editor is editor
+    assert editor.backend_combo.currentData() == "unicorn_udp"
+    assert editor.port_edit.text() == "4321"
+    project_save.assert_not_called()
+    default_save.assert_not_called()
+    dialog.reject()
+    project_save.assert_not_called()
+    default_save.assert_not_called()
+
+
+@pytest.mark.parametrize("action", ["apply_recording_button", "save_default_recording_button"])
+def test_inline_recording_invalid_draft_can_be_corrected_before_saving(
+    qtbot, tmp_path, action, recording_errors,
+):
+    project_save = Mock()
+    default_save = Mock()
+    original = {"recording_backend": "unicorn_udp", "unicorn_udp_port": 1000}
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, recording_configuration=original,
+        on_recording_configuration_changed=project_save,
+        on_default_recording_configuration_changed=default_save,
+    )
+    qtbot.addWidget(dialog)
+    editor = dialog.recording_editor
+    editor.port_edit.setText("70000")
+    button = getattr(dialog, action)
+    button.click()
+    recording_errors.assert_called_once()
+    assert recording_errors.call_args.args[:2] == (dialog, "Recording Setup Error")
+    project_save.assert_not_called()
+    default_save.assert_not_called()
+    assert dialog._recording_configuration == original
+    assert editor.port_edit.text() == "70000"
+    editor.port_edit.setText("5432")
+    button.click()
+    chosen_save = project_save if action == "apply_recording_button" else default_save
+    other_save = default_save if action == "apply_recording_button" else project_save
+    chosen_save.assert_called_once()
+    assert chosen_save.call_args.args[0]["unicorn_udp_port"] == 5432
+    other_save.assert_not_called()
+    assert recording_errors.call_count == 1
+
+
+@pytest.mark.parametrize("finish", ["close", "category", "use_default"])
+def test_inline_recording_hiding_or_replacing_editor_ignores_stale_detection(
+    qtbot, tmp_path, port_detection_jobs, recording_errors, finish,
+):
+    reset = Mock()
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, initial_category="Recording",
+        recording_configuration=_unconfigured_triggerbox(),
+        default_recording_configuration={"recording_backend": "unicorn_udp"},
+        on_recording_configuration_changed=lambda _configuration: None,
+        on_use_default_recording_configuration=reset,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert len(port_detection_jobs) == 1
+    editor = dialog.recording_editor
+    editor.brainproducts_port_edit.selectAll()
+    qtbot.keyClicks(editor.brainproducts_port_edit, "COM19")
+    job = port_detection_jobs[0]
+    if finish == "close":
+        dialog.reject()
+    elif finish == "category":
+        select_settings_category(dialog, "General")
+        assert job.cancelled
+        select_settings_category(dialog, "Recording")
+        assert len(port_detection_jobs) == 2
+    else:
+        dialog.use_default_recording_button.click()
+        reset.assert_called_once_with()
+        assert dialog.recording_editor is not editor
+    assert job.cancelled
+    job.finish(candidates=(TriggerBoxPortCandidate("COM42", "TriggerBox Plus"),))
+    job.finish(error=OSError("Late failure from the cancelled detection"))
+    QApplication.processEvents()
+    if finish == "use_default":
+        assert dialog.recording_editor.backend_combo.currentData() == "unicorn_udp"
+    else:
+        assert dialog.recording_editor is editor
+        assert editor.brainproducts_port_edit.text() == "COM19"
+    if finish == "category":
+        port_detection_jobs[1].finish(candidates=(
+            TriggerBoxPortCandidate("COM24", "Current TriggerBox Plus"),
+        ))
+        assert editor.detect_ports_button.isEnabled()
+        assert editor.brainproducts_port_edit.text() == "COM19"
+    recording_errors.assert_not_called()
+
+
+@pytest.mark.parametrize("computer_default", [False, True])
+@pytest.mark.parametrize("save_fails", [False, True])
+def test_inline_recording_save_keeps_reviewed_port_during_pending_detection(
+    qtbot, tmp_path, port_detection_jobs, recording_errors, computer_default, save_fails,
+):
+    save = Mock(side_effect=OSError("Read-only settings") if save_fails else None)
+    initial = _unconfigured_triggerbox(brainproducts_serial_port="COM3")
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, initial_category="Recording",
+        recording_configuration=initial,
+        default_recording_configuration=initial,
+        on_recording_configuration_changed=save if not computer_default else Mock(),
+        on_default_recording_configuration_changed=save if computer_default else Mock(),
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    assert len(port_detection_jobs) == 1
+    editor = dialog.recording_editor
+    _select_triggerbox_timing(editor)
+    button = (dialog.save_default_recording_button if computer_default
+              else dialog.apply_recording_button)
+    button.click()
+    save.assert_called_once()
+    assert save.call_args.args[0]["brainproducts_serial_port"] == "COM3"
+    assert dialog.isVisible()
+    port_detection_jobs[0].finish(candidates=(
+        TriggerBoxPortCandidate("COM9", "Detected TriggerBox Plus"),
+    ))
+    assert editor.brainproducts_port_edit.text() == ("COM9" if save_fails else "COM3")
+    accepted = (dialog._default_recording_configuration if computer_default
+                else dialog._recording_configuration)
+    if save_fails:
+        assert accepted == initial
+    else:
+        assert ProjectRecordingSettings.model_validate(accepted) == (
+            ProjectRecordingSettings.model_validate(_triggerbox_configuration())
+        )
+    assert recording_errors.call_count == int(save_fails)
+
+
 def test_project_device_reopen_and_switch_ignore_obsolete_global_choice(
     qtbot,
     controller,
@@ -1447,11 +1655,13 @@ def test_project_device_reopen_and_switch_ignore_obsolete_global_choice(
         {"recording_backend": "unicorn_udp", "unicorn_udp_port": 3456}
     )
     assert (
-        first_window.home_page.recording_summary.text()
+        _label_plain_text(first_window.home_page.recording_summary)
         == "Recording Device: Unicorn Black Mobile Headset"
     )
     second, second_window = open_created_project(controller, qtbot, tmp_path, "Other study")
-    assert second_window.home_page.recording_summary.text() == "Recording Device: BioSemi ActiveTwo"
+    assert _label_plain_text(second_window.home_page.recording_summary) == (
+        "Recording Device: BioSemi ActiveTwo"
+    )
     assert controller.load_recording_configuration()["recording_backend"] == "serial"
     controller.save_recording_configuration(
         {"recording_backend": "serial", "unicorn_udp_port": 1000}
@@ -1485,15 +1695,10 @@ def test_actichamp_port_apply_and_reopen_keeps_saved_port_during_detection(
     )
     qtbot.addWidget(settings)
 
-    def apply_port(child):
-        child.brainproducts_port_edit.setText(port)
-        _select_triggerbox_timing(child, sampling_rate=1000)
-        child.accept()
-        return child.result()
-
-    monkeypatch.setattr(RecordingSetupDialog, "exec", apply_port)
-    button = (settings.default_recording_setup_button if computer_default
-              else settings.recording_setup_button)
+    settings.recording_editor.brainproducts_port_edit.setText(port)
+    _select_triggerbox_timing(settings.recording_editor, sampling_rate=1000)
+    button = (settings.save_default_recording_button if computer_default
+              else settings.apply_recording_button)
     button.click()
     if computer_default:
         controller._settings = QSettings(ini_path, QSettings.Format.IniFormat)
@@ -1670,14 +1875,14 @@ def test_unicorn_launch_queues_automatic_check_and_surfaces_failure(
     window.resize(1120, 720)
     window.show()
     QApplication.processEvents()
-    assert window.home_page.recording_summary.text() == (
+    assert _label_plain_text(window.home_page.recording_summary) == (
         "Recording Device: Unicorn Black Mobile Headset"
     )
     assert "127.0.0.1:1000" in window.home_page.recording_summary.toolTip()
     _assert_labels_fit(window.home_page)
     document.set_experiment_test_mode_enabled(True)
     assert "No marker output" in document.recording_setup_summary()
-    assert window.home_page.recording_summary.text() == "No marker output (Test/Pilot)"
+    assert _label_plain_text(window.home_page.recording_summary) == "No marker output (Test/Pilot)"
 
 
 @pytest.mark.parametrize("entrypoint", ["home", "run"])
@@ -1749,6 +1954,7 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("size", [(760, 520), (1120, 720)], ids=["minimum", "default"])
 @pytest.mark.parametrize(
     "backend, port, expected",
     [
@@ -1782,6 +1988,7 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
     tmp_path,
     monkeypatch,
     background,
+    size,
     backend,
     port,
     expected,
@@ -1817,7 +2024,7 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
     palette = window.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     window.setPalette(palette)
-    window.resize(1120, 720)
+    window.resize(*size)
     window.show()
     page = window.home_page
     label = page.recording_summary
@@ -1826,10 +2033,21 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
         if setup_ready:
             prepare_compile_ready_project(window, tmp_path / "home-recording-assets")
         QApplication.processEvents()
-        assert label.text() == expected
+        assert window.size().toTuple() == size
+        assert _label_plain_text(label) == expected
         assert label.toolTip() == document.recording_setup_summary()
-        assert label.accessibleDescription() == document.recording_setup_summary()
-        assert label.textFormat() == Qt.TextFormat.PlainText
+        assert label.accessibleName() == expected
+        assert label.accessibleDescription() == (
+            document.recording_setup_summary() + "\nOpen recording settings."
+        )
+        assert label.statusTip() == "Open recording settings"
+        assert label.textFormat() == Qt.TextFormat.RichText
+        assert label.textInteractionFlags() == (
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard
+        )
+        assert label.focusPolicy() == Qt.FocusPolicy.StrongFocus
+        assert not label.openExternalLinks()
         assert label.alignment() == Qt.AlignmentFlag.AlignCenter
         assert label.geometry().bottom() < page.launch_button.geometry().top()
         _assert_labels_fit(page)
@@ -1840,16 +2058,50 @@ def test_home_recording_device_label_fits_and_preserves_output_details(
     ) and isinstance(port, int):
         document.set_experiment_test_mode_enabled(True)
         QApplication.processEvents()
-        assert label.text() == "No marker output (Test/Pilot)"
+        assert _label_plain_text(label) == "No marker output (Test/Pilot)"
         _assert_labels_fit(page)
         document.set_experiment_test_mode_enabled(False)
-        assert label.text() == expected
+        assert _label_plain_text(label) == expected
     recorder_probe.assert_not_called()
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("size", [(760, 520), (1120, 720)], ids=["minimum", "default"])
+def test_home_recording_fallback_is_an_escaped_internal_link(
+    qtbot, tmp_path, monkeypatch, background, size,
+):
+    summary = 'BioSemi serial — COM3 <Research & EEG> "Lab"'
+    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Mac recording summary")
+    monkeypatch.setattr(document, "recording_setup_summary", lambda: summary)
+    monkeypatch.setattr(
+        document, "validate_recording_launch",
+        Mock(side_effect=DocumentError("Local test required")),
+    )
+    page = home_page_module.HomePage(document, load_condition_template_profiles=lambda: [])
+    qtbot.addWidget(page)
+    palette = page.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    page.setPalette(palette)
+    page.resize(*size)
+    page.show()
+    QApplication.processEvents()
+
+    assert page.size().toTuple() == size
+    link = page.recording_summary
+    assert _label_plain_text(link) == summary
+    assert link.toolTip() == summary
+    assert link.accessibleName() == summary
+    assert link.text().count("<a ") == 1
+    assert 'href="recording-settings"' in link.text()
+    assert "&lt;Research &amp; EEG&gt;" in link.text()
+    assert not link.openExternalLinks()
+    _assert_labels_fit(page)
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+@pytest.mark.parametrize("size", [(760, 520), (1120, 720)], ids=["minimum", "default"])
 def test_home_recording_device_name_extension_and_pilot_output(
-    qtbot, tmp_path, monkeypatch, background,
+    qtbot, tmp_path, monkeypatch, background, size,
 ):
     name = (
         "Wireless High Density Research EEG Headset with an Extended Computer Local "
@@ -1865,22 +2117,23 @@ def test_home_recording_device_name_extension_and_pilot_output(
     palette = page.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     page.setPalette(palette)
-    page.resize(1120, 720)
+    page.resize(*size)
     page.show()
     document.set_recording_configuration({
         "recording_backend": "unicorn_udp", "unicorn_udp_port": 1000,
     })
     QApplication.processEvents()
-    assert page.recording_summary.text() == f"Recording Device: {name}"
+    assert page.size().toTuple() == size
+    assert _label_plain_text(page.recording_summary) == f"Recording Device: {name}"
     _assert_labels_fit(page)
     document.set_attentional_blink_pilot_mode_enabled(True)
     QApplication.processEvents()
-    assert page.recording_summary.text() == "No marker output (Test/Pilot)"
+    assert _label_plain_text(page.recording_summary) == "No marker output (Test/Pilot)"
     _assert_labels_fit(page)
     document.set_attentional_blink_pilot_mode_enabled(False)
-    assert page.recording_summary.text() == f"Recording Device: {name}"
+    assert _label_plain_text(page.recording_summary) == f"Recording Device: {name}"
     document.set_recording_configuration({"recording_backend": "serial"})
-    assert page.recording_summary.text() == "Recording Device: BioSemi ActiveTwo"
+    assert _label_plain_text(page.recording_summary) == "Recording Device: BioSemi ActiveTwo"
 
 
 @pytest.mark.parametrize(
@@ -1952,19 +2205,16 @@ def test_recording_settings_failed_save_preserves_accepted_device(
     select_settings_category(dialog, "Recording")
     dialog.show()
 
-    def fake_exec(child):
-        child.backend_combo.setCurrentIndex(child.backend_combo.findData("unicorn_udp"))
-        child.accept()
-        return child.result()
-
-    monkeypatch.setattr(RecordingSetupDialog, "exec", fake_exec)
+    editor = dialog.recording_editor
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("unicorn_udp"))
     initial_summary = dialog.recording_summary.text()
-    dialog.recording_setup_button.click()
+    dialog.apply_recording_button.click()
     QApplication.processEvents()
     recording_errors.assert_called_once_with(dialog, "Save Recording Setup Error", error)
     assert dialog.recording_summary.text() == initial_summary
     assert not dialog.recording_summary.toolTip()
     assert dialog._recording_configuration == original
+    assert editor.backend_combo.currentData() == "unicorn_udp"
     _assert_labels_fit(dialog)
 
 

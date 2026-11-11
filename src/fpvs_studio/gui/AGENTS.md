@@ -48,8 +48,10 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   Reporting/support jobs retain their cancellation and draft/receipt contracts.
 - Updater verification/launch stays in backend workers; Save/confirmation stays on the
   GUI thread. Keep newer-release visibility if trust evidence prevents installation.
-- Recording Apply atomically saves project override and selected BioSemi port; Cancel
-  preserves drafts. Explicit project choice overrides computer defaults. Recorder
+- Settings > Recording embeds `RecordingSetupEditor` with project/default save actions;
+  only the mandatory launch review uses its `RecordingSetupDialog` wrapper. Apply to
+  Project atomically saves the override and selected BioSemi port; closing without
+  applying preserves saved values. Explicit project choice overrides computer defaults. Recorder
   readiness runs in the launch worker; metadata discovery/access checks send no bytes.
   Normal Brain Products launches require project timing confirmation before participant
   entry. Use the shared modal error for Recording Setup and keep progress inline.

@@ -14,12 +14,12 @@ use document headings or `rg -n '^#{1,3} ' <document>` to choose the contract se
 | Scope | Use for | Governing guide | One focused contract |
 | --- | --- | --- | --- |
 | `repo` | Harness, shared configuration, cross-layer ownership | `AGENTS.md` | `ARCHITECTURE.md` |
-| `macos` | Source bootstrap, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
+| `macos` | Source bootstrap, PyCharm environment repair, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
 | `docs` | Guidance, contracts and plans | `AGENTS.md` | Edited document; `docs/exec-plans/README.md` for plan work |
-| `gui` | PySide6 widgets, controllers, workers, project recording setup, Tools, Settings navigation/preferences and nine-step authoring | `src/fpvs_studio/gui/AGENTS.md` | Relevant `docs/GUI_WORKFLOW.md` section; `docs/FRONTEND.md` for design |
+| `gui` | PySide6 widgets, controllers, workers, inline project/default recording setup, Tools, Settings navigation/preferences and nine-step authoring | `src/fpvs_studio/gui/AGENTS.md` | Relevant `docs/GUI_WORKFLOW.md` section; `docs/FRONTEND.md` for design |
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |
 | `compiler` | Compiled runs, sessions, participant reuse policies, scheduling and fixation | `src/fpvs_studio/core/AGENTS.md` | `docs/RUNSPEC.md` for runs or `docs/SESSION_PLAN.md` for sessions |
-| `project-io` | Persistence, configs, bundles, templates and paths | `src/fpvs_studio/core/AGENTS.md` | Relevant persistence/import section in `docs/GUI_WORKFLOW.md` |
+| `project-io` | Persistence, configs, bundles, templates and paths | `src/fpvs_studio/core/AGENTS.md` | Configs: [exchange format](../PROJECT_CONFIG.md); other persistence/imports: `docs/GUI_WORKFLOW.md` |
 | `preprocessing` | Image intake, inspection, variants and manifests | `src/fpvs_studio/preprocessing/AGENTS.md` | Relevant asset/manifest test |
 | `runtime` | Launch, preflight, session flow, scoring and participant results/exports | `src/fpvs_studio/runtime/AGENTS.md` | Relevant `docs/RUNTIME_EXECUTION.md` section; [exports](../RUNTIME_EXECUTION.md#exports) |
 | `engine` | Rendering, response pointers, graphics lifetime and frame playback | `src/fpvs_studio/engines/AGENTS.md` | Relevant `docs/ENGINE_INTERFACE.md` section |

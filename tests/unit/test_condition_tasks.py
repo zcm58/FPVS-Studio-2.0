@@ -934,7 +934,7 @@ def test_task_definitions_round_trip_through_project_config(
     loaded = read_project_config(config_path)
     scaffold = create_project_from_config(tmp_path / "imports", loaded)
 
-    assert loaded.schema_version == "1.2.0"
+    assert loaded.format_version == 2
     assert loaded.task_modules[0].task_id == "memory-intro"
     assert scaffold.project.task_modules[0] == sample_project.task_modules[0]
     assert scaffold.project.conditions[0].pre_task_bindings[0].task_id == "memory-intro"

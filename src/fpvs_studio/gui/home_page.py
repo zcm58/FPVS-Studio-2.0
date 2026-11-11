@@ -32,6 +32,7 @@ from fpvs_studio.gui.components import (
     mark_home_launch_action,
     mark_primary_action,
     mark_secondary_action,
+    set_action_link_text,
 )
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -346,9 +347,15 @@ class HomePage(QWidget):
         launch_panel_layout.addWidget(metrics_panel)
         self.recording_summary = QLabel(self)
         self.recording_summary.setObjectName("home_recording_summary")
-        self.recording_summary.setTextFormat(Qt.TextFormat.PlainText)
         self.recording_summary.setWordWrap(True)
         self.recording_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.recording_summary.setTextInteractionFlags(
+            Qt.TextInteractionFlag.LinksAccessibleByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByKeyboard,
+        )
+        self.recording_summary.setOpenExternalLinks(False)
+        self.recording_summary.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.recording_summary.setStatusTip("Open recording settings")
         launch_panel_layout.addWidget(self.recording_summary)
         launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
 
@@ -372,6 +379,8 @@ class HomePage(QWidget):
             self._theme_refreshing = True
             try:
                 apply_home_page_theme(self)
+                if hasattr(self, "recording_summary"):
+                    self._refresh_recording_summary()
                 self._sync_launch_button_geometry()
                 self._sync_action_layout()
                 self._sync_hero_height()
@@ -573,11 +582,11 @@ class HomePage(QWidget):
             ):
                 backend = "biosemi_active_three"
             device_name = _HOME_RECORDING_DEVICE_NAMES.get(backend)
-        self.recording_summary.setText(
-            f"Recording Device: {device_name}" if device_name else summary,
-        )
+        display_text = f"Recording Device: {device_name}" if device_name else summary
+        set_action_link_text(self.recording_summary, display_text, target="recording-settings")
         self.recording_summary.setToolTip(summary)
-        self.recording_summary.setAccessibleDescription(summary)
+        self.recording_summary.setAccessibleName(display_text)
+        self.recording_summary.setAccessibleDescription(f"{summary}\nOpen recording settings.")
 
     def _sync_hero_height(self) -> None:
         panel = self.launch_surface.hero_container

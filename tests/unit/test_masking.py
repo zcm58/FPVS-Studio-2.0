@@ -5,6 +5,7 @@ from collections import Counter
 
 import pytest
 from PIL import Image
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
 from fpvs_studio.core.compiler_limits import CompilationLimits, validate_compilation_workload
@@ -578,16 +579,15 @@ def test_catch_schemas_roundtrip_and_reject_older_versions(tmp_path):
         ProjectFile.model_validate(payload)
 
     config = export_project_config(project, tmp_path)
-    assert config.schema_version == "1.6.0"
+    assert config.format_version == 2
     assert config.toolbox.event_map == {
         **{condition.name: condition.trigger_code for condition in project.conditions},
         "Color catch": 10, "Faces catch": 11, "Number catch": 12,
     }
     imported = create_project_from_config(tmp_path / "imported", config)
     assert imported.project.condition_modifiers == project.condition_modifiers
-    assert imported.project.schema_version == ProjectSchemaVersion.V1_8
-    payload = config.model_dump(mode="json")
-    payload["schema_version"] = "1.5.0"
+    assert imported.project.schema_version == ProjectSchemaVersion.V1_17
+    payload = legacy_config_payload(config, '1.5.0')
     with pytest.raises(ValueError, match="schema 1.6.0"):
         ProjectConfigFile.model_validate(payload)
 

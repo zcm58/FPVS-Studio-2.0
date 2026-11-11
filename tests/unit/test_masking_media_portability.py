@@ -155,7 +155,7 @@ def test_masking_config_and_bundle_survive_source_deletion_and_relocation(
     paths = modifier_image_references(modifier)
     expected = {path: (sample_project_root / path).read_bytes() for path in paths}
     config = export_project_config(project, sample_project_root)
-    assert config.schema_version == "1.5.0"
+    assert config.format_version == 2
     assert len(config.task_assets) == 7
     assert {(asset.task_id, asset.relative_path) for asset in config.task_assets} == set(
         owned_image_references(project.task_modules, project.condition_modifiers)
@@ -171,8 +171,8 @@ def test_masking_config_and_bundle_survive_source_deletion_and_relocation(
         tmp_path / "from-config", read_project_config(config_path),
     )
     imported = import_project_bundle(bundle_path, tmp_path / "from-bundle")
-    for result in (restored, imported):
-        assert result.project.schema_version.value == "1.7.0"
+    for result, expected_schema in ((restored, "1.17.0"), (imported, "1.7.0")):
+        assert result.project.schema_version.value == expected_schema
         assert result.project.condition_modifiers == project.condition_modifiers
         assert {path: (result.project_root / path).read_bytes() for path in paths} == expected
 
@@ -260,12 +260,12 @@ def test_bundle_rejects_missing_scene_media(tmp_path, sample_project, sample_pro
         export_project_bundle(sample_project_root, tmp_path / "missing.fpvsbundle", refresh_hz=60)
 
 
-def test_ordinary_config_still_uses_legacy_version(sample_project, sample_project_root, tmp_path):
+def test_ordinary_config_uses_shared_format(sample_project, sample_project_root, tmp_path):
     config = export_project_config(sample_project, sample_project_root)
     path = tmp_path / "ordinary.fpvsconfig"
     write_project_config(path, config)
     payload = json.loads(path.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.2.0"
+    assert payload["format_version"] == 2
     assert "condition_modifiers" not in payload
 
 
@@ -276,7 +276,7 @@ def test_native_task_without_masking_group_uses_scene_config_schema(
     sample_project.task_modules = create_masking_modifier().task_modules
     config = export_project_config(sample_project, sample_project_root)
     assert config.condition_modifiers == []
-    assert config.schema_version == "1.5.0"
+    assert config.format_version == 2
     restored = create_project_from_config(tmp_path / "native-task", config)
-    assert restored.project.schema_version == ProjectSchemaVersion.V1_7
+    assert restored.project.schema_version == ProjectSchemaVersion.V1_17
     assert restored.project.task_modules == sample_project.task_modules

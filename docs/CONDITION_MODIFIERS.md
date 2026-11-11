@@ -151,14 +151,17 @@ this implementation.
 - GUI: draft editing, explicit assignment and local-save actions, worker I/O, and
   document application. The existing detailed task editor remains available.
 
-Projects using modifiers require project schema **1.6.0**; configs require **1.4.0**.
+Projects using modifiers require project schema **1.6.0**. Current configs use the
+shared [revision-2 format](PROJECT_CONFIG.md); historical modifier configs used
+**1.4.0**.
 Older projects retain their schema and omit empty modifier grouping on serialization.
 New schema versions are rejected by old strict readers instead of dropping behavior.
 The portable bundle envelope is unchanged. Masking streams and catch conditions have
 their own schema requirements described in [Masking](MASKING.md). Non-centered task
-text requires project/config **1.9.0/1.7.0**, SessionPlan **1.5.0**, and modifier preset
+text requires project **1.9.0**, SessionPlan **1.5.0**, and modifier preset
 **1.2.0**. Default-centered alignment is omitted, so existing centered task payloads
-retain their previous formats and presentation.
+retain their previous internal formats and presentation; historical configs added
+alignment in **1.7.0**.
 
 ## Verification and visible acceptance
 

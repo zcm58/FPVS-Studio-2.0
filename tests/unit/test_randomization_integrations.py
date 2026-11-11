@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from tests.unit.runtime_launcher_helpers import StubEngine
+from tests.unit.studio_handoff_fixtures import read_legacy_config
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.condition_modifiers import assign_modifier
@@ -160,12 +161,12 @@ def test_seed_policy_config_and_public_project_roundtrip(sample_project, tmp_pat
     project = _fixed_project(sample_project)
     project.settings.session.randomization_mode = mode
     config = export_project_config(project, None)
-    assert config.schema_version == "1.12.0"
+    assert config.format_version == 2
     path = tmp_path / "seeds.fpvsconfig"
     write_project_config(path, config)
     restored = create_project_from_config(tmp_path / "received", read_project_config(path))
     loaded = load_project_file(restored.project_root / "project.json")
-    assert loaded.schema_version == ProjectSchemaVersion.V1_14
+    assert loaded.schema_version == ProjectSchemaVersion.V1_17
     session = loaded.settings.session
     assert session.randomization_mode == mode
     assert (session.session_seed, session.stimulus_seed, session.fixation_seed) == (31, 72, 109)
@@ -181,7 +182,7 @@ def test_legacy_seed_config_omits_optional_fields_and_does_not_rewrite_source(
     loaded = load_project_file(path)
     assert path.read_bytes() == before
     config = export_project_config(loaded, None)
-    assert config.schema_version == "1.2.0"
+    assert config.format_version == 2
     assert not {"randomization_mode", "stimulus_seed", "fixation_seed"}.intersection(
         config.session.model_dump(),
     )
@@ -200,10 +201,10 @@ def test_config_rejects_invalid_seed_snapshots(sample_project, field, value):
 
 def test_config_seed_capability_rejected_before_import_io(sample_project, tmp_path):
     config = export_project_config(_fixed_project(sample_project), None)
-    invalid = config.model_copy(update={"schema_version": "1.11.0"})
+
     target = tmp_path / "received"
     with pytest.raises(ProjectConfigError, match="controls require config schema 1.12"):
-        create_project_from_config(target, invalid)
+        create_project_from_config(target, read_legacy_config(config, "1.11.0", tmp_path))
     assert not target.exists()
 
 
@@ -216,7 +217,7 @@ def test_specialized_configs_reject_controls_before_io(sample_project, tmp_path,
     else:
         project = sample_project
     config = export_project_config(project, None)
-    updates = {"schema_version": "1.12.0", "session": config.session.model_copy(update={
+    updates = {"session": config.session.model_copy(update={
         "randomization_mode": "fixed", "stimulus_seed": 72, "fixation_seed": 109,
     })}
     if specialized == "ab":
@@ -302,7 +303,7 @@ def test_completed_config_uses_compiled_snapshot_instead_of_current_editable_see
     write_json_file(completed / "session_plan.json", plan)
     project.settings.session.stimulus_seed = 999
     config = export_project_config(project, sample_project_root, completed_session_dir=completed)
-    assert config.schema_version == "1.13.0"
+    assert config.format_version == 2
     assert config.completed_session.ordering_policy == "pooled_no_adjacent"
     assert config.session.stimulus_seed == 999
     assert config.completed_session.randomization_seeds == RandomizationSeeds(

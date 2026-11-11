@@ -107,8 +107,10 @@ rounding or partial mutation. The stream includes blank halves and contrast modu
 but excludes lead-in, instructions, tasks, waiting and feedback. Frequency edits preserve
 requested seconds, or the legacy duration resolved at the selected refresh target.
 `ConditionRunSpec.requested_duration_seconds` retains authored seconds in RunSpec
-schema 1.6.0 (omitted for legacy runs); resolved timing remains frame-based. Project schema 1.12.0/config 1.10.0 carry explicit seconds;
-frequency-only overrides retain project 1.11.0/config 1.9.0 capability versions.
+schema 1.6.0 (omitted for legacy runs); resolved timing remains frame-based. Project
+schema 1.12.0 carries explicit seconds; frequency-only overrides retain project
+1.11.0. Historical config revisions were 1.10.0 and 1.9.0 respectively; current
+configs use the shared [revision-2 format](PROJECT_CONFIG.md).
 Inherited count-based projects retain their prior versions and omit optional fields.
 Duty-cycle mode remains per condition. Project-level
 condition-template profiles only seed defaults for authoring. Mixed Continuous Images,

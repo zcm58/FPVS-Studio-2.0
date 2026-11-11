@@ -22,7 +22,7 @@ from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 
 def _assert_visible_settings_text_fits(dialog: AppSettingsDialog) -> None:
-    assert_visible_children_within_parent(dialog)
+    assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     for label in dialog.findChildren(QLabel):
         if not label.isVisible() or not label.text():
             continue
@@ -37,6 +37,34 @@ def _assert_visible_settings_text_fits(dialog: AppSettingsDialog) -> None:
         for control in dialog.findChildren(control_type):
             if control.isVisible():
                 assert control.width() >= control.sizeHint().width(), control.text()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
+def test_settings_can_open_directly_to_recording(qtbot, tmp_path, background, size) -> None:
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        initial_category="Recording",
+        on_recording_configuration_changed=lambda _configuration: None,
+    )
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+
+    assert dialog.size().toTuple() == size
+    assert dialog.navigation.currentItem().text() == "Recording"
+    assert dialog.page_title.text() == "Recording"
+    assert dialog.pages.currentIndex() == dialog.navigation.currentRow()
+    assert dialog.recording_editor.backend_combo.isVisible()
+    assert dialog.apply_recording_button.isVisible()
+    assert dialog.apply_recording_button.isEnabled()
+    assert dialog.findChild(QPushButton, "settings_recording_setup") is None
+    assert dialog.findChild(QPushButton, "settings_default_recording_setup") is None
+    _assert_visible_settings_text_fits(dialog)
 
 
 @pytest.mark.parametrize(
@@ -113,7 +141,7 @@ def test_settings_categories_fit_minimum_and_default_sizes(
             label for label in page.findChildren(QLabel)
             if label.isVisible() and label.property("settingsSectionTitle") == "true"
         ]
-        if category != "Workspace":
+        if category not in {"Workspace", "Recording"}:
             assert titles, category
         title_left_edges = {label.mapTo(page, label.rect().topLeft()).x() for label in titles}
         assert len(title_left_edges) <= 1, category

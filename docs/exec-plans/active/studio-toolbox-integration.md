@@ -19,6 +19,47 @@ remains offline and HTTP is excluded from presentation.
 
 ## Studio work and verification
 
+### Shared exchange format, authorized 2026-11-10
+
+This slice replaces feature-selected config envelope revisions with one shared
+Studio–Toolbox handoff format. Setup and completed-session exports use document
+kinds within that format; the producer application/version is separate provenance.
+Historical 1.x configs remain readable through explicit normalization. Internal
+project, RunSpec, SessionPlan, acquisition-evidence and scientific method versions
+retain their existing responsibilities.
+
+- [x] Define the stable envelope and optional descriptive metadata boundary.
+- [x] Emit one current format from setup, completed and retained-handoff export
+  paths; preserve exact launch snapshots and source identity checks.
+- [x] Normalize historical configs into the current model and restore authored
+  projects by content, without treating an exchange revision as a project version.
+- [x] Verify shared producer fixtures in Studio and Toolbox, including completed
+  metadata/electrodes, unsupported scientific semantics and unknown revisions.
+- [x] Update contracts and complete focused, precommit and documentation checks.
+
+The canonical [config contract](../../PROJECT_CONFIG.md) owns the format policy;
+`core/project_config_legacy.py` isolates frozen historical checks. Strict MkDocs,
+documentation hygiene and changed-document relative-link checks pass; the
+docs-focused driver passed 13 tests. Studio project-I/O focused verification
+passed 868 tests with three Windows symlink skips, including 39 new format tests.
+Changed-file Ruff/compilation, Windows mypy across 284 files, Darwin mypy across
+nine files and the GC check passed. Final safe repo precommit passed 5,931 tests
+with 33 skips. This slice's source implementation and verification are complete;
+visible/installed workflow and physical acquisition acceptance remain pending.
+No local Qt or physical acquisition validation was performed.
+
+Four deterministic producer fixture copies are byte-identical across both
+repositories. On the final fixtures, Toolbox consumer import/workflow checks
+passed 92 tests with one skip; its broader project-I/O, GUI-focused non-Qt and
+precommit gates passed. The fixtures use a fixed synthetic seed, identifiers and
+export time so unrelated source releases do not change their scientific payloads.
+
+Toolbox still owns raw registration and scientific interpretation. This format
+change cannot infer an EEG file from participant/session metadata or qualify a
+recording. Visible GUI and physical hardware acceptance remain separate.
+
+### Existing integration
+
 - [x] Core-owned built-in declarations for BioSemi ActiveTwo 64 and Unicorn Hybrid
   Black factory 8, using Toolbox's exact versioned profile/montage/decoder IDs.
 - [x] Add declarations to saved recording settings, setup configs and runtime

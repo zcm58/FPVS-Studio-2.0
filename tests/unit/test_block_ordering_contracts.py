@@ -8,6 +8,7 @@ import pytest
 from pydantic import ValidationError
 from tests.platform_adapters import windows_runtime
 from tests.unit.runtime_launcher_helpers import StubEngine
+from tests.unit.studio_handoff_fixtures import read_legacy_config
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.condition_modifiers import assign_modifier
@@ -73,7 +74,7 @@ def test_block_ordering_project_and_config_roundtrip(sample_project, tmp_path, s
     save_project_file(project, path)
     assert load_project_file(path) == project
     config = export_project_config(project, None)
-    assert config.schema_version == "1.15.0"
+    assert config.format_version == 2
     assert config.session.condition_ordering == "randomized_blocks"
     config_path = tmp_path / "design.fpvsconfig"
     write_project_config(config_path, config)
@@ -117,10 +118,10 @@ def test_block_ordering_capability_is_strict_and_rejected_before_import_io(
     with pytest.raises(ValidationError, match="blocks are unavailable"):
         ProjectFile.model_validate(invalid_ab)
     config = export_project_config(project, None)
-    invalid = config.model_copy(update={"schema_version": "1.14.0"})
+
     destination = tmp_path / "received"
     with pytest.raises(ProjectConfigError):
-        create_project_from_config(destination, invalid)
+        create_project_from_config(destination, read_legacy_config(config, "1.14.0", tmp_path))
     assert not destination.exists()
 
 
@@ -155,7 +156,7 @@ def test_block_plan_completed_config_and_single_occurrence_recovery(
     completed = sample_project_root / "runs" / "completed"
     write_json_file(completed / "session_plan.json", plan)
     config = export_project_config(project, sample_project_root, completed_session_dir=completed)
-    assert config.schema_version == "1.15.0"
+    assert config.format_version == 2
     assert config.completed_session.ordering_policy == policy
     assert config.completed_session.block_orders == [block.condition_order for block in plan.blocks]
     assert ProjectConfigFile.model_validate_json(config.model_dump_json()) == config
@@ -229,7 +230,7 @@ def test_ordinary_block_design_stays_dormant_after_masking_assignment_and_interc
     assert plan.authored_task_flow is True
     assert len(plan.blocks) == 1
     config = export_project_config(masked, None)
-    assert config.schema_version == "1.15.0"
+    assert config.format_version == 2
     assert config.session.condition_ordering == "randomized_blocks"
     restored = create_project_from_config(tmp_path / "masked", config)
     reopened = load_project_file(restored.project_root / "project.json")

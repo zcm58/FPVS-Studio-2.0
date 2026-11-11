@@ -70,13 +70,14 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Library mouse-task compatibility floor | `core/library_publish.py`; final prepared-bundle verification rechecks it |
 | Manifest schemas and persistence | `preprocessing/models.py`, `preprocessing/manifest.py` |
 | Portable paths and project persistence | `core/paths.py`, `core/project_service.py` |
+| Studio–Toolbox configs | `core/project_config.py`, `core/project_config_legacy.py`; [format](docs/PROJECT_CONFIG.md) |
 | Guarded current-project Library replacement | `core/project_bundle_update.py`; ordinary imports never replace projects |
-| Recording | `gui/recording_dialog.py`, `gui/document_runtime.py`, `runtime/recording.py`, `runtime/acquisition_evidence.py` |
+| Recording | `gui/recording_dialog.py` shared editor/launch review, `gui/settings_dialog.py` inline project/default saves, `gui/document_runtime.py`, `runtime/recording.py`, `runtime/acquisition_evidence.py` |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
-| GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
-| Mac source/display/input adapters | `scripts/macos-source.sh`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 | Settings category navigation and preferences | `gui/settings_dialog.py`, `gui/controller.py`; [layout and persistence](docs/GUI_WORKFLOW.md#settings-appearance-and-layout) |
+| GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
+| Mac source/display/input adapters | `scripts/macos-source.sh`, `scripts/macos_repair_environment.py` (selected-interpreter repair), `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 
 ## Dependency Rules
 
@@ -118,10 +119,8 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 
 ## Task Context Recipes
 
-Use the task index for scope guidance and contracts. Search
-[optional topic recipes](docs/agent/task-recipes.md) for additional entry points.
-`docs/PLANS.md` routes active work; completed plans supply history.
-Use `docs/index.md` for the full map.
+Navigation: [task index](docs/agent/agent-index.md), [topic recipes](docs/agent/task-recipes.md),
+active `docs/PLANS.md`, and full `docs/index.md`.
 
 ## Verification and Documentation Freshness
 

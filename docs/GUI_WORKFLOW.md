@@ -457,7 +457,8 @@ Plain section widgets use the shared dialog styles and theme tokens.
 General contains Participant runs and eligible Local experiment testing controls.
 Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle. Workspace owns
 root-folder setup, condition templates and eligible Experiment Library access. Recording
-groups `Computer default` and `This project`. Advanced contains `Developer tools`,
+contains the hardware editor with project and computer-default save actions on one page.
+Advanced contains `Developer tools`,
 and Diagnostics contains `Crash reporting`. Existing control identities, eligibility,
 callbacks and immediate-save behavior carry through category changes. Page selection
 preserves entered values and inline error or status information.
@@ -607,7 +608,7 @@ the selected port without sending a trigger. Access errors use the same BioSemi 
 TriggerBox recovery guidance as Recording Setup. After editing a port, press Enter
 or choose **Check Port**. Digits become available after the port opens and closes
 successfully. Verify receipt separately in the recording software.
-For parallel output, set the I/O address in **Settings > Recording > Recording Setup**.
+For parallel output, set the I/O address in **Settings > Recording**.
 
 Each keypress opens the selected output, sends the digit and releases the connection.
 Wait for the result before sending the next digit. Studio reports the outcome of
@@ -1150,31 +1151,36 @@ This wording/token update retains backend eligibility, Test/Pilot bypasses and t
 persisted `launch/require_biosemi_recording_confirmation` and
 `launch/show_sophia_mode_ticker` preference keys.
 
-Project recording configuration is validated before participant collection. **Settings > Recording >
-Recording Setup…** edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree,
+Project recording configuration is validated before participant collection. **Settings > Recording**
+directly edits the open project's BioSemi ActiveTwo, BioSemi ActiveThree,
 Brain Products / BrainVision (TriggerBox/Plus), or Unicorn Recorder
 UDP choice. Unicorn exposes its loopback port; BioSemi exposes an editable serial-port
 selector; Brain Products exposes an editable detected-port list, amplifier, EEG
-sampling rate and pulse width. Apply atomically saves `settings.recording` and, for
+sampling rate and pulse width. **Apply to Project** atomically saves `settings.recording` and, for
 BioSemi, the selected `settings.triggers.serial_port` in that project's
-`project.json`; Cancel keeps the saved choice, and failed saves retain the accepted device.
-Other unsaved setup edits remain pending. Project Recording Setup is disabled without
-an open project. The obsolete `recording/backend` and `recording/unicorn_udp_port`
+`project.json`. Editing fields or changing Settings categories does not save them.
+Closing Settings discards unapplied recording edits; failed saves retain the displayed
+draft and accepted device. Other unsaved setup edits remain pending. Project actions
+and the project-only BioSemi port are hidden without an open project. The obsolete
+`recording/backend` and `recording/unicorn_udp_port`
 preferences remain ignored.
 
-The same Recording page shows **Default for this computer** and **Change Default…**,
-available without an open project. Its editor uses the existing recording fields
-and saves a typed JSON preference at `recording/default_configuration` in the app's
+**Save Default Settings** saves the displayed hardware fields as a typed JSON preference
+at `recording/default_configuration` in the app's
 local user-profile QSettings store. Root-folder changes do not reset this preference.
-The first-time picker chooses hardware only. **Change Default…** can save the
-Brain Products amplifier and EEG sampling rate to prefill project setup.
+This action is also available without a project and never saves the project's BioSemi
+serial port. Its tooltip explains that scope. The first-time picker chooses hardware
+only; the inline editor can save Brain Products amplifier and EEG sampling rate to
+prefill project setup. Settings no longer opens nested project/default recording editors.
 
 An explicit project's `settings.recording` overrides the computer default. An unset
 field inherits it dynamically; changing the default updates an inheriting open
-document and projects opened later without saving or dirtying them. **Recording
-Setup…** creates an override, and **Use Computer Default** clears only that field
-on disk while preserving other saved values and open drafts. Summaries distinguish
-inheritance from an override. Cancel and failed saves retain the previous choice.
+document and projects opened later without saving or dirtying them. **Apply to Project**
+creates an override, and **Use Computer Default** clears only that field on disk while
+preserving other saved values and unrelated open drafts. It replaces the recording
+form's pending edits with the computer default while retaining the project's BioSemi
+port. Summaries distinguish inheritance from an override and identify the saved
+computer default. Failed saves retain the previous accepted choice.
 The first normal Brain Products launch from Home, Run, or a condition re-run
 opens project **Recording Setup** if the project inherits its device or has no
 saved amplifier or EEG sampling rate. For parallel output, the amplifier is
@@ -1185,12 +1191,22 @@ a save failure stops that launch. Later launches use the project's saved values.
 launch asks again. Test/Pilot can run without first configuring recording.
 Home shows a centered `Recording Device: <selected device>` immediately above Launch
 Experiment, including the ActiveThree and TriggerBox/Plus identities.
+This summary is a wrapping, keyboard-accessible link to **Settings > Recording**,
+including when it shows the Mac transport summary, Test/Pilot output or required setup.
+The normal Settings menu still opens General. The Home link follows Settings' disabled
+state during project processing and cannot open while a launch is busy.
 Its GUI-only display-name map in `gui/home_page.py` can be extended when recording
 backends are added. The existing effective transport, endpoint and Recorder-check
-details remain in the label's tooltip and accessible description; Run retains its
+details remain in the link's tooltip and accessible description; Run retains its
 full output summary. Home and Run preserve the no-marker Test/Pilot text and
 show when Recording Setup is required. The device label identifies the configuration,
 not a detected connection or recording-readiness result.
+Visible acceptance: at Home's `760x520` minimum and `1120x720` default in both themes,
+activate the recording text by mouse and by Tab/Enter. Confirm Settings opens on
+Recording with the hardware fields already visible. Apply saves the current project;
+closing without applying preserves it.
+Check long device names, missing setup and the Mac/Test/Pilot summaries without clipping;
+changing hardware should refresh the Home link after Apply to Project.
 Projects without `settings.recording` inherit the computer default in the native app.
 Save/reopen and project switching preserve overrides and inheritance; `.fpvsconfig`
 and `.fpvsbundle` authoring transfers retain that distinction. Standalone document/API
@@ -1239,7 +1255,12 @@ and Pilot Study Mode skip the reminder. The dialog is `480x170` minimum and
 both BrainVision transports, Cancel/Escape, and the Test Mode bypass. Check
 Continue with a stubbed launch or a prepared recording setup.
 
-Recording setup has a `700x640` minimum/default size.
+The shared `RecordingSetupEditor` is an embeddable QWidget owned by
+`gui/recording_dialog.py`. Settings supplies the save actions and uses its existing
+vertical scroll area at `860x560` minimum and `1000x680` default. The standalone
+pre-launch `RecordingSetupDialog` wraps the same editor and retains its `700x640`
+minimum/default size. Hiding/closing/replacing an editor cancels pending checks and
+detaches callbacks; late results cannot update a replacement or reopened check.
 BioSemi ActiveTwo and ActiveThree share the existing project serial settings and
 Recording Reminder prompt. Their selector defaults unset ports to COM3 and lists available driver
 ports on a worker without opening them. Refresh retains the selected/manual value,
@@ -1314,7 +1335,8 @@ queue Recorder checks off the GUI thread, surface failures, restore controls, an
 never create the presentation engine or reserve a visit after a failed check. This coverage is
 registered for a safe visible environment and is not run by ordinary local checks.
 
-Visible TriggerBox acceptance: inspect Recording Setup at `700x640` in both themes.
+Visible TriggerBox acceptance: inspect Settings > Recording at `860x560` and `1000x680`
+in both themes, and the standalone launch review at `700x640`.
 Confirm Detect matches the height of the COM dropdown. Failed checks and invalid
 Apply attempts open Studio's error dialog with expandable diagnostics. Progress and
 successful checks stay in Recording Setup.
@@ -1328,25 +1350,27 @@ during the check must not inherit the old port's success.
 Choose actiCHamp at 100 Hz. Apply with 10 ms must report an error and keep the draft
 open. Apply with 20 ms must save. Reopen the project and confirm the amplifier and
 rate still match the saved choice.
-Switch between actiCHamp and LiveAmp at `700x640` in both themes, including pulse
+Switch between actiCHamp and LiveAmp at both Settings sizes in both themes, including pulse
 validation errors. Recorder version and input guidance must follow the selection;
 LiveAmp must not inherit actiCHamp's lower-eight-Recorder-bit instruction. The full
 hardware details remain accessible through the tooltip and accessible description.
-Apply COM3 or COM4 with actiCHamp, reopen Recording Setup or Change Default, and
+Save COM3 or COM4 with actiCHamp using each save action, reopen Settings > Recording, and
 confirm the saved port stays selected when discovery lists a different port.
+Also finish a pending first-time discovery after saving: the saved port must remain
+selected even when the only discovered port differs.
 Select a detected port, type a different COM port and click Detect: the displayed
 port must remain the manually entered value while that same port is checked.
-Switch devices, Cancel and reopen to check staged fields. With lab equipment,
+Switch devices, close without saving and reopen to check staged fields. With lab equipment,
 confirm normal-run saved markers separately from port discovery and check that
 Test/Pilot sends none.
 
-Visible BioSemi acceptance: open a project and Recording Setup at `700x640` in both
-themes. Verify ActiveTwo/ActiveThree port selection, manual COM193, empty/error/busy
+Visible BioSemi acceptance: open a project and Settings > Recording at `860x560` and
+`1000x680` in both themes. Verify ActiveTwo/ActiveThree port selection, manual COM193, empty/error/busy
 states, and full status/error details without clipping. Refresh must retain the
 selection. Check Port must report only that selection; edit or switch devices during
 a held check, then dismiss/reopen and confirm late results cannot overwrite state.
-Apply/reopen must preserve the port and existing baudrate; Cancel and a failed save
-must preserve the previous saved values and unrelated drafts. Change Default and Use
+Apply/reopen must preserve the port and existing baudrate; closing without applying and a failed save
+must preserve the previous saved values and unrelated drafts. Save Default Settings and Use
 Computer Default must retain the project COM field. Use fake services for this UI
 smoke path; real interface access and manually recorded markers remain separate checks.
 
@@ -1499,7 +1523,12 @@ mapping, display/session settings, modular-task definitions and media, and
 Toolbox-oriented `event_map` metadata.
 `Export > Completed Project Config...` writes the same setup handoff plus a summary of
 the latest completed session's order, seeds, trigger schedule, display geometry, and
-stimulus-manifest provenance. The default setup export filename is the compact project
+stimulus-manifest provenance. Both actions use the same revision-2
+[Studio–Toolbox config format](PROJECT_CONFIG.md), with distinct document kinds;
+optional features no longer select a different envelope revision. Historical
+configs remain readable. A completed export covers one captured session and does
+not include raw EEG or automatically register it in Toolbox.
+The default setup export filename is the compact project
 title in lowercase with spaces and punctuation removed, such as
 `semanticcategories.fpvsconfig` for `Semantic Categories`; completed exports append
 `-completed`. `Export > Group

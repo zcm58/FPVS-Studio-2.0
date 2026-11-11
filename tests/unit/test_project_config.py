@@ -7,6 +7,7 @@ import os
 from datetime import datetime, timezone
 
 import pytest
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import (
@@ -88,8 +89,8 @@ def test_setup_handoff_declares_selected_hardware_without_changing_schema(
 ):
     sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
     config = export_project_config(sample_project, project_root=None)
-    assert config.schema_version == "1.2.0"
-    assert config.toolbox.handoff_schema_version == "1.0"
+    assert config.format_version == 2
+    assert config.toolbox.handoff_schema_version is None
     profile = config.toolbox.acquisition_profile
     assert profile.id == profile_id and profile.montage_id == montage
     assert profile.version == profile.montage_version == profile.event_decoder_version == "1.0"
@@ -283,6 +284,7 @@ def test_latest_completed_toolbox_config_rejects_invalid_newest_without_fallback
         payload["project"]["project_id"] = "different-project"
     elif failure == "setup":
         payload["completed_session"] = None
+        payload["kind"] = "setup"
     elif failure == "session":
         payload["completed_session"]["session_id"] = "different-session"
     elif failure == "state":
@@ -438,7 +440,7 @@ def test_config_import_creates_new_project_shell_without_copying_stimuli(
     scaffold = create_project_from_config(tmp_path, config)
     loaded = load_project_file(scaffold.project_root / "project.json")
 
-    assert config.schema_version == "1.2.0"
+    assert config.format_version == 2
     assert loaded.meta.name == sample_project.meta.name
     assert loaded.settings.display.viewing_distance_cm == 90.0
     assert loaded.settings.protocol.base_hz == 7.5
@@ -507,8 +509,7 @@ def test_read_project_config_rejects_unsupported_schema_version(tmp_path, sample
     path = tmp_path / "project.fpvsconfig"
     config = export_project_config(sample_project, tmp_path)
     write_project_config(path, config)
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    payload["schema_version"] = "9.9.9"
+    payload = legacy_config_payload(config, "9.9.9")
     path.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ProjectConfigError, match="Unsupported project config schema version"):
@@ -560,8 +561,9 @@ def test_project_config_without_participant_session_policy_defaults_to_single_se
     schema_version: str,
 ) -> None:
     path = tmp_path / "legacy.fpvsconfig"
-    payload = export_project_config(sample_project, tmp_path / "source").model_dump(mode="json")
-    payload["schema_version"] = schema_version
+    payload = legacy_config_payload(
+        export_project_config(sample_project, tmp_path / "source"), schema_version,
+    )
     del payload["project"]["allow_repeated_participant_sessions"]
     original_payload = json.dumps(payload)
     path.write_text(original_payload, encoding="utf-8")
@@ -607,8 +609,7 @@ def test_project_config_round_trips_presentation_defaults_and_condition_override
 
 def test_read_project_config_migrates_v1_presentation_defaults(tmp_path, sample_project) -> None:
     path = tmp_path / "legacy.fpvsconfig"
-    payload = export_project_config(sample_project, tmp_path).model_dump(mode="json")
-    payload["schema_version"] = "1.0.0"
+    payload = legacy_config_payload(export_project_config(sample_project, tmp_path), '1.0.0')
     payload.pop("presentation")
     payload["display"]["stimulus_width_degrees"] = 6.25
     for condition in payload["conditions"]:
@@ -617,7 +618,7 @@ def test_read_project_config_migrates_v1_presentation_defaults(tmp_path, sample_
 
     loaded = read_project_config(path)
 
-    assert loaded.schema_version == "1.2.0"
+    assert loaded.format_version == 2
     assert loaded.presentation.pre_stream_fixation_seconds == 0.0
     assert loaded.presentation.defaults.image_geometry.width_degrees == 6.25
 
@@ -625,7 +626,7 @@ def test_read_project_config_migrates_v1_presentation_defaults(tmp_path, sample_
 def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample_project) -> None:
     path = tmp_path / "legacy.fpvsconfig"
     config = export_project_config(sample_project, tmp_path)
-    payload = config.model_dump(mode="json")
+    payload = legacy_config_payload(config, "1.2.0")
     del payload["protocol"]
     path.write_text(json.dumps(payload), encoding="utf-8")
 

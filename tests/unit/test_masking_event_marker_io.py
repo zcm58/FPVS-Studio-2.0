@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 from tests.unit.test_masking import masking_project
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -57,8 +58,8 @@ def marker_project(*, catch=False, alignment=False):
     return ProjectFile.model_validate(project.model_dump())
 
 
-def assert_markers(project):
-    assert project.schema_version == ProjectSchemaVersion.V1_10
+def assert_markers(project, expected_schema=ProjectSchemaVersion.V1_10):
+    assert project.schema_version == expected_schema
     assert all(modifier.masking.event_triggers == MaskingEventTriggers(
         mask_onset_code=156, catch_slot_onset_code=157,
     ) for modifier in project.condition_modifiers if modifier.masking is not None)
@@ -73,7 +74,7 @@ def test_project_config_and_bundle_preserve_marker_settings(tmp_path, catch, ali
     write_stimulus_manifest(root, create_empty_manifest(project.meta.project_id))
     assert load_project_file(root / "project.json") == project
     config = export_project_config(project, root)
-    assert config.schema_version == "1.8.0"
+    assert config.format_version == 2
     assert config.toolbox.event_map == {
         condition.name: condition.trigger_code for condition in project.conditions
     }
@@ -82,7 +83,7 @@ def test_project_config_and_bundle_preserve_marker_settings(tmp_path, catch, ali
     write_project_config(config_path, config)
     assert read_project_config(config_path) == config
     imported_config = create_project_from_config(tmp_path / "config-import", config)
-    assert_markers(imported_config.project)
+    assert_markers(imported_config.project, ProjectSchemaVersion.V1_17)
     assert imported_config.project.condition_modifiers == project.condition_modifiers
     bundle_path = tmp_path / "masking.fpvsbundle"
     export_project_bundle(root, bundle_path)
@@ -108,8 +109,7 @@ def test_event_markers_reject_older_project_schema(version):
 
 @pytest.mark.parametrize("version", ["1.5.0", "1.6.0", "1.7.0"])
 def test_event_markers_reject_older_config_schema(tmp_path, version):
-    payload = export_project_config(marker_project(), tmp_path).model_dump(mode="json")
-    payload["schema_version"] = version
+    payload = legacy_config_payload(export_project_config(marker_project(), tmp_path), version)
     with pytest.raises(ValueError, match="event triggers require config schema 1.8.0"):
         ProjectConfigFile.model_validate(payload)
 
@@ -216,7 +216,7 @@ def test_legacy_payloads_remain_opted_out_and_keep_existing_versions(tmp_path):
     assert load_project_file(path).model_dump_json() == original
     assert project.schema_version == ProjectSchemaVersion.V1_7
     config = export_project_config(project, tmp_path)
-    assert config.schema_version == "1.5.0" and "event_triggers" not in config.model_dump_json()
+    assert config.format_version == 2 and "event_triggers" not in config.model_dump_json()
     definition = create_masking_modifier()
     preset = save_modifier_preset(tmp_path / "library", definition, tmp_path, name="Legacy")
     assert preset.schema_version == "1.1.0" and "event_triggers" not in preset.model_dump_json()

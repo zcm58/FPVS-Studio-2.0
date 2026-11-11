@@ -35,6 +35,55 @@ Success is this workflow, using the same Studio version on both computers:
 
 ## Scope and boundaries
 
+### PyCharm environment repair (2026-11-11)
+
+The user requested a file that a researcher can run in PyCharm to diagnose and
+repair the environment after an engine-dependency preflight error. Add a standard-
+library helper under `scripts/` that identifies the exact interpreter, requires the
+native Python 3.10 environment selected by Setup Mac, and installs the existing
+`requirements-macos.txt` profile into that same environment. A check-only option
+must avoid installation. Preserve environments and IDE settings; OS build-tool
+provisioning remains owned by Setup Mac.
+
+Verify dependency consistency and actual engine-owned PsychoPy imports in a fresh
+process, retaining the underlying traceback without creating a presentation window.
+Keep this separate from physical refresh/timing qualification. Cover interpreter,
+architecture, path and subprocess failure cases with fakes; run the Mac focused
+route and applicable repository checks without launching Qt or installing packages
+on the development host. Native Mac repair remains to be exercised by the reporter.
+
+Implemented `scripts/macos_repair_environment.py` with default repair and `--check`
+modes, exact-interpreter pip invocation, interpreter/CPU/source guards, and fresh
+engine import diagnostics. It preserves the original chained import error that the
+current preflight summary labels generically as a missing PsychoPy installation.
+Check-only mode rejects mismatched installed/source release versions and validates
+installed requirement metadata; run repair after source updates to refresh it.
+
+Path entry points are the helper's own `__file__`, the checkout dependency/source
+files, Setup's `.venv3.10`/`.venv` selection, and `sys.executable`/`sys.prefix`.
+The working directory does not choose the checkout or installation target. Missing
+source/environment files, an unexpected interpreter or CPU, subprocess errors and
+failed installation/checks stop with a nonzero result. No project, IDE or persisted
+experiment format is changed. Repeated repair reuses the same declared requirements.
+
+Windows/fake-backed verification:
+
+- Baseline Mac focused route: 1523 passed, 26 platform/native checks skipped.
+- New helper tests: 42 passed, including stale metadata, chained errors, spaced
+  paths and interpreter preservation; no real pip, PsychoPy or Qt execution.
+- Helper Ruff, compilation and mypy passed; documentation focused route: 13 passed;
+  verification harness configuration and CLI help passed.
+- Repository precommit (`-Workers 4`): 5973 passed, 33 platform-related skips;
+  changed-file Ruff/compilation, Windows/macOS mypy and repository audits passed.
+  Native Mac execution/installation and physical display qualification remain
+  unperformed; the researcher can run the helper using the documented PyCharm flow.
+
+Changed files: `scripts/macos_repair_environment.py`,
+`tests/unit/test_macos_environment_repair.py`, `.agents/verification.toml`,
+`docs/MACOS_SUPPORT.md`, `ARCHITECTURE.md`, `docs/agent/agent-index.md`, and this plan.
+
+### Original Phase 1 boundaries
+
 | Phase 1 includes | Deferred or excluded |
 | --- | --- |
 | Source installation, startup, preferences, project management and all eight Setup steps | Compiled `.app`/DMG builds, signing, notarization and App Store distribution |

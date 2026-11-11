@@ -496,7 +496,7 @@ def test_persistence_and_portable_config_preserve_only_new_conditional_capabilit
     assert restored.task_modules[0].simple_post_questions
     assert migrate_project_payload(restored.model_dump()).schema_version.value == "1.16.0"
     config = export_project_config(restored, sample_project_root)
-    assert config.schema_version == "1.14.0"
+    assert config.format_version == 2
     imported = create_project_from_config(tmp_path / "imported", config)
     loaded = load_project_file(imported.project_root / "project.json")
     assert loaded.task_modules[0].simple_post_questions

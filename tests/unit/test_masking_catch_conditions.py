@@ -3,6 +3,7 @@
 from collections import Counter
 
 import pytest
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 from tests.unit.test_masking import catch_project
 
 from fpvs_studio.core.compiler import CompileError, compile_run_spec, compile_session_plan
@@ -215,18 +216,17 @@ def test_explicit_catch_project_config_roundtrip_preserves_real_condition_map(tm
     save_project_file(project, path)
     assert load_project_file(path) == project
     config = export_project_config(project, tmp_path)
-    assert config.schema_version == "1.7.0"
+    assert config.format_version == 2
     assert config.toolbox.event_map == {condition.name: condition.trigger_code
                                         for condition in project.conditions}
     imported = create_project_from_config(tmp_path / "imported", config)
     assert imported.project.conditions == project.conditions
-    assert imported.project.schema_version == ProjectSchemaVersion.V1_9
+    assert imported.project.schema_version == ProjectSchemaVersion.V1_17
     payload = project.model_dump(mode="json")
     payload["schema_version"] = "1.8.0"
     with pytest.raises(ValueError, match="schema 1.9.0"):
         ProjectFile.model_validate(payload)
-    payload = config.model_dump(mode="json")
-    payload["schema_version"] = "1.6.0"
+    payload = legacy_config_payload(config, '1.6.0')
     with pytest.raises(ValueError, match="schema 1.7.0"):
         ProjectConfigFile.model_validate(payload)
 
@@ -249,9 +249,8 @@ def test_noncenter_task_alignment_requires_versioned_project_config_session_and_
         ProjectFile.model_validate(project.model_dump())
     project.schema_version = ProjectSchemaVersion.V1_9
     config = export_project_config(project, tmp_path)
-    assert config.schema_version == "1.7.0"
-    payload = config.model_dump(mode="json")
-    payload["schema_version"] = "1.6.0"
+    assert config.format_version == 2
+    payload = legacy_config_payload(config, '1.6.0')
     with pytest.raises(ValueError, match="schema 1.7.0"):
         ProjectConfigFile.model_validate(payload)
     definition = create_masking_modifier()

@@ -203,10 +203,12 @@ establish optical equivalence on an unmeasured monitor.
 - Runtime owns task input, scoring and durable scene/task provenance. Planned event
   timestamps must never be reported as observed display times.
 
-Masking without catches retains project schema 1.7.0, config 1.5.0, RunSpec 1.4.0 and
-SessionPlan 1.3.0. Legacy automatic catches use project/config **1.8.0/1.6.0**. Explicit
-`Condition.masking_catch` flags and non-centered task text require project/config
-**1.9.0/1.7.0**. False condition flags and default-centered text alignment are omitted
+Masking without catches retains project schema 1.7.0, RunSpec 1.4.0 and
+SessionPlan 1.3.0. Legacy automatic catches use project **1.8.0**. Explicit
+`Condition.masking_catch` flags and non-centered task text require project
+**1.9.0**. Current configs share [format revision 2](PROJECT_CONFIG.md); historical
+configs introduced these three capabilities in 1.5.0, 1.6.0 and 1.7.0 respectively.
+False condition flags and default-centered text alignment are omitted
 from legacy payloads. Projects saved at a newer supported schema retain that version.
 
 Both catch representations compile to the existing **RunSpec 1.5.0** catch scene;
@@ -216,8 +218,9 @@ Modifier presets containing it require **1.2.0**; centered Masking presets, incl
 legacy automatic catches, retain 1.1.0. Strict schema/settings guards reject unsupported
 behavior in older readers instead of silently dropping it.
 
-Opt-in `event_triggers` requires project/config **1.10.0/1.8.0** and modifier preset
+Opt-in `event_triggers` requires project **1.10.0** and modifier preset
 **1.3.0**. Generic compiled trigger events need no new RunSpec or SessionPlan schema.
+Historical configs added these markers in 1.8.0; current handoffs use revision 2.
 The marker-enabled project requires Studio 2.2.0; Studio 2.1.0 does not support these
 new authoring settings. Masking 1.4.0 uses this capability while retaining the prior
 stimulus timing, block randomization and participant questions.

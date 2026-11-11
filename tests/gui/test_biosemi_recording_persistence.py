@@ -25,21 +25,11 @@ def _recording(backend="serial"):
     return ProjectRecordingSettings(recording_backend=backend).model_dump(mode="json")
 
 
-def _stub_recording_dialog(monkeypatch, *, backend="serial", accepted=True, port="COM193"):
-    contexts = []
-
-    class Dialog:
-        configuration = _recording(backend)
-        biosemi_serial_port = port
-
-        def __init__(self, configuration, parent=None, **context):
-            contexts.append((dict(configuration), context))
-
-        def exec(self):
-            return int(QDialog.DialogCode.Accepted if accepted else QDialog.DialogCode.Rejected)
-
-    monkeypatch.setattr(settings_module, "RecordingSetupDialog", Dialog)
-    return contexts
+def _edit_recording(dialog, *, backend="serial", port="COM193"):
+    editor = dialog.recording_editor
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
+    editor.biosemi_port_selector.combo.setEditText(port)
+    return editor
 
 
 def _document(tmp_path):
@@ -60,7 +50,6 @@ def test_settings_biosemi_apply_updates_only_saved_port_and_device_and_keeps_dra
     document = _document(tmp_path)
     before = load_project_file(document.project_file_path)
     document.update_protocol_settings(base_hz=5.0)
-    contexts = _stub_recording_dialog(monkeypatch, backend=backend)
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
         recording_configuration=document.recording_configuration,
@@ -73,12 +62,11 @@ def test_settings_biosemi_apply_updates_only_saved_port_and_device_and_keeps_dra
     dialog.setPalette(palette)
     select_settings_category(dialog, "Recording")
     dialog.show()
-    dialog._show_recording_setup()
+    editor = _edit_recording(dialog, backend=backend)
+    assert editor.biosemi_port_selector.port == "COM193"
+    dialog.apply_recording_button.click()
     QApplication.processEvents()
 
-    assert contexts[0][1] == {
-        "biosemi_serial_port": "COM7", "biosemi_serial_baudrate": 57600,
-    }
     saved = load_project_file(document.project_file_path)
     expected_triggers = before.settings.triggers.model_dump()
     expected_triggers["serial_port"] = "COM193"
@@ -91,7 +79,7 @@ def test_settings_biosemi_apply_updates_only_saved_port_and_device_and_keeps_dra
     assert "COM193" in dialog.recording_summary.text()
     assert dialog._biosemi_serial_baudrate == 57600
     assert (dialog.width(), dialog.height()) == (1000, 680)
-    assert_visible_children_within_parent(dialog)
+    assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     assert dialog.recording_summary.height() >= dialog.recording_summary.heightForWidth(
         dialog.recording_summary.width(),
     )
@@ -107,7 +95,6 @@ def test_settings_biosemi_cancel_or_save_failure_retains_port_device_and_context
 ):
     document = _document(tmp_path)
     before = document.project_file_path.read_bytes()
-    contexts = _stub_recording_dialog(monkeypatch, accepted=failure)
     error = OSError("project is read-only")
     save = Mock(side_effect=error)
     popup = Mock()
@@ -119,7 +106,11 @@ def test_settings_biosemi_cancel_or_save_failure_retains_port_device_and_context
     )
     qtbot.addWidget(dialog)
     initial_summary = dialog.recording_summary.text()
-    dialog._show_recording_setup()
+    _edit_recording(dialog)
+    if failure:
+        dialog.apply_recording_button.click()
+    else:
+        dialog.reject()
     assert save.call_count == int(failure)
     assert popup.call_count == int(failure)
     if failure:
@@ -128,8 +119,9 @@ def test_settings_biosemi_cancel_or_save_failure_retains_port_device_and_context
     assert dialog._biosemi_serial_port == "COM7"
     assert dialog._recording_configuration == document.recording_configuration
     assert dialog.recording_summary.text() == initial_summary
-    dialog._show_recording_setup()
-    assert contexts[-1][1]["biosemi_serial_port"] == "COM7"
+    assert dialog.recording_editor.biosemi_port_selector.port == "COM193"
+    if failure:
+        dialog.apply_recording_button.click()
     assert save.call_count == popup.call_count == 2 * int(failure)
     assert dialog.recording_summary.text() == initial_summary
 
@@ -152,7 +144,6 @@ def test_recording_document_failure_keeps_port_and_unrelated_drafts(qapp, tmp_pa
 def test_other_recording_devices_do_not_include_a_biosemi_port_edit(
     qapp, qtbot, tmp_path, monkeypatch,
 ):
-    contexts = _stub_recording_dialog(monkeypatch, backend="unicorn_udp")
     save = Mock()
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path, recording_configuration=_recording(),
@@ -160,8 +151,8 @@ def test_other_recording_devices_do_not_include_a_biosemi_port_edit(
         on_recording_configuration_changed=save,
     )
     qtbot.addWidget(dialog)
-    dialog._show_recording_setup()
-    assert contexts[0][1]["biosemi_serial_port"] == "COM7"
+    _edit_recording(dialog, backend="unicorn_udp")
+    dialog.apply_recording_button.click()
     assert save.call_args.args == (_recording("unicorn_udp"),)
     assert dialog._biosemi_serial_port == "COM7"
 
@@ -169,28 +160,54 @@ def test_other_recording_devices_do_not_include_a_biosemi_port_edit(
 def test_computer_default_changes_and_reset_preserve_project_serial_context(
     qapp, qtbot, tmp_path, monkeypatch,
 ):
-    contexts = _stub_recording_dialog(monkeypatch, backend="biosemi_active_three")
     project_save = Mock()
     default_save = Mock()
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path, recording_configuration=_recording(),
-        default_recording_configuration=_recording(), recording_uses_default=True,
+        default_recording_configuration=_recording(), recording_uses_default=False,
         biosemi_serial_port="COM7", biosemi_serial_baudrate=57600,
         on_default_recording_configuration_changed=default_save,
         on_recording_configuration_changed=project_save,
         on_use_default_recording_configuration=Mock(),
     )
     qtbot.addWidget(dialog)
-    dialog._show_default_recording_setup()
-    assert contexts[0][1] == {"computer_default": True}
+    _edit_recording(dialog, backend="biosemi_active_three")
+    dialog.save_default_recording_button.click()
     assert default_save.call_args.args == (_recording("biosemi_active_three"),)
     project_save.assert_not_called()
-    dialog._use_default_recording_setup()
+    dialog.use_default_recording_button.click()
     assert dialog._biosemi_serial_port == "COM7"
-    dialog._show_recording_setup()
-    assert contexts[-1][1] == {
-        "biosemi_serial_port": "COM7", "biosemi_serial_baudrate": 57600,
-    }
+    assert dialog.recording_editor.biosemi_port_selector.port == "COM7"
+    assert dialog._biosemi_serial_baudrate == 57600
+
+
+@pytest.mark.parametrize("backend", ["serial", "biosemi_active_three"])
+def test_inline_default_save_does_not_require_or_include_project_serial_port(
+    qtbot, tmp_path, monkeypatch, backend,
+):
+    project_save = Mock()
+    default_save = Mock()
+    popup = Mock()
+    monkeypatch.setattr(settings_module, "_show_error_dialog", popup)
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, recording_configuration=_recording(backend),
+        default_recording_configuration=_recording(),
+        biosemi_serial_port="COM7",
+        on_recording_configuration_changed=project_save,
+        on_default_recording_configuration_changed=default_save,
+    )
+    qtbot.addWidget(dialog)
+    _edit_recording(dialog, backend=backend, port="")
+    dialog.apply_recording_button.click()
+    project_save.assert_not_called()
+    popup.assert_called_once()
+    assert popup.call_args.args[:2] == (dialog, "Recording Setup Error")
+    dialog.save_default_recording_button.click()
+    default_save.assert_called_once_with(_recording(backend))
+    project_save.assert_not_called()
+    assert popup.call_count == 1
+    assert dialog._biosemi_serial_port == "COM7"
+    assert dialog.recording_editor.biosemi_port_selector.port == ""
 
 
 def test_controller_forwards_active_project_port_and_baud_to_settings(

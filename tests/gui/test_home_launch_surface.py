@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -43,6 +45,7 @@ from fpvs_studio.gui.run_page import (
     TestModeLaunchConfirmationDialog,
     TestModeLaunchSelection,
 )
+from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 
 def _assert_button_contents_fit(button: QPushButton) -> None:
@@ -67,6 +70,80 @@ def _assert_button_contents_fit(button: QPushButton) -> None:
     assert contents.width() >= required_width
     assert contents.height() >= required_height
     assert button.rect().contains(contents)
+
+
+@pytest.mark.parametrize("activation", ["mouse", "keyboard"])
+def test_home_recording_link_opens_recording_and_menu_still_opens_general(
+    qtbot, controller, tmp_path, monkeypatch, activation,
+):
+    reports = SimpleNamespace(
+        enabled=False, status="Reporting disabled for this test.", busy=False,
+        changed=Mock(), configure=lambda _enabled: None,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.crash_report_controller.crash_report_controller", lambda: reports,
+    )
+    opened_categories = []
+
+    def inspect_settings(dialog):
+        qtbot.addWidget(dialog)
+        dialog.show()
+        QApplication.processEvents()
+        category = dialog.navigation.currentItem().text()
+        opened_categories.append(category)
+        assert dialog.page_title.text() == category
+        assert dialog.pages.currentIndex() == dialog.navigation.currentRow()
+        if category == "Recording":
+            assert dialog.recording_editor.backend_combo.isVisible()
+            assert dialog.apply_recording_button.isVisible()
+            assert dialog.apply_recording_button.isEnabled()
+        dialog.close()
+        return int(QDialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", inspect_settings)
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Recording navigation")
+    window.resize(1120, 720)
+    window.show()
+    QApplication.processEvents()
+    link = window.home_page.recording_summary
+    if activation == "mouse":
+        qtbot.mouseClick(link, Qt.MouseButton.LeftButton, pos=link.rect().center())
+    else:
+        link.setFocus(Qt.FocusReason.TabFocusReason)
+        qtbot.keyClick(link, Qt.Key.Key_Return)
+    assert opened_categories == ["Recording"]
+
+    window.settings_action.trigger()
+    assert opened_categories == ["Recording", "General"]
+
+
+def test_home_recording_link_obeys_disabled_settings_and_launch_busy_guards(
+    qtbot, controller, tmp_path, monkeypatch,
+):
+    opened = Mock()
+    monkeypatch.setattr(controller, "show_settings_dialog", opened)
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Recording navigation guards")
+    link = window.home_page.recording_summary
+
+    window.settings_action.setEnabled(False)
+    assert not link.isEnabled()
+    link.linkActivated.emit("recording-settings")
+    opened.assert_not_called()
+
+    window.settings_action.setEnabled(True)
+    assert link.isEnabled()
+    monkeypatch.setattr(window, "is_launch_busy", lambda: True)
+    link.linkActivated.emit("recording-settings")
+    opened.assert_not_called()
+
+    monkeypatch.setattr(window, "is_launch_busy", lambda: False)
+    window._launch_after_session_seed_ready = True
+    link.linkActivated.emit("recording-settings")
+    opened.assert_not_called()
+
+    window._launch_after_session_seed_ready = False
+    link.linkActivated.emit("recording-settings")
+    opened.assert_called_once_with(initial_category="Recording")
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])

@@ -6,6 +6,7 @@ import csv
 import json
 
 import pytest
+from tests.unit.studio_handoff_fixtures import legacy_config_payload
 
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
 from fpvs_studio.core.cognitive_load_presets import populate_cognitive_load_fpvs
@@ -81,7 +82,7 @@ def test_requested_seconds_config_and_public_project_roundtrip(multi_condition_p
     project.conditions[1].base_hz = 4
     project = ProjectFile.model_validate(project.model_dump())
     config = export_project_config(project, project_root=None)
-    assert config.schema_version == "1.10.0"
+    assert config.format_version == 2
     path = tmp_path / "duration.fpvsconfig"
     write_project_config(path, config)
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -89,7 +90,7 @@ def test_requested_seconds_config_and_public_project_roundtrip(multi_condition_p
     assert "stream_duration_seconds" not in payload["conditions"][2]
     imported = create_project_from_config(tmp_path / "received", read_project_config(path))
     reopened = load_project_file(imported.project_root / "project.json")
-    assert reopened.schema_version == ProjectSchemaVersion.V1_12
+    assert reopened.schema_version == ProjectSchemaVersion.V1_17
     assert [item.stream_duration_seconds for item in reopened.conditions] == [120, 90, None, None]
     assert reopened.conditions[1].base_hz == 4
 
@@ -100,7 +101,7 @@ def test_legacy_two_sequences_keep_240_second_continuous_stream(sample_project, 
     condition.oddball_cycle_repeats_per_sequence = 144
     sample_project.settings.display.preferred_refresh_hz = None
     config = export_project_config(sample_project, project_root=None)
-    assert config.schema_version == "1.2.0"
+    assert config.format_version == 2
     assert "stream_duration_seconds" not in config.conditions[0].model_dump()
     imported = create_project_from_config(tmp_path, config).project
     assert imported.settings.display.preferred_refresh_hz is None
@@ -114,14 +115,13 @@ def test_legacy_two_sequences_keep_240_second_continuous_stream(sample_project, 
 def test_duration_config_requires_new_capability_before_import_writes(sample_project, tmp_path):
     sample_project.conditions[0].stream_duration_seconds = 120
     config = export_project_config(sample_project, project_root=None)
-    invalid = config.model_copy(update={"schema_version": "1.9.0"})
+    payload = json.dumps(legacy_config_payload(config, "1.9.0"))
+    path = tmp_path / "older-capability.fpvsconfig"
+    path.write_text(payload, encoding="utf-8")
     target = tmp_path / "received"
     with pytest.raises(ProjectConfigError, match="require config schema 1.10"):
-        create_project_from_config(target, invalid)
+        create_project_from_config(target, read_project_config(path))
     assert not target.exists()
-    path = tmp_path / "older-capability.fpvsconfig"
-    payload = invalid.model_dump_json()
-    path.write_text(payload, encoding="utf-8")
     with pytest.raises(ProjectConfigError, match="require config schema 1.10"):
         read_project_config(path)
     assert path.read_text(encoding="utf-8") == payload
@@ -231,11 +231,11 @@ def test_duration_profile_library_and_application_preserve_requested_seconds(
     project.settings = settings
     project = ProjectFile.model_validate(project.model_dump())
     config = export_project_config(project, project_root=None)
-    assert config.schema_version == "1.10.0"
+    assert config.format_version == 2
     assert config.condition_defaults.stream_duration_seconds == 120
     imported = create_project_from_config(tmp_path / "received", config).project
     assert imported.settings.condition_defaults.stream_duration_seconds == 120
-    assert imported.schema_version == ProjectSchemaVersion.V1_12
+    assert imported.schema_version == ProjectSchemaVersion.V1_17
 
 
 def test_cognitive_load_factory_honors_duration_template_defaults():
@@ -259,7 +259,7 @@ def test_ab_duration_config_rejected_before_import_creates_files(tmp_path, place
         settings=ProjectSettings(protocol=ProtocolSettings(base_hz=10)),
     ))
     original = export_project_config(project, project_root=None)
-    updates = {"schema_version": "1.10.0"}
+    updates = {}
     if placement == "condition":
         updates["conditions"] = [original.conditions[0].model_copy(update={
             "stream_duration_seconds": 5,

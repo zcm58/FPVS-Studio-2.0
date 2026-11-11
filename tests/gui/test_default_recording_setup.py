@@ -23,9 +23,10 @@ from fpvs_studio.gui import settings_dialog as settings_dialog_module
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError
+from fpvs_studio.gui.parallel_port_selector import ParallelPortSelector
 from fpvs_studio.gui.recording_dialog import (
     DefaultRecordingHardwareDialog,
-    RecordingSetupDialog,
+    RecordingSetupEditor,
 )
 from fpvs_studio.gui.root_folder_setup_dialog import RootFolderSetupDialog
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
@@ -35,6 +36,13 @@ _BACKENDS = (
     "unicorn_udp",
 )
 _PROMPT = "Please select your default EEG hardware. You can change this choice later."
+
+
+@pytest.fixture(autouse=True)
+def _no_hardware_discovery(monkeypatch):
+    """Preference tests never need to enumerate hardware."""
+    monkeypatch.setattr(RecordingSetupEditor, "_maybe_detect_ports", lambda _self: None)
+    monkeypatch.setattr(ParallelPortSelector, "detect_ports", lambda _self: None)
 
 
 def _configuration(backend: str, **values: object) -> dict[str, object]:
@@ -314,26 +322,68 @@ def test_actichamp_project_port_and_timing_survive_computer_default_changes(
     assert ProjectDocument.open_existing(document.project_root).project.settings.recording is None
 
 
+@pytest.mark.parametrize("uses_default", [False, True])
+def test_inline_default_save_updates_inheritance_without_writing_project(
+    controller, qtbot, tmp_path, monkeypatch, uses_default,
+):
+    controller.save_default_recording_configuration(_configuration("serial"))
+    document, _window = open_created_project(controller, qtbot, tmp_path)
+    if not uses_default:
+        controller.save_recording_configuration(_configuration("biosemi_active_three"))
+    previous_recording = document.recording_configuration
+    saved_project = document.project_file_path.read_bytes()
+    project_save = Mock(wraps=controller.save_recording_configuration)
+    monkeypatch.setattr(controller, "save_recording_configuration", project_save)
+    replacement = _configuration("unicorn_udp", unicorn_udp_port=5432)
+
+    def save_default(dialog):
+        qtbot.addWidget(dialog)
+        select_settings_category(dialog, "Recording")
+        dialog.show()
+        editor = dialog.recording_editor
+        editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("unicorn_udp"))
+        editor.port_edit.setText("5432")
+        dialog.save_default_recording_button.click()
+        assert dialog.isVisible()
+        assert dialog._default_recording_configuration == replacement
+        assert dialog._recording_configuration == (
+            replacement if uses_default else previous_recording
+        )
+        assert dialog._recording_uses_default == uses_default
+        assert ("Unicorn" if uses_default else "ActiveThree") in dialog.recording_summary.text()
+        dialog.reject()
+        return int(QDialog.DialogCode.Rejected)
+
+    monkeypatch.setattr(AppSettingsDialog, "exec", save_default)
+    controller.show_settings_dialog()
+    project_save.assert_not_called()
+    assert controller.load_default_recording_configuration() == replacement
+    assert document.uses_default_recording_configuration == uses_default
+    assert document.recording_configuration == (
+        replacement if uses_default else previous_recording
+    )
+    assert document.project_file_path.read_bytes() == saved_project
+
+
 def test_settings_default_is_editable_without_a_project(qtbot, qapp, tmp_path, monkeypatch):
     controller = _controller(qapp, tmp_path, monkeypatch)
     controller.save_fpvs_root_dir(tmp_path)
     controller.save_default_recording_configuration(_configuration("serial"))
 
-    def accept_default(subdialog):
-        qtbot.addWidget(subdialog)
-        assert subdialog.windowTitle() == "Default Recording Setup"
-        subdialog.backend_combo.setCurrentIndex(subdialog.backend_combo.findData("unicorn_udp"))
-        subdialog.accept()
-        return int(QDialog.DialogCode.Accepted)
-
     def use_settings(dialog):
         qtbot.addWidget(dialog)
-        assert dialog.default_recording_setup_button.isEnabled()
-        assert not dialog.recording_setup_button.isEnabled()
-        dialog.default_recording_setup_button.click()
+        select_settings_category(dialog, "Recording")
+        dialog.show()
+        assert dialog.save_default_recording_button.isEnabled()
+        assert dialog.apply_recording_button.isHidden()
+        assert dialog.use_default_recording_button.isHidden()
+        editor = dialog.recording_editor
+        assert editor.biosemi_port_selector.isHidden()
+        editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("unicorn_udp"))
+        dialog.save_default_recording_button.click()
+        assert dialog.isVisible()
         return int(QDialog.DialogCode.Accepted)
 
-    monkeypatch.setattr(RecordingSetupDialog, "exec", accept_default)
     monkeypatch.setattr(AppSettingsDialog, "exec", use_settings)
     controller.show_settings_dialog()
     assert controller.main_window is None
@@ -386,22 +436,16 @@ def test_welcome_settings_fits_and_changes_default_without_a_project(
 
     settings_calls = []
 
-    def accept_default(subdialog):
-        qtbot.addWidget(subdialog)
-        assert subdialog.windowTitle() == "Default Recording Setup"
-        subdialog.backend_combo.setCurrentIndex(subdialog.backend_combo.findData("unicorn_udp"))
-        subdialog.accept()
-        return int(QDialog.DialogCode.Accepted)
-
     def use_settings(dialog):
         qtbot.addWidget(dialog)
         settings_calls.append(True)
-        assert dialog.default_recording_setup_button.isEnabled()
-        assert not dialog.recording_setup_button.isEnabled()
-        dialog.default_recording_setup_button.click()
+        assert dialog.save_default_recording_button.isEnabled()
+        assert dialog.apply_recording_button.isHidden()
+        editor = dialog.recording_editor
+        editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("unicorn_udp"))
+        dialog.save_default_recording_button.click()
         return int(QDialog.DialogCode.Accepted)
 
-    monkeypatch.setattr(RecordingSetupDialog, "exec", accept_default)
     monkeypatch.setattr(AppSettingsDialog, "exec", use_settings)
     welcome.set_import_busy(True)
     QApplication.processEvents()
@@ -443,7 +487,10 @@ def test_failed_preference_sync_does_not_change_live_hardware(controller, qtbot,
     assert controller.load_default_recording_configuration() == _configuration("serial")
 
 
-def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path, monkeypatch):
+@pytest.mark.parametrize("cancel", [False, True])
+def test_settings_cancel_and_failed_save_retain_computer_default(
+    qtbot, tmp_path, monkeypatch, cancel,
+):
     popup = Mock()
     monkeypatch.setattr(settings_dialog_module, "_show_error_dialog", popup)
     saves = []
@@ -459,35 +506,28 @@ def test_settings_cancel_and_failed_save_retain_computer_default(qtbot, tmp_path
         on_default_recording_configuration_changed=fail_save,
     )
     qtbot.addWidget(dialog)
-    monkeypatch.setattr(RecordingSetupDialog, "exec", lambda _: int(QDialog.DialogCode.Rejected))
-    dialog.default_recording_setup_button.click()
+    editor = dialog.recording_editor
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("unicorn_udp"))
     assert saves == []
-
-    def accept_default(subdialog):
-        qtbot.addWidget(subdialog)
-        assert subdialog.backend_combo.currentData() == "serial"
-        subdialog.backend_combo.setCurrentIndex(subdialog.backend_combo.findData("unicorn_udp"))
-        subdialog.accept()
-        return int(QDialog.DialogCode.Accepted)
-
-    monkeypatch.setattr(RecordingSetupDialog, "exec", accept_default)
-    dialog.default_recording_setup_button.click()
-    assert len(saves) == 1
-    assert ProjectRecordingSettings.model_validate(saves[0]).model_dump(mode="json") == (
-        _configuration("unicorn_udp")
-    )
-    popup.assert_called_once_with(dialog, "Save Default Recording Setup Error", error)
+    if cancel:
+        dialog.reject()
+        popup.assert_not_called()
+        assert saves == []
+    else:
+        dialog.save_default_recording_button.click()
+        assert len(saves) == 1
+        assert ProjectRecordingSettings.model_validate(saves[0]).model_dump(mode="json") == (
+            _configuration("unicorn_udp")
+        )
+        popup.assert_called_once_with(dialog, "Save Default Recording Setup Error", error)
     assert "ActiveTwo" in dialog.default_recording_summary.text()
     assert not dialog.default_recording_summary.toolTip()
-    monkeypatch.setattr(
-        RecordingSetupDialog, "exec",
-        lambda subdialog: (
-            pytest.fail("Failed save replaced the previous default")
-            if subdialog.backend_combo.currentData() != "serial"
-            else int(QDialog.DialogCode.Rejected)
-        ),
-    )
-    dialog.default_recording_setup_button.click()
+    assert dialog._default_recording_configuration == _configuration("serial")
+    assert editor.backend_combo.currentData() == "unicorn_udp"
+    if not cancel:
+        dialog.save_default_recording_button.click()
+        assert len(saves) == 2
+    assert dialog._default_recording_configuration == _configuration("serial")
 
 
 def test_failed_project_reset_retains_override_and_retry_action(qtbot, tmp_path, monkeypatch):
@@ -546,7 +586,7 @@ def test_recording_settings_fit_sidebar_sizes(
     dialog.show()
     QApplication.processEvents()
     assert dialog.size().toTuple() == size
-    assert_visible_children_within_parent(dialog)
+    assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     for button in dialog.findChildren(QPushButton):
         if button.isVisible():
             assert button.width() >= button.sizeHint().width()

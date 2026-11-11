@@ -9,7 +9,7 @@ from typing import Any
 
 from PIL import Image
 from PySide6.QtCore import QObject, QPoint, Qt, Signal
-from PySide6.QtWidgets import QApplication, QListWidget, QMessageBox, QWidget
+from PySide6.QtWidgets import QApplication, QListWidget, QMessageBox, QScrollArea, QWidget
 
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
@@ -147,7 +147,9 @@ def assert_setup_wizard_vertical_scrolling_disabled(wizard: Any) -> None:
     assert not scroll_area.verticalScrollBar().isEnabled()
 
 
-def assert_visible_children_within_parent(root: QWidget) -> None:
+def assert_visible_children_within_parent(
+    root: QWidget, *, allow_scroll_content: bool = False,
+) -> None:
     for child in root.findChildren(QWidget):
         parent = child.parentWidget()
         if parent is None or not child.isVisible():
@@ -158,10 +160,16 @@ def assert_visible_children_within_parent(root: QWidget) -> None:
             f"{type(child).__name__} {child.objectName()}: {child.geometry().getRect()} "
             f"inside {type(parent).__name__} {parent.objectName()}: {parent.size().toTuple()}"
         )
+        scroll = parent.parentWidget()
+        intentional_vertical_scroll = (
+            allow_scroll_content and isinstance(scroll, QScrollArea)
+            and scroll.viewport() is parent and scroll.widget() is child
+        )
         assert top_left.x() >= -1, bounds
-        assert top_left.y() >= -1, bounds
         assert bottom_right.x() <= parent.width() + 1, bounds
-        assert bottom_right.y() <= parent.height() + 1, bounds
+        if not intentional_vertical_scroll:
+            assert top_left.y() >= -1, bounds
+            assert bottom_right.y() <= parent.height() + 1, bounds
 
 
 def select_settings_category(dialog: Any, category: str) -> None:

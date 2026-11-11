@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QIntValidator, QShowEvent
+from PySide6.QtGui import QHideEvent, QIntValidator, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -141,8 +141,8 @@ def recording_preference_summary(configuration: dict[str, object]) -> str:
     return label
 
 
-class RecordingSetupDialog(QDialog):
-    """Stage project recording hardware and endpoint settings until Apply."""
+class RecordingSetupEditor(QWidget):
+    """Edit a recording draft without choosing where or when it is saved."""
 
     def __init__(
         self, configuration: dict[str, object], parent: QWidget | None = None,
@@ -150,13 +150,8 @@ class RecordingSetupDialog(QDialog):
         biosemi_serial_baudrate: int = 115200,
     ) -> None:
         super().__init__(parent)
-        self.setObjectName("recording_setup_dialog")
-        self.setWindowTitle("Default Recording Setup" if computer_default else "Recording Setup")
-        self.setMinimumSize(700, 640)
-        self.resize(self.minimumSize())
-        self._configuration = dict(configuration)
+        self.setObjectName("recording_setup_editor")
         self._computer_default = computer_default
-        self._accepted_biosemi_serial_port = resolve_serial_port(biosemi_serial_port)
         self._port_detection_job: UpdateJob | None = None
         self._detection_started = False
         self._discovery_dismissed = False
@@ -192,14 +187,8 @@ class RecordingSetupDialog(QDialog):
         self._valid_amplifier = configuration.get("brainproducts_amplifier")
         self._valid_sampling_rate = configuration.get("brainproducts_sampling_rate_hz")
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
-        layout.addWidget(DialogHeader(
-            "Default Recording Setup" if computer_default else "Recording Setup",
-            ("For this computer. Projects can override this choice." if computer_default
-             else "For this project. Apply saves the selection."),
-            parent=self,
-        ))
         self.backend_combo = QComboBox(self)
         self.backend_combo.setObjectName("recording_backend_combo")
         self.backend_combo.addItem("BioSemi ActiveTwo (serial)", "serial")
@@ -303,6 +292,7 @@ class RecordingSetupDialog(QDialog):
         self.endpoint_label = QLabel("Host: 127.0.0.1 (this computer only)", self)
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(10)
         form.addRow("Recording device", self.backend_combo)
         self.unicorn_port_label = QLabel("Unicorn UDP port", self)
@@ -336,17 +326,6 @@ class RecordingSetupDialog(QDialog):
         self.guidance_label.setTextFormat(Qt.TextFormat.PlainText)
         self.guidance_label.setObjectName("recording_setup_guidance")
         layout.addWidget(self.guidance_label)
-        layout.addStretch(1)
-        self.button_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Cancel,
-            parent=self,
-        )
-        self.apply_button = self.button_box.button(QDialogButtonBox.StandardButton.Apply)
-        mark_primary_action(self.apply_button)
-        mark_secondary_action(self.button_box.button(QDialogButtonBox.StandardButton.Cancel))
-        self.apply_button.clicked.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        layout.addWidget(self.button_box)
         self.backend_combo.currentIndexChanged.connect(self._backend_changed)
         self.port_edit.textChanged.connect(self._refresh)
         self.biosemi_port_selector.port_changed.connect(self._refresh)
@@ -359,9 +338,6 @@ class RecordingSetupDialog(QDialog):
         self.detect_ports_button.clicked.connect(self._detect_ports)
         self.brainproducts_port_edit.textEdited.connect(self._manual_port_edited)
         self.brainproducts_port_combo.activated.connect(self._port_selected)
-        self.finished.connect(self._cancel_port_detection)
-        self.finished.connect(self.biosemi_port_selector.cancel)
-        self.finished.connect(self.parallel_port_selector.cancel)
         self._refresh()
         apply_dialog_theme(self)
         self.brainproducts_port_combo.ensurePolished()
@@ -405,6 +381,10 @@ class RecordingSetupDialog(QDialog):
         super().showEvent(event)
         self._discovery_dismissed = False
         self._maybe_detect_ports()
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self.cancel()
+        super().hideEvent(event)
 
     def _maybe_detect_ports(self) -> None:
         if (self.isVisible() and not self._detection_started
@@ -475,10 +455,12 @@ class RecordingSetupDialog(QDialog):
     def _show_port_detection_error(self, error: Exception, message: str) -> None:
         self._show_port_detection_status("")
         if self.isVisible() and self.backend_combo.currentData() == "brainproducts_triggerbox":
-            _show_error_dialog(self, "TriggerBox Detection Error", error, message=message)
+            _show_error_dialog(self.window(), "TriggerBox Detection Error", error, message=message)
 
     @Slot(object)
     def _port_detection_finished(self, value: object) -> None:
+        if self._port_detection_job is None or self.sender() is not self._port_detection_job:
+            return
         self._port_detection_job = None
         if self._discovery_dismissed:
             return
@@ -616,7 +598,9 @@ class RecordingSetupDialog(QDialog):
         else:
             self._show_port_detection_status(text, details=details)
 
-    def _cancel_port_detection(self, _result: int) -> None:
+    def cancel(self, _result: int = 0) -> None:
+        """Detach app-owned discovery jobs before hiding or replacing this editor."""
+
         self._discovery_dismissed = True
         if self._port_detection_job is not None:
             self._port_detection_job.finished.disconnect(self._port_detection_finished)
@@ -624,18 +608,14 @@ class RecordingSetupDialog(QDialog):
             self._port_detection_job = None
             self._detection_started = False
             self.detect_ports_button.setEnabled(True)
-
-    @property
-    def configuration(self) -> dict[str, object]:
-        """Return only the accepted preference draft."""
-
-        return dict(self._configuration)
+        self.biosemi_port_selector.cancel()
+        self.parallel_port_selector.cancel()
 
     @property
     def biosemi_serial_port(self) -> str:
-        """Return the accepted project port, retaining the original on Cancel."""
+        """Return the current project-port draft; validation belongs to the save action."""
 
-        return self._accepted_biosemi_serial_port
+        return self.biosemi_port_selector.port
 
     def _draft(self) -> dict[str, object]:
         selected = self.backend_combo.currentData()
@@ -816,17 +796,118 @@ class RecordingSetupDialog(QDialog):
             self._valid_sampling_rate = validated.brainproducts_sampling_rate_hz
         self._maybe_detect_ports()
 
-    def _validate_draft(self, draft: dict[str, object]) -> ProjectRecordingSettings:
+    def _validate_draft(
+        self, draft: dict[str, object], *, computer_default: bool | None = None,
+    ) -> ProjectRecordingSettings:
+        save_default = self._computer_default if computer_default is None else computer_default
         if (draft["recording_backend"] in ("serial", "biosemi_active_three")
-                and not self._computer_default and not self.biosemi_port_selector.port):
+                and not save_default and not self.biosemi_port_selector.port):
             raise ValueError("Enter the BioSemi trigger-interface serial port.")
         validate_recording_configuration(draft)
         return ProjectRecordingSettings.model_validate(draft)
 
-    def accept(self) -> None:
+    def validated_configuration(
+        self, *, computer_default: bool | None = None,
+    ) -> dict[str, object]:
+        """Return a valid current draft, raising without changing accepted settings."""
+
         draft = self._draft()
+        self._validate_draft(draft, computer_default=computer_default)
+        return draft
+
+    def retain_reviewed_selection(self) -> None:
+        """Keep the saved TriggerBox port when pending discovery results arrive."""
+
+        if self.backend_combo.currentData() == "brainproducts_triggerbox":
+            self._keep_triggerbox_port = True
+
+
+class RecordingSetupDialog(QDialog):
+    """Confirm a staged recording draft before a launch can continue."""
+
+    def __init__(
+        self, configuration: dict[str, object], parent: QWidget | None = None,
+        *, computer_default: bool = False, biosemi_serial_port: str | None = "COM3",
+        biosemi_serial_baudrate: int = 115200,
+    ) -> None:
+        super().__init__(parent)
+        self.setObjectName("recording_setup_dialog")
+        self.setWindowTitle("Default Recording Setup" if computer_default else "Recording Setup")
+        self.setMinimumSize(700, 640)
+        self.resize(self.minimumSize())
+        self._configuration = dict(configuration)
+        self._computer_default = computer_default
+        self._accepted_biosemi_serial_port = resolve_serial_port(biosemi_serial_port)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+        layout.addWidget(DialogHeader(
+            "Default Recording Setup" if computer_default else "Recording Setup",
+            ("For this computer. Projects can override this choice." if computer_default
+             else "For this project. Apply saves the selection."),
+            parent=self,
+        ))
+        self.editor = RecordingSetupEditor(
+            configuration, self, computer_default=computer_default,
+            biosemi_serial_port=biosemi_serial_port,
+            biosemi_serial_baudrate=biosemi_serial_baudrate,
+        )
+        layout.addWidget(self.editor)
+        layout.addStretch(1)
+        # Preserve the established dialog controls for launch callers and smoke coverage.
+        self.backend_combo = self.editor.backend_combo
+        self.port_edit = self.editor.port_edit
+        self.biosemi_port_selector = self.editor.biosemi_port_selector
+        self.parallel_port_selector = self.editor.parallel_port_selector
+        self.brainproducts_parallel_combo = self.editor.brainproducts_parallel_combo
+        self.brainproducts_parallel_edit = self.editor.brainproducts_parallel_edit
+        self.detect_parallel_ports_button = self.editor.detect_parallel_ports_button
+        self.brainproducts_port_combo = self.editor.brainproducts_port_combo
+        self.brainproducts_port_edit = self.editor.brainproducts_port_edit
+        self.brainproducts_port_row = self.editor.brainproducts_port_row
+        self.detect_ports_button = self.editor.detect_ports_button
+        self.brainproducts_amplifier_combo = self.editor.brainproducts_amplifier_combo
+        self.brainproducts_sampling_rate_combo = self.editor.brainproducts_sampling_rate_combo
+        self.brainproducts_pulse_edit = self.editor.brainproducts_pulse_edit
+        self.unicorn_port_label = self.editor.unicorn_port_label
+        self.biosemi_port_label = self.editor.biosemi_port_label
+        self.brainproducts_port_label = self.editor.brainproducts_port_label
+        self.brainproducts_parallel_label = self.editor.brainproducts_parallel_label
+        self.brainproducts_pulse_label = self.editor.brainproducts_pulse_label
+        self.brainproducts_amplifier_label = self.editor.brainproducts_amplifier_label
+        self.brainproducts_sampling_rate_label = self.editor.brainproducts_sampling_rate_label
+        self.endpoint_label = self.editor.endpoint_label
+        self.detection_status_label = self.editor.detection_status_label
+        self.pulse_requirement_label = self.editor.pulse_requirement_label
+        self.guidance_label = self.editor.guidance_label
+        self.button_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Apply | QDialogButtonBox.StandardButton.Cancel,
+            parent=self,
+        )
+        self.apply_button = self.button_box.button(QDialogButtonBox.StandardButton.Apply)
+        mark_primary_action(self.apply_button)
+        mark_secondary_action(self.button_box.button(QDialogButtonBox.StandardButton.Cancel))
+        self.apply_button.clicked.connect(self.accept)
+        self.button_box.rejected.connect(self.reject)
+        layout.addWidget(self.button_box)
+        self.finished.connect(self.editor.cancel)
+        apply_dialog_theme(self)
+
+    @property
+    def configuration(self) -> dict[str, object]:
+        """Return only the accepted preference draft."""
+
+        return dict(self._configuration)
+
+    @property
+    def biosemi_serial_port(self) -> str:
+        """Return the accepted project port, retaining the original on Cancel."""
+
+        return self._accepted_biosemi_serial_port
+
+    def accept(self) -> None:
         try:
-            self._validate_draft(draft)
+            draft = self.editor.validated_configuration()
         except ValueError as exc:
             _show_error_dialog(self, "Recording Setup Error", exc)
             return
