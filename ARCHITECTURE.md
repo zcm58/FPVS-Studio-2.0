@@ -77,7 +77,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
 | Settings category navigation and preferences | `gui/settings_dialog.py`, `gui/controller.py`; [layout and persistence](docs/GUI_WORKFLOW.md#settings-appearance-and-layout) |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
-| Mac repair/reporting/display/input adapters | `scripts/macos-source.sh`, `macos_repair_environment.py`, `scripts/macos_pycharm.py`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
+| Mac repair/reporting/display/input adapters | `scripts/macos-source.sh`, `Repair Mac.py`, `scripts/macos_pycharm.py`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 
 ## Dependency Rules
 

@@ -436,7 +436,7 @@ full_tests = ["tests/gui", "tests/integration/test_psychopy_engine.py"]
 include = [
   "scripts/macos-source.sh",
   "scripts/macos_pycharm.py",
-  "macos_repair_environment.py",
+  "Repair Mac.py",
   "*Mac.command",
   "requirements-macos.txt",
   "src/fpvs_studio/runtime/macos_display.py",

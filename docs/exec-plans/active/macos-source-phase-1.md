@@ -37,6 +37,9 @@ Success is this workflow, using the same Studio version on both computers:
 
 ### Top-level repair entry point (2026-11-11)
 
+The helper is now named `Repair Mac.py`. Running it updates saved PyCharm repair
+configurations that use either of its previous paths.
+
 Authorized follow-up: move `macos_repair_environment.py` to the checkout root beside
 `Setup Mac.command`, keeping repair, logging and reporting in that one file. Resolve
 the checkout from the helper's containing folder and keep detached diagnostic

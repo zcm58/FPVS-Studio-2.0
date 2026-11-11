@@ -409,6 +409,17 @@ def _configuration_script(configuration: ET.Element, repo_root: Path) -> Path | 
     return path.resolve()
 
 
+_LEGACY_REPAIR_SCRIPTS = (
+    "macos_repair_environment.py",
+    "scripts/macos_repair_environment.py",
+)
+
+
+def _legacy_repair_configuration(configuration: ET.Element, repo_root: Path) -> bool:
+    script = _configuration_script(configuration, repo_root)
+    return any(script == (repo_root / name).resolve() for name in _LEGACY_REPAIR_SCRIPTS)
+
+
 def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
     if configuration.get("type") != "PythonConfigurationType":
         return False
@@ -417,10 +428,8 @@ def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
         return options.get("SCRIPT_NAME", "") in ("fpvs_studio.app", "fpvs_studio.app.main")
     return _configuration_script(configuration, repo_root) in (
         (repo_root / "src/fpvs_studio/app/main.py").resolve(),
-        (repo_root / "macos_repair_environment.py").resolve(),
-        # Recognize saved Run configurations from before the helper moved.
-        (repo_root / "scripts/macos_repair_environment.py").resolve(),
-    )
+        (repo_root / "Repair Mac.py").resolve(),
+    ) or _legacy_repair_configuration(configuration, repo_root)
 
 
 def _project_documents(repo_root: Path) -> list[tuple[Path, ET.Element, bytes | None]]:
@@ -473,9 +482,7 @@ def _repair_settings_ready(repo_root: Path, python: Path, ide: RepairIDE) -> boo
         for configuration in configurations:
             if _studio_configuration(configuration, repo_root):
                 ready = ready and _interpreter_matches(configuration, python, sdk or "")
-                ready = ready and _configuration_script(configuration, repo_root) != (
-                    repo_root / "scripts/macos_repair_environment.py"
-                ).resolve()
+                ready = ready and not _legacy_repair_configuration(configuration, repo_root)
     return ready and generated_found
 
 
@@ -520,11 +527,8 @@ def _apply_repair_settings(repo_root: Path, python: Path, ide: RepairIDE) -> Non
         touched = False
         for configuration in document.iter("configuration"):
             if _studio_configuration(configuration, repo_root):
-                if _configuration_script(configuration, repo_root) == (
-                    repo_root / "scripts/macos_repair_environment.py"
-                ).resolve():
-                    _set_option(configuration, "SCRIPT_NAME",
-                                "$PROJECT_DIR$/macos_repair_environment.py")
+                if _legacy_repair_configuration(configuration, repo_root):
+                    _set_option(configuration, "SCRIPT_NAME", "$PROJECT_DIR$/Repair Mac.py")
                     touched = True
                 if not _interpreter_matches(configuration, python, sdk):
                     _set_option(configuration, "SDK_HOME", str(python.absolute()))

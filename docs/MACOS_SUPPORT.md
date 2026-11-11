@@ -97,7 +97,7 @@ hide an import failure in one of PsychoPy's dependencies; the full traceback is
 needed to distinguish these cases.
 
 1. Update the complete Studio checkout, including its `scripts/` folder, and close
-   Studio. In PyCharm, run the top-level `macos_repair_environment.py` beside
+   Studio. In PyCharm, run the top-level `Repair Mac.py` beside
    `Setup Mac.command`, without parameters.
    The helper can start from the wrong project interpreter; no manual interpreter
    selection is required.
@@ -125,7 +125,7 @@ runs under the verified Python and uses the owning IDE's actual settings locatio
 including a custom configuration directory. Settings changes are backed up; other
 SDKs, projects and unrelated Run configurations are preserved. Only recognized
 Studio/repair configurations have their interpreter fields updated. Existing repair
-Run configurations that still point into `scripts/` are retargeted to the top-level
+Run configurations that still use the former filename are retargeted to the top-level
 helper while PyCharm is closed.
 
 IDE settings are changed only after the relevant PyCharm process has exited. The
@@ -162,7 +162,7 @@ For a manual install from the checkout root, using the same interpreter as Studi
 
 ```bash
 .venv3.10/bin/python -m pip install --requirement requirements-macos.txt
-.venv3.10/bin/python macos_repair_environment.py --check
+.venv3.10/bin/python "Repair Mac.py" --check
 ```
 
 Substitute `.venv/bin/python` when that is the configured environment. The narrower

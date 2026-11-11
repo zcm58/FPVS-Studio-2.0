@@ -236,7 +236,7 @@ def _log_context(root: Path, check_only: bool) -> None:
     _LOGGER.info("Launcher Python: %s; version=%s; prefix=%s; base_prefix=%s; PID=%s",
                  sys.executable, sys.version.replace("\n", " "), sys.prefix,
                  sys.base_prefix, os.getpid())
-    for name in ("pyproject.toml", "requirements-macos.txt", "macos_repair_environment.py"):
+    for name in ("pyproject.toml", "requirements-macos.txt", "Repair Mac.py"):
         source = root / name
         if source.is_file():
             _LOGGER.info("Source SHA256 %s: %s", name,
@@ -655,7 +655,7 @@ def _report_payload(log_path: Path, outcome: str, app_version: str) -> dict:
         "created_at": datetime.now(timezone.utc).isoformat(),
         "title": "macOS environment repair diagnostic report",
         "happened": description.encode("utf-8")[:8000].decode("utf-8", errors="ignore"),
-        "steps": "Ran macos_repair_environment.py in PyCharm on macOS.",
+        "steps": "Ran Repair Mac.py in PyCharm on macOS.",
         "expected": "Studio's virtual environment, engine and PyCharm interpreter are ready.",
         "email": "", "app_version": app_version,
         "os_version": f"{platform.system()} {platform.release()}",

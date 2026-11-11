@@ -240,6 +240,7 @@ def _configuration(parent, name, script, *, module=False):
 
 
 @pytest.mark.parametrize("helper_path", [
+    "$PROJECT_DIR$/Repair Mac.py",
     "$PROJECT_DIR$/macos_repair_environment.py",
     "$PROJECT_DIR$/scripts/macos_repair_environment.py",
 ])
@@ -273,7 +274,7 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
         expected = "/wrong/python" if config.get("name") == "Other" else str(python)
         assert values["SDK_HOME"] == expected
         if config.get("name") == "Helper":
-            assert values["SCRIPT_NAME"] == "$PROJECT_DIR$/macos_repair_environment.py"
+            assert values["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac.py"
     custom_values = pycharm._options(ET.parse(directory / "custom.xml").find("configuration"))
     assert custom_values["SDK_HOME"] == str(python)
     assert custom_values["PARAMETERS"] == "--participant keep"
@@ -281,13 +282,18 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
 
 
 @pytest.mark.parametrize("location", ["workspace.xml", "runConfigurations/Repair.xml"])
-def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(repair_ide, location):
+@pytest.mark.parametrize("old_script", [
+    "macos_repair_environment.py", "scripts/macos_repair_environment.py",
+])
+def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(
+    repair_ide, location, old_script,
+):
     root, python, ide = repair_ide
     assert pycharm.configure_for_repair(root, python) == "ready"
     target = root / ".idea" / location
     tree = ET.parse(target).getroot() if target.exists() else ET.Element("component")
     parent = tree.find("component[@name='RunManager']") if location == "workspace.xml" else tree
-    config = _configuration(parent, "Repair", "$PROJECT_DIR$/scripts/macos_repair_environment.py")
+    config = _configuration(parent, "Repair", f"$PROJECT_DIR$/{old_script}")
     table = ET.parse(ide.config_dir / "options/jdk.table.xml").getroot()
     sdk = pycharm._sdk_name(table, python)
     pycharm._set_option(config, "SDK_HOME", str(python.absolute()))
@@ -299,7 +305,7 @@ def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(re
     assert target.read_bytes() == original
     assert pycharm.configure_for_repair(root, python) == "ready"
     saved = ET.parse(target).find(".//configuration[@name='Repair']")
-    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/macos_repair_environment.py"
+    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac.py"
     assert pycharm._options(saved)["PARAMETERS"] == "--participant keep"
 
 

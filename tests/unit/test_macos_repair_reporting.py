@@ -17,7 +17,7 @@ from fpvs_studio.support.models import Draft, Report
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
-    "macos_repair_reporting", ROOT / "macos_repair_environment.py",
+    "macos_repair_reporting", ROOT / "Repair Mac.py",
 )
 assert SPEC is not None and SPEC.loader is not None
 repair = importlib.util.module_from_spec(SPEC)
