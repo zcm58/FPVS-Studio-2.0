@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 
-from PySide6.QtCore import QEvent, QObject, Qt, Slot
+from PySide6.QtCore import QEvent, QObject, QSignalBlocker, Qt, Slot
 from PySide6.QtGui import QKeyEvent, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -25,15 +25,31 @@ from fpvs_studio.gui.components import apply_dialog_theme, mark_secondary_action
 from fpvs_studio.gui.window_helpers import _coerce_exception, _show_error_dialog
 from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.triggers.base import TriggerBackend
+from fpvs_studio.triggers.biosemi_discovery import (
+    biosemi_reconnected_port,
+    discover_biosemi_ports,
+    enumerate_com_ports,
+)
 from fpvs_studio.triggers.biosemi_errors import biosemi_port_error_message
 from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxBackend
-from fpvs_studio.triggers.brainproducts_errors import triggerbox_port_error_message
+from fpvs_studio.triggers.brainproducts_discovery import (
+    TriggerBoxDiscoveryError,
+    discover_triggerbox_ports,
+)
+from fpvs_studio.triggers.brainproducts_errors import (
+    triggerbox_failure_reason,
+    triggerbox_port_error_message,
+)
 from fpvs_studio.triggers.manual import send_test_trigger
 from fpvs_studio.triggers.parallel_backend import ParallelPortBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.serial_port_access import SerialPortAccessError, check_serial_port_access
 
 LOGGER = logging.getLogger(__name__)
+
+
+class _PortCheckError(RuntimeError):
+    """A connection check with recovery guidance for the operator."""
 
 
 class TriggerTesterDialog(QDialog):
@@ -62,6 +78,8 @@ class TriggerTesterDialog(QDialog):
         self._output = ""
         self._task: BackgroundTask | None = None
         self._checked_port: tuple[str, str] | None = None
+        self._disconnected_ports: frozenset[str] | None = None
+        self._reconnected_port: str | None = None
         self._pending_error: tuple[str, Exception, str | None] | None = None
 
         layout = QVBoxLayout(self)
@@ -82,10 +100,16 @@ class TriggerTesterDialog(QDialog):
         port_row.addWidget(self.port_edit, 1)
         self.check_port_button = QPushButton("Check Port", self)
         self.check_port_button.setAutoDefault(False)
-        self.check_port_button.setToolTip("Check port access without sending a trigger.")
+        self.check_port_button.setToolTip("Check the connection without sending a trigger.")
         mark_secondary_action(self.check_port_button)
         self.check_port_button.clicked.connect(self._check_port)
         port_row.addWidget(self.check_port_button)
+        self.manual_port_button = QPushButton(self)
+        self.manual_port_button.setCheckable(True)
+        self.manual_port_button.setAutoDefault(False)
+        mark_secondary_action(self.manual_port_button)
+        self.manual_port_button.toggled.connect(self._manual_port_toggled)
+        port_row.addWidget(self.manual_port_button)
         form.addRow(self._port_label, port_row)
         layout.addLayout(form)
 
@@ -111,11 +135,23 @@ class TriggerTesterDialog(QDialog):
         self.status_label.setMinimumHeight(4 * self.status_label.fontMetrics().lineSpacing())
         layout.addWidget(self.status_label, 1)
 
+        actions = QHBoxLayout()
+        self.find_port_button = QPushButton("Find Port…", self)
+        self.find_port_button.setCheckable(True)
+        self.find_port_button.setAutoDefault(False)
+        self.find_port_button.setToolTip(
+            "Find the BioSemi interface by reconnecting its USB cable."
+        )
+        mark_secondary_action(self.find_port_button)
+        self.find_port_button.toggled.connect(self._find_port_toggled)
+        actions.addWidget(self.find_port_button)
+        actions.addStretch()
         self.close_button = QPushButton("Close", self)
         self.close_button.setAutoDefault(False)
         mark_secondary_action(self.close_button)
         self.close_button.clicked.connect(self.reject)
-        layout.addWidget(self.close_button, alignment=Qt.AlignmentFlag.AlignRight)
+        actions.addWidget(self.close_button)
+        layout.addLayout(actions)
 
         default_output = recording.recording_backend
         if default_output == "biosemi_active_three":
@@ -128,13 +164,17 @@ class TriggerTesterDialog(QDialog):
         apply_dialog_theme(self)
         for widget in (
             self, self.output_combo, self.port_edit, self.check_port_button,
-            *self.digit_buttons, self.close_button,
+            self.manual_port_button, *self.digit_buttons, self.find_port_button, self.close_button,
         ):
             widget.installEventFilter(self)
         initial_focus: QWidget = self.output_combo
         if self.digit_buttons[1].isEnabled():
             initial_focus = self.digit_buttons[1]
-        elif self.port_edit.isEnabled() and not self.port_edit.isReadOnly():
+        elif (
+            not self._automatic_connection
+            and self.port_edit.isEnabled()
+            and not self.port_edit.isReadOnly()
+        ):
             initial_focus = self.port_edit
         initial_focus.setFocus()
 
@@ -162,11 +202,18 @@ class TriggerTesterDialog(QDialog):
         if self._task is None:
             super().reject()
 
+    @property
+    def _automatic_connection(self) -> bool:
+        return self._output in self._ports and not self.manual_port_button.isChecked()
+
     @Slot()
     def _select_output(self) -> None:
         if self._output in self._ports:
             self._ports[self._output] = self.port_edit.text()
         self._output = self.output_combo.currentData() or ""
+        with QSignalBlocker(self.manual_port_button):
+            self.manual_port_button.setChecked(False)
+        self._stop_finding_port()
         parallel = self._output == "brainproducts_parallel"
         endpoint = "Parallel address" if parallel else "COM port"
         self._port_label.setText(endpoint)
@@ -186,6 +233,10 @@ class TriggerTesterDialog(QDialog):
             return "Choose a recording output."
         if self._output == "brainproducts_parallel" and self._parallel_address is None:
             return "Set the parallel I/O address in Settings > Recording > Recording Setup."
+        if self.find_port_button.isChecked():
+            return "Finish finding the BioSemi interface before sending a trigger."
+        if self._automatic_connection:
+            return "" if self._checked_port is not None else "Check the device connection."
         if self._output in self._ports:
             port = self.port_edit.text().strip()
             if not port:
@@ -198,15 +249,59 @@ class TriggerTesterDialog(QDialog):
     def _port_changed(self) -> None:
         self._checked_port = None
         self.status_label.setText(self._configuration_issue())
+        self.status_label.setToolTip("")
         self._refresh_controls()
+
+    @Slot(bool)
+    def _manual_port_toggled(self, manual: bool) -> None:
+        self._port_changed()
+        if manual:
+            self.port_edit.setFocus()
+        elif self.isVisible():
+            self._check_port()
+
+    @Slot(bool)
+    def _find_port_toggled(self, finding: bool) -> None:
+        self._disconnected_ports = None
+        self._port_changed()
+        if finding:
+            self.status_label.setText(
+                "Unplug the BioSemi USB Trigger Interface from this computer, "
+                "then choose Scan Unplugged."
+            )
+
+    def _stop_finding_port(self) -> None:
+        with QSignalBlocker(self.find_port_button):
+            self.find_port_button.setChecked(False)
+        self._disconnected_ports = None
 
     def _refresh_controls(self) -> None:
         idle = self._task is None
-        self.output_combo.setEnabled(idle)
-        self.port_edit.setEnabled(idle and bool(self._output))
+        automatic = self._automatic_connection
         serial = self._output in self._ports
+        finding = self.find_port_button.isChecked()
+        self.output_combo.setEnabled(idle)
+        self.port_edit.setVisible(not (automatic or finding))
+        self.port_edit.setEnabled(idle and bool(self._output))
+        if serial:
+            self._port_label.setText("Connection" if automatic or finding else "COM port")
+        self.manual_port_button.setVisible(serial and not finding)
+        self.manual_port_button.setEnabled(idle)
+        self.manual_port_button.setText("Choose Port…" if automatic else "Use Automatic Detection")
+        self.find_port_button.setVisible(self._output == "serial")
+        self.find_port_button.setEnabled(idle)
+        self.find_port_button.setText("Cancel Find" if finding else "Find Port…")
         self.check_port_button.setVisible(serial)
-        self.check_port_button.setEnabled(idle and serial and bool(self.port_edit.text().strip()))
+        if finding:
+            check_label = (
+                "Scan Unplugged" if self._disconnected_ports is None else "Find Connected Port"
+            )
+        else:
+            check_label = "Check Connection" if automatic else "Check Port"
+        self.check_port_button.setText(check_label)
+        self.check_port_button.setEnabled(
+            idle and serial and (automatic or finding or bool(self.port_edit.text().strip())),
+        )
         self.close_button.setEnabled(idle)
         can_send = idle and not self._configuration_issue()
         for button in self.digit_buttons:
@@ -215,24 +310,128 @@ class TriggerTesterDialog(QDialog):
     @Slot()
     def _check_port(self) -> None:
         output, port = self._output, self.port_edit.text().strip()
-        if self._task is not None or output not in self._ports or not port:
+        automatic = self._automatic_connection
+        finding = self.find_port_button.isChecked()
+        if (
+            self._task is not None or output not in self._ports
+            or not (automatic or finding or port)
+        ):
             return
-        baudrate = self._baudrate if output == "serial" else 2_000_000
+        biosemi = output == "serial"
+        device = "BioSemi USB Trigger Interface" if biosemi else "BrainVision TriggerBox"
+        baudrate = self._baudrate if biosemi else 2_000_000
         self._checked_port = None
+        disconnected = self._disconnected_ports
+        reconnected = self._reconnected_port if automatic and biosemi else None
+        if finding and disconnected is None:
+            self._start_task(
+                enumerate_com_ports, "Scanning for serial ports…",
+                succeeded=self._remember_disconnected_ports, failed=self._show_reconnect_scan_error,
+            )
+            return
 
-        def check() -> tuple[str, str]:
-            result = check_serial_port_access(port, baudrate=baudrate)
-            if not result.accessible:
+        def check() -> tuple[str, str, bool]:
+            target = port
+            ports: tuple[str, ...]
+            if disconnected is not None:
+                try:
+                    target = biosemi_reconnected_port(disconnected, enumerate_com_ports())
+                except SerialPortAccessError as error:
+                    raise _PortCheckError(str(error)) from error
+                ports = (target,)
+            elif reconnected is not None:
+                ports = (reconnected,)
+            else:
+                try:
+                    ports = discover_biosemi_ports() if biosemi else tuple(
+                        candidate.port for candidate in discover_triggerbox_ports()
+                    )
+                except (SerialPortAccessError, TriggerBoxDiscoveryError) as error:
+                    if automatic and not biosemi:
+                        raise
+                    LOGGER.warning("Cannot list %s ports: %s", device, error)
+                    ports = ()
+
+            if automatic and not finding:
+                if not ports and not biosemi:
+                    raise _PortCheckError(
+                        "Studio could not find a BrainVision TriggerBox. Connect it and check "
+                        "again, or choose its port manually.",
+                    )
+                if len(ports) > 1:
+                    devices = "BioSemi interfaces" if biosemi else "BrainVision TriggerBoxes"
+                    action = "Use Find Port or choose a port." if biosemi else "Choose a port."
+                    raise _PortCheckError(
+                        f"Studio found multiple {devices}. {action} "
+                        f"Details: Detected ports: {', '.join(ports)}",
+                    )
+                if ports:
+                    target = ports[0]
+            elif not finding and ports and port.upper() not in ports:
+                if len(ports) == 1:
+                    raise _PortCheckError(
+                        f"You selected {port.upper()}. Windows lists the {device} "
+                        f"on {ports[0]}. Enter {ports[0]} or choose Use Automatic Detection.",
+                    )
+                raise _PortCheckError(
+                    f"You selected {port.upper()}. Choose a listed {device} port. "
+                    f"Details: Detected ports: {', '.join(ports)}",
+                )
+            try:
+                result = check_serial_port_access(target, baudrate=baudrate)
+            except SerialPortAccessError as error:
+                if biosemi and ports:
+                    guidance = biosemi_port_error_message(target.upper(), error)
+                    raise _PortCheckError(f"{guidance} Details: {error}") from error
+                raise
+            if result.accessible:
+                return output, target, bool(ports)
+            if biosemi and not ports:
                 raise RuntimeError(result.access_error)
-            return output, port
+            port_name = target.upper()
+            LOGGER.warning(
+                "%s access check failed on %s: %s", device, port_name, result.access_error,
+            )
+            format_error = biosemi_port_error_message if biosemi else triggerbox_port_error_message
+            guidance = format_error(port_name, result.access_error)
+            if finding:
+                guidance = f"Studio found the reconnected interface on {port_name}. {guidance}"
+            elif reconnected is not None:
+                guidance = f"The reconnect identified the interface on {port_name}. {guidance}"
+            elif ports:
+                guidance = f"Windows lists the {device} on {port_name}. {guidance}"
+            elif triggerbox_failure_reason(result.access_error) == "missing":
+                guidance = (
+                    f"Windows could not find the selected port {port_name}. Connect the TriggerBox "
+                    "and check its port in Device Manager."
+                )
+            raise _PortCheckError(f"{guidance} Details: {result.access_error}")
 
-        self._start_task(check, f"Checking {port}…", checking_port=True)
+        status = f"Connecting to the {device}…" if automatic or finding else f"Checking {port}…"
+        self._start_task(
+            check, status,
+            succeeded=self._show_port_access_success, failed=self._remember_port_access_error,
+        )
+
+    @Slot(object)
+    def _remember_disconnected_ports(self, ports: frozenset[str]) -> None:
+        self._disconnected_ports = ports
+        self.status_label.setText(
+            "Reconnect the BioSemi USB Trigger Interface, then choose Find Connected Port."
+        )
+
+    @Slot(object)
+    def _show_reconnect_scan_error(self, error: object) -> None:
+        self.status_label.setText(
+            "Studio could not list serial ports. Check Device Manager and retry."
+        )
+        self.status_label.setToolTip(str(error))
 
     def _send(self, code: int) -> None:
         if self._task is not None or self._configuration_issue():
             return
         output = self._output
-        port = self.port_edit.text().strip()
+        port = self._checked_port[1] if self._checked_port is not None else ""
         address = self._parallel_address
         baudrate = self._baudrate
         pulse_width_ms = self._pulse_width_ms
@@ -250,21 +449,22 @@ class TriggerTesterDialog(QDialog):
             send_test_trigger(backend, code)
             return code
 
-        self._start_task(send, f"Sending trigger {code}…")
+        self._start_task(
+            send, f"Sending trigger {code}…",
+            succeeded=self._show_send_success, failed=self._remember_send_error,
+        )
 
     def _start_task(
-        self, callback: Callable[[], object], status: str, *, checking_port: bool = False,
+        self, callback: Callable[[], object], status: str, *,
+        succeeded: Callable[..., None], failed: Callable[..., None],
     ) -> None:
         task = BackgroundTask(parent_widget=self, callback=callback)
         self._task = task
         self.status_label.setText(status)
+        self.status_label.setToolTip("")
         self._refresh_controls()
-        if checking_port:
-            task.succeeded.connect(self._show_port_access_success)
-            task.failed.connect(self._remember_port_access_error)
-        else:
-            task.succeeded.connect(self._show_send_success)
-            task.failed.connect(self._remember_send_error)
+        task.succeeded.connect(succeeded)
+        task.failed.connect(failed)
         task.finished.connect(self._finish_task)
         try:
             task.start()
@@ -277,7 +477,33 @@ class TriggerTesterDialog(QDialog):
             self._finish_task()
 
     @Slot(object)
-    def _show_port_access_success(self, endpoint: object) -> None:
+    def _show_port_access_success(self, result: tuple[str, str, bool]) -> None:
+        output, port, identified = result
+        endpoint = (output, port)
+        if (
+            output == self._output
+            and (self._automatic_connection or self.find_port_button.isChecked())
+        ):
+            if self.find_port_button.isChecked():
+                self._reconnected_port = port
+            self._stop_finding_port()
+            with QSignalBlocker(self.manual_port_button):
+                self.manual_port_button.setChecked(not identified)
+            self._checked_port = endpoint
+            if identified:
+                device, recorder = (
+                    ("BioSemi USB Trigger Interface", "ActiView") if output == "serial"
+                    else ("BrainVision TriggerBox", "Recorder")
+                )
+                self.status_label.setText(
+                    f"FPVS Studio has successfully connected to the {device}."
+                )
+                self.status_label.setToolTip(
+                    f"Send a test trigger to verify receipt in {recorder}.",
+                )
+            else:
+                self.status_label.setText(self._configuration_issue())
+            return
         current = (self._output, self.port_edit.text().strip())
         if endpoint == current:
             self._checked_port = current
@@ -286,21 +512,28 @@ class TriggerTesterDialog(QDialog):
     @Slot(object)
     def _remember_port_access_error(self, error: object) -> None:
         failure = _coerce_exception(error)
-        port = self.port_edit.text().strip()
-        if self._output == "serial":
-            title = "BioSemi Serial Port Error"
-            message = biosemi_port_error_message(port, failure)
-        else:
-            title = "TriggerBox Serial Port Error"
+        if isinstance(failure, (_PortCheckError, TriggerBoxDiscoveryError)):
+            message, _, details = str(failure).partition("Details:")
+            self.status_label.setText(message.strip())
+            self.status_label.setToolTip(details.strip())
+            return
+        if self._output == "brainproducts_triggerbox" or self.find_port_button.isChecked():
             if isinstance(failure, (ImportError, SerialPortAccessError)):
-                message = (
-                    "Studio could not check the TriggerBox port because serial support is "
+                self.status_label.setText(
+                    "Studio could not check the connection because serial support is "
                     "unavailable. Repair or reinstall Studio, then try again."
                 )
             else:
-                message = triggerbox_port_error_message(port, failure)
+                self.status_label.setText("Studio could not check the connection.")
+            self.status_label.setToolTip(str(failure))
+            return
+        with QSignalBlocker(self.manual_port_button):
+            self.manual_port_button.setChecked(True)
+        port = self.port_edit.text().strip()
         self.status_label.setText(self._configuration_issue())
-        self._pending_error = (title, failure, message)
+        self._pending_error = (
+            "BioSemi Serial Port Error", failure, biosemi_port_error_message(port, failure),
+        )
 
     @Slot(object)
     def _show_send_success(self, code: object) -> None:

@@ -599,36 +599,60 @@ task controls and visible acceptance are documented in
 
 ### Trigger Tester
 
-Open a project, then choose **Tools > Trigger Tester**. Select the recording output
-and press `0`–`9` on the top row or numeric keypad, or click a digit. The tester
-preselects the effective project recording device and uses its BioSemi baud rate,
-Brain Products pulse width, and configured endpoints. COM port edits apply to this
-dialog only. Opening the tester or switching to a serial output checks access to
-the selected port without sending a trigger. Access errors use the same BioSemi or
-TriggerBox recovery guidance as Recording Setup. After editing a port, press Enter
-or choose **Check Port**. Digits become available after the port opens and closes
-successfully. Verify receipt separately in the recording software.
-For parallel output, set the I/O address in **Settings > Recording**.
+Open a project, then choose **Tools > Trigger Tester**. The tester preselects the
+effective project recording device and uses its BioSemi baud rate and Brain Products
+pulse width. Press `0`–`9` on the top row or numeric keypad, or click a digit.
+
+For **BrainVision (TriggerBox / Plus)**, Studio automatically looks for a single
+TriggerBox listed by the driver, opens and closes the connection without sending a
+trigger, and confirms success before enabling the digits. If Studio finds no
+TriggerBox, finds several, or cannot open the connection, the dialog shows recovery
+guidance. Choose **Check Connection** to try detection again or **Choose Port…**
+to enter a COM port manually. Press Enter or choose **Check Port** after editing.
+If the manual selection differs from the TriggerBox ports Windows lists, Studio
+shows the mismatch before opening the selected port. If Windows lists no named
+TriggerBox, Studio can still check the manually selected port.
+
+For **BioSemi USB Trigger Interface**, Studio checks a single BioSemi-named port
+when available. With generic USB serial names, it checks the project's configured
+port at the project baud rate. To find a reassigned generic port, choose **Find
+Port…**, unplug the trigger interface from the Studio computer, and choose **Scan
+Unplugged**. Reconnect it and choose **Find Connected Port**. Studio checks only
+the single port added during the reconnect. If other ports changed or no port
+appeared, Studio shows how to retry. For a known device, a manual port mismatch
+points to the listed port before opening anything.
+
+Detected ports and COM edits in the tester apply to this dialog only. Recording
+uses the port saved in **Settings > Recording**. Set the parallel I/O address there.
 
 Each keypress opens the selected output, sends the digit and releases the connection.
 Wait for the result before sending the next digit. Studio reports the outcome of
-the local write. Use digits `1`–`9` to verify receipt in BrainVision Recorder 2 or
+the local write. Use digits `1`–`9` to verify receipt in BrainVision Recorder or
 BioSemi ActiView. Digit `0` writes the idle value, which may be omitted from the
 marker display.
 
 #### Visible smoke path
 
 1. In an approved visible GUI session, open **Tools > Trigger Tester** at `560x340`
-   in both themes. Confirm the selected output, COM port, digit buttons, status
-   and Close fit. Switch outputs and confirm Studio checks only the selected serial
-   port. Edit the port, press Enter, and verify sending becomes available after a
-   successful check.
-2. With the Brain Products hardware connected, check `1`, `9`, and a repeated `5`
-   on the recording PC in BrainVision Recorder 2. Repeat with the BioSemi USB
-   Trigger Interface and ActiView. Check that `0` reports an idle write in Studio.
-3. Open with a missing or occupied COM port. Confirm the vendor-specific modal
-   includes the port and recovery guidance. Correct the port or release it, use
-   **Check Port** and send a digit. Reopen to confirm the saved endpoint is checked.
+   in both themes. With TriggerBox selected, confirm the connection message and
+   enabled digits appear after a successful check, with the COM field hidden.
+   Confirm the output selector, actions, digits, status, and Close fit in both
+   automatic and manual modes.
+2. With Brain Products hardware connected, check `1`, `9`, and a repeated `5` in
+   BrainVision Recorder. Repeat with the BioSemi USB Trigger Interface and ActiView.
+   Check that `0` reports an idle write in Studio.
+3. Repeat the TriggerBox check with the device disconnected, the connection occupied,
+   and multiple devices listed. Confirm recovery guidance appears and sending stays
+   disabled. Choose **Choose Port…** and enter a different port with a named
+   TriggerBox connected. Confirm Studio points to the listed port. Check the
+   listed port manually and verify that a successful check enables sending.
+   Switch away and back to confirm automatic detection runs again.
+4. For a generic BioSemi USB serial device, verify that the configured port still
+   checks on open and that missing or occupied configured ports show the recovery
+   dialog. Use **Find Port…** and reconnect the trigger interface. Confirm Studio
+   enables the digits after checking the single new port, and verify receipt in
+   ActiView. Repeat with another USB serial device added during the scan and verify
+   that neither port is opened. Check the dialog at `560x340` during both scans.
 
 Registered GUI coverage lives in `tests/gui/test_trigger_tester.py`.
 

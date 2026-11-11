@@ -24,9 +24,11 @@
   connections on failure/cancellation, stop between candidates, and retain manual
   selection. Metadata and successful port access do not prove identity or marker receipt.
 - `serial_port_access.py` owns generic metadata enumeration and shared byte-free
-  open/close checks. BioSemi checks only the user-selected port at the project's
-  configured baudrate (normally 115200); never probe every generic serial port or
-  infer BioSemi identity from an openable port. TriggerBox retains its named-candidate
+  open/close checks. BioSemi Recording Setup uses the user-selected port at the
+  project's baudrate (normally 115200). Trigger Tester can also check a uniquely
+  BioSemi-named port or a single COM port added during an operator-guided reconnect.
+  Use metadata for discovery and never infer BioSemi identity from a generic name,
+  adapter chipset or openable port. TriggerBox retains its named-candidate
   filter (plus the explicit manual selection) and fixed baudrate while reusing the
   access helper. Denied access means the port may be owned by another program; report
   exclusive ownership and retry guidance without claiming a specific owner was found.

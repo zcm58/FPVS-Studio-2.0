@@ -36,7 +36,7 @@ Core owns randomized block membership and occurrence identity; see the
 | `src/fpvs_studio/runtime/` | Launch, preflight, participant/task/session flow, scoring, recovery and exports |
 | `src/fpvs_studio/support/` | Plain-language errors, diagnostics, reviewed reports and automatic crash outbox |
 | `src/fpvs_studio/tools/` | Condition figure rendering and project input resolution |
-| `src/fpvs_studio/triggers/` | Serial/parallel/UDP adapters, manual tests, discovery, recovery and write completion |
+| `src/fpvs_studio/triggers/` | Serial/parallel/UDP adapters, manual tests, port discovery, recovery and write completion |
 | `src/fpvs_studio/updates/` | Independent updater protocol, verified downloads, bounded cache and install handoff |
 
 The independent updater (`src/fpvs_studio/updater_main.py`) uses GUI without runtime or
