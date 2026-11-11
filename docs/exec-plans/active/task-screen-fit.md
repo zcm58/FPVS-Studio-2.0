@@ -22,4 +22,4 @@ reported 1,114 passes, four skips, and two failures. Both failures passed in
 a serial rerun using a short temporary path. Windows and macOS type checks,
 repository audits, and docs focused checks passed. The repository-wide pytest
 run reported failures and was stopped before its summary to shorten verification.
-Visible laptop acceptance remains pending.
+The fix shipped in [Studio 2.9.1](../completed/release-2.9.1.md). Visible acceptance on the affected laptop remains pending.

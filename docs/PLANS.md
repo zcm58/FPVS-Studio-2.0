@@ -55,6 +55,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
   history encoding, source/macOS updates, reviewed logs and Windows bundle fixes
   published immutable/latest; exact-source, packaged and public verification passed.
 - [Studio 2.8.1 release](exec-plans/completed/release-2.8.1.md)
+- [Studio 2.9.1 release](exec-plans/completed/release-2.9.1.md)
 - [Studio 2.9.0 release](exec-plans/completed/release-2.9.0.md):
   scrollable Settings, guarded packaging, exact-source CI and verified immutable release.
 - [Packaging DLL origin checks](exec-plans/completed/packaging-dll-origins.md)
