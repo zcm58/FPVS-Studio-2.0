@@ -40,10 +40,12 @@ and change preferences through the existing controls and save actions.
 ## Verification evidence
 
 - GUI focused verification passed with 178 safe tests, changed-file Ruff and compilation.
-- Repo precommit passed with 5,808 tests and 33 platform/permission skips, Windows and
+- Repo precommit passed with 5,872 tests and 33 platform/permission skips, Windows and
   Darwin mypy, and repository/documentation audits.
 - The targeted visible suite passed 99 cases across Settings, native theme preferences,
   recording Apply/Cancel/errors, Diagnostics, Workspace and Welcome bindings.
+- Both verification routes passed again on a clean checkout after integrating the
+  newer upstream Studio 2.8.2 changes before the push.
 - All six categories were captured at `860x560` and `1000x680` in native Windows Light
   and Dark themes on a `1920x1080` display at 100% scaling. Labels and controls fit.
 - The overflow regression forces a long Diagnostics page, sends real mouse-wheel
