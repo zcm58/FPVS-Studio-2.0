@@ -35,10 +35,29 @@ Success is this workflow, using the same Studio version on both computers:
 
 ## Scope and boundaries
 
+### Top-level repair entry point (2026-11-11)
+
+Authorized follow-up: move `macos_repair_environment.py` to the checkout root beside
+`Setup Mac.command`, keeping repair, logging and reporting in that one file. Resolve
+the checkout from the helper's containing folder and keep detached diagnostic
+continuation at the same entry point. Update PyCharm run-configuration recognition,
+test fixtures, verification routing and the documented commands. Existing repair
+configurations should migrate to the new script location when repair runs.
+
+Verification: the three repair/diagnostic/reporting modules passed 144 tests;
+bootstrap/source-tooling/routing checks passed 81 with 19 platform skips, including
+closed-IDE migration of saved workspace/shared Run configurations. Documentation
+checks passed 13 tests. Changed-file Ruff, compilation, both helper type-check
+targets and harness configuration passed. This focused relocation verification
+reuses the immediately preceding full precommit baseline (`9335b9a`, 6,102 passed)
+for unchanged application behavior; no application or report protocol changed.
+Native Mac repair/restart/reporting acceptance remains unchanged from the
+diagnostics follow-up below.
+
 ### Repair diagnostics and reporting (2026-11-11)
 
 Authorized follow-up: keep all new diagnostics and reporting implementation in
-`scripts/macos_repair_environment.py`. Retain private per-run logs, including
+`macos_repair_environment.py`. Retain private per-run logs, including
 subprocess output and full exceptions, and offer native **Send Error Report** and
 **Copy Log** actions after both normal completion and the existing IDE restart.
 Use the existing manual reporting service and its browser verification; no upload
@@ -144,7 +163,7 @@ architecture, path and subprocess failure cases with fakes; run the Mac focused
 route and applicable repository checks without launching Qt or installing packages
 on the development host. Native Mac repair remains to be exercised by the reporter.
 
-Implemented `scripts/macos_repair_environment.py` with default repair and `--check`
+Implemented `macos_repair_environment.py` with default repair and `--check`
 modes, exact-interpreter pip invocation, interpreter/CPU/source guards, and fresh
 engine import diagnostics. It preserves the original chained import error that the
 current preflight summary labels generically as a missing PsychoPy installation.
@@ -170,7 +189,7 @@ Windows/fake-backed verification:
   Native Mac execution/installation and physical display qualification remain
   unperformed; the researcher can run the helper using the documented PyCharm flow.
 
-Changed files: `scripts/macos_repair_environment.py`,
+Changed files: `macos_repair_environment.py`,
 `tests/unit/test_macos_environment_repair.py`, `.agents/verification.toml`,
 `docs/MACOS_SUPPORT.md`, `ARCHITECTURE.md`, `docs/agent/agent-index.md`, and this plan.
 

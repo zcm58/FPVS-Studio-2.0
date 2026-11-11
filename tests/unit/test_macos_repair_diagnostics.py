@@ -13,7 +13,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
-    "macos_repair_diagnostics", ROOT / "scripts/macos_repair_environment.py",
+    "macos_repair_diagnostics", ROOT / "macos_repair_environment.py",
 )
 assert SPEC is not None and SPEC.loader is not None
 repair = importlib.util.module_from_spec(SPEC)
@@ -352,7 +352,7 @@ def test_invalid_continuation_cannot_read_external_file(monkeypatch, tmp_path):
 
 @pytest.mark.parametrize("result", [0, 1])
 def test_main_saves_logs_then_offers_report_even_for_failed_checks(monkeypatch, tmp_path, result):
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "macos_repair_environment.py"))
     offers = []
     monkeypatch.setattr(repair, "repair_environment", lambda *args, **kwargs: result)
     monkeypatch.setattr(repair, "_offer_report", lambda *args: offers.append(args))
@@ -365,7 +365,7 @@ def test_main_saves_logs_then_offers_report_even_for_failed_checks(monkeypatch, 
 
 
 def test_unexpected_failure_keeps_full_traceback_and_report_action(monkeypatch, tmp_path):
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "macos_repair_environment.py"))
     offers = []
 
     def fail(*args, **kwargs):
@@ -380,7 +380,7 @@ def test_unexpected_failure_keeps_full_traceback_and_report_action(monkeypatch, 
 
 
 def test_main_pending_handoff_defers_report_until_finalizer(monkeypatch, tmp_path):
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "macos_repair_environment.py"))
     calls = []
 
     def pending(*args, **kwargs):
@@ -395,7 +395,7 @@ def test_main_pending_handoff_defers_report_until_finalizer(monkeypatch, tmp_pat
 
 
 def test_handoff_launch_failure_offers_failure_report(monkeypatch, tmp_path):
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "macos_repair_environment.py"))
     offers = []
 
     def pending(*args, **kwargs):
@@ -417,7 +417,7 @@ def test_detached_failure_before_logger_opens_is_visible(monkeypatch, tmp_path, 
     state, log = _continuation(tmp_path)
     if not keep_log:
         log.unlink()
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "macos_repair_environment.py"))
     shown = []
 
     def fail(*args):
@@ -433,7 +433,7 @@ def test_detached_failure_before_logger_opens_is_visible(monkeypatch, tmp_path, 
 
 def test_report_only_does_not_repeat_environment_repair(monkeypatch, tmp_path):
     _state, log = _continuation(tmp_path)
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "macos_repair_environment.py"))
     offers = []
 
     def unexpected(*args, **kwargs):

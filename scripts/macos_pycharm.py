@@ -391,13 +391,11 @@ def _options(configuration: ET.Element) -> dict[str, str]:
     return {item.get("name", ""): item.get("value", "") for item in configuration.findall("option")}
 
 
-def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
-    if configuration.get("type") != "PythonConfigurationType":
-        return False
+def _configuration_script(configuration: ET.Element, repo_root: Path) -> Path | None:
     options = _options(configuration)
     script = options.get("SCRIPT_NAME", "")
     if options.get("MODULE_MODE", "false").lower() == "true":
-        return script in ("fpvs_studio.app", "fpvs_studio.app.main")
+        return None
 
     def expanded(value: str) -> Path:
         return Path(value.replace("$PROJECT_DIR$", str(repo_root)).replace(
@@ -408,8 +406,19 @@ def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
     if not path.is_absolute():
         working = expanded(options.get("WORKING_DIRECTORY", str(repo_root)))
         path = (working if working.is_absolute() else repo_root / working) / path
-    return path.resolve() in (
+    return path.resolve()
+
+
+def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
+    if configuration.get("type") != "PythonConfigurationType":
+        return False
+    options = _options(configuration)
+    if options.get("MODULE_MODE", "false").lower() == "true":
+        return options.get("SCRIPT_NAME", "") in ("fpvs_studio.app", "fpvs_studio.app.main")
+    return _configuration_script(configuration, repo_root) in (
         (repo_root / "src/fpvs_studio/app/main.py").resolve(),
+        (repo_root / "macos_repair_environment.py").resolve(),
+        # Recognize saved Run configurations from before the helper moved.
         (repo_root / "scripts/macos_repair_environment.py").resolve(),
     )
 
@@ -464,6 +473,9 @@ def _repair_settings_ready(repo_root: Path, python: Path, ide: RepairIDE) -> boo
         for configuration in configurations:
             if _studio_configuration(configuration, repo_root):
                 ready = ready and _interpreter_matches(configuration, python, sdk or "")
+                ready = ready and _configuration_script(configuration, repo_root) != (
+                    repo_root / "scripts/macos_repair_environment.py"
+                ).resolve()
     return ready and generated_found
 
 
@@ -508,6 +520,12 @@ def _apply_repair_settings(repo_root: Path, python: Path, ide: RepairIDE) -> Non
         touched = False
         for configuration in document.iter("configuration"):
             if _studio_configuration(configuration, repo_root):
+                if _configuration_script(configuration, repo_root) == (
+                    repo_root / "scripts/macos_repair_environment.py"
+                ).resolve():
+                    _set_option(configuration, "SCRIPT_NAME",
+                                "$PROJECT_DIR$/macos_repair_environment.py")
+                    touched = True
                 if not _interpreter_matches(configuration, python, sdk):
                     _set_option(configuration, "SDK_HOME", str(python.absolute()))
                     _set_option(configuration, "SDK_NAME", sdk)
@@ -767,7 +785,7 @@ def configure_for_repair(
         return "ready"
     if check_only:
         raise ValueError(
-            "PyCharm uses a different interpreter. Run this helper without --check to fix it."
+            "PyCharm's Studio settings need updating. Run this helper without --check to fix it."
         )
     if not ide.pids:
         if not _profile_is_closed(ide):

@@ -239,7 +239,13 @@ def _configuration(parent, name, script, *, module=False):
     return config
 
 
-def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings(repair_ide):
+@pytest.mark.parametrize("helper_path", [
+    "$PROJECT_DIR$/macos_repair_environment.py",
+    "$PROJECT_DIR$/scripts/macos_repair_environment.py",
+])
+def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings(
+    repair_ide, helper_path,
+):
     root, python, _ide = repair_ide
     workspace = root / ".idea/workspace.xml"
     workspace.parent.mkdir()
@@ -247,7 +253,7 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
     ET.SubElement(tree, "component", name="Keep", value="custom")
     manager = ET.SubElement(tree, "component", name="RunManager", selected="Python.old")
     _configuration(manager, "Studio module", "fpvs_studio.app", module=True)
-    _configuration(manager, "Helper", "$PROJECT_DIR$/scripts/macos_repair_environment.py")
+    _configuration(manager, "Helper", helper_path)
     _configuration(manager, "Other", "$PROJECT_DIR$/unrelated.py")
     workspace.write_bytes(ET.tostring(tree))
     directory = root / ".idea/runConfigurations"
@@ -266,10 +272,35 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
         assert values["PARAMETERS"] == "--participant keep"
         expected = "/wrong/python" if config.get("name") == "Other" else str(python)
         assert values["SDK_HOME"] == expected
+        if config.get("name") == "Helper":
+            assert values["SCRIPT_NAME"] == "$PROJECT_DIR$/macos_repair_environment.py"
     custom_values = pycharm._options(ET.parse(directory / "custom.xml").find("configuration"))
     assert custom_values["SDK_HOME"] == str(python)
     assert custom_values["PARAMETERS"] == "--participant keep"
     assert unrelated.read_bytes() == untouched
+
+
+@pytest.mark.parametrize("location", ["workspace.xml", "runConfigurations/Repair.xml"])
+def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(repair_ide, location):
+    root, python, ide = repair_ide
+    assert pycharm.configure_for_repair(root, python) == "ready"
+    target = root / ".idea" / location
+    tree = ET.parse(target).getroot() if target.exists() else ET.Element("component")
+    parent = tree.find("component[@name='RunManager']") if location == "workspace.xml" else tree
+    config = _configuration(parent, "Repair", "$PROJECT_DIR$/scripts/macos_repair_environment.py")
+    table = ET.parse(ide.config_dir / "options/jdk.table.xml").getroot()
+    sdk = pycharm._sdk_name(table, python)
+    pycharm._set_option(config, "SDK_HOME", str(python.absolute()))
+    pycharm._set_option(config, "SDK_NAME", sdk)
+    target.write_bytes(ET.tostring(tree))
+    original = target.read_bytes()
+    with pytest.raises(ValueError, match="without --check"):
+        pycharm.configure_for_repair(root, python, check_only=True)
+    assert target.read_bytes() == original
+    assert pycharm.configure_for_repair(root, python) == "ready"
+    saved = ET.parse(target).find(".//configuration[@name='Repair']")
+    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/macos_repair_environment.py"
+    assert pycharm._options(saved)["PARAMETERS"] == "--participant keep"
 
 
 def test_repair_preserves_unrecognized_generated_configuration(repair_ide):

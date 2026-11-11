@@ -17,7 +17,7 @@ from packaging import markers
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location(
-    "macos_environment_repair", ROOT / "scripts/macos_repair_environment.py",
+    "macos_environment_repair", ROOT / "macos_repair_environment.py",
 )
 assert SPEC is not None and SPEC.loader is not None
 repair = importlib.util.module_from_spec(SPEC)
@@ -451,7 +451,7 @@ def test_pending_ide_handoff_does_not_report_full_success(monkeypatch, mac_check
 def test_failed_ide_configuration_cannot_report_ready(monkeypatch, mac_checkout):
     root, _python, _launcher = mac_checkout
     _fake_flow(monkeypatch, root, ide=ValueError("IDE profile could not be determined"))
-    monkeypatch.setattr(repair, "__file__", str(root / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(root / "macos_repair_environment.py"))
     assert repair.main([]) == 1
     log = next((root / ".fpvs-macos/diagnostics").glob("*/repair.log")).read_text()
     assert "could not be determined" in log
@@ -506,7 +506,7 @@ def test_ide_handoff_runs_under_verified_python(
 
 def test_main_check_uses_script_checkout_not_working_directory(monkeypatch, tmp_path):
     root, _python = _checkout(tmp_path)
-    monkeypatch.setattr(repair, "__file__", str(root / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(root / "macos_repair_environment.py"))
     calls = []
     monkeypatch.setattr(
         repair, "repair_environment",
@@ -522,7 +522,7 @@ def test_main_check_uses_script_checkout_not_working_directory(monkeypatch, tmp_
 ])
 def test_main_reports_environment_or_subprocess_errors(monkeypatch, tmp_path, error):
     root, _python = _checkout(tmp_path)
-    monkeypatch.setattr(repair, "__file__", str(root / "scripts/macos_repair_environment.py"))
+    monkeypatch.setattr(repair, "__file__", str(root / "macos_repair_environment.py"))
 
     def fail(*args, **kwargs):
         raise error

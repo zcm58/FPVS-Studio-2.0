@@ -11,6 +11,7 @@ on:
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
       - scripts/macos_pycharm.py
+      - macos_repair_environment.py
       - '*Mac.command'
       - requirements-macos.txt
       - scripts/script_helpers.ps1
@@ -25,6 +26,7 @@ on:
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
       - scripts/macos_pycharm.py
+      - macos_repair_environment.py
       - '*Mac.command'
       - requirements-macos.txt
       - scripts/script_helpers.ps1
