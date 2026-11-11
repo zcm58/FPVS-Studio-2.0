@@ -152,3 +152,38 @@ cursor behavior. All diagnostic processes exited cleanly.
 Automatic approval review blocked temporary-folder deletion with "blocked by policy";
 the task-owned evidence remains outside the repository in the local Temp folder
 `fpvs-cursor-smoke-d856d1dc17`.
+
+## Studio 2.8.1 object-memory report follow-up
+
+Feedback issue 10 reports Windows 10, Studio 2.8.1 and "No mouse on screen when
+selecting the objects to remember." Its retained diagnostics contain the unrelated
+history-CSV launch traceback, with no cursor, backend or display observations.
+The engine source is unchanged between the 2.7.4 and 2.8.1 tags. The built-in
+four-of-eight image-memory selection task already reaches the shared drawable-cursor
+path. No new production cursor defect was reproduced, and no speculative pointer
+behavior change was made for this report.
+
+Twelve new safe engine-route regressions cover this exact multiple-choice screen
+at simulated content scales 1, 1.25, 1.5 and 2: premature Submit, selection revision,
+successful Submit, Escape and render failure. They verify that the drawable cursor
+remains installed throughout the response and validation frames, native queued
+clicks stay aligned, and cleanup restores the pointer and frame-recording state.
+The cursor and memory-renderer test selection passed all 32 tests. The complete
+engine focused pytest selection then passed all 620 tests. Direct Ruff, compilation
+and diff checks passed for the changed test file. The focused wrapper stopped at
+Ruff findings in an unrelated, user-owned untracked example, so its listed test
+command was run directly without changing that example.
+
+An approved, bounded native diagnostic used the real engine, PsychoPy and Pyglet
+with eight synthetic images and isolated preferences. Both an ordinary 1280x720
+window and exclusive fullscreen at 1920x1080 completed the same select/revise/Submit
+sequence. Nine framebuffer samples per mode showed 138–202 pixels changed by the
+pointer draw immediately before buffer swap, including pointer movement over the
+image grid. Captures were inspected visually. Both modes restored the default
+cursor and previous visibility; both windows closed and the diagnostic exited zero.
+The native display scale was 1. No EEG, participant session or saved project was used.
+
+These checks establish rendering and simulated input on this development PC, not
+human acceptance on the reporter's Windows 10 machine. The original direct-host
+cause remains unqualified. Evidence is retained locally under
+`build/cursor-282-native/`; diagnostic scripts and images are not release artifacts.

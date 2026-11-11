@@ -6,8 +6,10 @@ from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 
 import pytest
+from tests.unit.test_memory_modifier_engine import _recognition_step as _memory_recognition_step
 from tests.unit.test_psychopy_task_mouse import _CursorScreen, _recognition_step
 
+from fpvs_studio.engines import psychopy_engine as engine_module
 from fpvs_studio.engines import psychopy_task_cursor as cursor_module
 from fpvs_studio.engines.psychopy_tasks import render_task_step
 
@@ -208,3 +210,69 @@ def test_task_cursor_cleanup_stays_on_its_presentation_thread(monkeypatch):
     assert harness.operations == [("cursor", installed)]
     cursor.close()
     assert harness.texture.id == 0
+
+
+@pytest.mark.parametrize("scale", [1, 1.25, 1.5, 2])
+@pytest.mark.parametrize("exit_kind", ["submit", "escape", "render_failure"])
+def test_memory_selection_keeps_drawable_cursor_through_validation_and_revision(
+    monkeypatch, tmp_path, scale, exit_kind,
+):
+    """Exercise the actual engine route for the reported four-of-eight image task."""
+
+    screen = _CursorScreen(initially_visible=False)
+    screen.scale = scale
+    screen.recordFrameIntervals = True
+    screen.frameIntervals = [0.016]
+    harness = _CursorHarness(monkeypatch, window=screen)
+    step = _memory_recognition_step()
+    submit_position = (0, -screen.size[1] * 0.32)
+    # Refuse early Submit, select four, then replace the first choice before exiting.
+    selections = (0, 1, "submit", 2, 3, 0, 4, "submit")
+    screen.actions = [None] + [
+        ("click", submit_position if item == "submit" else step.items[item].position_px, 1)
+        for item in selections
+    ]
+    if exit_kind != "submit":
+        screen.actions[-1] = "escape" if exit_kind == "escape" else "error"
+    frame_cursors = []
+    original_flip = screen.flip
+
+    def observe_flip():
+        frame_cursors.append(screen.winHandle._mouse_cursor)
+        assert screen.mouseVisible
+        assert not screen.recordFrameIntervals
+        original_flip()
+
+    def reject_legacy_mouse(**kwargs):
+        raise AssertionError("Memory selection must retain the native queued-click path.")
+
+    screen.flip = observe_flip
+    screen.event.Mouse = reject_legacy_mouse
+    engine = engine_module.PsychoPyEngine()
+    engine._psychopy = object()
+    engine._window = screen
+    engine._visual = screen.visual
+    engine._event = screen.event
+    engine._core = screen.core
+    engine._keyboard = screen.keyboard
+    monkeypatch.setattr(engine_module, "sys", SimpleNamespace(platform="win32"))
+
+    if exit_kind == "render_failure":
+        with pytest.raises(RuntimeError, match="display failed"):
+            engine.render_task_step(step, tmp_path)
+    else:
+        result = engine.render_task_step(step, tmp_path)
+        assert result.selected_item_ids == ("image-1", "image-2", "image-3", "image-4")
+        assert result.aborted is (exit_kind == "escape")
+        if exit_kind == "submit":
+            assert result.key == "mouse-submit"
+            assert result.mouse_position_px == pytest.approx(submit_position)
+
+    assert len(frame_cursors) == len(selections) + 1
+    assert all(cursor is frame_cursors[0] and cursor.drawable for cursor in frame_cursors)
+    assert screen.winHandle._mouse_cursor is harness.original
+    assert harness.texture.id == 0
+    assert screen.winHandle.handlers == []
+    assert not screen.mouseVisible
+    assert screen.recordFrameIntervals
+    assert screen.frameIntervals == []

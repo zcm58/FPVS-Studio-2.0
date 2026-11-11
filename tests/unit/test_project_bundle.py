@@ -12,6 +12,7 @@ import zipfile
 from contextlib import contextmanager
 from pathlib import Path
 from threading import Event
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -1058,6 +1059,43 @@ def test_recording_device_and_port_survive_project_bundle(
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
+@pytest.mark.parametrize("kind", ["project", "manifest"])
+@pytest.mark.parametrize("present", [False, True])
+def test_bundle_metadata_loaders_support_long_paths(
+    tmp_path, sample_project, monkeypatch, kind, present,
+):
+    root = tmp_path
+    while len(str(root)) <= 270:
+        root /= "long-project-folder"
+    _save_bundle_ready_project(root, sample_project)
+    relative_path = "project.json" if kind == "project" else "stimuli/manifest.json"
+    path = root / relative_path
+    assert len(str(path)) > 260
+    if not present:
+        filesystem_path(path).unlink()
+    original_is_file = Path.is_file
+
+    def is_file_without_long_path_policy(candidate):
+        value = str(candidate)
+        if len(value) > 260 and not value.startswith("\\\\?\\"):
+            return False
+        return original_is_file(candidate)
+
+    monkeypatch.setattr(Path, "is_file", is_file_without_long_path_policy)
+    loader = (
+        project_bundle_module._load_project_for_bundle
+        if kind == "project" else project_bundle_module._load_manifest_for_bundle
+    )
+    if not present:
+        with pytest.raises(ProjectBundleError, match=f"requires {relative_path}"):
+            loader(root)
+    elif kind == "project":
+        assert loader(root).meta.project_id == sample_project.meta.project_id
+    else:
+        assert loader(root).project_id == sample_project.meta.project_id
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")
 @pytest.mark.parametrize("long_bundle", [False, True])
 def test_bundle_transfer_without_windows_long_path_policy(
     tmp_path, sample_project, sample_project_root, monkeypatch, long_bundle,
@@ -1132,6 +1170,113 @@ def test_bundle_import_storage_failure_is_actionable_and_cleans_staging(
     with pytest.raises(ProjectBundleError, match=message):
         import_project_bundle(bundle, receiver)
     assert not (receiver / sample_project.meta.project_id).exists()
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize("winerror", [5, 32, 33])
+@pytest.mark.parametrize("persistent", [False, True])
+def test_bundle_commit_retries_only_brief_windows_locks(
+    tmp_path, sample_project, sample_project_root, monkeypatch, winerror, persistent,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "lock-test.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = tmp_path / "receiver"
+    error = PermissionError(13, "Synthetic Windows commit lock")
+    error.winerror = winerror
+    original_rename = Path.rename
+    attempts, waits = [], []
+
+    def locked_rename(source, target):
+        if source.name == "project" and "import-staging" in source.parts:
+            attempts.append((source, target))
+            if persistent or len(attempts) <= 2:
+                raise error
+        return original_rename(source, target)
+
+    monkeypatch.setattr(Path, "rename", locked_rename)
+    monkeypatch.setattr(
+        project_bundle_module, "time", SimpleNamespace(sleep=waits.append), raising=False,
+    )
+    if persistent:
+        with pytest.raises(ProjectBundleError, match="access was denied") as caught:
+            import_project_bundle(bundle, receiver)
+        assert caught.value.__cause__ is error
+        assert len(attempts) == 5
+        assert waits == [0.01, 0.02, 0.04, 0.08]
+        assert not (receiver / sample_project.meta.project_id).exists()
+    else:
+        imported = import_project_bundle(bundle, receiver)
+        assert (imported.project_root / "project.json").is_file()
+        assert len(attempts) == 3
+        assert waits == [0.01, 0.02]
+    assert len(set(attempts)) == 1
+    assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
+
+
+@pytest.mark.parametrize("winerror", [None, 6])
+def test_bundle_commit_does_not_retry_other_errors(
+    tmp_path, sample_project, sample_project_root, monkeypatch, winerror,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "lock-test.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    error = PermissionError(13, "Synthetic persistent access failure")
+    if winerror is not None:
+        error.winerror = winerror
+    attempts = []
+
+    def denied(source, target):
+        attempts.append((source, target))
+        raise error
+
+    monkeypatch.setattr(Path, "rename", denied)
+    monkeypatch.setattr(project_bundle_module, "time", SimpleNamespace(
+        sleep=lambda _delay: pytest.fail("Retried a non-transient error"),
+    ), raising=False)
+    with pytest.raises(ProjectBundleError) as caught:
+        import_project_bundle(bundle, tmp_path / "receiver")
+    assert caught.value.__cause__ is error and len(attempts) == 1
+
+
+@pytest.mark.parametrize("action", ["cancel", "destination-race"])
+def test_bundle_commit_wait_preserves_cancellation_and_other_projects(
+    tmp_path, sample_project, sample_project_root, monkeypatch, action,
+):
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    bundle = tmp_path / "lock-test.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = tmp_path / "receiver"
+    target = receiver / sample_project.meta.project_id
+    cancel = Event()
+    error = PermissionError(13, "Synthetic Windows commit lock")
+    error.winerror = 5
+    attempts, waits = [], []
+
+    def denied(source, destination):
+        attempts.append((source, destination))
+        raise error
+
+    def wait(delay):
+        waits.append(delay)
+        if action == "cancel":
+            cancel.set()
+            return True
+        target.mkdir()
+        (target / "other-project.txt").write_text("Preserve this project", encoding="utf-8")
+        return False
+
+    monkeypatch.setattr(Path, "rename", denied)
+    monkeypatch.setattr(cancel, "wait", wait)
+    expected = ProjectBundleCancelled if action == "cancel" else ProjectBundleError
+    message = "cancel" if action == "cancel" else "already exists"
+    with pytest.raises(expected, match=message):
+        import_project_bundle(bundle, receiver, cancel_event=cancel)
+    assert len(attempts) == 1 and waits == [0.01]
+    if action == "destination-race":
+        assert (target / "other-project.txt").read_text(encoding="utf-8") == "Preserve this project"
+    else:
+        assert not target.exists()
     assert list((app_data_dir(receiver) / IMPORT_STAGING_DIRNAME).iterdir()) == []
 
 

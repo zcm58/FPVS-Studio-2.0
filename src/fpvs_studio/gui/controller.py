@@ -91,7 +91,7 @@ from fpvs_studio.runtime.export_modes import (
     VALID_EXPORT_MODES,
 )
 from fpvs_studio.updates.downloader import cleanup_update_cache
-from fpvs_studio.updates.helper_client import HelperClient
+from fpvs_studio.updates.helper_client import check_app_updates, installer_updates_supported
 from fpvs_studio.updates.models import UpdateCheckResult
 
 if TYPE_CHECKING:
@@ -232,7 +232,7 @@ class StudioController(QObject):
         self._startup_update_job: UpdateJob | None = None
         self._update_lifecycle.manual_check_requested.connect(self._cancel_startup_update_check)
         self._startup_update_check_callback: Callable[[Event], UpdateCheckResult] = (
-            lambda cancel: HelperClient().check(__version__, cancel_event=cancel)
+            lambda cancel: check_app_updates(__version__, cancel_event=cancel)
         )
         self._active_import_bundle_task: BackgroundTask | None = None
         self._project_open_job: UpdateJob | None = None
@@ -291,8 +291,6 @@ class StudioController(QObject):
         self._data_sharing().startup(self._fpvs_root_dir, tuple(self.load_recent_project_roots()))
 
     def _schedule_startup_update_check(self) -> None:
-        if sys.platform == "darwin":
-            return  # Source updates use Git and the macOS environment helper.
         if not self.startup_update_checks_enabled or self._startup_update_check_started:
             return
         self._startup_update_check_started = True
@@ -323,7 +321,7 @@ class StudioController(QObject):
     def start_update_cache_housekeeping(self) -> None:
         """Schedule offline, app-cache-only startup work before root-folder onboarding."""
 
-        if sys.platform == "darwin":
+        if not installer_updates_supported():
             return
         if self._startup_cache_cleanup_started or self._update_lifecycle.is_shutting_down:
             return

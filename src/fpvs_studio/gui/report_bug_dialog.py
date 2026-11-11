@@ -27,7 +27,8 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.support.models import MAX_FEATURE_CHARACTERS, Draft
+from fpvs_studio.support.diagnostics import combine_diagnostics
+from fpvs_studio.support.models import MAX_FEATURE_CHARACTERS, MAX_LOG_BYTES, Draft
 
 
 class ReportBugDialog(QDialog):
@@ -55,6 +56,7 @@ class ReportBugDialog(QDialog):
         self._pending_error = ""
         self._pending_title = ""
         self._pending_message = ""
+        self._accepted_error = ""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 18, 22, 18)
         layout.setSpacing(10)
@@ -134,7 +136,7 @@ class ReportBugDialog(QDialog):
         diagnostic_layout.addWidget(
             self._label(
                 "Review logs for personal or research information. Redaction may miss details. "
-                "Excluding logs also excludes the error excerpt. App version and OS stay included.",
+                "Excluding logs also excludes the error details. App version and OS stay included.",
                 diagnostics,
             )
         )
@@ -143,9 +145,9 @@ class ReportBugDialog(QDialog):
         diagnostic_layout.addWidget(self.refresh_button)
         diagnostic_layout.addWidget(
             self._label(
-                "When connected, reports go privately to the developer. Full logs and reply email "
-                "are retained for 14 days (backup history may last seven more). The description "
-                "and short error excerpt remain in the private GitHub issue until removed.",
+                "Reports and included logs remain in the private GitHub issue until removed. "
+                "Long logs are split into numbered comments. The service keeps the report and "
+                "reply email for 14 days; backups may last seven more.",
                 diagnostics,
             )
         )
@@ -175,7 +177,7 @@ class ReportBugDialog(QDialog):
         else:
             self.feature_count.hide()
         self.context_button = QPushButton("Use newly reported error", self)
-        self.context_button.clicked.connect(self.use_pending_error)
+        self.context_button.clicked.connect(lambda: self.action_requested.emit("context"))
         self.context_button.hide()
         layout.addWidget(self.context_button)
         self.status_label = self._label("", self)
@@ -264,12 +266,16 @@ class ReportBugDialog(QDialog):
             }
         )
         return self._draft.model_copy(
-            update={"report": report, "include_logs": self.include_logs.isChecked()}
+            update={
+                "report": report, "include_logs": self.include_logs.isChecked(),
+                "accepted_error": self._accepted_error,
+            }
         )
 
     def set_draft(self, draft: Draft) -> None:
         self._updating = True
         self._draft = draft.model_copy(deep=True)
+        self._accepted_error = draft.accepted_error
         for name, editor in self.fields.items():
             value = getattr(draft.report, name)
             if isinstance(editor, QPlainTextEdit):
@@ -333,24 +339,40 @@ class ReportBugDialog(QDialog):
         self._pending_message = message or f"FPVS Studio showed this error: {title}"
         self.context_button.show()
 
-    def use_pending_error(self) -> None:
+    def pending_error_context(self) -> tuple[str, str, str]:
+        return self._pending_title, self._pending_error, self._pending_message
+
+    def use_pending_error(
+        self, logs: str = "", *, context: tuple[str, str, str] | None = None,
+    ) -> None:
         if self._draft.locked or self._state in ("loading", "verifying", "sending", "checking"):
             return
-        self.diagnostics_edit.setPlainText(self._pending_error)
+        selected = context if context is not None else self.pending_error_context()
+        title, details, message = selected
+        reviewed = self.diagnostics_edit.toPlainText()
+        if logs and logs not in reviewed:
+            reviewed = "\n\n".join(value for value in (reviewed, logs) if value)
+        self._accepted_error = details
+        self.replace_diagnostics(reviewed)
         if not self.title_edit.text():
-            self.title_edit.setText(self._pending_title[:160])
+            self.title_edit.setText(title[:160])
         if not self.happened_edit.toPlainText().strip():
-            self.happened_edit.setPlainText(self._pending_message)
+            self.happened_edit.setPlainText(message)
         self.include_logs.setChecked(True)
-        self.context_button.hide()
+        if selected == self.pending_error_context():
+            self.context_button.hide()
         self.tabs.setCurrentIndex(0)
         self.steps_edit.setFocus()
+
+    def replace_diagnostics(self, logs: str) -> None:
+        """Keep the explicitly accepted error when refreshing the session context."""
+        self.diagnostics_edit.setPlainText(combine_diagnostics(logs, self._accepted_error))
 
     def _changed(self) -> None:
         if self._updating:
             return
         size = len(self.diagnostics_edit.toPlainText().encode("utf-8"))
-        self.size_label.setText(f"Error log text: {size:,} / 98,304 bytes")
+        self.size_label.setText(f"Error log text: {size:,} / {MAX_LOG_BYTES:,} bytes")
         self._update_feature_limit()
         self.draft_changed.emit()
 

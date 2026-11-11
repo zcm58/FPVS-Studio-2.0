@@ -46,6 +46,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Condition Figure waveforms](exec-plans/completed/condition-figure-waveforms.md)
 - [Condition Figure stimulus sequence](exec-plans/completed/condition-figure-sequence.md)
 - [Trigger Tester](exec-plans/completed/trigger-tester.md)
+- [History compatibility and Studio 2.8.2](exec-plans/completed/history-updates-release-2.8.2.md):
+  history encoding, source/macOS updates, reviewed logs and Windows bundle fixes
+  published immutable/latest; exact-source, packaged and public verification passed.
 - [Studio 2.8.1 release](exec-plans/completed/release-2.8.1.md)
 - [Project Brain Products recording setup](exec-plans/completed/project-brainproducts-recording-setup.md):
   modal setup errors and first-launch project timing confirmation.

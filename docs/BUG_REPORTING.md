@@ -127,7 +127,8 @@ The native desktop implementation is available independently of Cloudflare.
 **File > Report a Bug...** opens Details and Diagnostics tabs. Error popups also
 offer **Report this bug. Please!**, including errors before a project is open or
 while choosing the Studio Root. One click closes the error popup and opens the
-existing reporter with its full error details attached. A fresh report has its
+existing reporter with its full error details attached alongside collected session
+logs, instead of replacing the logs with the popup traceback. A fresh report has its
 summary and description filled in; a quick note about reproduction is optional.
 Opening either entry point collects locally and never submits automatically.
 Repeated menu clicks raise the same dialog and preserve its existing draft.
@@ -138,7 +139,7 @@ their recorded version and exact payload for status recovery.
 Required fields: summary and what happened. Reproduction steps, expected behavior,
 and reply email are optional. Unknown reproduction steps have an explicit option.
 Users can edit or exclude logs, copy the report, or save UTF-8 text. Excluding logs
-also excludes the error excerpt; app version and OS remain included. Credentials
+also excludes the error details; app version and OS remain included. Credentials
 for receipt access never appear in text exports or clipboard copies.
 
 The approved reporting service is connected by default. Submit Report keeps the
@@ -160,8 +161,8 @@ serialized launch failures. Technical driver details stay in **Show Details...**
 application-owned `gui/error_dialogs.py` decorates critical message boxes and
 simple warning errors, including static Qt message boxes. Warning confirmations
 and information messages retain their existing decisions. Native error popups
-size to their wrapped text with a minimum width of 580 logical pixels; details
-expand separately. The report button is never the default or Escape action.
+size to their wrapped text; Qt may choose a content width below the requested minimum.
+Details expand separately. The report button is never the default or Escape action.
 
 `support/error_explanations.py` owns GUI-neutral explanation rules. New error
 popups and exception-driven inline labels use this owner, including recording,
@@ -174,8 +175,9 @@ confirmation decisions are unchanged. Visible acceptance checks the affected
 surfaces at minimum size in both themes, with long failures and expanded details.
 
 New error context is redacted and bounded through the existing support helpers. Existing
-report text is preserved; **Use newly reported error** explicitly replaces its
-diagnostics and fills only blank description fields. Verification, sending, and
+report text is preserved; **Use newly reported error** adds that error to its
+diagnostics and fills only blank description fields. Refreshing the logs retains
+the last explicitly accepted error. Verification, sending, and
 receipt-locked reports cannot replace their payload with a later error.
 
 ## Local ownership and retention
@@ -224,14 +226,21 @@ string. Native files share the existing retention and overall budget. Only fatal
 breadcrumbs and catastrophic native tracebacks write directly to the open descriptor;
 ordinary formatting and file writes remain on the logging thread.
 
-Drafts use atomic writes and retain at most five files, each up to 256 KiB, for
+Drafts use atomic writes and retain at most five files, each up to 4 MiB, for
 seven days. Closing saves the current draft; Discard Draft explicitly deletes it.
 Only matching owned files are purged. File-save cancellation has no side effects.
 Storage failures remain visible and Copy Report is still usable. Drafts contain
 reviewed text and receipt capabilities in the user's local account storage; they
 are not encrypted separately. Do not include research records in reports.
+The last accepted error is local draft metadata so refreshing after restart can
+retain it. It is not a new upload field and does not change receipt-bound payloads.
 
-Collection reads only app-owned support logs, up to 96 KiB. Common path prefixes,
+Collection reads only the active process's app-owned support session logs, including
+retained rotations and native traces, up to 256 KiB. Without a matching active logger,
+it explicitly identifies the latest retained session. It never mixes other live
+sessions into the report. Sections identify their source files; missing, rotated-away
+or over-budget text cannot be recovered, and omissions are explicitly identified.
+The collector and popup context share the same reviewed-text budget. Common path prefixes,
 emails, participant tags, and credentials are redacted best-effort. Users review
 the final text because redaction cannot guarantee removal of every sensitive value.
 Credential redaction covers quoted keys and values, including JSON and passwords
@@ -272,9 +281,10 @@ The reviewed report is UTF-8 JSON, sorted keys, no insignificant whitespace,
 | steps / expected | Optional text; all description fields together at most 16 KiB UTF-8 |
 | email | Optional reply email, at most 254 characters |
 | app_version / os_version | App and OS strings; no hostname or environment dump |
-| diagnostics | Reviewed text, at most 96 KiB; empty when excluded |
+| diagnostics | Reviewed text, at most 256 KiB; empty when excluded |
 
-Maximum complete payload: 128 KiB. Unknown fields and binary uploads must be rejected
+Maximum complete bug payload: 1 MiB. Feature and automatic crash limits are unchanged.
+Unknown fields and binary uploads must be rejected
 server-side. Backend must revalidate all lengths, types, and hashes independently.
 
 1. `POST /v1/intents`: body contains `schema_version`, `report_id`,
@@ -316,7 +326,8 @@ unknown receipt into permission to create a duplicate report.
 The UI freezes the reviewed payload during verification/upload and while delivery
 is uncertain or pending. It shows Check status after ambiguous delivery, preserving
 the same report ID; it never automatically POSTs again. A received report is shown
-as pending GitHub issue creation. Submitted becomes Done. The service never returns
+as pending GitHub delivery. Submitted becomes Done only after the issue and every
+required diagnostic part are confirmed. The service never returns
 a private GitHub URL as the user's receipt link. Cancellation does not retract bytes
 already sent, so receipt checks remain necessary after interrupted uploads.
 
@@ -330,9 +341,14 @@ App restricted to that repository, and email notifications to
 `zmurphy@abe.msstate.edu`. No R2 or paid subscription was enabled. Sending-domain
 records belong under `reports.zack-murphy.com`; existing website records are preserved.
 
-Full submitted logs and optional reply email expire after 14 days; D1 recovery
-history may retain deleted data for seven additional days. GitHub descriptions and
-a bounded reviewed error excerpt have a separate lifetime until manually removed.
+The service's copy of submitted logs and optional reply email expires after 14 days;
+D1 recovery history may retain deleted data for seven additional days. GitHub descriptions
+and all included reviewed diagnostics from Studio 2.8.2 and later remain until manually removed.
+Earlier clients retain their disclosed short-excerpt delivery; existing reports are
+not republished with expanded logs. Small diagnostics
+fit directly in the issue; larger diagnostics use numbered, bounded comments. Accepted
+text is not silently shortened for GitHub. Delivery confirms each part and reconciles
+ambiguous writes before retrying, preserving report identity and preventing blind reposts.
 The server shares a 100-report daily limit across bugs and features, with separate
 transactional intent and storage limits. Background cleanup, GitHub authentication, issue creation and
 email run in rotating minute phases to keep CPU work bounded. Email retry cannot

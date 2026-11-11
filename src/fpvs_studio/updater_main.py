@@ -42,6 +42,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.stdio:
         return serve_stdio()
 
+    from fpvs_studio.updates.helper_client import installer_updates_supported
     from fpvs_studio.updates.helper_runtime import (
         helper_command,
         is_staged_helper,
@@ -52,7 +53,7 @@ def main(argv: list[str] | None = None) -> int:
     # directory before showing a window so setup can replace this helper as well.
     startup_error: Exception | None = None
     try:
-        if getattr(sys, "frozen", False) and not args.gui_smoke and not is_staged_helper():
+        if installer_updates_supported() and not args.gui_smoke and not is_staged_helper():
             if args.apply:
                 raise RuntimeError("An install handoff must use the staged updater.")
             spawn_helper_command(helper_command())

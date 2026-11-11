@@ -231,7 +231,7 @@ def _iter_session_condition_history_summaries(
     if not history_path.is_file():
         return []
 
-    with history_path.open("r", encoding="utf-8", newline="") as handle:
+    with history_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         if not reader.fieldnames or not {"session_id", "participant_number"}.issubset(
             reader.fieldnames

@@ -27,7 +27,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.update_dialog import UpdateDialog
+from fpvs_studio.gui.update_dialog import SOURCE_UPDATE_INSTRUCTIONS, UpdateDialog
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateCallback,
@@ -37,7 +37,7 @@ from fpvs_studio.gui.update_lifecycle import (
     update_lifecycle,
 )
 from fpvs_studio.support.error_explanations import describe_error, explain_error
-from fpvs_studio.updates.helper_client import HelperClient
+from fpvs_studio.updates.helper_client import HelperClient, installer_updates_supported
 from fpvs_studio.updates.helper_service import (
     binary_stdio,
     check_update,
@@ -82,9 +82,13 @@ class UpdaterWindow(UpdateDialog):
             lifecycle=lifecycle,
         )
         self.setObjectName("standalone_updater")
-        self.setWindowTitle("FPVS Studio Update & Repair")
-        self.title_label.setText("FPVS Studio Update & Repair")
-        self.current_version_label.setText("Current version: checking installed application...")
+        self.setWindowTitle(
+            "FPVS Studio Update & Repair" if self._installer_updates_enabled else
+            "FPVS Studio Source Updates"
+        )
+        if self._installer_updates_enabled:
+            self.title_label.setText("FPVS Studio Update & Repair")
+            self.current_version_label.setText("Current version: checking installed application...")
         self.setMinimumHeight(660)
         self.resize(760, 680)
         self.repair_button = QPushButton("Repair / Reinstall", self.button_box)
@@ -94,6 +98,10 @@ class UpdaterWindow(UpdateDialog):
         actions = self.button_box.layout()
         assert isinstance(actions, QGridLayout)
         actions.addWidget(self.repair_button, 2, 0, 1, 2)
+        self.repair_button.setVisible(self._installer_updates_enabled)
+        self.repair_button.setEnabled(self._installer_updates_enabled)
+        if not self._installer_updates_enabled:
+            self._check_task = None
         if auto_check:
             QTimer.singleShot(0, self.start_update_check)
 
@@ -115,7 +123,7 @@ class UpdaterWindow(UpdateDialog):
 
     @Slot()
     def start_repair_check(self) -> None:
-        if self._job is not None or self._preparing_install:
+        if not self._installer_updates_enabled or self._job is not None or self._preparing_install:
             return
         self._repair = True
         self.download_button.setText("Download and Install")
@@ -128,11 +136,16 @@ class UpdaterWindow(UpdateDialog):
 
     def _handle_task_finished(self, outcome: object) -> None:
         super()._handle_task_finished(outcome)
-        self.repair_button.setEnabled(not self._close_pending and self._job is None)
+        self.repair_button.setEnabled(
+            self._installer_updates_enabled and not self._close_pending and self._job is None
+        )
 
     def _handle_check_result(self, result: object) -> None:
         super()._handle_check_result(result)
-        if self._repair and isinstance(result, UpdateCheckResult) and result.update_available:
+        if (
+            self._installer_updates_enabled and self._repair
+            and isinstance(result, UpdateCheckResult) and result.update_available
+        ):
             self.download_button.setText("Download and Install")
             asset = result.installer_asset
             if asset is not None and asset.sha256 is not None:
@@ -331,6 +344,7 @@ def _show_startup_error(error: Exception) -> None:
     box.setText(explanation.summary)
     box.setInformativeText(
         explanation.advice + " You can also download the full installer from Studio's release page."
+        if installer_updates_supported() else SOURCE_UPDATE_INSTRUCTIONS
     )
     box.setDetailedText(str(error))
     box.setStandardButtons(QMessageBox.StandardButton.Ok)
@@ -349,6 +363,9 @@ def run_updater_gui(
     app.setOrganizationName("FPVS Studio")
     if smoke_report is not None:
         return run_visible_smoke(app, smoke_report)
+    if apply_mode and not installer_updates_supported():
+        _show_startup_error(UpdateError("This Studio copy cannot use the Windows installer."))
+        return 1
     if startup_error is not None:
         _show_startup_error(startup_error)
         return 1

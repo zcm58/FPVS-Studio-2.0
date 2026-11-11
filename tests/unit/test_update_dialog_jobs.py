@@ -154,6 +154,7 @@ def update_flow(tmp_path):
         "_PROGRESS_MAXIMUM": 1000, "_LOGGER": logging.getLogger(__name__),
         "sys": SimpleNamespace(platform="win32"),
         "explain_error": explain_error,
+        "SOURCE_UPDATE_INSTRUCTIONS": "Pull the latest changes from the remote Git repository.",
     }
     exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
     jobs, events = [], []
@@ -175,6 +176,7 @@ def update_flow(tmp_path):
     downloaded = DownloadedInstaller(tmp_path / "update.exe", 9, asset.sha256, asset)
     instance = namespace["UpdateDialog"]()
     instance._result = UpdateCheckResult("1.0", "2.0", True, None, "", asset, False)
+    instance._installer_updates_enabled = True
     instance._downloaded_installer = None
     instance._preparing_install = False
     instance._disposed = Event()
@@ -359,3 +361,14 @@ def test_committed_launch_survives_late_cancel_and_quits_after_finish(update_flo
     install.finish()
     assert flow.events == ["download", "save", "launch", "quit"]
     assert flow.dialog.result == flow.dialog.DialogCode.Accepted
+
+
+@pytest.mark.parametrize("action", ["start_download", "install_and_restart"])
+def test_source_update_cannot_download_or_launch_even_with_installer_state(update_flow, action):
+    flow = update_flow
+    flow.dialog._installer_updates_enabled = False
+    flow.dialog._downloaded_installer = flow.downloaded
+    getattr(flow.dialog, action)()
+    assert flow.jobs == []
+    assert flow.events == []
+    assert not flow.dialog._download_available()

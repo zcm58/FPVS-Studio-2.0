@@ -14,7 +14,7 @@ from uuid import uuid4
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.support.models import Draft, ReportKind, utc_now
 
-MAX_DRAFT_BYTES = 256 * 1024
+MAX_DRAFT_BYTES = 4 * 1024 * 1024
 _DRAFT_NAME = re.compile(r"draft-[0-9a-f-]{36}\.json\Z")
 
 

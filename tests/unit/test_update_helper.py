@@ -55,6 +55,83 @@ def _downloaded(root: Path) -> DownloadedInstaller:
     return DownloadedInstaller(path, 9, asset.sha256 or "", asset)
 
 
+@pytest.mark.parametrize("platform,frozen", [
+    ("win32", False), ("darwin", False), ("darwin", True),
+    ("linux", False), ("linux", True),
+])
+@pytest.mark.parametrize("asset_case", ["valid", "missing", "duplicate", "mismatched"])
+def test_source_and_non_windows_update_checks_never_select_an_installer(
+    monkeypatch, platform, frozen, asset_case,
+):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform=platform, frozen=frozen))
+    calls = []
+    release = {
+        "tag_name": "v2.8.2", "draft": False, "prerelease": False,
+        "html_url": "https://github.com/zcm58/FPVS-Studio-2.0/releases/tag/v2.8.2",
+        "body": "- Preserve history when upgrading.",
+        "assets": [{
+            "name": "FPVS-Studio-Setup-2.8.2.exe", "size": 123,
+            "digest": "sha256:" + "a" * 64, "id": 123,
+            "browser_download_url": (
+                "https://github.com/zcm58/FPVS-Studio-2.0/releases/download/v2.8.2/"
+                "FPVS-Studio-Setup-2.8.2.exe"
+            ),
+        }],
+    }
+    if asset_case == "missing":
+        release["assets"] = []
+    elif asset_case == "duplicate":
+        release["assets"] *= 2
+    elif asset_case == "mismatched":
+        release["assets"][0]["name"] = "FPVS-Studio-Setup-2.0.0.exe"
+
+    def metadata(url, *, cancel_event):
+        calls.append(url)
+        return [release]
+
+    monkeypatch.setattr(helper_client, "fetch_release_metadata", metadata)
+    monkeypatch.setattr(helper_client.HelperClient, "check", lambda *_a, **_kw: pytest.fail(
+        "Source updates must not start the Windows helper",
+    ))
+    assert not helper_client.installer_updates_supported()
+    result = helper_client.check_app_updates("2.8.1")
+    assert result.update_available and result.latest_version == "2.8.2"
+    assert result.installer_asset is None
+    assert result.release_url == release["html_url"]
+    assert result.release_notes_summary == release["body"]
+    assert calls == [helper_client.DEFAULT_RELEASES_API_URL]
+
+
+def test_packaged_windows_app_keeps_the_existing_helper_update_route(monkeypatch):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform="win32", frozen=True))
+    expected = UpdateCheckResult("1.0", "2.0", True, None, "", _asset(), False)
+    calls = []
+
+    def check(_self, current_version, **kwargs):
+        calls.append((current_version, kwargs))
+        return expected
+
+    monkeypatch.setattr(helper_client.HelperClient, "check", check)
+    monkeypatch.setattr(helper_client, "fetch_release_metadata", lambda *_a, **_kw: pytest.fail(
+        "Packaged Windows must retain the independent helper route",
+    ))
+    cancel = Event()
+    assert helper_client.installer_updates_supported()
+    assert helper_client.check_app_updates("1.0", cancel_event=cancel) is expected
+    assert calls == [("1.0", {"cancel_event": cancel, "phase_callback": None})]
+
+
+def test_source_update_cancellation_stops_before_metadata_request(monkeypatch):
+    monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform="darwin", frozen=False))
+    monkeypatch.setattr(helper_client, "fetch_release_metadata", lambda *_a, **_kw: pytest.fail(
+        "Canceled source checks must not request metadata",
+    ))
+    cancel = Event()
+    cancel.set()
+    with pytest.raises(UpdateCancelled):
+        helper_client.check_app_updates("2.8.1", cancel_event=cancel)
+
+
 def _result() -> UpdateCheckResult:
     return UpdateCheckResult("1.0.0", "2.0.0", True, None, "New version", _asset(), False)
 

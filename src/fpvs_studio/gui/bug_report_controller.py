@@ -275,17 +275,25 @@ class BugReportController(QObject):
                 "checking",
                 "Checking report receipt…",
             )
-        elif action == "refresh" and self.kind == "bug" and not dialog.snapshot().locked:
+        elif (
+            action in ("refresh", "context")
+            and self.kind == "bug" and not dialog.snapshot().locked
+        ):
+            selected_error = dialog.pending_error_context() if action == "context" else None
 
             def refreshed(value: object) -> None:
-                dialog.diagnostics_edit.setPlainText(str(value))
+                if action == "context":
+                    self._show_delivery(dialog.snapshot())
+                    dialog.use_pending_error(str(value), context=selected_error)
+                else:
+                    dialog.replace_diagnostics(str(value))
                 self._show_delivery(dialog.snapshot())
 
             self._start(
                 lambda _cancel: collect_diagnostics(self.store().root),
                 refreshed,
                 "loading",
-                "Collecting recent application logs…",
+                "Collecting current session logs…",
             )
         elif action in ("new", "discard"):
             draft = dialog.snapshot()
@@ -300,16 +308,25 @@ class BugReportController(QObject):
                 )
                 return
             self._dirty = False
+
+            def fresh_draft(_cancel: Event) -> Draft:
+                fresh = self._empty_draft()
+                if self.kind == "bug":
+                    fresh.report.diagnostics = collect_diagnostics(self.store().root)
+                self.store().discard(draft)
+                return fresh
+
             self._start(
-                lambda _cancel: self.store().discard(draft),
+                fresh_draft,
                 self._new_draft,
                 "loading",
                 "Discarding local draft…",
             )
 
-    def _new_draft(self, _value: object) -> None:
+    def _new_draft(self, value: object) -> None:
         self._intent = None
-        self._dialog().set_draft(self._empty_draft())
+        self._error_context = None
+        self._dialog().set_draft(cast(Draft, value))
         self._dialog().context_button.hide()
         self._show_delivery(self._dialog().snapshot())
 
