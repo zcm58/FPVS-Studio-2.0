@@ -9,6 +9,7 @@ tests = [
   "tests/unit/test_qt_test_registry.py",
   "tests/unit/test_verification_driver.py",
   "tests/unit/test_platform_adapters.py",
+  "tests/unit/test_windows_source_setup.py",
 ]
 full_tests = []
 include = [
@@ -25,6 +26,7 @@ include = [
   "tests/unit/test_import_boundaries.py",
   "tests/unit/test_qt_test_registry.py",
   "tests/unit/test_verification_driver.py",
+  "tests/unit/test_windows_source_setup.py",
   "pyproject.toml",
 ]
 manual_smoke = []

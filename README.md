@@ -31,6 +31,16 @@ Sometimes, using OneDrive or other services that sync with a cloud service can c
 issues with loading and running your experiments, so I recommend placing your root folder
 outside of one of those directories.
 
+### Windows source setup
+
+Clone or extract the entire repository. Close PyCharm if it is open, then
+double-click **Setup Windows.cmd**. Setup prepares 64-bit Python 3.10, installs
+`requirements.txt`, and leaves the virtual environment active in its PowerShell window.
+
+Run `fpvs-studio` in that window, or open the checkout in PyCharm and select
+**FPVS Studio (Windows)** to run `src/fpvs_studio/app/main.py`. See the
+[Windows setup guide](docs/ENVIRONMENT.md#windows-source-setup) for details.
+
 ### Mac source setup
 
 Download or clone the **entire repository**, then open its folder in Finder:

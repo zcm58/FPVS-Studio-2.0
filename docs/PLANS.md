@@ -41,6 +41,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Windows source setup](exec-plans/completed/windows-source-setup.md)
 - [Inline Recording settings](exec-plans/completed/inline-recording-settings.md):
   hardware fields and project/default save actions share one Settings page; safe
   focused/precommit checks passed, with visible Qt acceptance unperformed.

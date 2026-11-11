@@ -195,7 +195,7 @@ def test_mac_engine_requires_display_link_support_without_changing_other_platfor
 
 
 @pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
-def test_mac_engine_binding_constraint_does_not_apply_to_other_platforms(platform_name) -> None:
+def test_engine_binding_excludes_broken_pyqt6_stubs_on_mac_and_windows(platform_name) -> None:
     environment = {**default_environment(), "sys_platform": platform_name}
     requirements = [
         Requirement(value)
@@ -206,7 +206,7 @@ def test_mac_engine_binding_constraint_does_not_apply_to_other_platforms(platfor
         if requirement.name.lower() == "pyqt6"
         and (requirement.marker is None or requirement.marker.evaluate(environment))
     ]
-    if platform_name == "darwin":
+    if platform_name in {"darwin", "win32"}:
         assert len(selected) == 1
         assert "6.11.0" in selected[0].specifier
         assert "6.12.0" not in selected[0].specifier

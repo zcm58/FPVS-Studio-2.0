@@ -43,8 +43,8 @@ engine = [
   # Mac refresh protection requires the display-link callback added in 2026.1.
   "psychopy>=2026.1,<2027.0; sys_platform == 'darwin'",
   "sounddevice>=0.4,<0.6",
-  # PyQt6 6.12.0 ships invalid type stubs; retain the compatible Mac engine binding.
-  "PyQt6>=6.11,<6.12; sys_platform == 'darwin'",
+  # PyQt6 6.12.0 ships invalid type stubs in the Mac and Windows engine installs.
+  "PyQt6>=6.11,<6.12; sys_platform == 'darwin' or sys_platform == 'win32'",
   # Security floors for dependencies already required by PsychoPy.
   "GitPython>=3.1.60,<4.0",
   "requests>=2.33.0,<3.0",

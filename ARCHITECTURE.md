@@ -115,7 +115,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Library/import/update/publishing | `docs/EXPERIMENT_LIBRARY.md` |
 | Results and storage | `docs/DATA_SHARING.md`, `docs/REPORTING_STORAGE.md` |
 | Diagnostics and service activation | `docs/BUG_REPORTING.md` |
-| Environment, release and security | `docs/ENVIRONMENT.md`, `docs/PACKAGING.md`, `docs/SECURITY.md` |
+| Source setup, release and security | `docs/ENVIRONMENT.md`, `docs/PACKAGING.md`, `docs/SECURITY.md` |
 
 ## Task Context Recipes
 

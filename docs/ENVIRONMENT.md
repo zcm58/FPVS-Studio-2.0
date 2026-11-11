@@ -12,6 +12,33 @@ This is enforced in:
 
 ## Recommended Local Setup
 
+### Windows source setup
+
+In the full checkout on x64 Windows, close PyCharm and double-click **Setup Windows.cmd**.
+Setup reuses a compatible `.venv3.10` or `.venv`. If neither is usable and `.venv3.10`
+is available, it creates `.venv3.10` with 64-bit Python 3.10. It uses an installed 3.10
+interpreter when found by the Python launcher, or downloads one into `.python310`
+using a pinned, checksum-verified uv release. An incompatible `.venv` is preserved.
+If `.venv3.10` is incompatible or incomplete, rename it and rerun setup.
+
+`requirements.txt` installs packages into the selected Python 3.10 environment.
+It includes the Studio app, PsychoPy and development tools. Setup runs `pip check`
+and leaves PowerShell open with that environment active. Run `fpvs-studio` there
+to open Studio.
+
+For PyCharm, open the checkout and run **FPVS Studio (Windows)**. Setup configures
+the project interpreter and points this run configuration at
+`src/fpvs_studio/app/main.py`. When multiple standard profiles are available, setup
+uses the newest installed one it detects. Set `FPVS_PYCHARM_CONFIG` to an existing
+settings folder to select a different or custom profile. Changed IDE files are backed
+up in `.idea/fpvs-setup-backups/`. If PyCharm was open during setup or is installed
+later, close it and rerun setup to bind the interpreter.
+
+`Setup Windows.cmd` calls `scripts/setup_windows.ps1` to install dependencies and
+activate the environment. `scripts/windows_pycharm.py` prepares the IDE files.
+
+### Mac source setup
+
 For experimental macOS source setup, double-click `Setup Mac.command`, then
 `Run Mac.command` in the complete checkout. The existing shell adapter creates or
 reuses a native Python 3.10 environment, installs `requirements-macos.txt` and checks
@@ -31,10 +58,12 @@ prepares its run configuration. Changed XML is backed up under `.fpvs-macos/`; o
 SDK entries and project components are preserved. The same actions are available through
 `bash scripts/macos-source.sh {setup|run|pycharm|verify}`.
 
-PowerShell:
+### Manual Windows setup
+
+With 64-bit Python 3.10 already installed, run these commands in PowerShell:
 
 ```powershell
-py -3.10 -m venv .venv3.10
+py -3.10-64 -m venv .venv3.10
 .\.venv3.10\Scripts\python -m pip install -U 'pip>=26.2'
 .\.venv3.10\Scripts\python -m pip install -r requirements.txt
 ```

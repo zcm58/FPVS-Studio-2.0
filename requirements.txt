@@ -1,3 +1,4 @@
 # Developer dependencies, including the PsychoPy engine, are declared in pyproject.toml.
+# On Windows, double-click Setup Windows.cmd to prepare Python 3.10 and install these packages.
 # Mac users: double-click Setup Mac.command, or use requirements-macos.txt for the engine.
 -e .[dev,engine]
