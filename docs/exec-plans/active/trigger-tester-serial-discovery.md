@@ -15,3 +15,8 @@ reassigned port by reconnecting only that device.
   and configured BioSemi, BrainVision, and parallel paths in the relevant test scopes.
 - Run the [visible smoke path](../../GUI_WORKFLOW.md#trigger-tester) on Windows
   and verify receipt in ActiView and BrainVision Recorder with physical hardware.
+
+All 17 registered Trigger Tester tests passed in a native Windows session at 100%
+scaling with simulated hardware. The operator confirmed the tester and marker
+sending on a 2026 actiCHamp setup with Recorder 2 and a USB TriggerBox. Physical
+automatic detection and BioSemi reconnect checks are pending.
