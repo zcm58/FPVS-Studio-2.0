@@ -9,6 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Studio 3.0.1 release](exec-plans/active/release-3.0.1.md) | Windows build, visible display checks and GitHub publication |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Visible checks passed. Physical discovery and reconnect acceptance pending. |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
