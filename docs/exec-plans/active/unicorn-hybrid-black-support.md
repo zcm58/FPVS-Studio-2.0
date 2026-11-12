@@ -15,9 +15,9 @@ software checks.
 
 Trigger Tester can submit individual UDP event markers on the effective project
 port using the same adapter as normal launches. The dialog reports local submission
-and leaves receipt verification to Recorder. The [visible smoke path](../../GUI_WORKFLOW.md#trigger-tester)
-includes comparing a short known sequence against a saved raw BDF. This check is
-pending on the physical headset.
+and leaves receipt verification to Recorder. The 2026-11-12 Windows bench run verified
+the [visible smoke path](../../GUI_WORKFLOW.md#trigger-tester) and a normal Studio launch
+against the same saved raw BDF from a connected headset.
 
 The 2026-10-12 [Studio/Toolbox integration decision](studio-toolbox-integration.md)
 adds a core-owned built-in hardware declaration registry and automatic completed-session
@@ -370,6 +370,20 @@ checks must use fakes and safe non-Qt coverage. Qt execution and physical marker
 tests require a user-approved safe visible setup; never use offscreen Qt locally.
 
 ## Decision And Progress Log
+
+- 2026-11-12: Studio 3.0.1 source with Trigger Tester commit `e22b664` and Unicorn
+  Recorder 1.24.02 (1.24.2.2760) passed a Windows bench test. The operator completed
+  pairing through the CSR8510 A10 USB dongle with internal Bluetooth disabled after
+  earlier authentication failures. Recorder acquired its built-in test signal and
+  accepted UDP on `127.0.0.1:1000`. Trigger Tester sent `1, 9, 5, 5` using its buttons
+  and keyboard. A normal 300-frame Studio run passed Recorder readiness and logged
+  condition-start code `42` followed by six oddball codes `55`. The finalized classic
+  BDF (`24BIT`) contained all 11 events in its `Status` channel in exact order, with
+  zero extra nonzero samples. The BDF contained 45,563 samples at 250 Hz. The raw BDF,
+  marker comparison and Studio acquisition log were retained locally. This bench run
+  leaves long-run Bluetooth stability, participant EEG quality, BDF+/Toolbox
+  interchange and display-to-EEG timing open.
+  Raw BDF SHA-256 `b6bc4388e2301ebba498776c789ea45f59889fe00b2f4b35cd5015d5d1fdc7c0`.
 
 - 2026-09-30: User selected the minimal Home launch-text indicator, with
   `Recording Device: BioSemi ActiveTwo` and

@@ -743,13 +743,13 @@ visit or opening presentation. A valid configuration and successful readiness ch
 allow playback to send markers to the configured loopback port, initially 1000.
 Test/Pilot always uses null output and skips Recorder checks.
 
-Full receiver and physical timing qualification remain pending, but do not block this
-workflow. There is no additional validation mode, bypass preference or manual approval.
-The retained 426-marker test demonstrates exact counts/order, codes 1–255 and repeated
-codes in Recorder 1.24.02's classic BDF and parallel CSV. It does not establish BDF+
-interchange, Toolbox acceptance, loss handling or display/physical timing. The active
-plan tracks those remaining checks, and exported receiver-validation metadata stays
-`pending`.
+Recorder 1.24.02 saved all 11 expected markers in the raw BDF `Status` channel at
+250 Hz in the Windows USB Bluetooth bench test. The file contained four Trigger Tester
+markers and all seven markers from a completed normal Studio launch, in order. An
+earlier 426-marker test verified codes 1–255 and repeated codes in classic BDF and CSV.
+The [active plan](exec-plans/active/unicorn-hybrid-black-support.md#decision-and-progress-log)
+tracks the bench evidence and the remaining BDF+/Toolbox, loss handling and physical
+timing checks. Exported receiver-validation metadata stays `pending`.
 
 The project selection is `serial`, `biosemi_active_three`, `brainproducts_triggerbox`
 or `unicorn_udp`; native GUI projects without saved recording settings inherit the
