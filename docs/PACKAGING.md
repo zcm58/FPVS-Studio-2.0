@@ -76,6 +76,8 @@ release notes with a short user-facing bullet that fits Studio's What's New prev
 Add detail in later bullets when it helps users understand the release. Record
 build and verification evidence in the release plan.
 
+The [3.0.1 release record](exec-plans/completed/release-3.0.1.md) tracks manual
+physical screen width calibration and verified Windows publication.
 The [3.0.0 release record](exec-plans/completed/release-3.0.0.md) tracks the
 Recorder 2 support announcement and verified Windows publication.
 The [2.9.1 release record](exec-plans/completed/release-2.9.1.md) tracks fullscreen
