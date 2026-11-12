@@ -24,7 +24,6 @@ theme:
 nav:
   - Home: index.md
   - Install: install.md
-  - Quickstart: quickstart.md
   - Prepare Stimuli: prepare-images.md
   - Run a Session: run-session.md
   - Update FPVS Studio: updates.md

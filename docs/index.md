@@ -4,8 +4,8 @@ This directory is the structured documentation entry point for future FPVS Studi
 development. Keep stable source-of-truth docs here, and keep the compact repo map in
 `../ARCHITECTURE.md`.
 
-These are internal developer and agent-facing docs, not the public user guide. The
-public quickstart site lives in `../docs-site/` and is built with MkDocs.
+These are internal developer and agent-facing docs. The public user guide lives
+in `../docs-site/` and is built with MkDocs.
 
 ## Choose A Task
 
