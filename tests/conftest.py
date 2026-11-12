@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import os
-import shutil
 import sys
 import tempfile
-import uuid
 from pathlib import Path
 
 import pytest
@@ -22,6 +20,7 @@ from fpvs_studio.core.models import (
     ProjectSettings,
     StimulusSet,
 )
+from fpvs_studio.core.paths import filesystem_path
 from tests.qt_test_registry import (
     QT_TESTS_ENV_VAR,
     load_qt_test_registry,
@@ -32,9 +31,11 @@ from tests.qt_test_registry import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-TEST_ENV_ROOT = (
-    ROOT / "build" / "test_env" / f"pytest-{os.getpid()}-{uuid.uuid4().hex[:10]}"
-)
+# Allocate from the system temp location before redirecting the process's temp paths.
+TEST_TEMP_PARENT = Path(tempfile.gettempdir()).resolve()
+# Cleanup must traverse long Windows paths created by the bundle and path tests.
+TEST_ENV = tempfile.TemporaryDirectory(prefix="fpvs-test-", dir=filesystem_path(TEST_TEMP_PARENT))
+TEST_ENV_ROOT = TEST_TEMP_PARENT / Path(TEST_ENV.name).name
 
 if qt_tests_requested(cli_opt_in="--allow-qt-tests" in sys.argv, environ=os.environ):
     # pytest-qt is blocked from entry-point autoload in pyproject.toml so an
@@ -42,8 +43,8 @@ if qt_tests_requested(cli_opt_in="--allow-qt-tests" in sys.argv, environ=os.envi
     pytest_plugins = ("pytestqt.plugin",)
 
 
-def _apply_workspace_test_env() -> Path:
-    root = TEST_ENV_ROOT.resolve()
+def _apply_test_env() -> Path:
+    root = TEST_ENV_ROOT
     directories = {
         "tmp": root / "tmp",
         "appdata": root / "appdata",
@@ -77,7 +78,7 @@ def _apply_workspace_test_env() -> Path:
     return root
 
 
-_apply_workspace_test_env()
+_apply_test_env()
 
 
 def pytest_addoption(parser) -> None:
@@ -165,16 +166,16 @@ def pytest_report_header(config: pytest.Config) -> str:
 
 
 def pytest_unconfigure(config: pytest.Config) -> None:  # noqa: ARG001
-    """Remove this process's namespaced workspace test environment."""
+    """Remove the private temporary directory owned by this pytest process."""
 
-    shutil.rmtree(TEST_ENV_ROOT, ignore_errors=True)
+    TEST_ENV.cleanup()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _workspace_env() -> Path:
-    """Keep temp/profile writes inside the workspace for deterministic test runs."""
+    """Keep test temp and profile writes inside the private test directory."""
 
-    return _apply_workspace_test_env()
+    return _apply_test_env()
 
 
 def _build_project(project_id: str, project_name: str, *, condition_count: int) -> ProjectFile:

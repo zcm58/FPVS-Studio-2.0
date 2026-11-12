@@ -94,20 +94,42 @@ def test_default_pytest_session_does_not_import_pyside6(pytestconfig: pytest.Con
             for module_name in sys.modules
         )
 
-    # Probe default collection independently of an explicitly opted-in parent.
+    # Probe default collection and scratch cleanup in an independent process.
     # Block Qt before import so a missed registry entry cannot execute native code.
     script = """
 import importlib.abc
+import os
+import stat
 import sys
+import tempfile
+from pathlib import Path
+
 import pytest
+from fpvs_studio.core.paths import filesystem_path
+
 class BlockQt(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
         if fullname == "PySide6" or fullname.startswith("PySide6."):
             raise ImportError("Default pytest collection attempted to import Qt: " + fullname)
+
+class CheckTestEnvironment:
+    def pytest_sessionstart(self, session):
+        self.root = Path(tempfile.gettempdir()).resolve().parent
+        assert self.root.parent == temp_parent, self.root
+        for name in ("TMPDIR", "TMP", "TEMP", "APPDATA", "LOCALAPPDATA", "HOME", "USERPROFILE"):
+            assert Path(os.environ[name]).resolve().parent == self.root, name
+        artifact = filesystem_path(self.root / ("long-" * 25) / ("long-" * 25) / "read-only.txt")
+        artifact.parent.mkdir(parents=True)
+        artifact.write_text("scratch", encoding="utf-8")
+        artifact.chmod(stat.S_IREAD)
+
+temp_parent = Path(tempfile.gettempdir()).resolve()
+check_env = CheckTestEnvironment()
 sys.meta_path.insert(0, BlockQt())
-result = pytest.main(["--collect-only", "-qq", "--tb=short"])
+result = pytest.main(["--collect-only", "-qq", "--tb=short"], plugins=[check_env])
 assert result == 0, result
 assert not any(name == "PySide6" or name.startswith("PySide6.") for name in sys.modules)
+assert not check_env.root.exists(), check_env.root
 """
     env = os.environ.copy()
     env.pop("FPVS_ALLOW_QT_TESTS", None)

@@ -76,7 +76,7 @@ def report():
 @pytest.fixture
 def configured(tmp_path, monkeypatch):
     # Core validates an imported copy inside this workspace; keep that nested path
-    # independent of pytest's potentially long repository-local basetemp.
+    # independent of pytest's potentially long nested temporary paths.
     with tempfile.TemporaryDirectory(prefix="dp-", dir=tempfile.gettempdir()) as name:
         temporary = Path(name)
         monkeypatch.setattr(publisher.tempfile, "gettempdir", lambda: str(temporary))

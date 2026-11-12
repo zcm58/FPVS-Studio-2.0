@@ -190,8 +190,7 @@ explicitly, keeps each test file in one worker, and retains a separate temporary
 profile for every process. Start with two to four workers; more workers can increase
 Windows filesystem contention and memory use. Audits, lint and type checks still run
 in order. The default is one worker, which is also useful when diagnosing failures.
-Use the normal checkout or a short worktree path on Windows. Pytest nests fixture
-paths under the checkout's `build/test_env`.
+Pytest nests fixture paths under the system temporary directory.
 
 The Qt-enabled `full` tier requires one worker. Its existing visible-environment
 approval and opt-in requirements still apply.
@@ -201,9 +200,9 @@ in [TD-004](exec-plans/tech-debt-tracker.md#td-004-sequential-uploaded-history-s
 
 ## GUI Test Environment
 
-Qt and PsychoPy-adjacent tests keep writes inside the workspace. Shared pytest
-configuration redirects local test environment paths into `build/test_env` and creates
-isolated per-run temporary roots.
+The shared pytest configuration redirects temporary files, user profile paths, and
+Qt settings into private `fpvs-test-*` directories under the system temp location
+(`%TEMP%` on Windows). Each pytest process removes its directory at teardown.
 
 Registered Qt modules are excluded before import during ordinary local verification.
 Use the safe GUI route for non-Qt checks:
