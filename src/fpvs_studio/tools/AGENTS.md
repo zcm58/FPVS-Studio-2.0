@@ -6,6 +6,10 @@
 resolves configured condition pools in `condition_figure_project.py` and renders
 600-DPI PNGs in `condition_figure.py`. The dialog owns selection and worker lifetime.
 
+The [offline Unicorn timing report](../../../docs/RUNTIME_EXECUTION.md#unicorn-recorder-timing-report)
+compares finalized Recorder and Studio evidence without opening a device or changing
+either input file.
+
 The current user-facing `Tools > Image Resizer` page is Studio-native code in
 `src/fpvs_studio/gui/image_resizer_page.py` backed by preprocessing normalization
 services. The imported FPVS Toolbox reference files were archived under

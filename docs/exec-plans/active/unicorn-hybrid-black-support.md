@@ -308,6 +308,12 @@ separate; checked implementation tasks do not establish those acceptance results
 
 ### Phase 3 - Toolbox Integration And Timing Qualification
 
+Use the [offline Unicorn timing report](../../RUNTIME_EXECUTION.md#unicorn-recorder-timing-report)
+to compare a run's finalized raw BDF and Studio acquisition evidence. Keep those
+inputs intact and retain the report with local bench evidence. The comparison
+checks marker integrity and drift relative to Studio callbacks. Physical timing
+qualification requires the independent measurements above.
+
 - [ ] Run a full recording through the companion Toolbox plan: native 250 Hz,
   interpolation off, explicit reference/ROI/QC policy, event reconciliation and spectra.
 - [ ] Reconcile the expected and actually recorded code sequence across all conditions
@@ -370,6 +376,18 @@ checks must use fakes and safe non-Qt coverage. Qt execution and physical marker
 tests require a user-approved safe visible setup; never use offscreen Qt locally.
 
 ## Decision And Progress Log
+
+- 2026-11-12: Ran the offline timing report on the saved two-minute 6 Hz / 1.2 Hz
+  Recorder BDF and Studio acquisition log. All 145 sent markers matched in order
+  (one code 1 and 144 code 55), all oddball callback frame gaps were 50, and the
+  52,989 saved samples had zero CNT discontinuities and zero invalid flags. From
+  code 1 to the last 55, Studio callbacks spanned 119.796103 s, 37.231 ms shorter
+  than the corresponding 60 Hz reference frame span. The nominal BDF span was
+  119.912000 s, 115.897 ms longer than the callback span. The fit gave an apparent
+  250.246909 samples/s relative to Studio, with 1.258 ms RMS residual. The Markdown
+  report stays with local bench evidence and both input hashes were unchanged.
+  The acquisition log has marker callbacks only, so per-frame and optical timing
+  remain unverified.
 
 - 2026-11-12: Studio 3.0.1 source with Trigger Tester commit `e22b664` and Unicorn
   Recorder 1.24.02 (1.24.2.2760) passed a Windows bench test. The operator completed

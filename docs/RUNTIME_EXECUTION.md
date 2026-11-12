@@ -844,6 +844,36 @@ No timing shift is applied in Studio. See the
 [active execution plan](exec-plans/active/unicorn-hybrid-black-support.md) for receiver
 fixtures, repeated/boundary/rate tests, loss evidence, and the no-purchase timing route.
 
+#### Unicorn Recorder timing report
+
+From a Studio source environment, compare a finalized raw Recorder `24BIT` BDF with
+the matching Studio acquisition-v1 JSON for a single normal run. Start a separate
+Recorder file for the run so the BDF contains exactly that run's marker sequence.
+
+```powershell
+python -m fpvs_studio.tools.unicorn_timing recording.bdf run.acquisition-v1.json --refresh-hz 60 --oddball-hz 1.2 --oddball-code 55 --output timing.md
+```
+
+The refresh rate, oddball rate and code default to `60`, `1.2` and `55`. The report
+prints Markdown to standard output by default. `--output` creates a new file and
+refuses an existing path. Both input files are read-only.
+
+The report checks the full marker count and code order, available BDF sample counter
+and validation channels, and the oddball callback frame and time gaps. At 60 Hz, a 1.2 Hz
+oddball schedule expects 50 frames per interval. At the nominal 250 Hz BDF rate,
+833.333… ms spans 208⅓ samples, so 208- and 209-sample gaps can reflect sample
+quantization. A steady change in BDF elapsed time relative to callback elapsed time
+is measured separately from this interval variation. The report gives the drift
+slope and RMS residual where the sequence and timing evidence support a fit. It
+withholds the fit if marker matching or required timing checks fail.
+
+The comparison uses Studio's callback clock. The apparent sample rate can reflect
+both acquisition clock error and Recorder's marker placement. The acquisition-v1
+sidecar contains callback frame indices and timestamps. Establishing dropped display
+frames requires per-frame timing evidence, and measuring physical stimulus onset
+requires an optical signal. Estimating an absolute EEG sample rate requires an
+independent timing reference. The report leaves the saved EEG and event indices intact.
+
 ### Acquisition evidence contract, version 1
 
 `core/execution.py` owns `RecordingSnapshot` and `AcquisitionEvidence`; runtime's
