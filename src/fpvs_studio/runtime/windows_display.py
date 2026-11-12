@@ -18,6 +18,9 @@ _DISPLAY_DEVICE_PRIMARY_DEVICE = 0x00000004
 _DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1
 _DISPLAYCONFIG_PATH_ACTIVE = 0x00000001
 _DISPLAYCONFIG_PATH_BOOST_REFRESH_RATE = 0x00000010
+_ENUM_CURRENT_SETTINGS = 0xFFFFFFFF
+_DM_INTERLACED = 0x00000002
+_MONITORINFOF_PRIMARY = 0x00000001
 
 _UINT32 = ctypes.c_uint32
 _UINT64 = ctypes.c_uint64
@@ -197,6 +200,121 @@ class _DisplayDeviceW(ctypes.Structure):
         ("DeviceID", ctypes.c_wchar * 128),
         ("DeviceKey", ctypes.c_wchar * 128),
     ]
+
+
+class _MonitorRect(ctypes.Structure):
+    _fields_ = [
+        ("left", ctypes.c_int32), ("top", ctypes.c_int32),
+        ("right", ctypes.c_int32), ("bottom", ctypes.c_int32),
+    ]
+
+
+class _MonitorInfoExW(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", _UINT32),
+        ("rcMonitor", _MonitorRect),
+        ("rcWork", _MonitorRect),
+        ("dwFlags", _UINT32),
+        ("szDevice", ctypes.c_wchar * 32),
+    ]
+
+
+@dataclass(frozen=True)
+class WindowsMonitor:
+    """One independently addressable Windows desktop monitor."""
+
+    device_name: str
+    primary: bool
+    pixel_width: int
+    pixel_height: int
+    x: int = 0
+    y: int = 0
+
+
+def query_windows_monitors() -> tuple[WindowsMonitor, ...]:
+    """Enumerate desktop monitors without importing a GUI or graphics toolkit.
+
+    The native enumeration order also supports the existing Pyglet index API.
+    New callers retain the device name so topology changes cannot retarget a choice.
+    """
+    user32 = _load_user32()
+    callback_type = getattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE)(
+        _BOOL, ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(_MonitorRect), ctypes.c_ssize_t,
+    )
+    user32.EnumDisplayMonitors.argtypes = [
+        ctypes.c_void_p, ctypes.c_void_p, callback_type, ctypes.c_ssize_t,
+    ]
+    user32.EnumDisplayMonitors.restype = _BOOL
+    user32.GetMonitorInfoW.argtypes = [ctypes.c_void_p, ctypes.POINTER(_MonitorInfoExW)]
+    user32.GetMonitorInfoW.restype = _BOOL
+    monitors: list[WindowsMonitor] = []
+    errors: list[str] = []
+
+    def collect(handle: int, _dc: int, _rect: Any, _data: int) -> int:
+        info = _MonitorInfoExW()
+        info.cbSize = ctypes.sizeof(info)
+        if not user32.GetMonitorInfoW(handle, ctypes.byref(info)):
+            errors.append("Windows could not read a connected monitor's identity.")
+            return 0
+        name = str(info.szDevice).strip()
+        rect = info.rcMonitor
+        width, height = rect.right - rect.left, rect.bottom - rect.top
+        if not name or width <= 0 or height <= 0:
+            errors.append("Windows returned an incomplete connected monitor description.")
+            return 0
+        monitors.append(WindowsMonitor(
+            name, bool(info.dwFlags & _MONITORINFOF_PRIMARY), width, height,
+            rect.left, rect.top,
+        ))
+        return 1
+
+    callback = callback_type(collect)
+    succeeded = user32.EnumDisplayMonitors(None, None, callback, 0)
+    if errors:
+        raise WindowsDisplayModeError(errors[0])
+    if not succeeded or not monitors:
+        raise WindowsDisplayModeError("Windows could not enumerate connected monitors.")
+    if len({monitor.device_name.casefold() for monitor in monitors}) != len(monitors):
+        raise WindowsDisplayModeError("Windows returned ambiguous monitor identities.")
+    if sum(monitor.primary for monitor in monitors) != 1:
+        raise WindowsDisplayModeError("Windows did not report one active primary monitor.")
+    return tuple(monitors)
+
+
+class _DevModeW(ctypes.Structure):
+    # Public DEVMODEW layout. Unused WCHAR arrays use the Win32 16-bit ABI
+    # even when tests run on a platform with a different native wchar width.
+    _fields_ = [
+        ("dmDeviceName", ctypes.c_uint16 * 32),
+        ("dmSpecVersion", ctypes.c_uint16),
+        ("dmDriverVersion", ctypes.c_uint16),
+        ("dmSize", ctypes.c_uint16),
+        ("dmDriverExtra", ctypes.c_uint16),
+        ("dmFields", _UINT32),
+        ("printer_or_display", _UINT32 * 4),
+        ("printer_fields", ctypes.c_uint16 * 5),
+        ("dmFormName", ctypes.c_uint16 * 32),
+        ("dmLogPixels", ctypes.c_uint16),
+        ("dmBitsPerPel", _UINT32),
+        ("dmPelsWidth", _UINT32),
+        ("dmPelsHeight", _UINT32),
+        ("dmDisplayFlags", _UINT32),
+        ("dmDisplayFrequency", _UINT32),
+        ("remaining_fields", _UINT32 * 8),
+    ]
+
+
+@dataclass(frozen=True)
+class WindowsRefreshRecommendation:
+    """Higher nominal fixed modes reported for the current presentation resolution."""
+
+    pixel_width: int
+    pixel_height: int
+    higher_rates_hz: tuple[int, ...]
+
+    @property
+    def highest_hz(self) -> int:
+        return max(self.higher_rates_hz)
 
 
 @dataclass(frozen=True)
@@ -385,7 +503,10 @@ def _query_active_display_paths(user32: Any) -> list[_ActiveDisplayPath]:
 def _select_primary_display_mode(
     primary_device_name: str,
     active_paths: list[_ActiveDisplayPath],
+    *,
+    selected: bool = False,
 ) -> WindowsDisplayMode:
+    display_role = "selected" if selected else "primary"
     matching = [
         path
         for path in active_paths
@@ -393,23 +514,24 @@ def _select_primary_display_mode(
     ]
     if not matching:
         raise WindowsDisplayModeError(
-            f"Windows could not match primary display {primary_device_name!r} to an active path."
+            f"Windows could not match {display_role} display {primary_device_name!r} "
+            "to an active path. Reconnect the monitor or choose another display."
         )
     if len(matching) > 1:
         raise WindowsDisplayModeError(
-            "The primary Windows desktop source maps to multiple active display paths. "
+            f"The {display_role} Windows desktop source maps to multiple active display paths. "
             "Use an extended single-primary display configuration for exact verification."
         )
-    selected = matching[0]
-    if selected.numerator <= 0 or selected.denominator <= 0:
+    selected_path = matching[0]
+    if selected_path.numerator <= 0 or selected_path.denominator <= 0:
         raise WindowsDisplayModeError(
-            "Windows reported an invalid rational refresh rate for the primary display."
+            f"Windows reported an invalid rational refresh rate for the {display_role} display."
         )
     return WindowsDisplayMode(
-        display_device_name=selected.source_device_name,
-        numerator=selected.numerator,
-        denominator=selected.denominator,
-        dynamic_refresh_enabled=selected.dynamic_refresh_enabled,
+        display_device_name=selected_path.source_device_name,
+        numerator=selected_path.numerator,
+        denominator=selected_path.denominator,
+        dynamic_refresh_enabled=selected_path.dynamic_refresh_enabled,
     )
 
 
@@ -421,3 +543,67 @@ def query_primary_windows_display_mode() -> WindowsDisplayMode:
         _primary_gdi_device_name(user32),
         _query_active_display_paths(user32),
     )
+
+
+def query_windows_display_mode(display_device_name: str | None = None) -> WindowsDisplayMode:
+    """Read the chosen Windows desktop source, defaulting to the current primary."""
+    if display_device_name is None:
+        return query_primary_windows_display_mode()
+    if not isinstance(display_device_name, str) or not display_device_name.strip():
+        raise WindowsDisplayModeError("The selected Windows display name must not be blank.")
+    return _select_primary_display_mode(
+        display_device_name, _query_active_display_paths(_load_user32()), selected=True,
+    )
+
+
+def query_windows_refresh_recommendation(
+    display_device_name: str | None = None,
+) -> WindowsRefreshRecommendation | None:
+    """Find higher progressive modes at the selected display's active resolution."""
+    mode = query_windows_display_mode(display_device_name)
+    if mode.dynamic_refresh_enabled or mode.numerator != 60 * mode.denominator:
+        return None
+
+    user32 = _load_user32()
+    enumerate_mode = user32.EnumDisplaySettingsW
+    enumerate_mode.argtypes = [ctypes.c_wchar_p, _UINT32, ctypes.POINTER(_DevModeW)]
+    enumerate_mode.restype = _BOOL
+
+    def read_mode(index: int) -> _DevModeW | None:
+        settings = _DevModeW()
+        settings.dmSize = ctypes.sizeof(_DevModeW)
+        if not enumerate_mode(mode.display_device_name, index, ctypes.byref(settings)):
+            return None
+        return settings
+
+    current = read_mode(_ENUM_CURRENT_SETTINGS)
+    if current is None or not current.dmPelsWidth or not current.dmPelsHeight:
+        raise WindowsDisplayModeError("Windows could not read the current display resolution.")
+    if current.dmDisplayFrequency != 60:
+        return None  # The mode changed between the native reads.
+
+    resolution = (current.dmPelsWidth, current.dmPelsHeight)
+    rates: set[int] = set()
+    for index in range(4096):
+        candidate = read_mode(index)
+        if candidate is None:
+            break
+        if (
+            (candidate.dmPelsWidth, candidate.dmPelsHeight) == resolution
+            and candidate.dmBitsPerPel == current.dmBitsPerPel
+            and not candidate.dmDisplayFlags & _DM_INTERLACED
+            and candidate.dmDisplayFrequency > 60
+        ):
+            rates.add(candidate.dmDisplayFrequency)
+    else:
+        raise WindowsDisplayModeError("Windows returned too many display modes to compare.")
+
+    # A resolution or mode change during enumeration invalidates the comparison.
+    final = read_mode(_ENUM_CURRENT_SETTINGS)
+    if final is None or (
+        final.dmPelsWidth, final.dmPelsHeight, final.dmBitsPerPel, final.dmDisplayFrequency,
+    ) != (*resolution, current.dmBitsPerPel, 60):
+        return None
+    if rates:
+        return WindowsRefreshRecommendation(*resolution, tuple(sorted(rates)))
+    return None

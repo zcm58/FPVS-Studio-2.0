@@ -15,6 +15,7 @@ from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.display_mode import (
     DisplayModeError,
     NativeDisplayMode,
+    query_native_display_mode,
     query_primary_native_display_mode,
 )
 
@@ -60,13 +61,27 @@ def verify_primary_display_refresh(
     *,
     runtime_options: Mapping[str, object] | None = None,
 ) -> DisplayRefreshVerification:
-    """Verify the primary display's native mode and stable fullscreen frame delivery."""
+    """Verify the selected display's native mode and stable fullscreen frame delivery."""
 
     if sys.platform == "darwin" and getattr(engine, "engine_id", None) == "psychopy":
         from fpvs_studio.runtime.macos_session_process import verify_macos_primary_display_refresh
 
         try:
-            return verify_macos_primary_display_refresh()
+            options = runtime_options or {}
+            selected_name = options.get("display_device_name")
+            selected_index = options.get("display_index")
+            if selected_name is not None and not isinstance(selected_name, str):
+                raise DisplayRefreshVerificationError("Select a valid Mac presentation monitor.")
+            if selected_index is not None and (
+                type(selected_index) is not int or selected_index != 0
+                or selected_name is not None
+            ):
+                raise DisplayRefreshVerificationError(
+                    "Select the Mac presentation monitor by its native identity."
+                )
+            if selected_name is None:
+                return verify_macos_primary_display_refresh()
+            return verify_macos_primary_display_refresh(display_device_name=selected_name)
         except RuntimeError as exc:
             raise DisplayRefreshVerificationError(str(exc)) from exc
     return _verify_primary_display_refresh_in_process(engine, runtime_options=runtime_options)
@@ -79,10 +94,41 @@ def _verify_primary_display_refresh_in_process(
 ) -> DisplayRefreshVerification:
     """Observe on the presentation thread; Mac callers use the bounded probe child."""
 
+    probe_options = dict(runtime_options or {})
+    selected_name = probe_options.get("display_device_name")
+    selected_index = probe_options.get("display_index")
     try:
-        display_mode = query_primary_native_display_mode()
+        if selected_name is not None:
+            if not isinstance(selected_name, str) or not selected_name.strip():
+                raise DisplayModeError("The selected display device name must not be blank.")
+            if selected_index is not None:
+                raise DisplayModeError("Select a display by device name or index, not both.")
+        elif sys.platform == "win32" and selected_index is not None:
+            from fpvs_studio.runtime.windows_display import (
+                WindowsDisplayModeError,
+                query_windows_monitors,
+            )
+
+            try:
+                monitors = query_windows_monitors()
+            except WindowsDisplayModeError as exc:
+                raise DisplayModeError(str(exc)) from exc
+            if type(selected_index) is not int or not 0 <= selected_index < len(monitors):
+                raise DisplayModeError("The selected display index is no longer available.")
+            selected_name = monitors[selected_index].device_name
+            # Pin this probe to the same identity used by native verification.
+            probe_options["display_index"] = None
+        display_mode = (
+            query_primary_native_display_mode() if selected_name is None
+            else query_native_display_mode(selected_name)
+        )
     except DisplayModeError as exc:
         raise DisplayRefreshVerificationError(str(exc)) from exc
+    if display_mode.platform_name == "Windows":
+        probe_options["display_device_name"] = display_mode.display_name
+    elif display_mode.platform_name == "macOS" and display_mode.display_device_name is not None:
+        probe_options["display_device_name"] = display_mode.display_device_name
+        probe_options["display_index"] = None
     if display_mode.variable_refresh_enabled:
         variable_refresh_name = display_mode.variable_refresh_label or "enabled"
         platform_guidance = (
@@ -107,7 +153,7 @@ def _verify_primary_display_refresh_in_process(
 
     try:
         psychopy_measured_hz = float(
-            engine.measure_refresh_hz(runtime_options=runtime_options)
+            engine.measure_refresh_hz(runtime_options=probe_options)
         )
     except Exception as exc:
         raise DisplayRefreshVerificationError(

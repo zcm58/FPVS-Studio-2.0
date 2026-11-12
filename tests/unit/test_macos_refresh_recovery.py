@@ -84,6 +84,74 @@ def test_mac_automatic_preflight_uses_bounded_probe_before_playback(
     assert not (sample_project_root / "runs").exists()
 
 
+def test_mac_automatic_preflight_forwards_selected_identity_to_bounded_probe(monkeypatch):
+    set_module_platform(monkeypatch, display_refresh, "darwin")
+    seen = []
+
+    def probe(*, display_device_name):
+        seen.append(display_device_name)
+        return _verified()
+
+    monkeypatch.setattr(process, "verify_macos_primary_display_refresh", probe)
+    monkeypatch.setattr(display_refresh, "_verify_primary_display_refresh_in_process",
+                        lambda *_a, **_k: pytest.fail("Parent must not create graphics"))
+    result = display_refresh.verify_primary_display_refresh(
+        SimpleNamespace(engine_id="psychopy"),
+        runtime_options={"display_device_name": "macos:84", "display_index": None},
+    )
+    assert result == _verified()
+    assert seen == ["macos:84"]
+
+
+@pytest.mark.parametrize("options", [
+    {"display_device_name": False}, {"display_index": 1}, {"display_index": False},
+    {"display_device_name": "macos:84", "display_index": 0},
+])
+def test_mac_refresh_rejects_ambiguous_or_invalid_selection_before_probe(monkeypatch, options):
+    set_module_platform(monkeypatch, display_refresh, "darwin")
+    monkeypatch.setattr(process, "verify_macos_primary_display_refresh",
+                        lambda **_: pytest.fail("No probe"))
+    with pytest.raises(DisplayRefreshVerificationError, match="Mac presentation monitor"):
+        display_refresh.verify_primary_display_refresh(
+            SimpleNamespace(engine_id="psychopy"), runtime_options=options,
+        )
+
+
+@pytest.mark.parametrize("selected_name", [None, "macos:84"])
+def test_child_probe_uses_the_same_native_monitor_for_mode_and_frame_delivery(
+    monkeypatch, selected_name,
+):
+    set_module_platform(monkeypatch, display_refresh, "darwin")
+    identity = selected_name or "macos:42"
+    mode = NativeDisplayMode(
+        "macOS", "Display", 60.0, "CoreGraphics/AppKit", False,
+        display_device_name=identity,
+    )
+    queries, observed = [], []
+
+    def query(name=None):
+        queries.append(name)
+        return mode
+
+    def measure(*, runtime_options):
+        observed.append(runtime_options)
+        return 60.0
+
+    monkeypatch.setattr(display_refresh, "query_primary_native_display_mode", query)
+    monkeypatch.setattr(display_refresh, "query_native_display_mode", query)
+    options = {"fullscreen": True, "display_index": None}
+    if selected_name is not None:
+        options["display_device_name"] = selected_name
+    result = display_refresh._verify_primary_display_refresh_in_process(
+        SimpleNamespace(measure_refresh_hz=measure), runtime_options=options,
+    )
+    assert result.display_mode is mode
+    assert queries == [selected_name]
+    assert observed[0]["display_device_name"] == identity
+    assert observed[0]["display_index"] is None
+    assert options.get("display_device_name") == selected_name
+
+
 @pytest.fixture
 def native_child(monkeypatch):
     """Replace only the child command; never import PsychoPy or open a window."""
@@ -135,12 +203,15 @@ def test_hung_probe_is_killed_reaped_and_cleaned_then_retry_succeeds(monkeypatch
     assert all(not path.parent.exists() for path in requests)
 
 
-def test_cancel_during_probe_kills_and_reaps_only_probe(native_child):
+@pytest.mark.parametrize("display_device_name", [None, "macos:84"])
+def test_cancel_during_probe_kills_and_reaps_only_probe(native_child, display_device_name):
     install, children, requests = native_child
     cancel = threading.Event()
     install(cancel=cancel)
     with pytest.raises(process.MacOSSessionProcessError, match="canceled"):
-        process.verify_macos_primary_display_refresh(cancel_event=cancel)
+        process.verify_macos_primary_display_refresh(
+            cancel_event=cancel, display_device_name=display_device_name,
+        )
     assert children[0].poll() is not None
     assert not requests[0].parent.exists()
 

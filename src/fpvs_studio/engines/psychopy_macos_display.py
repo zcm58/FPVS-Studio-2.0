@@ -14,6 +14,53 @@ DISPLAY_LINK_TIMEOUT_SECONDS = 1.0
 LOGGER = logging.getLogger(__name__)
 
 
+def _macos_window_display_id(window: Any) -> int:
+    """Read the actual NSWindow screen instead of Pyglet's requested screen object."""
+    appkit = import_module("AppKit")
+    native = appkit.NSWindow(c_void_p=window.winHandle._nswindow.ptr)
+    return int(native.screen().deviceDescription()["NSScreenNumber"])
+
+
+def confirm_macos_window_display(window: Any, expected_display_id: int) -> None:
+    """Confirm actual monitor placement and refresh stale mixed-DPI backing metadata."""
+    if sys.platform != "darwin":
+        return
+    try:
+        actual_display_id = _macos_window_display_id(window)
+        if actual_display_id != expected_display_id:
+            raise RuntimeError(
+                f"Mac presentation display changed from {expected_display_id} to "
+                f"{actual_display_id}. Choose the intended monitor and launch again."
+            )
+        backing = tuple(window.winHandle.get_framebuffer_size())
+        if len(backing) != 2 or any(
+            not isinstance(value, Integral) or isinstance(value, bool) or int(value) <= 0
+            for value in backing
+        ):
+            raise RuntimeError("Mac presentation display did not report valid backing pixels.")
+        if tuple(window.frameBufferSize) != backing:
+            # PsychoPy reads Retina backing before its final Cocoa placement.
+            # Its existing backend resize path re-reads the realized NSView and
+            # updates the viewport/scissor together. Reapplying False does not
+            # capture a display or change the already-borderless window mode.
+            if window._isFullScr is not False or bool(getattr(window, "useFBO", False)):
+                raise RuntimeError(
+                    "Mac presentation display backing could not be refreshed safely."
+                )
+            window.backend.setFullScr(False)
+        if tuple(window.frameBufferSize) != backing or tuple(window.size) != backing:
+            raise RuntimeError(
+                "Mac presentation display backing pixels did not match its viewport."
+            )
+    except Exception as exc:
+        if isinstance(exc, RuntimeError) and str(exc).startswith("Mac presentation display"):
+            raise
+        raise RuntimeError(
+            "Mac presentation display could not be confirmed. Check the monitor connection "
+            "and retry the launch."
+        ) from exc
+
+
 def prepare_macos_fullscreen_presentation(
 ) -> tuple[Callable[[], None], Callable[[], None]] | None:
     """Prepare activation and restoration before changing app presentation options.

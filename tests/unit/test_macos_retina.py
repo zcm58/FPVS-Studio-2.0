@@ -14,8 +14,20 @@ from tests.unit.test_psychopy_engine import (
 from fpvs_studio.engines import psychopy_engine as engine_module
 from fpvs_studio.engines import psychopy_window
 from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
+from fpvs_studio.runtime import macos_display
 from fpvs_studio.runtime.preflight import PreflightError
 from fpvs_studio.runtime.run_worker import _validate_configured_display_resolution
+
+
+@pytest.fixture(autouse=True)
+def fake_mac_monitor_identity(monkeypatch):
+    monkeypatch.setattr(
+        macos_display, "query_macos_monitors",
+        lambda: (SimpleNamespace(display_id=1, primary=True),),
+    )
+    monkeypatch.setattr(
+        psychopy_window, "_pyglet_screens", lambda: [SimpleNamespace(_cg_display_id=1)],
+    )
 
 
 def test_mac_window_uses_retina_pyglet(monkeypatch):

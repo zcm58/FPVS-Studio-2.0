@@ -68,10 +68,15 @@ from fpvs_studio.gui.components import (
     create_resolution_spin_box as _resolution_spin_box,
 )
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.monitor_selection_dialog import (
+    choose_experiment_display,
+    selected_display_options,
+)
 from fpvs_studio.gui.presentation_settings_dialog import (
     PresentationSettingsDialog,
     presentation_defaults_summary,
 )
+from fpvs_studio.gui.refresh_recommendation_dialog import check_windows_refresh
 from fpvs_studio.gui.window_helpers import (
     _RUNTIME_BACKGROUND_COLOR_PRESETS,
     _canonical_runtime_background_hex,
@@ -672,6 +677,16 @@ class DisplaySettingsEditor(QWidget):
         self.refresh_verification_changed.emit()
 
     def _start_refresh_detection(self) -> None:
+        if self._refresh_probe_task is None:
+            choose_experiment_display(self, self._check_selected_display_refresh)
+
+    def _check_selected_display_refresh(self, display_device_name: str | None) -> None:
+        check_windows_refresh(
+            self, lambda: self._measure_refresh(display_device_name),
+            display_device_name=display_device_name,
+        )
+
+    def _measure_refresh(self, display_device_name: str | None = None) -> None:
         if self._refresh_probe_task is not None:
             return
         self._clear_refresh_verification()
@@ -684,10 +699,15 @@ class DisplaySettingsEditor(QWidget):
                     verify_macos_primary_display_refresh,
                 )
 
-                return verify_macos_primary_display_refresh(cancel_event=cancel_event)
+                return verify_macos_primary_display_refresh(
+                    cancel_event=cancel_event, **selected_display_options(display_device_name),
+                )
             engine = create_engine(EngineName.PSYCHOPY)
             return verify_primary_display_refresh(
-                engine, runtime_options={"fullscreen": True, "display_index": None}
+                engine, runtime_options={
+                    "fullscreen": True, "display_index": None,
+                    **selected_display_options(display_device_name),
+                },
             )
 
         task = ProgressTask(

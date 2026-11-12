@@ -33,6 +33,8 @@ def _library(**overrides: object) -> SimpleNamespace:
     values: dict[str, object] = {
         "CGMainDisplayID": 42,
         "CGDisplayIsActive": 1,
+        "CGDisplayMirrorsDisplay": 0,
+        "CGGetActiveDisplayList": 0,
         "CGDisplayCopyDisplayMode": 1234,
         "CGDisplayModeGetRefreshRate": 60.0,
         "CGDisplayModeGetWidth": 1512,

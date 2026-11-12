@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ctypes
 import json
 import subprocess
+from types import SimpleNamespace
 from typing import cast
 
 import pytest
@@ -81,6 +83,80 @@ def test_windows_mode_preserves_exact_fraction() -> None:
 
     assert mode.hz == pytest.approx(59.94005994005994)
     assert mode.fraction_text == "60000/1001"
+
+
+@pytest.mark.parametrize(("numerator", "denominator", "dynamic"), [
+    (120, 1, False), (60_000, 1_001, False), (60, 1, True),
+])
+def test_windows_refresh_recommendation_only_compares_fixed_60(
+    monkeypatch, numerator, denominator, dynamic,
+):
+    monkeypatch.setattr(
+        windows_display_module, "query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode("display", numerator, denominator, dynamic),
+    )
+    monkeypatch.setattr(
+        windows_display_module, "_load_user32", lambda: pytest.fail("unexpected enumeration"),
+    )
+    assert windows_display_module.query_windows_refresh_recommendation() is None
+
+
+@pytest.mark.parametrize("case", ["higher", "none", "changed", "unavailable"])
+def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, case):
+    current = (1920, 1080, 32, 0, 60)
+    candidates = [
+        current,
+        (1920, 1080, 32, 0, 120),
+        (1920, 1080, 32, 0, 165),
+        (1280, 720, 32, 0, 360),
+        (1920, 1080, 16, 0, 300),
+        (1920, 1080, 32, 2, 240),
+    ]
+    if case == "none":
+        candidates = [current, *candidates[3:]]
+    reads = []
+
+    def enumerate_mode(name, index, pointer):
+        assert name == "presentation display"
+        reads.append(index)
+        settings = pointer._obj
+        assert settings.dmSize == 220
+        if index == 0xFFFFFFFF:
+            if case == "unavailable":
+                return 0
+            values = (2560, 1440, 32, 0, 60) if case == "changed" and len(reads) > 1 else current
+        elif index < len(candidates):
+            values = candidates[index]
+        else:
+            return 0
+        (
+            settings.dmPelsWidth, settings.dmPelsHeight, settings.dmBitsPerPel,
+            settings.dmDisplayFlags, settings.dmDisplayFrequency,
+        ) = values
+        return 1
+
+    assert ctypes.sizeof(windows_display_module._DevModeW) == 220
+    monkeypatch.setattr(
+        windows_display_module, "query_primary_windows_display_mode",
+        lambda: WindowsDisplayMode("presentation display", 60, 1),
+    )
+    monkeypatch.setattr(
+        windows_display_module, "_load_user32",
+        lambda: SimpleNamespace(EnumDisplaySettingsW=enumerate_mode),
+    )
+    if case == "unavailable":
+        with pytest.raises(WindowsDisplayModeError, match="current display resolution"):
+            windows_display_module.query_windows_refresh_recommendation()
+        return
+    result = windows_display_module.query_windows_refresh_recommendation()
+    assert reads == [0xFFFFFFFF, *range(len(candidates) + 1), 0xFFFFFFFF]
+    if case == "higher":
+        assert result is not None
+        assert (result.pixel_width, result.pixel_height) == (1920, 1080)
+        assert result.higher_rates_hz == (120, 165)
+        assert result.highest_hz == 165
+    else:
+        assert result is None
 
 
 def test_primary_mode_selection_matches_device_name_case_insensitively() -> None:

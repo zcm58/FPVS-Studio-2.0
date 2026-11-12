@@ -9,7 +9,7 @@ import pytest
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QWidget
-from tests.gui.helpers import assert_visible_children_within_parent
+from tests.gui.helpers import ImmediateProgressTask, assert_visible_children_within_parent
 
 from fpvs_studio.gui import condition_recovery_dialog as module
 from fpvs_studio.gui import main_window
@@ -165,8 +165,9 @@ def test_rerun_keeps_recording_and_visit_safeguards(monkeypatch, testing, repeat
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
         _bundle_import_processing_active=False, _project_update_reload_failed=False,
+        _trigger_tester=None,
     )
-    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+    main_window.StudioMainWindow._launch_recovered_condition_on_display(window, _record(), None)
     assert expected in str(show_error.call_args.args[2])
     document.validate_recording_launch.assert_not_called()
 
@@ -189,8 +190,9 @@ def test_cancelled_recording_setup_stops_recovery_before_participant_entry(monke
     window = SimpleNamespace(
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
         _bundle_import_processing_active=False, _project_update_reload_failed=False,
+        _trigger_tester=None,
     )
-    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+    main_window.StudioMainWindow._launch_recovered_condition_on_display(window, _record(), None)
     setup.assert_called_once_with(window, document)
     document.validate_recording_launch.assert_not_called()
     participant.assert_not_called()
@@ -224,9 +226,10 @@ def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
         flush_pending_edits=lambda: True,
         _bundle_import_processing_active=False, _project_update_reload_failed=False,
+        _trigger_tester=None,
     )
 
-    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+    main_window.StudioMainWindow._launch_recovered_condition_on_display(window, _record(), None)
 
     confirm.assert_called_once_with(window, "brainproducts_triggerbox")
     task.assert_not_called()
@@ -243,12 +246,15 @@ def test_current_setup_replacement_cancel_does_not_compile_or_launch(monkeypatch
         isVisible=lambda: True, is_launch_busy=lambda: False,
         document=document, flush_pending_edits=lambda: True,
         _bundle_import_processing_active=False, _project_update_reload_failed=False,
+        _trigger_tester=None,
     )
     monkeypatch.setattr(
         main_window.QMessageBox, "question",
         lambda *args: main_window.QMessageBox.StandardButton.Cancel,
     )
-    main_window.StudioMainWindow._launch_recovered_condition(window, _record(can_rerun=False))
+    main_window.StudioMainWindow._launch_recovered_condition_on_display(
+        window, _record(can_rerun=False), None,
+    )
     document.compile_session.assert_not_called()
 
 
@@ -263,6 +269,7 @@ def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypa
         isVisible=lambda: True, is_launch_busy=lambda: False, document=document,
         flush_pending_edits=lambda: True, _session_seed_ready=False,
         _bundle_import_processing_active=False, _project_update_reload_failed=False,
+        _trigger_tester=None,
         _start_deferred_session_seed_task=Mock(), launch_session=Mock(),
     )
     monkeypatch.setattr(
@@ -270,10 +277,86 @@ def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypa
         lambda *args: main_window.QMessageBox.StandardButton.Yes,
     )
     monkeypatch.setattr(main_window.QMessageBox, "information", Mock())
-    main_window.StudioMainWindow._launch_recovered_condition(window, _record(can_rerun=False))
+    main_window.StudioMainWindow._launch_recovered_condition_on_display(
+        window, _record(can_rerun=False), None,
+    )
     window._start_deferred_session_seed_task.assert_called_once()
     document.compile_session.assert_not_called()
     window.launch_session.assert_not_called()
+
+
+@pytest.mark.parametrize("accepted", [True, False])
+def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
+    qtbot, monkeypatch, tmp_path, accepted,
+):
+    selected = r"\\.\DISPLAY2"
+    window = QWidget()
+    qtbot.addWidget(window)
+    window.show()
+    window.is_launch_busy = lambda: False
+    window._bundle_import_processing_active = False
+    window._project_update_reload_failed = False
+    window._trigger_tester = None
+    window.flush_pending_edits = lambda: True
+    window.launch_action = Mock()
+    window._condition_recovery = SimpleNamespace(close_dialog=Mock())
+    window._notify_session_started = lambda start: start()
+    window._on_home_launch_succeeded = Mock()
+    window._on_home_launch_failed = Mock()
+    window._on_home_launch_finished = Mock()
+    window._launch_recovered_condition_on_display = lambda record, name: (
+        main_window.StudioMainWindow._launch_recovered_condition_on_display(window, record, name)
+    )
+    document = SimpleNamespace(
+        project_root=tmp_path,
+        local_testing_enabled=False,
+        require_biosemi_recording_confirmation=False,
+        project=SimpleNamespace(
+            settings=SimpleNamespace(allow_repeated_participant_sessions=True),
+            manual_removed_electrodes={}, demographics_questions=[],
+        ),
+        validate_recording_launch=Mock(return_value="serial"),
+        update_manual_removed_electrodes=Mock(), save=Mock(),
+        next_participant_session_number=Mock(return_value=2),
+        launch_compiled_session=Mock(return_value=object()),
+    )
+    window.document = document
+    participant_dialog = Mock()
+    participant_dialog.DialogCode.Accepted = 1
+    participant_dialog.exec.return_value = 1
+    participant_dialog.participant_details = main_window.ParticipantLaunchDetails(
+        participant_number="0012",
+    )
+    participant = Mock(return_value=participant_dialog)
+    monkeypatch.setattr(main_window, "ParticipantNumberDialog", participant)
+    monkeypatch.setattr(main_window, "configure_brainproducts_for_launch", lambda *_: True)
+    monkeypatch.setattr(main_window, "confirm_brainvision_recording", lambda *_: True)
+    monkeypatch.setattr(main_window, "ProgressTask", ImmediateProgressTask)
+    frozen_plan = object()
+    monkeypatch.setattr(main_window, "build_recovery_session_plan", lambda *_, **__: frozen_plan)
+
+    def choose(_parent, proceed):
+        if accepted:
+            proceed(selected)
+
+    advice = Mock(side_effect=lambda _parent, proceed, **_kwargs: proceed())
+    monkeypatch.setattr(main_window, "choose_experiment_display", choose)
+    monkeypatch.setattr(main_window, "check_windows_refresh", advice)
+    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+
+    if accepted:
+        assert advice.call_args.kwargs["display_device_name"] == selected
+        call = document.launch_compiled_session.call_args
+        assert call.args == (frozen_plan,)
+        assert call.kwargs["display_device_name"] == selected
+        assert call.kwargs["participant_session_number"] == 2
+        assert call.kwargs["display_index"] is None
+        assert call.kwargs["fullscreen"] is True
+        window._on_home_launch_failed.assert_not_called()
+    else:
+        advice.assert_not_called()
+        participant.assert_not_called()
+        document.launch_compiled_session.assert_not_called()
 
 
 @pytest.mark.parametrize("close_kind", ["hidden", "deactivated", "presentation", "shutdown"])

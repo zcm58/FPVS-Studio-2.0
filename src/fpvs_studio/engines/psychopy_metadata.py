@@ -42,7 +42,7 @@ def runtime_metadata_for_run(
     monitor_name = (
         monitor.getName() if monitor is not None and hasattr(monitor, "getName") else None
     )
-    display_index = runtime_options.get("display_index")
+    display_index = getattr(window, "screen", runtime_options.get("display_index"))
     if not isinstance(display_index, int):
         display_index = None
 

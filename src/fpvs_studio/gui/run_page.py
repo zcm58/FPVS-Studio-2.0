@@ -53,7 +53,12 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.demographics_form import DemographicsForm
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
+from fpvs_studio.gui.monitor_selection_dialog import (
+    choose_experiment_display,
+    selected_display_options,
+)
 from fpvs_studio.gui.recording_dialog import configure_brainproducts_for_launch
+from fpvs_studio.gui.refresh_recommendation_dialog import check_windows_refresh
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.window_helpers import (
@@ -902,6 +907,10 @@ class RunPage(QWidget):
         )
 
     def preflight_session(self) -> None:
+        if not self.is_launch_busy():
+            check_windows_refresh(self, self._preflight_after_refresh_check)
+
+    def _preflight_after_refresh_check(self) -> None:
         try:
             session_plan = self._document.preflight_session(refresh_hz=self.current_refresh_hz())
         except Exception as error:
@@ -918,6 +927,16 @@ class RunPage(QWidget):
         )
 
     def launch_session(self) -> None:
+        if not self.is_launch_busy():
+            choose_experiment_display(self, self._check_launch_display_refresh)
+
+    def _check_launch_display_refresh(self, display_device_name: str | None) -> None:
+        check_windows_refresh(
+            self, lambda: self._launch_after_refresh_check(display_device_name),
+            display_device_name=display_device_name,
+        )
+
+    def _launch_after_refresh_check(self, display_device_name: str | None = None) -> None:
         if self.is_launch_busy():
             return
         try:
@@ -929,7 +948,9 @@ class RunPage(QWidget):
             if sys.platform == "darwin":
                 from fpvs_studio.gui.local_test_display_dialog import confirm_local_test_display
 
-                local_display = confirm_local_test_display(self._document, self)
+                local_display = confirm_local_test_display(
+                    self._document, self, **selected_display_options(display_device_name),
+                )
                 if local_display is None:
                     return
                 assert local_display.preferred_refresh_hz is not None
@@ -948,6 +969,7 @@ class RunPage(QWidget):
         if self._document.experiment_test_mode_enabled:
             self._launch_participant_session(
                 participant_details, refresh_hz, None, local_display=local_display,
+                **selected_display_options(display_device_name),
             )
             return
         participant_number = participant_details.participant_number
@@ -970,6 +992,7 @@ class RunPage(QWidget):
         check.confirmed.connect(
             lambda number: self._launch_participant_session(
                 participant_details, refresh_hz, number, local_display=local_display,
+                **selected_display_options(display_device_name),
             )
         )
         check.start()
@@ -982,6 +1005,7 @@ class RunPage(QWidget):
         self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
         participant_session_number: int | None,
         *, local_display: DisplaySettings | None = None,
+        display_device_name: str | None = None,
     ) -> None:
         try:
             backend = self._document.validate_recording_launch()
@@ -1050,6 +1074,7 @@ class RunPage(QWidget):
                 participant_session_number=participant_session_number,
                 display_index=None,
                 fullscreen=True,
+                **selected_display_options(display_device_name),
             )
             return LaunchTaskResult(session_plan=compiled_plan, summary=summary)
 

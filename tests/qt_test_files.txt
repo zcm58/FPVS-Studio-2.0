@@ -37,6 +37,8 @@ tests/gui/test_manage_projects_rename.py
 tests/gui/test_manage_projects_responsiveness.py
 tests/gui/test_masking_conditions.py
 tests/gui/test_masking_modifier_dialog.py
+tests/gui/test_monitor_launch_integration.py
+tests/gui/test_monitor_selection_dialog.py
 tests/gui/test_participant_results_action.py
 tests/gui/test_post_questions_dialog.py
 tests/gui/test_presentation_settings_dialog.py
@@ -46,6 +48,7 @@ tests/gui/test_project_version_dialog.py
 tests/gui/test_qt_diagnostics.py
 tests/gui/test_randomization_controls.py
 tests/gui/test_recording_setup.py
+tests/gui/test_refresh_recommendation_dialog.py
 tests/gui/test_report_bug_dialog.py
 tests/gui/test_run_page_launch.py
 tests/gui/test_settings_dialog.py

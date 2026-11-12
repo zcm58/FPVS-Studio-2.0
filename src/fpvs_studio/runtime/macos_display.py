@@ -1,4 +1,4 @@
-"""Read the default macOS display mode without creating a GUI or choosing a rate.
+"""Read connected macOS displays without creating a GUI or choosing a rate.
 
 CoreGraphics supplies the active mode and Retina backing dimensions. AppKit's
 native refresh intervals establish whether that same display has a fixed mode;
@@ -17,6 +17,7 @@ from math import isclose, isfinite
 from fpvs_studio.runtime.display_mode import DisplayModeError, NativeDisplayMode
 
 _CORE_GRAPHICS_PATH = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics"
+_MAX_ACTIVE_DISPLAYS = 128
 _FIXED_RATE_GUIDANCE = (
     "Choose a fixed refresh rate in macOS System Settings > Displays, then check again."
 )
@@ -32,6 +33,40 @@ class _CoreGraphicsMode:
     pixel_height: int
 
 
+@dataclass(frozen=True)
+class MacOSMonitor:
+    """One independently addressable macOS desktop, identified by CoreGraphics."""
+
+    display_id: int
+    primary: bool
+    pixel_width: int
+    pixel_height: int
+
+    @property
+    def device_name(self) -> str:
+        return f"macos:{self.display_id}"
+
+
+def macos_display_id(device_name: str) -> int:
+    """Decode a canonical launch-only macOS display identity without native calls."""
+    prefix = "macos:"
+    if not isinstance(device_name, str) or not device_name.startswith(prefix):
+        raise DisplayModeError("Choose a valid macOS presentation display, then retry.")
+    digits = device_name[len(prefix):]
+    if (
+        not 1 <= len(digits) <= 10 or not digits.isascii() or not digits.isdecimal()
+        or digits.startswith("0")
+    ):
+        raise DisplayModeError("Choose a valid macOS presentation display, then retry.")
+    return _validate_display_id(int(digits))
+
+
+def _validate_display_id(display_id: int) -> int:
+    if type(display_id) is not int or not 0 < display_id <= 0xFFFFFFFF:
+        raise DisplayModeError("Choose a valid macOS presentation display, then retry.")
+    return display_id
+
+
 def _load_core_graphics() -> ctypes.CDLL:
     try:
         library = ctypes.CDLL(_CORE_GRAPHICS_PATH)
@@ -39,6 +74,12 @@ def _load_core_graphics() -> ctypes.CDLL:
         library.CGMainDisplayID.restype = ctypes.c_uint32
         library.CGDisplayIsActive.argtypes = [ctypes.c_uint32]
         library.CGDisplayIsActive.restype = ctypes.c_uint32
+        library.CGGetActiveDisplayList.argtypes = [
+            ctypes.c_uint32, ctypes.POINTER(ctypes.c_uint32), ctypes.POINTER(ctypes.c_uint32),
+        ]
+        library.CGGetActiveDisplayList.restype = ctypes.c_int32
+        library.CGDisplayMirrorsDisplay.argtypes = [ctypes.c_uint32]
+        library.CGDisplayMirrorsDisplay.restype = ctypes.c_uint32
         library.CGDisplayCopyDisplayMode.argtypes = [ctypes.c_uint32]
         library.CGDisplayCopyDisplayMode.restype = ctypes.c_void_p
         library.CGDisplayModeGetRefreshRate.argtypes = [ctypes.c_void_p]
@@ -59,15 +100,34 @@ def _load_core_graphics() -> ctypes.CDLL:
     return library
 
 
-def _query_core_graphics_mode() -> _CoreGraphicsMode:
+def _query_core_graphics_mode(display_id: int | None = None) -> _CoreGraphicsMode:
     library = _load_core_graphics()
+    return _read_core_graphics_mode(library, display_id)
+
+
+def _read_core_graphics_mode(
+    library: ctypes.CDLL, display_id: int | None,
+) -> _CoreGraphicsMode:
     try:
-        display_id = int(library.CGMainDisplayID())
+        if display_id is None:
+            display_id = int(library.CGMainDisplayID())
+            if not display_id:
+                raise DisplayModeError("macOS has no active default fullscreen display.")
+        else:
+            _validate_display_id(display_id)
         if not display_id or not library.CGDisplayIsActive(display_id):
-            raise DisplayModeError("macOS has no active default fullscreen display.")
+            raise DisplayModeError(
+                "macOS has no active presentation display for the selected monitor. "
+                "Reconnect it or choose another display, then retry."
+            )
+        if library.CGDisplayMirrorsDisplay(display_id):
+            raise DisplayModeError(
+                "The selected macOS display mirrors another monitor. "
+                "Use extended displays or select the mirror set's primary display."
+            )
         mode = library.CGDisplayCopyDisplayMode(display_id)
         if not mode:
-            raise DisplayModeError("macOS did not provide the active default display mode.")
+            raise DisplayModeError("macOS did not provide the selected display's active mode.")
         try:
             result = _CoreGraphicsMode(
                 display_id=display_id,
@@ -90,6 +150,43 @@ def _query_core_graphics_mode() -> _CoreGraphicsMode:
     return result
 
 
+def query_macos_monitors() -> tuple[MacOSMonitor, ...]:
+    """Enumerate active desktops without requiring a fixed refresh rate.
+
+    CoreGraphics includes software-mirrored secondary displays in its active list;
+    they are not independent destinations and are omitted from this selector.
+    """
+    if sys.platform != "darwin":
+        raise DisplayModeError("The macOS display adapter is only available on macOS.")
+    library = _load_core_graphics()
+    identifiers = (ctypes.c_uint32 * _MAX_ACTIVE_DISPLAYS)()
+    count = ctypes.c_uint32()
+    result = library.CGGetActiveDisplayList(
+        _MAX_ACTIVE_DISPLAYS, identifiers, ctypes.byref(count),
+    )
+    if result != 0:
+        raise DisplayModeError(f"macOS could not enumerate active displays (error {result}).")
+    if not 0 < count.value < _MAX_ACTIVE_DISPLAYS:
+        raise DisplayModeError("macOS did not report a complete list of active displays.")
+    display_ids = tuple(int(identifiers[index]) for index in range(count.value))
+    if len(set(display_ids)) != len(display_ids) or any(not value for value in display_ids):
+        raise DisplayModeError("macOS returned ambiguous active display identities.")
+    primary_id = int(library.CGMainDisplayID())
+    monitors = []
+    for display_id in display_ids:
+        if library.CGDisplayMirrorsDisplay(display_id):
+            continue
+        mode = _read_core_graphics_mode(library, display_id)
+        monitors.append(MacOSMonitor(
+            display_id, display_id == primary_id, mode.pixel_width, mode.pixel_height,
+        ))
+    if sum(monitor.primary for monitor in monitors) != 1:
+        raise DisplayModeError("macOS did not report one active primary display. Try again.")
+    if int(library.CGMainDisplayID()) != primary_id:
+        raise DisplayModeError("The macOS primary display changed during detection. Try again.")
+    return tuple(monitors)
+
+
 def _query_refresh_intervals(display_id: int) -> tuple[float, float]:
     try:
         appkit = importlib.import_module("AppKit")
@@ -108,7 +205,7 @@ def _query_refresh_intervals(display_id: int) -> tuple[float, float]:
             ]
             if len(screens) != 1:
                 raise DisplayModeError(
-                    "macOS could not uniquely match the default display to its refresh intervals."
+                    "macOS could not uniquely match the selected display to its refresh intervals."
                 )
             # Do not use mainScreen(): it follows keyboard focus rather than CGMainDisplayID.
             screen = screens[0]
@@ -129,7 +226,12 @@ def _query_refresh_intervals(display_id: int) -> tuple[float, float]:
 
 
 def query_primary_macos_display_mode() -> NativeDisplayMode:
-    """Read a demonstrably fixed native mode for macOS's default fullscreen display.
+    """Read a demonstrably fixed native mode for macOS's primary display."""
+    return query_macos_display_mode()
+
+
+def query_macos_display_mode(display_id: int | None = None) -> NativeDisplayMode:
+    """Read a demonstrably fixed native mode for the selected macOS display.
 
     Apple documents unequal minimum/maximum NSScreen intervals as Adaptive Sync:
     https://developer.apple.com/videos/play/wwdc2021/10147/
@@ -139,11 +241,14 @@ def query_primary_macos_display_mode() -> NativeDisplayMode:
 
     if sys.platform != "darwin":
         raise DisplayModeError("The macOS display adapter is only available on macOS.")
-    mode = _query_core_graphics_mode()
+    mode = (
+        _query_core_graphics_mode() if display_id is None
+        else _query_core_graphics_mode(display_id)
+    )
     minimum, maximum = _query_refresh_intervals(mode.display_id)
     if not isclose(minimum, maximum, rel_tol=1e-7, abs_tol=0):
         raise DisplayModeError(
-            "Adaptive Sync or ProMotion variable refresh is enabled on the default display. "
+            "Adaptive Sync or ProMotion variable refresh is enabled on the selected display. "
             + _FIXED_RATE_GUIDANCE
         )
     interval_hz = 1.0 / minimum
@@ -163,6 +268,7 @@ def query_primary_macos_display_mode() -> NativeDisplayMode:
         exact_refresh=False,
         pixel_width=mode.pixel_width,
         pixel_height=mode.pixel_height,
+        display_device_name=f"macos:{mode.display_id}",
         mode_reference=(
             f"display {mode.display_id}; {mode.width} x {mode.height} mode, "
             f"{mode.pixel_width} x {mode.pixel_height} backing pixels"

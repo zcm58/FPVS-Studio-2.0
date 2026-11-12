@@ -28,13 +28,20 @@ if TYPE_CHECKING:
 
 
 def confirm_local_test_display(
-    document: ProjectDocument, parent: QWidget,
+    document: ProjectDocument, parent: QWidget, *, display_device_name: str | None = None,
 ) -> DisplaySettings | None:
     """Share the Mac display confirmation between Home and Run launch surfaces."""
-    from fpvs_studio.runtime.display_mode import query_primary_native_display_mode
+    from fpvs_studio.runtime.display_mode import (
+        query_native_display_mode,
+        query_primary_native_display_mode,
+    )
 
+    mode = (
+        query_primary_native_display_mode() if display_device_name is None
+        else query_native_display_mode(display_device_name)
+    )
     dialog = LocalTestDisplayDialog(
-        document.project.settings.display, query_primary_native_display_mode(), parent,
+        document.project.settings.display, mode, parent,
     )
     if dialog.exec() != QDialog.DialogCode.Accepted:
         return None
@@ -116,6 +123,7 @@ class LocalTestDisplayDialog(QDialog):
             f"{self.refresh_hz:g} Hz · {mode.pixel_width} × {mode.pixel_height} backing px", self,
         )
         self.mode_label.setWordWrap(True)
+        self.mode_label.setToolTip(mode.mode_text)
         form.addRow("Detected display", self.mode_label)
         form.addRow("Physical screen width", self.screen_width_spin)
         form.addRow("Viewing distance", self.distance_spin)

@@ -140,6 +140,44 @@ def test_mac_frozen_guard_precedes_recording_checks(monkeypatch):
         launcher._validate_launch_settings(_settings())
 
 
+def test_mac_named_secondary_launch_is_valid_and_keeps_identity(monkeypatch):
+    set_module_platform(monkeypatch, launcher, "darwin")
+    settings = _settings(display_device_name="macos:84")
+    launcher._validate_launch_settings(settings)
+    assert launcher._launch_runtime_options(settings)["display_device_name"] == "macos:84"
+    with pytest.raises(launcher.LaunchSettingsError, match="name or index"):
+        launcher._validate_launch_settings(replace(settings, display_index=0))
+
+
+@pytest.mark.parametrize("identity", ["", "macos:0", "macos:4294967296", "macos:NaN", True,
+                                      r"\\.\DISPLAY2"])
+def test_mac_invalid_named_selection_is_blocked_before_hardware(monkeypatch, tmp_path, identity):
+    set_module_platform(monkeypatch, launcher, "darwin")
+    monkeypatch.setattr(launcher, "_check_recorder_before_launch",
+                        lambda *_: pytest.fail("Invalid display must not probe recorders"))
+    with pytest.raises(launcher.LaunchSettingsError, match="valid Mac"):
+        launcher.launch_session(
+            tmp_path, object(), participant_number="001",
+            launch_settings=_settings(display_device_name=identity),
+        )
+
+
+def test_default_mac_launch_pins_native_primary_independent_of_enumeration_order(monkeypatch):
+    from fpvs_studio.runtime import macos_display
+
+    set_module_platform(monkeypatch, launcher, "darwin")
+    monkeypatch.setattr(macos_display, "query_macos_monitors", lambda: (
+        macos_display.MacOSMonitor(84, False, 2560, 1440),
+        macos_display.MacOSMonitor(42, True, 3024, 1964),
+    ))
+    for index in (None, 0):
+        settings = _settings(display_index=index)
+        options = launcher._launch_runtime_options(settings)
+        assert options["display_device_name"] == "macos:42"
+        assert options["display_index"] is None
+        assert settings.display_device_name is None
+
+
 @pytest.mark.parametrize("platform", ["win32", "linux"])
 def test_other_platform_launch_policy_remains_unchanged(monkeypatch, platform):
     set_module_platform(monkeypatch, launcher, platform)
@@ -149,8 +187,9 @@ def test_other_platform_launch_policy_remains_unchanged(monkeypatch, platform):
 
 
 @pytest.mark.parametrize("pilot", [False, True])
+@pytest.mark.parametrize("display_device_name", [None, "macos:84"])
 def test_private_child_main_thread_roundtrip_preserves_neutral_session(
-    monkeypatch, sample_project, sample_project_root, pilot,
+    monkeypatch, sample_project, sample_project_root, pilot, display_device_name,
 ):
     plan = compile_session_plan(sample_project, project_root=sample_project_root, refresh_hz=60)
     seen = []
@@ -159,6 +198,7 @@ def test_private_child_main_thread_roundtrip_preserves_neutral_session(
         seen.append((root, selected, options))
         assert process.threading.current_thread() is process.threading.main_thread()
         assert options["launch_settings"].windowed_size_px == (1280, 720)
+        assert options["launch_settings"].display_device_name == display_device_name
         return _summary(selected)
 
     monkeypatch.setattr(launcher, "launch_session", launch)
@@ -166,7 +206,10 @@ def test_private_child_main_thread_roundtrip_preserves_neutral_session(
     result = process.launch_macos_test_session(
         sample_project_root, plan, participant_number="001", participant_session_number=2,
         participant_metadata={"age": 25},
-        launch_settings=_settings(pilot_mode=pilot, experiment_test_mode=not pilot),
+        launch_settings=_settings(
+            pilot_mode=pilot, experiment_test_mode=not pilot,
+            display_device_name=display_device_name,
+        ),
     )
     assert result == _summary(plan)
     assert seen[0][0] == sample_project_root.resolve()
@@ -174,6 +217,7 @@ def test_private_child_main_thread_roundtrip_preserves_neutral_session(
     assert seen[0][2]["participant_metadata"].age == 25
     request_path, payload, options = calls[0]
     assert payload["operation"] == "session"
+    assert payload["launch_settings"]["display_device_name"] == display_device_name
     assert "participant_metadata" in payload
     assert str(Path(process.__file__).resolve().parents[2]) in options["env"]["PYTHONPATH"]
     assert not request_path.parent.exists()
@@ -227,13 +271,19 @@ def test_mismatched_child_identity_is_rejected(monkeypatch, sample_project, samp
                                           launch_settings=_settings())
 
 
-def test_refresh_proxy_measures_only_primary_fullscreen_in_child_main_thread(monkeypatch):
+@pytest.mark.parametrize("display_device_name", [None, "macos:84"])
+def test_refresh_proxy_measures_selected_fullscreen_in_child_main_thread(
+    monkeypatch, display_device_name,
+):
     from fpvs_studio.engines import registry
     from fpvs_studio.runtime import display_refresh
 
     seen = []
     verification = DisplayRefreshVerification(
-        NativeDisplayMode("macOS", "Primary", 60.0, "CoreGraphics", True), 60.0, 60.0,
+        NativeDisplayMode(
+            "macOS", "Display 84", 60.0, "CoreGraphics", True,
+            display_device_name=display_device_name,
+        ), 60.0, 60.0,
     )
     engine = object()
     monkeypatch.setattr(registry, "create_engine", lambda _name: engine)
@@ -246,9 +296,12 @@ def test_refresh_proxy_measures_only_primary_fullscreen_in_child_main_thread(mon
 
     monkeypatch.setattr(display_refresh, "_verify_primary_display_refresh_in_process", verify)
     calls = _fake_process(monkeypatch)
-    assert process.verify_macos_primary_display_refresh() == verification
-    assert seen == [{"fullscreen": True, "display_index": None}]
-    assert calls[0][1] == {"version": 1, "operation": "refresh"}
+    assert process.verify_macos_primary_display_refresh(
+        display_device_name=display_device_name,
+    ) == verification
+    selection = {} if display_device_name is None else {"display_device_name": display_device_name}
+    assert seen == [{"fullscreen": True, "display_index": None, **selection}]
+    assert calls[0][1] == {"version": 1, "operation": "refresh", **selection}
     assert not calls[0][0].parent.exists()
 
 
@@ -265,6 +318,51 @@ def test_refresh_proxy_rejects_invalid_measurement(monkeypatch):
     _fake_process(monkeypatch, respond)
     with pytest.raises(process.MacOSSessionProcessError, match="invalid result"):
         process.verify_macos_primary_display_refresh()
+
+
+def test_refresh_proxy_rejects_result_for_another_monitor(monkeypatch):
+    def respond(path):
+        verification = DisplayRefreshVerification(
+            NativeDisplayMode(
+                "macOS", "Display 42", 60.0, "CoreGraphics", True,
+                display_device_name="macos:42",
+            ), 60.0, 60.0,
+        )
+        process._private_file(path.parent / "response.json", write=process._Response(
+            verification=verification,
+        ).model_dump_json().encode())
+        return 0
+
+    _fake_process(monkeypatch, respond)
+    with pytest.raises(process.MacOSSessionProcessError, match="different display"):
+        process.verify_macos_primary_display_refresh(display_device_name="macos:84")
+
+
+@pytest.mark.parametrize("identity", ["", "macos:0", "macos:4294967296", "macos:NaN", True,
+                                      r"\\.\DISPLAY2"])
+def test_invalid_refresh_identity_never_starts_a_child(monkeypatch, identity):
+    set_module_platform(monkeypatch, process, "darwin")
+    monkeypatch.setattr(process, "_exchange", lambda *_a, **_k: pytest.fail("No child"))
+    with pytest.raises(process.MacOSSessionProcessError, match="valid Mac"):
+        process.verify_macos_primary_display_refresh(display_device_name=identity)
+
+
+def test_child_rejects_invalid_monitor_identity_before_loading_engine(monkeypatch, tmp_path):
+    from fpvs_studio.engines import registry
+
+    set_module_platform(monkeypatch, process, "darwin")
+    monkeypatch.setattr(registry, "create_engine", lambda *_: pytest.fail("No engine"))
+    private = tmp_path / "request-area"
+    private.mkdir(mode=0o700)
+    request = private / "request.json"
+    process._private_file(request, write=json.dumps({
+        "version": 1, "operation": "refresh", "display_device_name": "macos:0",
+    }).encode())
+    assert process.main([str(request)]) == 1
+    response = process._Response.model_validate_json(
+        process._private_file(private / "response.json"),
+    )
+    assert response.error == "invalid_request"
 
 
 def test_child_rejects_unknown_opcode_without_loading_engine(monkeypatch, tmp_path):
@@ -344,6 +442,8 @@ def test_display_guidance_is_bounded_without_echoing_arbitrary_failure_payloads(
     "macOS display refresh callback stopped. Retry after checking the display.",
     "Mac Test/Pilot requires the foreground-window keyboard backend.",
     "PsychoPy could not determine the Mac presentation display size.",
+    "Could not select the presentation monitor: the selected display disconnected.",
+    "Mac presentation display does not match the selected monitor. Retry the launch.",
 ])
 def test_mac_display_adapter_failures_retain_actionable_guidance(message):
     response = process._launch_failure(RuntimeError(message))

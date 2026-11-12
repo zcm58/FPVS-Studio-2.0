@@ -33,7 +33,7 @@ The runtime worker now drives sessions like this:
 ```text
 SessionPlan
   -> preflight every RunSpec
-  -> read the platform-native primary/default mode and verify PsychoPy frame stability once
+  -> read the selected platform-native display mode and verify PsychoPy frame stability once
   -> compare the approved exact mode to every compiled refresh target
   -> create trigger backend
   -> engine.open_session(...)
@@ -106,7 +106,7 @@ project data resolve to Arial; Open Sans is supplied by FPVS Studio rather than 
 machine-local font installation.
 
 Default launch settings require connected-display refresh verification. Preflight first
-asks a runtime-owned platform adapter for the primary/default display's configured
+asks a runtime-owned platform adapter for the selected display's configured
 native mode, then asks the engine for one fullscreen observation per session. Windows
 continues to use `QueryDisplayConfig`; its exact fraction is authoritative for approved-
 rate selection, so `60000/1001` maps to `59.94 Hz` while `60/1` maps to `60 Hz`.
@@ -121,7 +121,26 @@ launch. Native queries are read-only and do not alter display settings. This che
 independent of the Setup Wizard's one-click detection, so Home and Run cannot bypass
 it, and verification does not modify the compiled frame schedule.
 
-macOS source queries the default display through CoreGraphics and matches its ID
+Windows/Mac launch selection carries a transient `LaunchSettings.display_device_name`
+outside project, RunSpec and SessionPlan formats. Windows uses the GDI device name;
+Mac uses `macos:<CGDisplayID>`. Native enumeration records the operating system's
+primary flag and pixel dimensions without requiring a fixed refresh rate, so a
+variable-refresh primary does not prevent choosing a fixed-rate external display.
+Mac omits mirrored secondary outputs. Without a choice, the native primary is used
+even when it is not Pyglet screen zero. The engine maps the identity to its current
+Pyglet screen before probe and session window creation. Disconnected, missing or
+ambiguous selections block playback without a screen-zero fallback. Windows' legacy
+index API remains available; Mac's numeric index zero retains its primary-display
+meaning while alternate displays use native identity. The selected device is carried
+through refresh verification and Mac probe IPC. Selection itself does not modify
+compiled timing or calibration.
+
+The Windows GUI can separately request a refresh-rate recommendation. The runtime
+adapter compares the selected display's exact fixed 60 Hz mode with progressive
+modes the driver offers at the same resolution and color depth. It returns higher
+nominal rates for guidance. The adapter makes no display or timing changes.
+
+macOS source queries the selected display through CoreGraphics and matches its ID
 to AppKit's fixed refresh intervals. Unknown or variable intervals (Adaptive Sync/
 ProMotion) fail explicitly; a zero CoreGraphics rate is usable only with a proven
 fixed native interval. The fullscreen engine still verifies delivery. Local Test/Pilot
@@ -134,15 +153,19 @@ distance and refresh from the local dialog remain test-only. Cancel saves nothin
 Retina
 framebuffer size must match that calibration before resource upload. Mac presentation
 uses a borderless desktop-sized window, avoiding Pyglet's exclusive display capture
-and shielding-level window. The requested fullscreen/default-display policy remains
+and shielding-level window. The requested fullscreen/selected-display policy remains
 mandatory; this is a Mac implementation adapter, not an optional smaller test window.
 App-scoped Cocoa presentation options hide the Dock/menu bar while active and restore
 previous options on close/failure, without disabling application switching or quit.
 After native backing storage is realized, the Mac adapter normalizes PsychoPy's
 coordinate flag so `pix` means one backing pixel. The backing framebuffer, viewport
 and native content scale remain intact; no authored positions or schedules are scaled.
+Before the first flip, the Mac engine confirms the actual NSWindow display identity
+and backing pixels. If mixed display scaling left PsychoPy's cached dimensions stale,
+its existing nonexclusive resize path refreshes backing metadata, viewport and scissor;
+a remaining mismatch fails explicitly before stimuli are presented.
 Mac launch guards
-reject production, trigger output, windowed/unverified playback and non-primary displays
+reject production, trigger output, windowed/unverified playback and invalid display identities
 before creating engines or acquisition services. Test/Pilot does not qualify EEG or
 physical timing; native GUI acceptance is tracked in [Mac support](MACOS_SUPPORT.md).
 
@@ -194,7 +217,9 @@ The PsychoPy implementation:
   `getActualFrameRate(...)`, then closes that probe window before session playback opens
 - opens one `visual.Window` per launched session
 - reuses that window across all runs in the `SessionPlan`
-- opens launched playback fullscreen on the default display
+- opens launched playback on the selected Windows/Mac display, defaulting to the
+  native primary; Mac retains nonexclusive desktop-sized playback and Linux its
+  existing primary/default policy
 - supplies the selected Pyglet screen's native pixel dimensions to both fullscreen
   window constructors instead of inheriting PsychoPy's `800x600` default request;
   detection failure is warning-only because PsychoPy still resolves the actual size

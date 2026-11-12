@@ -35,6 +35,15 @@ as PsychoPy. Runtime owns flow and calls engines through
   entries. Foreground muting, response filters, clearing and clocks remain intact;
   no keyboard class or Windows dispatcher is patched.
 - PsychoPy imports must remain lazy and local to engine implementations.
+- Windows/Mac window creation resolves the runtime device identity against Pyglet's current
+  screens for both refresh probing and session playback, explicitly using the Pyglet
+  backend. With no explicit selection,
+  it resolves the native primary monitor. Missing or ambiguous selections fail before
+  PsychoPy can silently substitute screen zero. Selection remains a launch option,
+  outside compiled schedules. See [runtime display policy](RUNTIME_EXECUTION.md#session-flow).
+  Mac additionally confirms actual NSWindow placement and realized backing dimensions
+  before the first flip; mixed-DPI cached metadata is refreshed through the existing
+  nonexclusive backend resize path and revalidated.
 - Engines return core-owned execution summaries; exporters stay outside engine
   code.
 - Production playback requires a backend declaring `emits_external_markers`; the legacy

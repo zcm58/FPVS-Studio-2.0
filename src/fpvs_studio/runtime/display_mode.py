@@ -25,6 +25,7 @@ class NativeDisplayMode:
     variable_refresh_label: str | None = None
     pixel_width: int | None = None
     pixel_height: int | None = None
+    display_device_name: str | None = None
 
     def __post_init__(self) -> None:
         if not isfinite(self.refresh_hz) or self.refresh_hz <= 0:
@@ -61,14 +62,20 @@ class NativeDisplayMode:
 def query_primary_native_display_mode() -> NativeDisplayMode:
     """Return the native mode for the primary/default fullscreen display."""
 
+    return query_native_display_mode()
+
+
+def query_native_display_mode(display_device_name: str | None = None) -> NativeDisplayMode:
+    """Return the selected Windows/Mac mode or the platform's primary mode."""
+
     if sys.platform == "win32":
         from fpvs_studio.runtime.windows_display import (
             WindowsDisplayModeError,
-            query_primary_windows_display_mode,
+            query_windows_display_mode,
         )
 
         try:
-            windows_mode = query_primary_windows_display_mode()
+            windows_mode = query_windows_display_mode(display_device_name)
         except WindowsDisplayModeError as exc:
             raise DisplayModeError(f"Exact Windows display mode could not be read: {exc}") from exc
         return NativeDisplayMode(
@@ -85,9 +92,19 @@ def query_primary_native_display_mode() -> NativeDisplayMode:
         )
 
     if sys.platform == "darwin":
-        from fpvs_studio.runtime.macos_display import query_primary_macos_display_mode
+        from fpvs_studio.runtime.macos_display import (
+            macos_display_id,
+            query_macos_display_mode,
+            query_primary_macos_display_mode,
+        )
 
-        return query_primary_macos_display_mode()
+        return (
+            query_primary_macos_display_mode() if display_device_name is None
+            else query_macos_display_mode(macos_display_id(display_device_name))
+        )
+
+    if display_device_name is not None:
+        raise DisplayModeError("Named monitor selection is supported only on Windows and macOS.")
 
     if sys.platform.startswith("linux"):
         from fpvs_studio.runtime.linux_display import query_primary_linux_display_mode

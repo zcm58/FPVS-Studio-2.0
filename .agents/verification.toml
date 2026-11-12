@@ -386,6 +386,8 @@ tests = [
   "tests/unit/test_verification_driver.py",
   "tests/unit/test_platform_adapters.py",
   "tests/unit/test_macos_display.py",
+  "tests/unit/test_macos_monitor_selection.py",
+  "tests/unit/test_macos_monitor_rendering.py",
   "tests/unit/test_macos_source_tooling.py",
   "tests/unit/test_macos_bootstrap.py",
   "tests/unit/test_macos_environment_repair.py",

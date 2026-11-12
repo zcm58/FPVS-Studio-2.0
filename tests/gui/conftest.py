@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 from PySide6.QtCore import QObject, QSettings, Signal
 from PySide6.QtWidgets import QFileDialog, QMessageBox
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.gui import biosemi_port_selector as biosemi_port_module
 from fpvs_studio.gui import controller as controller_module
+from fpvs_studio.gui import monitor_selection_dialog, refresh_recommendation_dialog
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.recording_dialog import DefaultRecordingHardwareDialog
@@ -21,6 +23,18 @@ class _HeldSerialPortJob(QObject):
 
     def cancel(self) -> None:
         pass
+
+
+@pytest.fixture(autouse=True)
+def _disable_native_monitor_selection(monkeypatch) -> None:
+    """Individual GUI tests opt in with fake connected Windows displays."""
+    set_module_platform(monkeypatch, monitor_selection_dialog, "test")
+
+
+@pytest.fixture(autouse=True)
+def _disable_native_refresh_recommendation(monkeypatch) -> None:
+    """Individual GUI tests opt in with a fake Windows mode probe."""
+    set_module_platform(monkeypatch, refresh_recommendation_dialog, "test")
 
 
 @pytest.fixture(autouse=True)

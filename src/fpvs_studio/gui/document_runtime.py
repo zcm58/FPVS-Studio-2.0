@@ -346,6 +346,7 @@ class DocumentRuntimeMixin:
         participant_metadata: ParticipantMetadata | None = None,
         participant_session_number: int | None = None,
         display_index: int | None,
+        display_device_name: str | None = None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
         recording_operator_confirmed: bool = False,
@@ -378,6 +379,7 @@ class DocumentRuntimeMixin:
                     engine_name=engine_name,
                     fullscreen=fullscreen,
                     display_index=display_index,
+                    display_device_name=display_device_name,
                     # Persisted legacy flags cannot disable EEG recording output.
                     serial_enabled=not self.local_testing_enabled,
                     recording_backend=cast(
@@ -461,6 +463,7 @@ class DocumentRuntimeMixin:
         participant_metadata: ParticipantMetadata | None = None,
         participant_session_number: int | None = None,
         display_index: int | None,
+        display_device_name: str | None = None,
         fullscreen: bool = True,
         engine_name: str = EngineName.PSYCHOPY.value,
     ) -> tuple[SessionPlan, LaunchSummary]:
@@ -480,6 +483,7 @@ class DocumentRuntimeMixin:
             participant_metadata=participant_metadata,
             participant_session_number=participant_session_number,
             display_index=display_index,
+            display_device_name=display_device_name,
             fullscreen=fullscreen,
             engine_name=engine_name,
         )

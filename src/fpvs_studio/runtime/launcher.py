@@ -48,6 +48,7 @@ class LaunchSettings:
     engine_name: str | EngineName = EngineName.PSYCHOPY
     fullscreen: bool = True
     display_index: int | None = None
+    display_device_name: str | None = None
     serial_enabled: bool = True
     serial_port: str | None = "COM3"
     serial_baudrate: int = 115200
@@ -83,6 +84,8 @@ class LaunchSettings:
         """Return a generic engine-facing runtime options mapping."""
 
         options = asdict(self)
+        if self.display_device_name is None:
+            options.pop("display_device_name")
         if self.sharing_protocol_sha256 is None:
             options.pop("sharing_protocol_sha256")
         if self.toolbox_handoff_config is None:
@@ -120,7 +123,20 @@ def _validate_macos_source_launch(
     if settings.display_index is not None and (
         type(settings.display_index) is not int or settings.display_index != 0
     ):
-        raise LaunchSettingsError("macOS source execution supports only the primary display.")
+        raise LaunchSettingsError(
+            "Select the Mac monitor by its native identity; numeric indices support only "
+            "the primary display."
+        )
+    if settings.display_device_name is not None:
+        from fpvs_studio.runtime.display_mode import DisplayModeError
+        from fpvs_studio.runtime.macos_display import macos_display_id
+
+        try:
+            macos_display_id(settings.display_device_name)
+        except (DisplayModeError, TypeError, ValueError) as exc:
+            raise LaunchSettingsError("Select a valid Mac presentation monitor.") from exc
+        if settings.display_index is not None:
+            raise LaunchSettingsError("Select a display by device name or index, not both.")
     if require_main_thread and threading.current_thread() is not threading.main_thread():
         raise LaunchSettingsError("macOS presentation must run on the process main thread.")
 
@@ -132,8 +148,18 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
     if not isinstance(settings.experiment_test_mode, bool):
         raise LaunchSettingsError("experiment_test_mode must be a boolean.")
     if settings.display_index is not None:
-        if not isinstance(settings.display_index, int) or settings.display_index < 0:
+        if type(settings.display_index) is not int or settings.display_index < 0:
             raise LaunchSettingsError("display_index must be None or a non-negative integer.")
+    if settings.display_device_name is not None:
+        if (
+            not isinstance(settings.display_device_name, str)
+            or not settings.display_device_name.strip()
+        ):
+            raise LaunchSettingsError("display_device_name must be None or a non-empty string.")
+        if sys.platform not in {"win32", "darwin"}:
+            raise LaunchSettingsError("Named monitor selection is supported on Windows and macOS.")
+        if settings.display_index is not None:
+            raise LaunchSettingsError("Select a display by device name or index, not both.")
     if not isinstance(settings.fullscreen, bool):
         raise LaunchSettingsError("fullscreen must be a boolean.")
     if not isinstance(settings.serial_enabled, bool):
@@ -221,6 +247,38 @@ def _validate_participant_number(participant_number: str) -> str:
     return cleaned
 
 
+def _launch_runtime_options(settings: LaunchSettings) -> dict[str, object]:
+    """Pin native display identity so preflight and playback share one monitor."""
+    options = settings.as_runtime_options()
+    if sys.platform == "win32" and settings.display_index is not None:
+        from fpvs_studio.runtime.windows_display import (
+            WindowsDisplayModeError,
+            query_windows_monitors,
+        )
+
+        try:
+            monitors = query_windows_monitors()
+        except WindowsDisplayModeError as exc:
+            raise LaunchSettingsError(str(exc)) from exc
+        if not 0 <= settings.display_index < len(monitors):
+            raise LaunchSettingsError("The selected display index is no longer available.")
+        options["display_device_name"] = monitors[settings.display_index].device_name
+        options["display_index"] = None
+    elif sys.platform == "darwin" and settings.display_device_name is None:
+        from fpvs_studio.runtime.display_mode import DisplayModeError
+        from fpvs_studio.runtime.macos_display import query_macos_monitors
+
+        try:
+            primary = [monitor for monitor in query_macos_monitors() if monitor.primary]
+        except DisplayModeError as exc:
+            raise LaunchSettingsError(str(exc)) from exc
+        if len(primary) != 1:
+            raise LaunchSettingsError("macOS did not identify one active primary display.")
+        options["display_device_name"] = primary[0].device_name
+        options["display_index"] = None
+    return options
+
+
 def _check_recorder_before_launch(settings: LaunchSettings) -> None:
     """Check live Recorder state outside the GUI thread before presentation.
 
@@ -268,7 +326,7 @@ def launch_run(
             "launch_run only supports full export mode; use launch_session for compact "
             "summary exports."
         )
-    runtime_options = settings.as_runtime_options()
+    runtime_options = _launch_runtime_options(settings)
     cleaned_participant_number = _validate_participant_number(participant_number)
     cleaned_participant_metadata = _validate_participant_metadata(participant_metadata)
     output_dir = runs_dir(project_root) / run_spec.run_id
@@ -302,7 +360,7 @@ def launch_session(
     _validate_macos_source_launch(settings, require_main_thread=True)
     _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)
-    runtime_options = settings.as_runtime_options()
+    runtime_options = _launch_runtime_options(settings)
     cleaned_participant_number = _validate_participant_number(participant_number)
     cleaned_participant_metadata = _validate_participant_metadata(participant_metadata)
     engine = create_engine(settings.engine_name)

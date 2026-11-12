@@ -52,6 +52,7 @@ from fpvs_studio.engines.psychopy_graphics_lifetime import (
 )
 from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
 from fpvs_studio.engines.psychopy_macos_display import (
+    confirm_macos_window_display,
     create_macos_test_keyboard,
     guard_macos_display_link,
     prepare_macos_fullscreen_presentation,
@@ -85,6 +86,7 @@ from fpvs_studio.engines.psychopy_window import (
     build_window_kwargs,
     close_presentation_window,
     create_fixation_stim,
+    selected_macos_display_id,
     validate_macos_framebuffer,
 )
 from fpvs_studio.engines.windows_graphics_budget import (
@@ -169,6 +171,10 @@ class PsychoPyEngine(PresentationEngine):
             presentation = prepare_macos_fullscreen_presentation()
             if presentation is not None:
                 activate_presentation, restore_presentation = presentation
+            if sys.platform == "darwin":
+                confirm_macos_window_display(
+                    probe_window, selected_macos_display_id(runtime_options or {}),
+                )
             guard_macos_display_link(probe_window)
             use_macos_framebuffer_pixels(probe_window)
             if presentation is not None:
@@ -219,6 +225,10 @@ class PsychoPyEngine(PresentationEngine):
             )
             if presentation is not None:
                 activate_presentation, self._restore_presentation = presentation
+            if sys.platform == "darwin":
+                confirm_macos_window_display(
+                    self._window, selected_macos_display_id(self._runtime_options),
+                )
             guard_macos_display_link(self._window)
             use_macos_framebuffer_pixels(self._window)
             if presentation is not None:

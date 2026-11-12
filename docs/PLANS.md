@@ -10,6 +10,7 @@ historical release draft does not authorize publishing an old version.
 | Plan | Current scope or remaining gate |
 | --- | --- |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Visible checks passed. Physical discovery and reconnect acceptance pending. |
+| [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Show higher fixed refresh rates and link to Advanced display |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [Fit task screens](exec-plans/active/task-screen-fit.md) | Use the realized viewport for pre- and post-condition screens in Test/Pilot and recording |
@@ -42,6 +43,12 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [macOS monitor selection](exec-plans/completed/macos-monitor-selection.md):
+  per-launch Mac primary/default selection, chosen-display refresh checks and Retina
+  presentation routing; source checks passed, with physical Mac acceptance unperformed.
+- [Experiment monitor selection](exec-plans/completed/experiment-monitor-selection.md):
+  per-launch Windows display choice defaults to the current primary monitor; selected
+  display checks and fake-engine regressions pass, with visible acceptance unperformed.
 - [Windows source setup](exec-plans/completed/windows-source-setup.md)
 - [Inline Recording settings](exec-plans/completed/inline-recording-settings.md):
   hardware fields and project/default save actions share one Settings page; safe

@@ -67,6 +67,7 @@ def test_local_test_display_confirmation_preserves_input_and_fits(
     assert_visible_children_within_parent(dialog)
     assert dialog.screen_width_spin.value() == 49.5
     assert "120 Hz" in dialog.mode_label.text()
+    assert dialog.mode_label.toolTip() == mode.mode_text
     assert f"{pixels[0]} × {pixels[1]} backing px" in dialog.mode_label.text()
     assert dialog.configured_resolution_label.text() == (
         f"{display.screen_width_px} × {display.screen_height_px} px"
@@ -175,6 +176,7 @@ def test_launch_confirms_local_display_only_on_mac_before_condition_selection(
     page = SimpleNamespace(
         _project_update_reload_failed=False,
         _bundle_import_processing_active=False,
+        _trigger_tester=None,
         is_launch_busy=lambda: False,
         current_refresh_hz=lambda: 60,
         _home_launch_refresh_hz=lambda: 60,
@@ -195,7 +197,10 @@ def test_launch_confirms_local_display_only_on_mac_before_condition_selection(
         _launch_participant_session=Mock(),
     )
     page.document = page._document
-    launch = StudioMainWindow.launch_session if surface == "home" else RunPage.launch_session
+    launch = (
+        StudioMainWindow._launch_after_refresh_check if surface == "home"
+        else RunPage._launch_after_refresh_check
+    )
     launch(page)
     if accepted or platform_name == "win32":
         refresh = 120 if platform_name == "darwin" else 60
@@ -361,8 +366,9 @@ def test_mac_resolution_save_runs_in_launch_worker_before_compile(
         assert calls == ["compile", "playback"]
 
 
+@pytest.mark.parametrize("selected", [None, "macos:73"])
 def test_rejecting_mac_display_confirmation_preserves_saved_project(
-    qtbot, monkeypatch, sample_project, sample_project_root,
+    qtbot, monkeypatch, sample_project, sample_project_root, selected,
 ):
     from fpvs_studio.runtime import display_mode
 
@@ -373,9 +379,18 @@ def test_rejecting_mac_display_confirmation_preserves_saved_project(
     parent = QDialog()
     qtbot.addWidget(parent)
     monkeypatch.setattr(display_mode, "query_primary_native_display_mode", _mode)
+    selected_mode = replace(_mode(), display_name="Display 73", display_device_name=selected)
+    query_selected = Mock(return_value=selected_mode)
+    monkeypatch.setattr(display_mode, "query_native_display_mode", query_selected)
     monkeypatch.setattr(LocalTestDisplayDialog, "exec", lambda _self: QDialog.DialogCode.Rejected)
 
-    assert local_test_display_dialog.confirm_local_test_display(document, parent) is None
+    assert local_test_display_dialog.confirm_local_test_display(
+        document, parent, display_device_name=selected,
+    ) is None
+    if selected is None:
+        query_selected.assert_not_called()
+    else:
+        query_selected.assert_called_once_with(selected)
     assert project_path.read_bytes() == before
     assert document.project == sample_project
 

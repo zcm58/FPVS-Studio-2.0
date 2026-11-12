@@ -271,11 +271,44 @@ Run the authoring application with:
 
 The installed script entry point is also available as `fpvs-studio`.
 
+Each Windows or Mac launch from Home or Run, including an eligible interrupted-condition re-run,
+detects connected desktop monitors in a worker before participant entry. With two or
+more monitors, **Choose experiment display** offers their display numbers, pixel dimensions
+and a **Primary** marker. The operating system's current primary monitor is preselected on every
+invocation. **Continue** uses the selection for this launch; **Cancel** stops it.
+With one monitor there is no selection dialog. Detection errors block launch with
+retry guidance. The selection never changes operating-system settings or project files.
+The dialog has a `520x220` minimum and a `560x240` default size.
+
+**Check refresh rate** uses the same selector to verify the intended monitor and
+update the project's timing target. Choosing a launch monitor does not change that
+target or calibration; the existing refresh and resolution checks remain authoritative.
+If a monitor is disconnected, launch fails explicitly rather than using another screen.
+Mac selection uses CoreGraphics' primary display, independently of keyboard focus.
+Mirrored secondary outputs are not independently drawable and do not add selector
+choices. Mac local calibration, the bounded refresh probe and session playback all
+use the selected native display identity, including its Retina backing dimensions.
+Existing Test/Pilot, fixed-refresh and explicit resolution-update rules still apply.
+Linux retains its existing primary/default display policy.
+
 Setup's optional **Check refresh rate** action and automatic launch preflight use the native configured
-mode for the primary/default display plus a temporary fullscreen PsychoPy stability
+mode for the selected Windows/Mac monitor (otherwise the primary/default display), plus
+a temporary fullscreen PsychoPy stability
 observation. Windows uses its exact rational display path; KDE Linux uses KScreen's
 structured current-mode and VRR data, while Linux X11 uses XRandR. Variable-refresh
 configurations remain blocking for timing-sensitive playback.
+
+On Windows, **Check refresh rate**, Run preflight, and launch from Home or Run
+first check for a higher fixed refresh rate when the presentation display uses
+60 Hz. The dialog shows the highest available rate at the current resolution and
+recommends the highest rate supported by Studio timing checks. It shows the
+display number when the workflow supplies a selected display. **Open Advanced
+display settings** opens Windows Settings and ends the pending action. If Settings
+fails to open, the dialog stays open and shows the manual path. After changing the
+rate, return to Studio and use **Check refresh rate** on the same display to update
+and verify the project's refresh setting. **Continue at 60 Hz** proceeds with
+normal checks and is the default when 60 Hz is the highest supported option.
+
 On Mac, the check offers Cancel and a bounded probe; failure/cancellation leaves the
 rate unverified and enables retry. Application shutdown cancels a running Setup check.
 The [runtime contract](RUNTIME_EXECUTION.md#session-flow) owns timeout/cleanup rules.
@@ -902,8 +935,9 @@ The authoring window is organized around two user-facing modes:
     without running the optional fullscreen refresh check; a visible notice explains its
     effect before activation. Changing the dropdown clears the prior check. Uniform-rate
     projects retain requested-versus-realized approximation warnings; mixed image rates
-    must all fit the selected refresh exactly. Current launches always use PsychoPy, fullscreen
-    session playback, and the default display without exposing those as choices
+    must all fit the selected refresh exactly. Current launches always use PsychoPy
+    and fullscreen session playback; Windows and Mac offer a monitor choice at launch when
+    multiple monitors are connected.
   - the Image Size step exposes Image sizing, horizontal image width and vertical image
     height in visual degrees, calibrated display geometry and a concise summary of
     the project presentation defaults. Width/Height, keep proportions authors one axis;
@@ -1814,9 +1848,11 @@ Current honest behavior:
 
 - runtime launch uses normal session mode without restoring the retired runtime
   production/test Boolean gate
-- launched PsychoPy playback opens fullscreen on the default display
-- display-index and fullscreen launch controls are not exposed in the current GUI;
-  launch uses the default display and fullscreen playback
+- launched PsychoPy playback uses the selected Windows/Mac monitor, with the operating
+  system's current primary monitor selected by default; Mac retains its nonexclusive
+  desktop-sized presentation adapter and Linux its existing primary/default policy
+- monitor selection appears only when multiple independent Windows/Mac displays are detected;
+  fullscreen policy remains fixed
 - if the project uses an intended display resolution, launched playback blocks before
   stimulus presentation when PsychoPy reports a different fullscreen resolution
 - each condition waits for `Space` before playback starts

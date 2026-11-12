@@ -57,12 +57,17 @@ from fpvs_studio.gui.document_support import DocumentError, format_validation_re
 from fpvs_studio.gui.fixation_cross_data_dialog import FixationCrossDataDialog
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
+from fpvs_studio.gui.monitor_selection_dialog import (
+    choose_experiment_display,
+    selected_display_options,
+)
 from fpvs_studio.gui.processing_page import (
     BundleExportProcessingPage,
     BundleExportResultPage,
     BundleImportProcessingPage,
 )
 from fpvs_studio.gui.recording_dialog import configure_brainproducts_for_launch
+from fpvs_studio.gui.refresh_recommendation_dialog import check_windows_refresh
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
     BioSemiRecordingConfirmationDialog,
@@ -1114,13 +1119,28 @@ class StudioMainWindow(QMainWindow):
             return
         if not self.flush_pending_edits():
             return
+        choose_experiment_display(self, self._check_launch_display_refresh)
+
+    def _check_launch_display_refresh(self, display_device_name: str | None) -> None:
+        check_windows_refresh(
+            self, lambda: self._launch_after_refresh_check(display_device_name),
+            display_device_name=display_device_name,
+        )
+
+    def _launch_after_refresh_check(self, display_device_name: str | None = None) -> None:
+        if self._project_update_reload_failed or self._bundle_import_processing_active:
+            return
+        if self.is_launch_busy() or self._trigger_tester is not None:
+            return
         try:
             refresh_hz = self._home_launch_refresh_hz()
             local_display = None
             if sys.platform == "darwin":
                 from fpvs_studio.gui.local_test_display_dialog import confirm_local_test_display
 
-                local_display = confirm_local_test_display(self.document, self)
+                local_display = confirm_local_test_display(
+                    self.document, self, **selected_display_options(display_device_name),
+                )
                 if local_display is None:
                     return
                 assert local_display.preferred_refresh_hz is not None
@@ -1140,6 +1160,7 @@ class StudioMainWindow(QMainWindow):
             self._launch_participant_session(
                 participant_details, refresh_hz, None,
                 **({} if local_display is None else {"local_display": local_display}),
+                **selected_display_options(display_device_name),
             )
             return
         participant_number = participant_details.participant_number
@@ -1160,6 +1181,7 @@ class StudioMainWindow(QMainWindow):
             lambda number: self._launch_participant_session(
                 participant_details, refresh_hz, number,
                 **({} if local_display is None else {"local_display": local_display}),
+                **selected_display_options(display_device_name),
             )
         )
         check.start()
@@ -1172,6 +1194,7 @@ class StudioMainWindow(QMainWindow):
         self, participant_details: ParticipantLaunchDetails, refresh_hz: float,
         participant_session_number: int | None,
         *, local_display: DisplaySettings | None = None,
+        display_device_name: str | None = None,
     ) -> None:
         participant_number = participant_details.participant_number
         try:
@@ -1222,6 +1245,7 @@ class StudioMainWindow(QMainWindow):
                 participant_session_number=participant_session_number,
                 display_index=None,
                 fullscreen=True,
+                **selected_display_options(display_device_name),
             )
             return LaunchTaskResult(session_plan=compiled_plan, summary=summary)
 
@@ -1246,6 +1270,22 @@ class StudioMainWindow(QMainWindow):
 
     def _launch_recovered_condition(self, record: InterruptedCondition) -> None:
         """Launch one frozen occurrence through the ordinary recording/visit safeguards."""
+        if (
+            not self.isVisible() or self.is_launch_busy()
+            or self._bundle_import_processing_active or self._project_update_reload_failed
+            or self._trigger_tester is not None
+        ):
+            return
+        choose_experiment_display(
+            self, lambda name: check_windows_refresh(
+                self, lambda: self._launch_recovered_condition_on_display(record, name),
+                display_device_name=name,
+            ),
+        )
+
+    def _launch_recovered_condition_on_display(
+        self, record: InterruptedCondition, display_device_name: str | None,
+    ) -> None:
         if (
             not self.isVisible() or self.is_launch_busy()
             or self._bundle_import_processing_active or self._project_update_reload_failed
@@ -1342,6 +1382,7 @@ class StudioMainWindow(QMainWindow):
                     details.participant_number,
                 ),
                 display_index=None, fullscreen=True,
+                **selected_display_options(display_device_name),
             )
             return LaunchTaskResult(session_plan=plan, summary=summary)
 

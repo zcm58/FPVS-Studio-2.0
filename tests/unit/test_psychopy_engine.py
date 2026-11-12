@@ -72,6 +72,10 @@ class _FakeWindow:
         self.size = kwargs.get("size", [1920, 1080])
         self.frameBufferSize = self.size
         self.useRetina = kwargs.get("useRetina", False)
+        self.screen = kwargs.get("screen", 0)
+        self._isFullScr = kwargs.get("fullscr", False)
+        self.useFBO = False
+        self.winHandle = SimpleNamespace(get_framebuffer_size=lambda: self.frameBufferSize)
         self.monitor = None
         self.events = events if events is not None else []
         self.raise_on_flip_index = raise_on_flip_index
@@ -411,6 +415,29 @@ def _patch_fake_psychopy(
     set_module_platform(monkeypatch, psychopy_window_module, platform_name)
     set_module_platform(monkeypatch, psychopy_engine_module, platform_name)
     set_module_platform(monkeypatch, psychopy_macos_display_module, platform_name)
+    from fpvs_studio.runtime import macos_display, windows_display
+
+    monkeypatch.setattr(
+        windows_display, "query_windows_monitors",
+        lambda: (windows_display.WindowsMonitor(r"\\.\DISPLAY1", True, 1920, 1080),),
+    )
+    monkeypatch.setattr(
+        macos_display, "query_macos_monitors",
+        lambda: (SimpleNamespace(display_id=1, primary=True),),
+    )
+    monkeypatch.setattr(
+        psychopy_macos_display_module, "_macos_window_display_id", lambda window: window.screen + 1,
+    )
+    monkeypatch.setattr(
+        psychopy_window_module, "_pyglet_screens",
+        lambda: [
+            SimpleNamespace(
+                get_device_name=lambda index=index: rf"\\.\DISPLAY{index + 1}",
+                _cg_display_id=index + 1,
+            )
+            for index in range(3)
+        ],
+    )
     presentation_app = SimpleNamespace(
         presentationOptions=lambda: 0,
         setPresentationOptions_=lambda value: None,
@@ -472,6 +499,7 @@ def test_measure_refresh_hz_uses_fullscreen_psychopy_probe_and_closes_window(mon
         "waitBlanking": True,
         "color": "black",
         "units": "pix",
+        "winType": "pyglet",
         "size": [1920, 1080],
         "checkTiming": False,
     }
@@ -803,6 +831,7 @@ def test_psychopy_engine_opens_fullscreen_window_for_launched_session(monkeypatc
         "waitBlanking": True,
         "color": "black",
         "units": "pix",
+        "winType": "pyglet",
         "size": [1920, 1080],
     }
 
@@ -831,6 +860,7 @@ def test_psychopy_engine_preserves_windowed_session_size(monkeypatch) -> None:
         "waitBlanking": True,
         "color": "black",
         "units": "pix",
+        "winType": "pyglet",
         "size": [1280, 720],
     }
 
@@ -863,9 +893,8 @@ def test_fullscreen_window_uses_selected_pyglet_screen_size(
     assert window_kwargs["size"] == [2560, 1440]
 
 
-def test_fullscreen_window_falls_back_to_psychopy_when_screen_query_fails(
+def test_fullscreen_window_rejects_unavailable_screen_enumeration(
     monkeypatch,
-    caplog,
 ) -> None:
     set_module_platform(monkeypatch, psychopy_window_module, "win32")
     def _fail_import(_module_name: str) -> object:
@@ -873,17 +902,15 @@ def test_fullscreen_window_falls_back_to_psychopy_when_screen_query_fails(
 
     monkeypatch.setattr(psychopy_window_module, "import_module", _fail_import)
 
-    with caplog.at_level(logging.WARNING, logger=psychopy_window_module.__name__):
-        window_kwargs = psychopy_window_module.build_window_kwargs(
+    with pytest.raises(RuntimeError, match="Could not select the presentation monitor"):
+        psychopy_window_module.build_window_kwargs(
             {"fullscreen": True, "display_index": 1}
         )
-
-    assert "size" not in window_kwargs
-    assert "PsychoPy will determine the actual fullscreen size" in caplog.text
 
 
 def test_refresh_probe_uses_fullscreen_size_when_launch_is_windowed(monkeypatch) -> None:
     set_module_platform(monkeypatch, psychopy_window_module, "win32")
+    monkeypatch.setattr(psychopy_window_module, "_pyglet_screens", lambda: [object(), object()])
     monkeypatch.setattr(
         psychopy_window_module,
         "_detect_fullscreen_size_px",

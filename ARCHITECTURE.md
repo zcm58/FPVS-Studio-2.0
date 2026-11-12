@@ -73,6 +73,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Studio–Toolbox configs | `core/project_config.py`, `core/project_config_legacy.py`; [format](docs/PROJECT_CONFIG.md) |
 | Guarded current-project Library replacement | `core/project_bundle_update.py`; ordinary imports never replace projects |
 | Recording setup and launch | `gui/recording_dialog.py`, `gui/settings_dialog.py`, `gui/document_runtime.py`, `runtime/recording.py`, `runtime/acquisition_evidence.py` |
+| Windows/Mac presentation monitor | `gui/monitor_selection_dialog.py`, `runtime/windows_display.py`, `runtime/macos_display.py`, `runtime/display_refresh.py`, `runtime/macos_session_process.py`, `engines/psychopy_window.py`; [launch contract](docs/GUI_WORKFLOW.md#launch) |
 | Trigger Tester | `gui/trigger_tester.py`, `triggers/manual.py` and port discovery |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |

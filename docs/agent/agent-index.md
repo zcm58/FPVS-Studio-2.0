@@ -62,3 +62,8 @@ isolation, Windows test paths and `-Durations`.
 
 Read the selected skill completely. Keep behavior in its canonical contract and
 add topic entry points to the optional recipes.
+
+Windows and Mac experiment monitor selection follows the `gui` route and the
+[launch workflow](../GUI_WORKFLOW.md#launch); native mode validation and engine screen
+mapping also use the `runtime` and `engine` focused checks. Mac enumeration, selected
+monitor rendering, Retina backing and bounded-probe coverage use the `macos` route.

@@ -18,7 +18,7 @@ from math import isclose, isfinite
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, StrictStr, field_validator
 
 from fpvs_studio.core.enums import EngineName
 from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
@@ -67,6 +67,20 @@ class _RefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     version: Literal[1] = 1
     operation: Literal["refresh"] = "refresh"
+    display_device_name: StrictStr | None = None
+
+    @field_validator("display_device_name")
+    @classmethod
+    def _validate_display_identity(cls, value: str | None) -> str | None:
+        if value is not None:
+            from fpvs_studio.runtime.display_mode import DisplayModeError
+            from fpvs_studio.runtime.macos_display import macos_display_id
+
+            try:
+                macos_display_id(value)
+            except DisplayModeError as exc:
+                raise ValueError("Invalid Mac presentation monitor identity.") from exc
+        return value
 
 
 class _Response(BaseModel):
@@ -105,6 +119,7 @@ def _launch_failure(error: Exception) -> _Response:
     if isinstance(error, RuntimeError) and str(error).startswith((
         "macOS display refresh callback", "Mac Test/Pilot requires the foreground-window",
         "PsychoPy could not determine the Mac presentation display size.",
+        "Could not select the presentation monitor:", "Mac presentation display ",
     )):
         return _Response(
             error="display_verification", guidance=str(error)[:1000],
@@ -115,7 +130,7 @@ def _launch_failure(error: Exception) -> _Response:
     )):
         return _Response(
             error="display_verification",
-            guidance="The Mac backing pixels do not match this local test. Check the primary "
+            guidance="The Mac backing pixels do not match this local test. Check the selected "
             "display and recheck its refresh rate and local calibration before restarting.",
             child_traceback=_stack_locations(error),
         )
@@ -229,11 +244,15 @@ def launch_macos_test_session(
 
 
 def verify_macos_primary_display_refresh(
-    *, cancel_event: threading.Event | None = None,
+    *, cancel_event: threading.Event | None = None, display_device_name: str | None = None,
 ) -> DisplayRefreshVerification:
-    """Measure fullscreen on a child main thread with a deadline and cancellation."""
+    """Measure the chosen display on a child main thread with bounded cancellation."""
     _require_source_macos()
-    response = _exchange(_RefreshRequest(), cancel_event=cancel_event)
+    try:
+        request = _RefreshRequest(display_device_name=display_device_name)
+    except ValueError as exc:
+        raise MacOSSessionProcessError("Select a valid Mac presentation monitor.") from exc
+    response = _exchange(request, cancel_event=cancel_event)
     result = response.verification
     if (result is None or response.summary is not None
             or not isfinite(result.psychopy_measured_hz) or result.psychopy_measured_hz <= 0
@@ -242,6 +261,12 @@ def verify_macos_primary_display_refresh(
             or not isclose(result.display_mode.hz, result.psychopy_measured_hz,
                            rel_tol=PSYCHOPY_STABILITY_RELATIVE_TOLERANCE, abs_tol=0.0)):
         raise MacOSSessionProcessError("The macOS refresh check returned an invalid result.")
+    if display_device_name is not None and result.display_mode.display_device_name != (
+        display_device_name
+    ):
+        raise MacOSSessionProcessError(
+            "The macOS refresh check returned a different display. Select the monitor again."
+        )
     return result
 
 
@@ -286,7 +311,12 @@ def _exchange(
         folder = Path(directory)
         os.chmod(folder, 0o700)
         request_path = folder / "request.json"
-        _private_file(request_path, write=request.model_dump_json().encode("utf-8"))
+        _private_file(
+            request_path,
+            write=request.model_dump_json(exclude_none=isinstance(request, _RefreshRequest)).encode(
+                "utf-8",
+            ),
+        )
         environment = os.environ.copy()
         source_root = str(Path(__file__).resolve().parents[2])
         environment["PYTHONPATH"] = os.pathsep.join(
@@ -367,7 +397,11 @@ def main(argv: Sequence[str] | None = None) -> int:
 
                 verification = _verify_primary_display_refresh_in_process(
                     create_engine(EngineName.PSYCHOPY),
-                    runtime_options={"fullscreen": True, "display_index": None},
+                    runtime_options={
+                        "fullscreen": True, "display_index": None,
+                        **({"display_device_name": request.display_device_name}
+                           if request.display_device_name is not None else {}),
+                    },
                 )
                 response = _Response(verification=verification)
             else:

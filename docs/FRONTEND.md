@@ -173,8 +173,11 @@ interaction.
   It exposes project BioSemi/TriggerBox serial-port selection.
   actiCHamp parallel output has a separate hexadecimal address selector with
   metadata-only Windows detection and shared sampling-rate/pulse controls.
-  Other serial parameters, display selection and fullscreen policy remain
-  backend/runtime contract values outside runtime launch controls.
+  Other serial parameters and fullscreen policy remain backend/runtime contract
+  values. Windows and Mac launch offer a monitor selector only when multiple
+  independent displays are connected; the operating system's current primary monitor
+  is selected by default. See
+  [Launch](GUI_WORKFLOW.md#launch) for selection and refresh-check behavior.
 
 ## Verification
 

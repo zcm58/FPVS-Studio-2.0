@@ -230,6 +230,16 @@ Choose a local FPVS Studio Root Folder. Mac source testing uses the explicit loc
 Test/Pilot path and null trigger output; it must retain native display verification,
 engine observation and timing QC. The local dialog starts with the project's physical
 screen width and viewing distance. Enter the measured values for that test.
+Home and Run detect active independent monitors at launch. Multiple monitors open
+the shared selector with the Mac's current primary display selected; one monitor
+continues without that selector. Primary means `CGMainDisplayID`, not the display
+with keyboard focus. Mirrored secondary outputs do not add independent choices.
+The selected native identity is transient and follows calibration, bounded refresh
+verification and playback; disappearance or incorrect window placement blocks the
+launch. **Check refresh rate** also offers the selector when multiple displays exist.
+The engine validates actual NSWindow placement and Retina backing dimensions,
+including mixed-scaling displays. Fake-backed tests cover routing and rejection;
+physical multi-monitor acceptance remains separate.
 When target and detected backing resolutions differ, Home and Run show both sizes
 and ask to save the detected target resolution before compiling. Acceptance saves
 only pixel dimensions/fixed-resolution policy; Cancel saves nothing, and a save error
