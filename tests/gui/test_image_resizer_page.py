@@ -8,7 +8,7 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QWidget
+from PySide6.QtWidgets import QApplication, QLabel, QWidget
 from tests.gui.helpers import (
     _assert_visible_children_within_parent,
     _ImmediateProgressTask,
@@ -16,7 +16,9 @@ from tests.gui.helpers import (
     _write_image_directory,
 )
 
+from fpvs_studio.gui.components import image_resizer_stylesheet
 from fpvs_studio.gui.controller import StudioController
+from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
 
 
@@ -38,6 +40,31 @@ def test_return_home_stays_in_bottom_footer_when_resized(qtbot, dark):
         _assert_visible_children_within_parent(page)
     qtbot.mouseClick(page.return_home_button, Qt.MouseButton.LeftButton)
     assert returns == [True]
+
+
+def test_open_image_resizer_tracks_application_palette(qtbot, qapp):
+    original_palette = QPalette(qapp.palette())
+    page = ImageResizerPage()
+    qtbot.addWidget(page)
+    page.resize(960, 640)
+    page.show()
+    heading = page.findChild(QLabel, "image_resizer_controls_heading")
+    assert heading is not None
+    try:
+        for background in ("#f4f7fb", "#202124", "#f4f7fb"):
+            palette = QPalette(original_palette)
+            palette.setColor(QPalette.ColorRole.Window, QColor(background))
+            qapp.setPalette(palette)
+            QApplication.processEvents()
+
+            theme = resolve_studio_theme(palette)
+            assert page.styleSheet() == image_resizer_stylesheet(theme)
+            heading_color = heading.palette().color(QPalette.ColorRole.WindowText).name()
+            assert heading_color == theme.text_primary
+            _assert_visible_children_within_parent(page)
+    finally:
+        qapp.setPalette(original_palette)
+        QApplication.processEvents()
 
 
 def test_tools_menu_exposes_in_window_image_resizer(
@@ -72,13 +99,16 @@ def test_tools_menu_exposes_in_window_image_resizer(
     assert window.main_stack.currentWidget() is window.home_page
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_image_resizer_uses_wide_two_column_workbench(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    background: str,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Layout")
 
+    window.setPalette(QPalette(QColor(background)))
     window.image_resizer_action.trigger()
     QApplication.processEvents()
     page = window.image_resizer_page
@@ -113,7 +143,36 @@ def test_image_resizer_uses_wide_two_column_workbench(
     assert results_left > controls_right
     assert controls_panel.width() > results_panel.width()
     assert workbench.width() >= int(surface_frame.width() * 0.8)
-    _assert_visible_children_within_parent(page)
+    assert page.size_combo.accessibleName() == "Output size in pixels"
+    assert page.size_combo.currentText() == "512 × 512"
+    assert page.findChild(QLabel, "image_resizer_controls_copy") is None
+    assert page.findChild(QLabel, "image_resizer_results_copy") is None
+
+    window.resize(960, 640)
+    QApplication.processEvents()
+    empty_size_row_top = page.size_combo.y()
+    source_dir = tmp_path / "Participant calibration images" / "Original stimulus images"
+    source_dir.mkdir(parents=True)
+    output_dir = tmp_path / "Prepared experimental stimuli" / "Resized stimulus images"
+    page._set_source_dir(source_dir)
+    page._set_output_dir(output_dir, user_selected=True)
+    QApplication.processEvents()
+    assert page.size_combo.y() == empty_size_row_top
+
+    for size in ((960, 640), (1120, 720), (960, 640)):
+        window.resize(*size)
+        QApplication.processEvents()
+        assert window.size().toTuple() == size
+        for label, path in ((page.source_value, source_dir), (page.output_value, output_dir)):
+            assert not label.wordWrap()
+            assert "…" in label.text()
+            assert label.toolTip() == str(path)
+            assert label.accessibleName() == str(path)
+            text_width = label.fontMetrics().horizontalAdvance(label.text())
+            assert text_width <= label.contentsRect().width()
+        for button in (page.source_button, page.output_button, page.optimize_button):
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+        _assert_visible_children_within_parent(page)
 
 
 def test_image_resizer_source_selection_suggests_output_folder(
@@ -149,7 +208,7 @@ def test_image_resizer_disabled_state_explains_unavailable_optimization(
 
     assert page.optimize_button.isEnabled() is False
     assert page.open_output_button.isHidden()
-    assert "source folder and an output folder" in page.result_label.text().lower()
+    assert page.result_label.text() == "Choose a source folder."
 
     source_dir = tmp_path / "raw-images"
     _write_image_directory(source_dir)
@@ -186,8 +245,8 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     page._set_output_dir(output_dir, user_selected=True)
     qtbot.mouseClick(page.optimize_button, Qt.MouseButton.LeftButton)
 
-    assert page.status_badge.text() == "Optimization complete"
-    assert "Optimized 1 image(s)" in page.result_label.text()
+    assert page.result_label.text() == "Resized 1 image to 512 × 512 px."
+    assert page.copy_output_button.text() == "Copy Folder Path"
     assert not page.open_output_button.isHidden()
     assert not page.copy_output_button.isHidden()
     assert page.open_output_button.isEnabled()
@@ -199,3 +258,52 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     output_paths = sorted(output_dir.iterdir())
     assert len(output_paths) == 1
     assert output_paths[0].suffix == ".png"
+    page._set_output_dir(tmp_path / "Another output folder", user_selected=True)
+    assert page.result_label.text() == "No batch results yet."
+    assert page.open_output_button.isHidden()
+    assert page.copy_output_button.isHidden()
+
+
+@pytest.mark.parametrize("size", [(960, 640), (1120, 720)], ids=["minimum", "default"])
+def test_image_resizer_retains_failure_until_inputs_change(qtbot, tmp_path, monkeypatch, size):
+    from fpvs_studio.gui import image_resizer_page
+
+    page = ImageResizerPage()
+    qtbot.addWidget(page)
+    page.resize(*size)
+    page.show()
+    errors = []
+
+    def fail_batch(**_kwargs):
+        assert page.result_label.text() == "Resizing images…"
+        assert not page.optimize_button.isEnabled()
+        raise RuntimeError("Output folder cannot be opened.")
+
+    monkeypatch.setattr(image_resizer_page, "ProgressTask", _ImmediateProgressTask)
+    monkeypatch.setattr(image_resizer_page, "optimize_image_folder_for_fpvs", fail_batch)
+    monkeypatch.setattr(
+        image_resizer_page,
+        "_show_error_dialog",
+        lambda _parent, _title, error: errors.append(error),
+    )
+    source_dir = tmp_path / "Participant calibration images" / "Original stimulus images"
+    source_dir.mkdir(parents=True)
+    page._set_source_dir(source_dir)
+    QApplication.processEvents()
+
+    qtbot.mouseClick(page.optimize_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert page.size().toTuple() == size
+    assert page.result_label.text() == "Batch failed."
+    assert [str(error) for error in errors] == ["Output folder cannot be opened."]
+    assert page.optimize_button.isEnabled()
+    assert page.open_output_button.isHidden()
+    assert page.copy_output_button.isHidden()
+    for label in (page.source_value, page.output_value, page.result_label):
+        assert label.height() >= label.heightForWidth(label.width())
+    assert str(page._output_dir) in (page.output_value.text(), page.output_value.toolTip())
+    _assert_visible_children_within_parent(page)
+
+    page._set_output_dir(tmp_path / "Resized images", user_selected=True)
+    assert page.result_label.text() == "No batch results yet."

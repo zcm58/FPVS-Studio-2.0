@@ -96,7 +96,10 @@ class _QuestionEditor(SectionCard):
     changed = Signal()
 
     def __init__(self, parent: QWidget) -> None:
-        super().__init__(title="Question", object_name="setup_demographics_editor", parent=parent)
+        super().__init__(
+            title="Question", object_name="setup_demographics_editor", framed=False, parent=parent,
+        )
+        self.card_layout.setContentsMargins(0, 0, 0, 0)
         self._draft: _QuestionDraft | None = None
         self._option_edits: list[QLineEdit] = []
 
@@ -384,9 +387,10 @@ class DemographicsSetupStep(QWidget):
 
         workspace = QHBoxLayout()
         workspace.setSpacing(16)
-        outline_card = SectionCard(title="Questions", parent=self)
-        outline_card.setMaximumWidth(265)
-        self.question_list = _QuestionOutline(outline_card)
+        outline = SectionCard(title="Questions", framed=False, parent=self)
+        outline.setMaximumWidth(265)
+        outline.card_layout.setContentsMargins(0, 0, 0, 0)
+        self.question_list = _QuestionOutline(outline)
         self.question_list.setAccessibleName("Questions in presentation order")
         self.question_list.setToolTip("Drag to change the question order.")
         self.question_list.setTextElideMode(Qt.TextElideMode.ElideRight)
@@ -396,20 +400,20 @@ class DemographicsSetupStep(QWidget):
         self.question_list.setDropIndicatorShown(True)
         self.question_list.currentRowChanged.connect(self._select_question)
         self.question_list.order_changed.connect(self._sync_outline_order)
-        outline_card.body_layout.addWidget(self.question_list, 1)
+        outline.body_layout.addWidget(self.question_list, 1)
         move_buttons = QHBoxLayout()
-        self.move_up_button = QPushButton("Move up", outline_card)
-        self.move_down_button = QPushButton("Move down", outline_card)
+        self.move_up_button = QPushButton("Move up", outline)
+        self.move_down_button = QPushButton("Move down", outline)
         for button, offset in ((self.move_up_button, -1), (self.move_down_button, 1)):
             mark_secondary_action(button)
             move_buttons.addWidget(button)
             button.clicked.connect(lambda _checked=False, direction=offset: self._move(direction))
-        outline_card.body_layout.addLayout(move_buttons)
-        self.add_button = QPushButton("Add question", outline_card)
+        outline.body_layout.addLayout(move_buttons)
+        self.add_button = QPushButton("Add question", outline)
         mark_primary_action(self.add_button)
         self.add_button.clicked.connect(self._add_question)
-        outline_card.body_layout.addWidget(self.add_button)
-        workspace.addWidget(outline_card, 1)
+        outline.body_layout.addWidget(self.add_button)
+        workspace.addWidget(outline, 1)
 
         self.editor = _QuestionEditor(self)
         self.editor.changed.connect(self._question_changed)

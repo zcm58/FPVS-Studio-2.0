@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
@@ -95,6 +94,7 @@ from fpvs_studio.core.task_models import (
 )
 from fpvs_studio.gui.components import (
     DialogHeader,
+    SectionCard,
     apply_condition_modifier_theme,
     mark_destructive_action,
     mark_error_text,
@@ -341,6 +341,7 @@ class ConditionModifierDialog(QDialog):
         self.modifier_list.currentItemChanged.connect(self._select_item)
         side.addWidget(self.modifier_list, 1)
         self.advanced_toggle = QToolButton(sidebar)
+        self.advanced_toggle.setObjectName("modifier_advanced_toggle")
         self.advanced_toggle.setText("Advanced modifiers")
         self.advanced_toggle.setCheckable(True)
         self.advanced_toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -415,22 +416,24 @@ class ConditionModifierDialog(QDialog):
         overview = QVBoxLayout(self.overview)
         self.workflow_labels: list[QLabel] = []
         flow = QGridLayout()
+        flow.setHorizontalSpacing(20)
+        flow.setVerticalSpacing(12)
         for index, title in enumerate(
             ("Session baseline", "Before FPVS", "During FPVS", "After FPVS")
         ):
-            group = QGroupBox(title, self.overview)
-            group_layout = QVBoxLayout(group)
-            label = _label("", group)
-            group_layout.addWidget(label)
+            section = self._flat_section(title, self.overview)
+            label = _label("", section)
+            section.body_layout.addWidget(label)
             self.workflow_labels.append(label)
-            flow.addWidget(group, index // 2, index % 2)
-        overview.addLayout(flow, 1)
+            flow.addWidget(section, index // 2, index % 2, Qt.AlignmentFlag.AlignTop)
+        overview.addLayout(flow)
         self.recorded_label = _label("", self.overview)
         overview.addWidget(self.recorded_label)
         self.advanced_button = QPushButton("Advanced steps…", self.overview)
         self.advanced_button.clicked.connect(self._open_advanced)
         self.advanced_button.hide()
         overview.addWidget(self.advanced_button, 0, Qt.AlignmentFlag.AlignLeft)
+        overview.addStretch(1)
         self.tabs.addTab(self.overview, "Overview")
         self._build_settings()
         self._build_preview()
@@ -495,6 +498,15 @@ class ConditionModifierDialog(QDialog):
         footer.addWidget(self.apply_button)
         layout.addLayout(footer)
 
+    @staticmethod
+    def _flat_section(title: str, parent: QWidget) -> SectionCard:
+        section = SectionCard(title=title, framed=False, parent=parent)
+        section.setAccessibleName(title)
+        section.card_layout.setContentsMargins(0, 0, 0, 0)
+        section.card_layout.setSpacing(6)
+        section.body_layout.setSpacing(6)
+        return section
+
     def _build_settings(self) -> None:
         settings = QWidget(self.tabs)
         layout = QVBoxLayout(settings)
@@ -544,16 +556,15 @@ class ConditionModifierDialog(QDialog):
             ("Four target images", self.target_list, lambda: self._choose_images(True)),
             ("Four foil images", self.foil_list, lambda: self._choose_images(False)),
         ):
-            group = QGroupBox(title, memory)
-            group_layout = QVBoxLayout(group)
+            section = self._flat_section(title, memory)
             image_list.setIconSize(QSize(34, 34))
             image_list.setMinimumHeight(90)
             image_list.setMaximumHeight(140)
-            group_layout.addWidget(image_list)
-            button = QPushButton("Choose four images…", group)
+            section.body_layout.addWidget(image_list)
+            button = QPushButton("Choose four images…", section)
             button.clicked.connect(callback)
-            group_layout.addWidget(button)
-            image_row.addWidget(group)
+            section.body_layout.addWidget(button)
+            image_row.addWidget(section)
         memory_layout.addLayout(image_row)
         timing = QHBoxLayout()
         timing.addWidget(QLabel("Study presentation", memory))

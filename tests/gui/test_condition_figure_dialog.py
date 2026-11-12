@@ -8,7 +8,8 @@ from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication, QFrame, QLabel
 from tests.gui.helpers import (
     assert_visible_children_within_parent,
     open_created_project,
@@ -102,12 +103,16 @@ def _assert_geometry(qtbot, dialog, size):
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_automatic_defaults_load_five_previews_and_fit_both_sizes(
-    qtbot, sample_project, tmp_path, figure_jobs,
+    qtbot, sample_project, tmp_path, figure_jobs, background,
 ):
     long_name = "Longest realistic condition label " * 9
     sample_project.conditions[0].name = long_name
     dialog = _open_dialog(qtbot, sample_project, tmp_path)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     assert dialog.has_active_task
     assert dialog.mode_combo.currentText() == "Automatic"
     assert not dialog.export_button.isEnabled()
@@ -117,6 +122,11 @@ def test_automatic_defaults_load_five_previews_and_fit_both_sizes(
     assert [combo.currentIndex() for combo in dialog.stimulus_combos] == [0, 1, 2, 3, 0]
     assert not any(combo.isEnabled() for combo in dialog.stimulus_combos)
     assert all(not preview.pixmap().isNull() for preview in dialog.preview_labels)
+    preview_section = dialog.preview_labels[0].parentWidget()
+    assert preview_section.property("sectionCard") == "false"
+    assert all(
+        preview.frameShape() == QFrame.Shape.StyledPanel for preview in dialog.preview_labels
+    )
     assert dialog.export_button.isEnabled()
     assert long_name in dialog.condition_combo.toolTip()
     assert str(figure_jobs.sources.base_stimuli[0]) in dialog.stimulus_combos[0].toolTip()

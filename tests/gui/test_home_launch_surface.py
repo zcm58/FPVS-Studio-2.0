@@ -26,7 +26,6 @@ from PySide6.QtWidgets import (
 from tests.gui.helpers import (
     _assert_visible_children_within_parent,
     _ImmediateProgressTask,
-    _list_widget_text,
     _open_created_project,
     _prepare_compile_ready_project,
 )
@@ -156,11 +155,16 @@ def test_home_recording_link_obeys_disabled_settings_and_launch_busy_guards(
 def test_home_actions_fit_minimum_and_default_sizes_and_resize_back(
     qtbot, controller, tmp_path, monkeypatch, background, ready, description,
 ):
+    long_blocker = (
+        "Assign a target source to condition " + "familiar and unfamiliar exemplars " * 8
+        if not ready and description else None
+    )
     monkeypatch.setattr(HomePage, "_status_report", lambda _self: SimpleNamespace(
         badge_state="ready" if ready else "warning",
         status_label="Ready to Launch" if ready else "Setup Required",
         status_summary="" if ready else "Choose the image sources for every condition",
         readiness_items=(),
+        first_blocker=long_blocker,
     ))
     document, window = _open_created_project(
         controller, qtbot, tmp_path,
@@ -179,6 +183,22 @@ def test_home_actions_fit_minimum_and_default_sizes_and_resize_back(
         QApplication.processEvents()
         assert window.size().toTuple() == size
         assert page.current_project_subtitle.isVisible() is bool(description)
+        if description:
+            subtitle = page.current_project_subtitle
+            width = subtitle.contentsRect().width()
+            assert subtitle.text() == subtitle.fontMetrics().elidedText(
+                description, Qt.TextElideMode.ElideRight, width,
+            )
+            assert subtitle.fontMetrics().horizontalAdvance(subtitle.text()) <= width
+            assert subtitle.toolTip() == description
+            assert subtitle.accessibleName() == description
+        if long_blocker:
+            blocker = page.launch_status_summary
+            width = blocker.contentsRect().width()
+            assert blocker.text() == blocker.fontMetrics().elidedText(
+                long_blocker, Qt.TextElideMode.ElideRight, width,
+            )
+            assert blocker.toolTip() == blocker.accessibleName() == long_blocker
         assert page.edit_setup_button.text() == ("Edit Setup" if ready else "Complete Setup")
         _assert_visible_children_within_parent(page)
         for button in (*buttons, page.launch_button):
@@ -587,8 +607,8 @@ def test_home_quick_action_buttons_present_and_wired(
     assert launch_button.isEnabled() is False
     assert launch_button.property("launchActionRole") == "primary"
     assert new_button.text() == "Create Project"
-    assert import_button.text() == "Import New Project"
-    assert open_button.text() == "Open Existing Project"
+    assert import_button.text() == "Import Project Bundle"
+    assert open_button.text() == "Open Project"
     assert edit_setup_button.text() == "Complete Setup"
     assert edit_setup_button.property("primaryActionRole") == "true"
     assert edit_setup_button.property("secondaryActionRole") == "false"
@@ -763,15 +783,16 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     assert run_launch_button is not None
     assert status_label.text() == "Setup Required"
     assert status_label.property("statusState") == "error"
-    assert status_label.alignment() == Qt.AlignmentFlag.AlignCenter
-    assert status_label.minimumWidth() == 224
-    assert status_label.minimumHeight() >= 34
+    assert status_label.alignment() == (Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    assert status_label.minimumWidth() == 0
+    assert status_label.width() >= status_label.fontMetrics().horizontalAdvance(status_label.text())
+    assert status_label.height() >= status_label.fontMetrics().height()
     assert status_summary.isVisible()
     assert status_summary.alignment() == Qt.AlignmentFlag.AlignCenter
     assert status_summary.text() == "Add at least one condition."
     assert status_summary.toolTip() == home_launch_button.toolTip()
     assert home_launch_button.isEnabled() is False
-    assert "Needs setup:" in home_launch_button.toolTip()
+    assert home_launch_button.toolTip() == "Add at least one condition."
     assert home_launch_button.statusTip() == home_launch_button.toolTip()
     assert complete_setup_button.text() == "Complete Setup"
     assert complete_setup_button.property("primaryActionRole") == "true"
@@ -824,12 +845,12 @@ def test_main_window_no_longer_exposes_top_level_tab_bar(
     assert window.main_stack.indexOf(window.setup_wizard_page) >= 0
 
 
-def test_main_window_buttons_are_hover_animation_enabled(
+def test_main_window_buttons_keep_theme_feedback_without_graphics_effects(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Hover Buttons Project")
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Button States Project")
     create_button = window.home_page.findChild(QPushButton, "home_create_project_button")
     run_compile_button = window.run_page.findChild(QPushButton, "compile_session_button")
     run_launch_button = window.run_page.findChild(QPushButton, "launch_session_button")
@@ -837,9 +858,14 @@ def test_main_window_buttons_are_hover_animation_enabled(
     assert run_compile_button is not None
     assert run_launch_button is not None
     assert run_compile_button.text() == "Preview Session Plan"
-    assert create_button.property("hoverAnimationEnabled") is True
-    assert run_compile_button.property("hoverAnimationEnabled") is True
-    assert run_launch_button.property("hoverAnimationEnabled") is True
+    assert all(
+        button.graphicsEffect() is None
+        for button in (create_button, run_compile_button, run_launch_button)
+    )
+    stylesheet = window.styleSheet()
+    assert "QPushButton:hover" in stylesheet
+    assert "QPushButton:pressed" in stylesheet
+    assert "QPushButton:focus" in stylesheet
 
 
 def test_run_page_preview_copy_and_home_status_are_compile_agnostic(
@@ -858,15 +884,9 @@ def test_run_page_preview_copy_and_home_status_are_compile_agnostic(
     assert home_status is not None
 
     assert preview_button.text() == "Preview Session Plan"
-    assert (
-        window.run_page.summary_text.placeholderText()
-        == "Preview the session plan or launch to populate runtime diagnostics."
-    )
-    assert (
-        "launch will collect participant details, compile, and run launch checks automatically"
-        in window.run_page.readiness_summary_value.text().lower()
-    )
-    assert "compile once on run / runtime" not in _list_widget_text(readiness_list).lower()
+    assert window.run_page.summary_text.placeholderText() == "No session preview yet."
+    assert readiness_list.count() == 0
+    assert window.run_page.readiness_summary_value.text() == "Add at least one condition."
     assert "needs compile" not in home_status.text().lower()
     assert "compile" not in home_status.toolTip().lower()
 
@@ -994,9 +1014,13 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     )
 
     assert condition_count_label.text() == "1"
+    assert condition_count_label.property("homeValueRole") == "primary"
     assert block_count_label.text() == "2"
+    assert block_count_label.property("homeValueRole") == "primary"
     assert fixation_label.text() == "Disabled"
+    assert fixation_label.property("homeValueRole") == "secondary"
     assert accuracy_label.text() == "Disabled"
+    assert accuracy_label.property("homeValueRole") == "secondary"
     assert status_label.text()
     assert subtitle_label.text() == ""
     assert subtitle_label.isHidden()
@@ -1023,16 +1047,18 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     QApplication.processEvents()
 
     assert window.document.project.meta.description == long_description
-    assert subtitle_label.text().endswith("...")
-    assert len(subtitle_label.text()) <= 96
+    assert subtitle_label.text() != long_description
+    assert subtitle_label.text() == subtitle_label.fontMetrics().elidedText(
+        long_description, Qt.TextElideMode.ElideRight, subtitle_label.contentsRect().width(),
+    )
     assert subtitle_label.toolTip() == long_description
+    assert subtitle_label.accessibleName() == long_description
 
     window.document.update_project_description(" \t\n ")
     QApplication.processEvents()
     assert subtitle_label.isHidden()
     assert subtitle_label.text() == ""
     assert window.document.project.meta.description == " \t\n "
-    assert subtitle_label.maximumHeight() <= subtitle_label.fontMetrics().lineSpacing() * 2 + 4
     _assert_visible_children_within_parent(launch_panel)
 
 

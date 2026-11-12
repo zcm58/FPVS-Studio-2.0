@@ -17,6 +17,7 @@ from fpvs_studio.gui.components import apply_non_home_shell_theme, apply_section
 from fpvs_studio.gui.design_system import (
     CARD_PADDING_X,
     CARD_PADDING_Y,
+    FONT_SIZE_SECTION_TITLE,
     PAGE_MARGIN_X,
     PAGE_MARGIN_Y,
     PAGE_SECTION_GAP,
@@ -268,7 +269,7 @@ class NonHomePageShell(QWidget):
 
 
 class SectionCard(QFrame):
-    """Reusable section card with optional tooltip affordance."""
+    """Reusable section heading and body with optional framing and help."""
 
     def __init__(
         self,
@@ -277,11 +278,12 @@ class SectionCard(QFrame):
         subtitle: str | None = None,
         tooltip_text: str | None = None,
         object_name: str = "section_card",
+        framed: bool = True,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName(object_name)
-        self.setProperty("sectionCard", "true")
+        self.setProperty("sectionCard", "true" if framed else "false")
         if tooltip_text:
             self.setToolTip(tooltip_text)
 
@@ -323,4 +325,10 @@ class SectionCard(QFrame):
         self.body_layout.setSpacing(PAGE_SECTION_GAP)
         self.card_layout.addLayout(self.body_layout)
 
-        apply_section_card_theme(self)
+        if framed:
+            apply_section_card_theme(self)
+        else:
+            title_font = self.title_label.font()
+            title_font.setPixelSize(FONT_SIZE_SECTION_TITLE)
+            title_font.setBold(True)
+            self.title_label.setFont(title_font)

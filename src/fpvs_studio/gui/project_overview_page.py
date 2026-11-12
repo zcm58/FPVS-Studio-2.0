@@ -31,7 +31,6 @@ from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.gui.components import (
     PathValueLabel,
     SectionCard,
-    apply_project_overview_theme,
     configure_setup_form,
 )
 from fpvs_studio.gui.document import ProjectDocument
@@ -223,28 +222,23 @@ class ProjectOverviewEditor(QWidget):
         condition_profile_actions_layout.addStretch(1)
         condition_profile_layout.addWidget(self.condition_profile_actions)
 
-        self.project_overview_card = SectionCard(
-            title="Project Details",
-            object_name="dashboard_project_overview_card",
-            parent=self,
-        )
-        self.project_overview_card.setMaximumWidth(1040)
-        self.project_overview_card.setSizePolicy(
+        self.project_workspace = QWidget(self)
+        self.project_workspace.setObjectName("project_details_workspace")
+        self.project_workspace.setMaximumWidth(1040)
+        self.project_workspace.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Maximum,
         )
-        self.project_overview_card.title_label.setVisible(False)
-        self.project_overview_card.setProperty("setupFlatSection", "true")
 
         self.project_details_card = SectionCard(
             title="Project details",
             object_name="project_details_card",
-            parent=self.project_overview_card,
+            parent=self.project_workspace,
         )
         self.experiment_setup_card = SectionCard(
             title="Experiment setup",
             object_name="experiment_setup_card",
-            parent=self.project_overview_card,
+            parent=self.project_workspace,
         )
         for card in (self.project_details_card, self.experiment_setup_card):
             card.card_layout.setContentsMargins(16, 16, 16, 16)
@@ -286,8 +280,7 @@ class ProjectOverviewEditor(QWidget):
         self.project_details_card.body_layout.addWidget(self.project_details_column)
         self.experiment_setup_card.body_layout.addWidget(self.experiment_setup_column)
 
-        form_panel = QWidget(self.project_overview_card)
-        form_layout = QHBoxLayout(form_panel)
+        form_layout = QHBoxLayout(self.project_workspace)
         form_layout.setContentsMargins(0, 0, 0, 0)
         form_layout.setSpacing(24)
         form_layout.addWidget(self.project_details_card, 3)
@@ -300,20 +293,14 @@ class ProjectOverviewEditor(QWidget):
         QWidget.setTabOrder(self.participant_tutorial_checkbox,
                            self.repeat_participant_sessions_checkbox)
 
-        self.project_overview_card.card_layout.setContentsMargins(0, 0, 0, 0)
-        self.project_overview_card.card_layout.setSpacing(0)
-        self.project_overview_card.body_layout.setSpacing(0)
-        self.project_overview_card.body_layout.addWidget(form_panel)
-
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        layout.addWidget(self.project_overview_card, 0, Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(self.project_workspace)
         layout.addStretch(1)
 
         self._document.project_changed.connect(self.refresh)
         self.refresh()
-        apply_project_overview_theme(self)
         self._sync_template_action_sizes()
 
     def refresh(self) -> None:

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from PySide6.QtWidgets import (
     QDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -17,6 +16,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.paths import slugify_project_name, validate_project_id
 from fpvs_studio.core.project_bundle import project_bundle_filename
 from fpvs_studio.gui.components import (
+    PathValueLabel,
     apply_studio_theme,
     mark_error_text,
     mark_primary_action,
@@ -36,48 +36,39 @@ class BundleExportOptionsDialog(QDialog):
         self.setMinimumSize(560, 350)
         self.resize(620, 370)
 
-        eyebrow = QLabel("PROJECT EXPORT", self)
-        eyebrow.setProperty("bundleWorkflowRole", "eyebrow")
         title = QLabel("Export a portable project copy", self)
         title.setProperty("bundleWorkflowRole", "title")
-        lead = QLabel(
-            "Choose the project name that another FPVS Studio user will see after import.",
-            self,
-        )
-        lead.setProperty("bundleWorkflowRole", "lead")
-        lead.setWordWrap(True)
 
-        options_card = QFrame(self)
-        options_card.setObjectName("bundle_export_options_card")
-        options_card.setProperty("bundleWorkflowCard", "true")
-        options_layout = QGridLayout(options_card)
-        options_layout.setContentsMargins(16, 14, 16, 14)
+        options_layout = QGridLayout()
         options_layout.setHorizontalSpacing(12)
         options_layout.setVerticalSpacing(10)
 
-        name_label = QLabel("Project name in bundle", options_card)
+        name_label = QLabel("Project name in bundle", self)
         name_label.setProperty("bundleWorkflowRole", "sectionTitle")
-        self.project_name_edit = QLineEdit(current_project_name, options_card)
+        self.project_name_edit = QLineEdit(current_project_name, self)
         self.project_name_edit.setObjectName("bundle_export_project_name_edit")
         self.project_name_edit.selectAll()
+        name_label.setBuddy(self.project_name_edit)
         options_layout.addWidget(name_label, 0, 0, 1, 2)
         options_layout.addWidget(self.project_name_edit, 1, 0, 1, 2)
 
-        self.validation_label = QLabel(options_card)
+        self.validation_label = QLabel(self)
         self.validation_label.setObjectName("bundle_export_project_name_validation")
         self.validation_label.setWordWrap(True)
         mark_error_text(self.validation_label)
         options_layout.addWidget(self.validation_label, 2, 0, 1, 2)
 
-        folder_label = QLabel("Imported project folder", options_card)
+        folder_label = QLabel("Imported project folder", self)
         folder_label.setProperty("bundleWorkflowRole", "meta")
-        self.folder_value_label = QLabel(options_card)
+        self.folder_value_label = PathValueLabel(parent=self, single_line=True)
         self.folder_value_label.setObjectName("bundle_export_folder_preview")
+        self.folder_value_label.setProperty("pathValue", "false")
         self.folder_value_label.setProperty("bundleWorkflowRole", "fileName")
-        filename_label = QLabel("Suggested bundle file", options_card)
+        filename_label = QLabel("Suggested bundle file", self)
         filename_label.setProperty("bundleWorkflowRole", "meta")
-        self.filename_value_label = QLabel(options_card)
+        self.filename_value_label = PathValueLabel(parent=self, single_line=True)
         self.filename_value_label.setObjectName("bundle_export_filename_preview")
+        self.filename_value_label.setProperty("pathValue", "false")
         self.filename_value_label.setProperty("bundleWorkflowRole", "fileName")
         options_layout.addWidget(folder_label, 3, 0)
         options_layout.addWidget(self.folder_value_label, 3, 1)
@@ -85,13 +76,9 @@ class BundleExportOptionsDialog(QDialog):
         options_layout.addWidget(self.filename_value_label, 4, 1)
         options_layout.setColumnStretch(1, 1)
 
-        note = QLabel(
-            "This changes only the portable copy. "
-            "The open project and its folder remain unchanged.",
-            self,
-        )
+        note = QLabel("The open project keeps its current name and folder.", self)
         note.setObjectName("bundle_export_options_note")
-        note.setProperty("importDisplayRole", "info")
+        note.setProperty("bundleWorkflowRole", "note")
         note.setWordWrap(True)
 
         self.cancel_button = QPushButton("Cancel", self)
@@ -114,11 +101,10 @@ class BundleExportOptionsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 22)
         layout.setSpacing(11)
-        layout.addWidget(eyebrow)
         layout.addWidget(title)
-        layout.addWidget(lead)
-        layout.addWidget(options_card)
+        layout.addLayout(options_layout)
         layout.addWidget(note)
+        layout.addStretch(1)
         layout.addLayout(buttons)
 
         self.project_name_edit.textChanged.connect(self._refresh_validation)
@@ -145,8 +131,8 @@ class BundleExportOptionsDialog(QDialog):
         self.validation_label.setVisible(bool(error))
         self.continue_button.setEnabled(not error)
         if error:
-            self.folder_value_label.setText("—")
-            self.filename_value_label.setText("—")
+            self.folder_value_label.set_path_text("—")
+            self.filename_value_label.set_path_text("—")
             return
-        self.folder_value_label.setText(slugify_project_name(project_name))
-        self.filename_value_label.setText(project_bundle_filename(project_name))
+        self.folder_value_label.set_path_text(slugify_project_name(project_name))
+        self.filename_value_label.set_path_text(project_bundle_filename(project_name))

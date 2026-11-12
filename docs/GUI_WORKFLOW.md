@@ -171,10 +171,9 @@ internal padding and a 24 px gutter. Bold card titles sit above the field labels
 content stays at the top and the row uses the taller card's natural height. Name, optional multiline
 description and folder sit on the left; category, template actions and participant
 settings sit on the right. Folder paths elide to the available pixel width, with the
-full path in the tooltip and accessible description. Conditions keeps its navigator beside a
-natural-height **This condition** card, followed by left-aligned image source cards or
-expanding word editors. Extra height belongs to the list and word editors, not empty
-space inside the details card.
+full path in the tooltip and accessible description. Conditions keeps its navigator beside
+the **This condition** fields, followed by left-aligned image source cards or expanding
+word editors. The list and word editors use the available height below the heading.
 
 Timing owns the FPVS frequency, duration and presentation table plus oddball cadence.
 For FPVS and masking, refresh, **Shared stimulus frequency** and **Show an oddball every**
@@ -218,7 +217,9 @@ See [Frontend](FRONTEND.md#setup-text-hierarchy) for the descriptive-text policy
 Timing is step 4 and Display & Session is step 5. Next from Timing keeps
 staged timing edits until the combined step is accepted, so a new frequency can be paired
 with its required refresh rate. Back from the combined step preserves those drafts. Its
-Next confirms the selected refresh target and applies the pending timing through
+refresh control labels the 60 Hz default while the project has no saved rate. Choosing
+60 Hz from the menu explicitly sets that target. Next confirms the selected refresh
+target and applies the pending timing through
 the existing validation/confirmation path; invalid drafts return to Timing.
 Native AB retains its existing condition-owned timing, summarized on Timing.
 For visible acceptance at 1120x820 in both themes, open Timing with an unset refresh,
@@ -236,7 +237,7 @@ authored frequencies. The canonical rule is in [Run timing](RUNSPEC.md#timing-mo
 Open **Setup > Demographics**, between Project and Conditions. New and existing
 projects start with Age, Sex, Handedness, and “Are you colorblind?” unless a
 questionnaire has been saved. Select a question in the outline to edit its wording,
-type, choices, and **Required** setting in the card. Types include short answer,
+type, choices, and **Required** setting in the editor. Types include short answer,
 paragraph, multiple choice, checkboxes, dropdown, linear scale, rating, date, time,
 age (1–120), and yes/no. Multiple choice and checkboxes can offer an **Other** text
 answer. Linear scales can label both endpoints. New questions start optional and
@@ -253,7 +254,7 @@ Project bundles and `.fpvsconfig` setup handoffs carry the authored questions.
 
 In an approved visible session, open Setup at `1120x820` and use Next from Project
 to reach Demographics. Add a long multiple-choice question, edit its choices, enable
-Other, duplicate the card, and drag it above a default. Test the move buttons and
+Other, duplicate the question, and drag it above a default. Test the move buttons and
 check that invalid choices keep the draft open. At `600x360`, preview a mix of types
 with an optional blank and a missing required answer. Save and reopen, then check
 that Participant Information from Home and Run shows the same order and controls.
@@ -318,7 +319,7 @@ The [runtime contract](RUNTIME_EXECUTION.md#session-flow) owns timeout/cleanup r
 ### Experiment Library
 
 **View > Experiment Library...** and **Create Project > Download from library** open
-the same whole-project browser. **Settings > Workspace > Experiment Library / Manage Access...** exposes its
+the same whole-project browser. **Settings > Workspace > Manage Library Access…** exposes its
 lab-code enrollment and device-disconnect controls. Search/select an experiment, then
 **Download and set up experiment** verifies its archive and reuses the normal
 destination review, new-folder import and display-settings flow. Imported projects are
@@ -374,9 +375,9 @@ applying it to an open document. Welcome and Library enrollment follow this step
 The welcome window provides:
 
 - `Create Project`
-- `Import New Project`
-- `Open Existing Project`
-- `Change Root Folder...`
+- `Import Project Bundle`
+- `Open Project`
+- `Change Root Folder…`
 - `Settings…`, including the computer's default EEG hardware
 
 Welcome retains `760x520` minimum and `1120x720` default sizes. Settings is a
@@ -384,7 +385,7 @@ centered secondary action beneath the four existing entry actions. Its responsiv
 single-column layout uses compact controls so all five actions remain within the
 same minimum size; import-busy state disables Settings with the other actions.
 
-`Change Root Folder...` reopens the guided root-folder setup and native folder picker
+`Change Root Folder…` reopens the guided root-folder setup and native folder picker
 without requiring a project to be open. Canceling either step leaves the configured
 root unchanged.
 
@@ -489,8 +490,10 @@ The sidebar's Settings heading and the selected category title establish the hie
 Plain section widgets use the shared dialog styles and theme tokens.
 
 General contains Participant runs and eligible Local experiment testing controls.
-Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle. Workspace owns
-root-folder setup, condition templates and eligible Experiment Library access. Recording
+Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle. Workspace shows
+the active root folder and offers root-folder setup, condition templates and eligible
+Experiment Library access. The root path remains available in full through its tooltip
+and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
 Advanced contains `Developer tools`,
 and Diagnostics contains `Crash reporting`. Existing control identities, eligibility,
@@ -858,15 +861,15 @@ The authoring window is organized around two user-facing modes:
   - keeps the main `File`, `View`, and `Tools` menus available in that order while
     preserving the same centered launch-card placement used by the menu-free home
     surface
-  - a centered project card with project title, description, launch readiness badge, condition count, block
+  - a centered project card with project title, description, inline launch readiness, condition count, block
     count, fixation cross status, accuracy tracking status, project open/create
     actions, including create, import, and open, setup editing, and a prominent centered
     `Launch Experiment`
   - uses the same shared launch-surface frame as Welcome so the outer window and
     inner card styling stay aligned across the two launch surfaces
   - the four project actions form a two-by-two grid at the `760x520` minimum and
-    one row at `1120x720`; empty optional descriptions are hidden while authored
-    descriptions remain visible
+    one row at `1120x720`. An authored description appears as a one-line preview with
+    the complete text available through its tooltip and accessible name
   - ready projects show `Edit Setup` as a secondary action for intentional edits
   - incomplete projects keep the same setup button slot but relabel it `Complete Setup`
     and style it as the primary enabled action
@@ -878,7 +881,7 @@ The authoring window is organized around two user-facing modes:
     horizontally scrolling `RECORDING REMINDER ENABLED` ticker at the top of the launch panel
   - returning from app-expanded Setup restores the compact Home footprint unless
     the user manually resized the larger setup window
-  - opening a project builds Home first; the Setup Wizard, Run / Runtime page, Image
+  - opening a project builds Home first. The Setup Wizard, Run page, Image
     Resizer, and bundle processing pages are created only when the user requests those
     workflows
 - `Setup Wizard`
@@ -1109,9 +1112,9 @@ The authoring window is organized around two user-facing modes:
   - Response exposes accuracy tracking, response key/window, appearance, and a live
     preview on the current display background; accuracy tracking is enabled by default
     for new projects and by the one-time migration of older projects
-  - Review presents its summaries in a card, with `Save and Return Home` and
-    `Return Home Without Saving` in the bottom navigation alongside Back;
-    returning without saving always asks for confirmation
+  - Review groups summaries with headings and dividers. `Save and Return Home` and
+    `Return Home Without Saving` stay in the bottom navigation alongside Back.
+    Returning without saving always asks for confirmation.
 - `View > Fixation Task Accuracy...` for FPVS / FPVS Oddball projects
   - opens a compact view of the active project's pooled fixation-task results
   - loads `logs/session_condition_history.csv` in the background through the runtime
@@ -1133,13 +1136,15 @@ The authoring window is organized around two user-facing modes:
     [Participant results workbook](#participant-results-workbook)
 - `Tools > Image Resizer`
   - in-window utility for optimizing an arbitrary folder of source images
-  - primary action is `Optimize Images for FPVS`
+  - primary action is `Resize Images`
   - outputs center-cropped PNG copies at `512x512` by default, with secondary
     `256x256` and `1024x1024` choices
   - suggests a sibling output folder named `<source-folder>-fpvs-optimized`
   - explains why optimization is unavailable when required folders are missing or
     invalid
-  - after a successful batch, exposes `Open Output Folder` and `Copy Output Folder`
+  - after a successful batch, exposes `Open Folder` and `Copy Folder Path`. Changing
+    either folder clears those actions. A failed batch keeps the error status visible
+    until the operator changes a folder or retries
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 
@@ -1147,9 +1152,9 @@ Detailed Conditions remains available internally for existing document bindings,
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
 Timing, Display & Session, Image Size, Fixation, and Response are separate guided setup pages.
 Timing retains `experiment`/`timing`; `display`/`runtime`/`session` all open the combined step.
-The Run / Runtime page remains a launch, readiness, and session-preview surface,
-not a display-engine configuration step.
-Run / Runtime feedback exposes `Open Run Folder` and `Copy Run Folder` after a launch
+The internal Run page shows readiness, launch controls, and session details. The
+session details pane shows the preview, validation issues, or launch feedback.
+Run exposes `Open Folder` and `Copy Folder Path` after a launch
 completion or abort when the runtime summary includes an output directory. In compact
 summary export mode, the runtime summary has no run-folder output path, so those buttons
 stay hidden and completion text points users to `View > Open Participant Results`.
@@ -1481,8 +1486,8 @@ schedules, task flow, timing warmup/QC, and normal test exports remain unchanged
 Production launches do not expose the selector and continue to compile all conditions.
 Participant summaries already exclude reserved IDs `0` and `00`.
 
-The Stimuli Manager remains an internal support page for variant/materialization
-behavior, not a guided setup step or visible top-level tab during normal use. Its raw
+The Stimuli Manager is an internal support page for variant and materialization
+behavior. The source table preserves the full path in each cell and its tooltip. Its raw
 source-folder import path is permissive like guided Conditions import; strict inspection
 and materialization still surface invalid or inconsistent source details before runtime
 launch. Word stimulus rows are shown for readiness context but cannot use image-folder
@@ -1517,8 +1522,9 @@ verifies archive paths and hashes in an app-owned staging folder, resolves
 project-folder collisions, and shows staged verify/base-stimuli/oddball-stimuli/project
 setup progress. Imports started from an open project use the embedded processing page;
 imports started from Welcome use the same page inside a modal progress dialog. The
-progress surface uses a wide, single-card layout with flat source/destination and
-activity sections so paths, status copy, and all four stage labels remain visible. The
+progress surface uses a single frame with source/destination and activity sections so
+paths, status copy, and all four stage labels remain visible. Export progress follows the
+same layout. The export result shows the file, contents and path actions in one frame. The
 configured Studio root is persisted and loaded as an absolute path; import destinations
 never fall back to the application working directory. Bundle reads, collision checks
 and destination creation use the core Windows path adapter, including long source and
@@ -1543,7 +1549,7 @@ measurements are mapped to the nearest approved FPVS refresh rate when they are 
 tolerance; unsupported measurements are shown for review without writing an invalid
 refresh target. Closing or pressing Escape cannot bypass the two explicit open actions.
 It leaves the imported project available under the configured Studio root without
-opening it, so the user can reopen it later through `Open Existing Project`.
+opening it, so the user can reopen it later through `Open Project`.
 Bundles use the same format on Mac and Windows. Transfer validation rejects ambiguous
 case/Unicode aliases, unsupported filename components and link/special-file payloads.
 Canonical-equivalent filesystem spellings are exported using authored reference
@@ -1700,7 +1706,7 @@ preprocessing services but must not silently mutate the active project.
   `src/fpvs_studio/gui/components.py`.
 - Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
   launch card, border styling, and first-paint background.
-  Welcome places Open Existing Project first, styles it as the primary blue action,
+  Welcome places Open Project first, styles it as the primary blue action,
   and gives it initial focus/default Enter activation. Create, Import and Root Folder
   remain secondary; compact layouts preserve the same order.
 - Shared Setup Wizard presentation components include the connected progress stepper,
@@ -1803,7 +1809,7 @@ The current GUI supports:
 - opening and editing an existing project
 - importing a complete project from an `.fpvsbundle` file from Welcome, Home, or the
   File menu
-- opening known or recent projects from `Open Existing Project`
+- opening known or recent projects from `Open Project`
 - managing known projects and moving project folders to the Recycle Bin after confirmation
 - saving and reopening project state
 - launching ready projects from Home without exposing setup tabs
@@ -2043,7 +2049,7 @@ Native dropdown/spinner affordances and system file pickers remain available.
 Review uses factual summaries for project, conditions/task bindings, Timing, Image Size,
 Session, and Fixation/Response, with effective tutorial status in Project. Edit actions
 follow ready-project step-jump permissions. Review's completion actions use the shared
-bottom navigation outside the summary frame: Return Home Without Saving on the left,
+bottom navigation below the summaries, with Return Home Without Saving on the left and
 Back and Save and Return Home on the right. Other steps retain Return Home, Back, and
 Next in that row. Saving returns Home with the existing nonmodal status-bar confirmation;
 returning without saving explains that edits remain in memory until the project closes.

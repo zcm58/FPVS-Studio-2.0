@@ -8,7 +8,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -54,44 +53,29 @@ class ImportDisplaySettingsDialog(QDialog):
         self.resize(780, 660)
         self._apply_updates = False
 
-        self.eyebrow_label = QLabel("DISPLAY SETUP", self)
-        self.eyebrow_label.setObjectName("import_display_eyebrow")
-        self.eyebrow_label.setProperty("importDisplayRole", "eyebrow")
-
         self.title_label = QLabel("Match this project's display", self)
         self.title_label.setObjectName("import_display_title")
         self.title_label.setProperty("importDisplayRole", "title")
 
         self.intro_label = QLabel(
             (
-                f"The imported project targets a {display.stimulus_width_degrees:.1f}° image "
-                "width. Confirm this computer's physical display details before opening it."
+                "Confirm this computer's display details to preserve the project's "
+                f"{display.stimulus_width_degrees:.1f}° image width."
             ),
             self,
         )
         self.intro_label.setProperty("importDisplayRole", "lead")
         self.intro_label.setWordWrap(True)
 
-        self.image_width_label = QLabel(
-            f"Visual-angle target: {display.stimulus_width_degrees:.1f}°",
-            self,
-        )
-        self.image_width_label.setObjectName("import_display_image_width_label")
-        self.image_width_label.setProperty("bundleWorkflowRole", "meta")
-
         imported_refresh = display.preferred_refresh_hz or 60.0
-        comparison_card = QFrame(self)
-        comparison_card.setObjectName("import_display_comparison_card")
-        comparison_card.setProperty("bundleWorkflowCard", "true")
-        comparison_layout = QGridLayout(comparison_card)
-        comparison_layout.setContentsMargins(16, 14, 16, 14)
+        comparison_layout = QGridLayout()
         comparison_layout.setHorizontalSpacing(20)
         comparison_layout.setVerticalSpacing(10)
-        imported_header = QLabel("Imported settings", comparison_card)
+        imported_header = QLabel("Imported settings", self)
         imported_header.setProperty("importDisplayRole", "columnHeader")
-        detected_header = QLabel("Detected on this computer", comparison_card)
+        detected_header = QLabel("Detected on this computer", self)
         detected_header.setProperty("importDisplayRole", "columnHeader")
-        self.detected_badge = StatusBadgeLabel(parent=comparison_card)
+        self.detected_badge = StatusBadgeLabel(parent=self)
         self.detected_badge.setObjectName("import_display_detected_badge")
         self.detected_badge.set_state("info", "Not detected")
         comparison_layout.addWidget(imported_header, 0, 1)
@@ -102,9 +86,9 @@ class ImportDisplaySettingsDialog(QDialog):
             ("Refresh rate", f"{imported_refresh:.2f} Hz"),
             ("Resolution", f"{display.screen_width_px} × {display.screen_height_px} px"),
         )
-        self.detected_refresh_label = QLabel("—", comparison_card)
+        self.detected_refresh_label = QLabel("—", self)
         self.detected_refresh_label.setWordWrap(True)
-        self.detected_resolution_label = QLabel("—", comparison_card)
+        self.detected_resolution_label = QLabel("—", self)
         detected_labels = (
             self.detected_refresh_label,
             self.detected_resolution_label,
@@ -113,9 +97,9 @@ class ImportDisplaySettingsDialog(QDialog):
             zip(imported_values, detected_labels, strict=True),
             start=1,
         ):
-            row_label = QLabel(label_text, comparison_card)
+            row_label = QLabel(label_text, self)
             row_label.setProperty("importDisplayRole", "columnHeader")
-            imported_label = QLabel(imported_text, comparison_card)
+            imported_label = QLabel(imported_text, self)
             imported_label.setProperty("importDisplayRole", "lead")
             detected_label.setProperty("importDisplayRole", "lead")
             comparison_layout.addWidget(row_label, row, 0)
@@ -177,28 +161,24 @@ class ImportDisplaySettingsDialog(QDialog):
 
         comparison_layout.addWidget(self.detect_button, 3, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
 
-        values_card = QFrame(self)
-        values_card.setObjectName("import_display_values_card")
-        values_card.setProperty("bundleWorkflowCard", "true")
-        values_layout = QGridLayout(values_card)
-        values_layout.setContentsMargins(16, 12, 16, 12)
+        values_layout = QGridLayout()
         values_layout.setHorizontalSpacing(12)
         values_layout.setVerticalSpacing(8)
-        values_heading = QLabel("Values to apply", values_card)
+        values_heading = QLabel("Values to apply", self)
         values_heading.setProperty("bundleWorkflowRole", "sectionTitle")
         values_layout.addWidget(values_heading, 0, 0, 1, 4)
-        values_layout.addWidget(QLabel("Refresh rate", values_card), 1, 0)
+        values_layout.addWidget(QLabel("Refresh rate", self), 1, 0)
         values_layout.addWidget(self.refresh_hz_spin, 1, 1)
-        values_layout.addWidget(QLabel("Viewing distance", values_card), 1, 2)
+        values_layout.addWidget(QLabel("Viewing distance", self), 1, 2)
         values_layout.addWidget(self.viewing_distance_spin, 1, 3)
-        values_layout.addWidget(QLabel("Screen width", values_card), 2, 0)
+        values_layout.addWidget(QLabel("Screen width", self), 2, 0)
         values_layout.addWidget(self.screen_width_cm_spin, 2, 1)
-        values_layout.addWidget(QLabel("Resolution", values_card), 2, 2)
+        values_layout.addWidget(QLabel("Resolution", self), 2, 2)
         resolution_row = QHBoxLayout()
         resolution_row.setContentsMargins(0, 0, 0, 0)
         resolution_row.setSpacing(6)
         resolution_row.addWidget(self.screen_width_px_spin)
-        resolution_separator = QLabel("×", values_card)
+        resolution_separator = QLabel("×", self)
         resolution_separator.setAlignment(Qt.AlignmentFlag.AlignCenter)
         resolution_row.addWidget(resolution_separator)
         resolution_row.addWidget(self.screen_height_px_spin)
@@ -206,23 +186,11 @@ class ImportDisplaySettingsDialog(QDialog):
         helper = QLabel(
             "Measure the width across the lit screen and the viewing distance "
             "from the participant's eyes to the screen.",
-            values_card,
+            self,
         )
         helper.setProperty("importDisplayRole", "helper")
         helper.setWordWrap(True)
         values_layout.addWidget(helper, 3, 0, 1, 4)
-
-        info_label = QLabel(
-            (
-                f"Applying local display values preserves the "
-                f"{display.stimulus_width_degrees:.1f}° visual-angle target. "
-                "Stimulus files and protocol settings are unchanged."
-            ),
-            self,
-        )
-        info_label.setObjectName("import_display_info")
-        info_label.setProperty("importDisplayRole", "info")
-        info_label.setWordWrap(True)
 
         self.keep_button = QPushButton("Open with Imported Values", self)
         self.keep_button.setObjectName("import_display_keep_button")
@@ -244,13 +212,13 @@ class ImportDisplaySettingsDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 22, 24, 22)
         layout.setSpacing(10)
-        layout.addWidget(self.eyebrow_label)
         layout.addWidget(self.title_label)
         layout.addWidget(self.intro_label)
-        layout.addWidget(self.image_width_label)
-        layout.addWidget(comparison_card)
-        layout.addWidget(values_card)
-        layout.addWidget(info_label)
+        layout.addSpacing(10)
+        layout.addLayout(comparison_layout)
+        layout.addSpacing(10)
+        layout.addLayout(values_layout)
+        layout.addStretch(1)
         layout.addLayout(button_row)
         apply_studio_theme(self)
 

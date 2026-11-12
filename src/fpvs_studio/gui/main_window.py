@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressDialog,
-    QPushButton,
     QStackedWidget,
     QStatusBar,
     QWidget,
@@ -46,7 +45,6 @@ from fpvs_studio.core.project_bundle import (
 from fpvs_studio.core.project_config import PROJECT_CONFIG_SUFFIX, project_config_filename
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.action_palette import ActionEntry, ActionPaletteDialog
-from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.components import StatusBadgeLabel, apply_studio_theme
@@ -281,8 +279,6 @@ class StudioMainWindow(QMainWindow):
         )
         self.home_page.project_update_button.setEnabled(self.project_update_action.isEnabled())
         self._create_menu_and_toolbar()
-        self._button_hover_animators: list[ButtonHoverAnimator] = []
-        self._install_button_hover_animations()
         self._wire_document()
         self._update_window_title()
         self._show_initial_workflow_surface()
@@ -317,7 +313,6 @@ class StudioMainWindow(QMainWindow):
             page.pending_edits_changed.connect(self._update_save_state)
             page.pending_edits_changed.connect(self._invalidate_handoff_approval)
             self.main_stack.addWidget(page)
-            self._install_button_hover_animations()
         return self._setup_wizard_page
 
     @property
@@ -350,7 +345,6 @@ class StudioMainWindow(QMainWindow):
             page = ImageResizerPage(on_return_home=self.show_home, parent=self)
             self._image_resizer_page = page
             self.main_stack.addWidget(page)
-            self._install_button_hover_animations()
         return self._image_resizer_page
 
     @property
@@ -370,7 +364,6 @@ class StudioMainWindow(QMainWindow):
             page.open_folder_requested.connect(self._open_bundle_export_folder)
             self._bundle_export_result_page = page
             self.main_stack.addWidget(page)
-            self._install_button_hover_animations()
         return self._bundle_export_result_page
 
     @property
@@ -646,13 +639,6 @@ class StudioMainWindow(QMainWindow):
         # A project can close or be handed off before this queued callback runs.
         if self.isVisible() and not update_lifecycle().is_shutting_down:
             self.launch_session()
-
-    def _install_button_hover_animations(self) -> None:
-        self._button_hover_animators.clear()
-        for button in self.findChildren(QPushButton):
-            if button.property("hoverAnimationEnabled") is True:
-                continue
-            self._button_hover_animators.append(ButtonHoverAnimator(button, parent=self))
 
     def _create_actions(self) -> None:
         self.new_project_action = QAction("Create New Project", self)

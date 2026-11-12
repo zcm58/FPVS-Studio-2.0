@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox
 from tests.gui.helpers import ImmediateProgressTask, open_created_project
 
 from fpvs_studio.core.condition_template_profiles import built_in_condition_template_profiles
@@ -46,8 +46,19 @@ def test_legacy_separation_cancel_preserves_document(qtbot, ab_document, monkeyp
     ab_document.project.conditions[:] = [ab_document.project.conditions[0], legacy]
     widget = ConditionSetupStep(ab_document)
     qtbot.addWidget(widget)
+    widget.resize(1040, 560)
     widget.show()
+    QApplication.processEvents()
     assert not widget.separate_conditions_button.isHidden()
+    notice = widget.condition_list_hint.text()
+    assert "incompatible conditions" in notice
+    widget._select_condition(legacy.condition_id)
+    QApplication.processEvents()
+    assert widget.condition_list_hint.isVisible()
+    assert widget.condition_list_hint.text() == notice
+    assert widget.condition_list_hint.height() >= widget.condition_list_hint.heightForWidth(
+        widget.condition_list_hint.width()
+    )
     before = ab_document.project.model_dump()
     monkeypatch.setattr(QMessageBox, "question", lambda *args: QMessageBox.StandardButton.Cancel)
     monkeypatch.setattr(

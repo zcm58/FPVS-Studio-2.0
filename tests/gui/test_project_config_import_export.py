@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QObject, QRect, Qt, Signal
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QWidget
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QPushButton, QWidget
 from tests.gui.helpers import (
     assert_visible_children_within_parent,
     open_created_project,
@@ -33,6 +34,7 @@ from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportProgressDialog,
     BundleImportReviewDialog,
 )
+from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.import_display_settings_dialog import (
     DetectedDisplaySettings,
@@ -40,6 +42,11 @@ from fpvs_studio.gui.import_display_settings_dialog import (
     detect_primary_display_settings,
 )
 from fpvs_studio.gui.main_window import _BundleExportTaskResult
+from fpvs_studio.gui.processing_page import (
+    BundleExportProcessingPage,
+    BundleExportResultPage,
+    BundleImportProcessingPage,
+)
 
 
 class _ImmediateBackgroundTask(QObject):
@@ -297,9 +304,9 @@ def test_export_project_bundle_shows_embedded_processing_screen(
         - window.bundle_export_processing_page.rect().center().x()
     ) <= 1
     assert content.property("bundleProcessingCard") == "true"
-    assert window.bundle_export_processing_page.message_label.text() == (
-        "Preparing a portable copy of this project."
-    )
+    assert not isinstance(window.bundle_export_processing_page.context_card, QFrame)
+    assert not isinstance(window.bundle_export_processing_page.activity_card, QFrame)
+    assert window.bundle_export_processing_page.title_label.text() == "Exporting Bundle Wait"
     source_label = window.bundle_export_processing_page.source_value_label
     assert str(window.document.project_root) in (source_label.text(), source_label.toolTip())
     assert window.bundle_export_processing_page.destination_value_label.text().endswith(
@@ -332,6 +339,7 @@ def test_export_project_bundle_shows_embedded_processing_screen(
     assert second_step.property("processingStepState") == "complete"
     assert third_step.property("processingStepState") == "active"
     window._on_bundle_export_stage_changed("complete")
+    assert window.bundle_export_processing_page.current_activity_label.text() == "Bundle ready"
     assert first_step.property("processingStepState") == "complete"
     assert second_step.property("processingStepState") == "complete"
     assert third_step.property("processingStepState") == "complete"
@@ -388,9 +396,13 @@ def test_export_project_bundle_defaults_to_compact_project_title_filename(
     assert captured["path"].endswith("semanticcategories.fpvsbundle")
 
 
-def test_bundle_export_options_dialog_previews_import_identity(qtbot) -> None:
+@pytest.mark.parametrize("size", [(560, 350), (620, 370)], ids=["minimum", "default"])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_bundle_export_options_dialog_previews_import_identity(qtbot, size, background) -> None:
     dialog = BundleExportOptionsDialog(current_project_name="Semantic Categories")
     qtbot.addWidget(dialog)
+    dialog.setPalette(QPalette(QColor(background)))
+    dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
 
@@ -406,6 +418,10 @@ def test_bundle_export_options_dialog_previews_import_identity(qtbot) -> None:
         "semanticcategoriesimporttest.fpvsbundle"
     )
     assert dialog.continue_button.isEnabled() is True
+    assert dialog.size().toTuple() == size
+    assert not any(
+        widget.property("bundleWorkflowCard") == "true" for widget in dialog.findChildren(QWidget)
+    )
     assert_visible_children_within_parent(dialog)
 
     dialog.project_name_edit.setText("   ")
@@ -499,6 +515,58 @@ def test_bundle_export_result_page_copies_path_opens_folder_and_waits_for_done(
     page.done_button.click()
 
     assert window.main_stack.currentWidget() is window.home_page
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(760, 465), (1120, 665)], ids=["minimum", "default"])
+def test_bundle_progress_and_result_use_one_frame_at_minimum(qtbot, tmp_path, background, size):
+    bundle_path = tmp_path / ("Familiar objects and unfamiliar exemplars " * 3 + ".fpvsbundle")
+    export = BundleExportProcessingPage()
+    importing = BundleImportProcessingPage()
+    result = BundleExportResultPage()
+    for page, stage in ((export, "write"), (importing, "oddball")):
+        page.set_transfer_context(
+            title=None,
+            source_label="Source",
+            source_path=bundle_path,
+            destination_label="Destination",
+            destination_path=tmp_path / "Review destination",
+        )
+        page.set_stage(stage)
+    project_name = "Familiar objects and unfamiliar exemplars " * 3
+    result.set_result(project_name=project_name.strip(), bundle_path=bundle_path,
+                      packaged_file_count=8)
+
+    for page in (export, importing, result):
+        qtbot.addWidget(page)
+        page.setPalette(QPalette(QColor(background)))
+        apply_studio_theme(page)
+        page.resize(*size)
+        page.show()
+        QApplication.processEvents()
+        assert page.size().toTuple() == size
+        frames = [frame for frame in page.findChildren(QFrame) if type(frame) is QFrame]
+        assert len(frames) == 1
+        assert abs(frames[0].geometry().center().x() - page.rect().center().x()) <= 1
+        assert_visible_children_within_parent(page)
+        for label in page.findChildren(QLabel):
+            if not label.isVisible() or not label.text():
+                continue
+            if label.wordWrap():
+                assert label.height() >= label.heightForWidth(label.width()), label.text()
+            else:
+                assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(
+                    label.text(),
+                ), label.text()
+                assert label.contentsRect().height() >= label.fontMetrics().height(), label.text()
+        for button in page.findChildren(QPushButton):
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+
+    filename = result.filename_label
+    assert filename.toolTip() == filename.accessibleName() == bundle_path.name
+    for path_label in (export.source_value_label, importing.source_value_label, result.path_label):
+        assert path_label.text().endswith(".fpvsbundle")
+        assert path_label.toolTip() == path_label.accessibleName() == str(bundle_path)
 
 
 def test_export_group_summary_cancel_leaves_no_file(
@@ -626,28 +694,38 @@ def test_import_project_bundle_cancel_leaves_current_project_unchanged(
     assert controller.main_window.document.project.meta.name == "Bundle Current"
 
 
+@pytest.mark.parametrize("size", [(720, 560), (780, 610)], ids=["minimum", "default"])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_bundle_import_review_dialog_shows_manifest_destination_and_choices(
     qtbot,
     tmp_path: Path,
+    size,
+    background,
 ) -> None:
-    bundle_path = tmp_path / "semanticcategories.fpvsbundle"
-    root_dir = tmp_path / "studio-root"
+    bundle_path = tmp_path / ("semantic-categories-" * 8 + "experiment.fpvsbundle")
+    root_dir = tmp_path / " - ".join(["Lab project root"] * 7)
     dialog = BundleImportReviewDialog(
         bundle_path=bundle_path,
         root_dir=root_dir,
         manifest=_sample_bundle_manifest(),
     )
     qtbot.addWidget(dialog)
+    dialog.setPalette(QPalette(QColor(background)))
+    dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
 
-    assert dialog.filename_label.text() == bundle_path.name
     assert dialog.manifest_badge.text() == "Manifest readable"
-    assert dialog.destination_label.toolTip() in {"", str(root_dir / "semantic-categories")}
-    assert str(root_dir / "semantic-categories") in (
-        dialog.destination_label.text(),
-        dialog.destination_label.toolTip(),
+    assert dialog.size().toTuple() == size
+    assert not any(
+        widget.property("bundleWorkflowCard") == "true" for widget in dialog.findChildren(QWidget)
     )
+    for label, full_text in (
+        (dialog.filename_label, bundle_path.name),
+        (dialog.destination_label, str(root_dir / "semantic-categories")),
+    ):
+        assert label.toolTip() == label.accessibleName() == full_text
+        assert label.fontMetrics().horizontalAdvance(label.text()) <= label.contentsRect().width()
     assert_visible_children_within_parent(dialog)
 
     dialog.choose_another_button.click()
@@ -812,25 +890,13 @@ def test_import_project_bundle_shows_embedded_processing_screen(
     assert _DeferredBackgroundTask.instances[0].started is True
     QApplication.processEvents()
     assert window.main_stack.currentWidget() is window.bundle_import_processing_page
-    assert window.bundle_import_processing_page.message_label.text() == (
-        "Creating a local FPVS Studio project from the selected bundle."
-    )
+    assert window.bundle_import_processing_page.title_label.text() == "Importing Bundle Import Wait"
     assert window.bundle_import_processing_page.source_value_label.text().endswith(
         "import.fpvsbundle"
     )
     assert window.bundle_import_processing_page.content.width() >= 820
-    assert (
-        window.bundle_import_processing_page.context_card.property(
-            "bundleProcessingContext"
-        )
-        == "flat"
-    )
-    assert (
-        window.bundle_import_processing_page.activity_card.property(
-            "bundleProcessingActivity"
-        )
-        == "flat"
-    )
+    assert not isinstance(window.bundle_import_processing_page.context_card, QFrame)
+    assert not isinstance(window.bundle_import_processing_page.activity_card, QFrame)
     assert_visible_children_within_parent(window.bundle_import_processing_page)
 
     first_step = window.bundle_import_processing_page.findChild(
@@ -950,12 +1016,15 @@ def test_import_display_settings_dialog_detect_button_keeps_edited_width(
     assert_visible_children_within_parent(dialog)
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_import_display_settings_dialog_keeps_approved_value_for_unsupported_refresh(
     qtbot,
     monkeypatch,
+    background,
 ) -> None:
     dialog = ImportDisplaySettingsDialog(DisplaySettings(preferred_refresh_hz=60.0))
     qtbot.addWidget(dialog)
+    dialog.setPalette(QPalette(QColor(background)))
     dialog.show()
     QApplication.processEvents()
     monkeypatch.setattr(
@@ -977,6 +1046,9 @@ def test_import_display_settings_dialog_keeps_approved_value_for_unsupported_ref
     assert dialog.minimumSize().width() == 720
     assert dialog.minimumSize().height() == 640
     assert dialog.detected_refresh_label.wordWrap() is True
+    assert not any(
+        widget.property("bundleWorkflowCard") == "true" for widget in dialog.findChildren(QWidget)
+    )
     for width, height in ((720, 640), (780, 660)):
         dialog.resize(width, height)
         QApplication.processEvents()

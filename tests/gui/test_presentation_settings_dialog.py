@@ -34,6 +34,7 @@ from fpvs_studio.core.presentation import (
     legacy_project_presentation_settings,
     resolve_role_presentation,
 )
+from fpvs_studio.gui.components import SectionCard
 from fpvs_studio.gui.condition_template_manager_dialog import _format_profile_details
 from fpvs_studio.gui.condition_template_profile_editor_dialog import (
     ConditionTemplateProfileEditorDialog,
@@ -76,6 +77,11 @@ def test_presentation_dialog_header_and_preview_fit_minimum_size(
 
     assert dialog.width() == 900
     assert dialog.height() == 600
+    sections = dialog._editors["common"].findChildren(SectionCard)
+    assert [section.title_label.text() for section in sections] == [
+        "Transform", "Image geometry", "Word height", "Word color", "Word position",
+    ]
+    assert all(section.property("sectionCard") == "false" for section in sections)
     assert "Cancel leaves it unchanged" in dialog.header.subtitle_label.text()
     for label in (dialog.header.title_label, dialog.header.subtitle_label):
         assert label.height() >= label.heightForWidth(label.width())

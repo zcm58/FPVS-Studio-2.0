@@ -43,6 +43,11 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Desktop panel hierarchy](exec-plans/completed/desktop-panel-hierarchy.md):
+  flattened redundant framing and verified the affected layouts in Light and Dark.
+- [Desktop interface polish](exec-plans/completed/desktop-interface-polish.md):
+  simplified project entry, guided setup, runtime diagnostics, Settings and Image Resizer.
+  Verified in Light and Dark on the Windows desktop at 100% scaling.
 - [macOS monitor selection](exec-plans/completed/macos-monitor-selection.md):
   per-launch Mac primary/default selection, chosen-display refresh checks and Retina
   presentation routing; source checks passed, with physical Mac acceptance unperformed.

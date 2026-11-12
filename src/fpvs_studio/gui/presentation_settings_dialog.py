@@ -19,7 +19,6 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -59,6 +58,7 @@ from fpvs_studio.core.presentation import resolve_role_presentation
 from fpvs_studio.gui.components import (
     DialogHeader,
     FiniteDoubleSpinBox,
+    SectionCard,
     apply_dialog_theme,
     mark_error_text,
     mark_primary_action,
@@ -129,7 +129,9 @@ def presentation_defaults_summary(defaults: StimulusPresentationDefaults) -> str
             f"{_enum_label(geometry.mode).split(' (', 1)[0]}, "
             f"{geometry.width_degrees:g} x {geometry.height_degrees:g} deg"
         )
-    return f"{geometry_text}; {_enum_label(defaults.transform).lower()}"
+    if defaults.transform == StimulusTransform.NONE:
+        return geometry_text
+    return f"{geometry_text} · {_enum_label(defaults.transform).lower()}"
 
 
 def condition_presentation_summary(document: ProjectDocument, condition_id: str) -> str:
@@ -269,11 +271,12 @@ class PresentationDefaultsEditor(QWidget):
         )
 
         self._override_checks: dict[str, QCheckBox] = {}
+        self._section_contents: dict[str, QWidget] = {}
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.setSpacing(8)
+        layout.setSpacing(16)
         layout.addWidget(
-            self._group_box(
+            self._section(
                 "Transform",
                 "transform",
                 self._form(("Runtime transform", self.transform_combo)),
@@ -285,16 +288,16 @@ class PresentationDefaultsEditor(QWidget):
             ("Width", self.geometry_width_spin),
             ("Height", self.geometry_height_spin),
         )
-        layout.addWidget(self._group_box("Image geometry", "image_geometry", geometry_form))
+        layout.addWidget(self._section("Image geometry", "image_geometry", geometry_form))
         height_form = self._form(
             ("Schedule", self.text_height_mode_combo),
             ("Units", self.text_height_unit_combo),
             ("Height values", self.text_height_values_edit),
             ("Experiment font", self.font_value_label),
         )
-        layout.addWidget(self._group_box("Word height", "text_height", height_form))
+        layout.addWidget(self._section("Word height", "text_height", height_form))
         layout.addWidget(
-            self._group_box(
+            self._section(
                 "Word color",
                 "text_color",
                 self._form(("Opaque sRGB", self.text_color_edit)),
@@ -305,7 +308,7 @@ class PresentationDefaultsEditor(QWidget):
             ("Horizontal (x)", self.position_x_spin),
             ("Vertical (y)", self.position_y_spin),
         )
-        layout.addWidget(self._group_box("Word position", "text_position", position_form))
+        layout.addWidget(self._section("Word position", "text_position", position_form))
         layout.addStretch(1)
 
         self.geometry_mode_combo.currentIndexChanged.connect(self._update_geometry_state)
@@ -353,25 +356,27 @@ class PresentationDefaultsEditor(QWidget):
             form.addRow(label, widget)
         return panel
 
-    def _group_box(self, title: str, name: str, content: QWidget) -> QGroupBox:
-        group = QGroupBox(title, self)
-        group.setObjectName(f"{self._prefix}_{name}_group")
-        group_layout = QVBoxLayout(group)
-        group_layout.setContentsMargins(10, 8, 10, 8)
-        group_layout.setSpacing(6)
+    def _section(self, title: str, name: str, content: QWidget) -> SectionCard:
+        section = SectionCard(
+            title=title, object_name=f"{self._prefix}_{name}_group", framed=False, parent=self,
+        )
+        section.setAccessibleName(title)
+        section.card_layout.setContentsMargins(6, 0, 6, 0)
+        section.card_layout.setSpacing(6)
+        section.body_layout.setSpacing(6)
         if self._optional:
-            check = QCheckBox("Override inherited value (clear to reset)", group)
+            check = QCheckBox("Override inherited value (clear to reset)", section)
             check.setObjectName(f"{self._prefix}_{name}_override_checkbox")
             check.toggled.connect(self._update_group_enablement)
             if name == "image_geometry":
                 check.toggled.connect(self._update_geometry_state)
             check.toggled.connect(self._emit_changed)
             check.setToolTip("Clear this option to reset the entire group to its inherited value.")
-            group_layout.addWidget(check)
+            section.body_layout.addWidget(check)
             self._override_checks[name] = check
-        group_layout.addWidget(content)
-        content.setProperty("presentationGroupContent", name)
-        return group
+        section.body_layout.addWidget(content)
+        self._section_contents[name] = content
+        return section
 
     def _emit_changed(self, *_args: object) -> None:
         """Normalize value-bearing widget signals to the editor's no-argument signal."""
@@ -429,12 +434,7 @@ class PresentationDefaultsEditor(QWidget):
         if not self._optional:
             return
         for name, check in self._override_checks.items():
-            group = self.findChild(QGroupBox, f"{self._prefix}_{name}_group")
-            if group is None:
-                continue
-            for child in group.findChildren(QWidget):
-                if child.property("presentationGroupContent") == name:
-                    child.setEnabled(check.isChecked())
+            self._section_contents[name].setEnabled(check.isChecked())
 
     def _update_geometry_state(self) -> None:
         mode = self.geometry_mode_combo.currentData()

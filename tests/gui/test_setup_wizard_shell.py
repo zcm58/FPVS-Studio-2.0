@@ -15,6 +15,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QHeaderView,
     QLabel,
     QListWidget,
@@ -260,11 +261,13 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     _assert_setup_wizard_vertical_scrolling_disabled(wizard)
     assert wizard.shell.layout_mode == "single_column"
     assert wizard.shell.page_container.width_preset == "full"
-    assert wizard.shell.title_label.text() == "Set up your experiment"
+    assert wizard.shell.title_label.text() == "Project"
     assert wizard.findChild(QListWidget, "setup_wizard_step_list") is None
     assert wizard.findChild(QLabel, "setup_wizard_progress_header") is None
     assert wizard.progress_steps.objectName() == "setup_wizard_progress_steps"
-    assert wizard.step_status_badge.objectName() == "setup_wizard_ready_badge"
+    assert wizard.findChild(QLabel, "setup_wizard_ready_badge") is None
+    assert wizard.findChild(QLabel, "setup_wizard_step_title") is None
+    assert wizard.findChild(QLabel, "setup_wizard_step_status_label") is None
     assert len(wizard.progress_steps.step_items) == 9
     assert wizard.step_stack.count() == 9
     assert wizard.project_step_surface.property("setupStepSurface") == "true"
@@ -357,21 +360,24 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     label_text = "\n".join(label.text() for label in wizard.findChildren(QLabel))
     assert "Current Step" not in label_text
     assert "Only the controls needed for this setup step are shown." not in label_text
-    for step_key in (
-        "project",
-        "demographics",
-        "conditions",
-        "experiment",
-        "display",
-        "session",
-        "image_size",
-        "fixation",
-        "response",
-        "review",
+    for step_key, title in (
+        ("project", "Project"),
+        ("demographics", "Demographics"),
+        ("conditions", "Conditions"),
+        ("experiment", "Timing"),
+        ("display", "Display & Session"),
+        ("session", "Display & Session"),
+        ("image_size", "Image Size"),
+        ("fixation", "Fixation"),
+        ("response", "Response and Appearance"),
+        ("review", "Review"),
     ):
         wizard.open_wizard(step_key=step_key)
         QApplication.processEvents()
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
+        heading = wizard.shell.title_label
+        assert heading.isVisible() and heading.text() == title
+        assert heading.contentsRect().width() >= heading.fontMetrics().horizontalAdvance(title)
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
         surface = wizard.step_stack.currentWidget()
         assert surface.content.mapTo(surface, QPoint(0, 0)).y() == 24
@@ -386,7 +392,6 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
                 assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(
                     label.text()
                 ), label.objectName()
-        assert not wizard.step_status_badge.isVisible()
     wizard.open_wizard(step_key="project")
     QApplication.processEvents()
     assert "Complete each setup step once" not in label_text
@@ -394,23 +399,20 @@ def test_setup_wizard_exists_and_uses_single_column_shell_with_steps(
     assert "Beta: test-mode runtime path only" not in label_text
     assert "Confirm the project name and template." not in label_text
     assert wizard.shell.footer_strip.isVisible() is False
-    assert wizard.step_title_label.isVisible() is False
-    assert wizard.step_status_badge.isVisible() is False
     assert wizard.property("launchSurfaceRoot") == "true"
-    assert wizard.step_card.property("launchSurfaceFrame") == "true"
-    assert wizard.step_card.property("sectionCard") == "false"
+    assert not isinstance(wizard.step_workspace, QFrame)
+    assert wizard.step_workspace.property("launchSurfaceFrame") is None
     assert wizard.step_count_label.text() == "Step 1 of 9"
-    assert 'QFrame[launchSurfaceFrame="true"]' in wizard.styleSheet()
     assert "QFrame#non_home_shell_content_frame" in wizard.styleSheet()
     assert "QWidget#page_container_scroll_content" in wizard.styleSheet()
-    assert wizard.step_card.isAncestorOf(wizard.progress_panel_shell)
-    assert wizard.step_card.isAncestorOf(wizard.step_content_anchor)
+    assert wizard.step_workspace.isAncestorOf(wizard.progress_panel_shell)
+    assert wizard.step_workspace.isAncestorOf(wizard.step_content_anchor)
     assert wizard.step_content_anchor.isAncestorOf(wizard.content_stack)
-    assert wizard.step_card.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
-    assert wizard.step_card.maximumHeight() <= wizard.shell.page_container.scroll_area.height()
+    assert wizard.step_workspace.sizePolicy().verticalPolicy() == QSizePolicy.Policy.Expanding
+    assert wizard.step_workspace.maximumHeight() <= wizard.shell.page_container.scroll_area.height()
     assert wizard.progress_panel_shell.sizePolicy().verticalPolicy() == (QSizePolicy.Policy.Fixed)
     progress_top = wizard.progress_panel_shell.mapTo(
-        wizard.step_card,
+        wizard.step_workspace,
         wizard.progress_panel_shell.rect().topLeft(),
     ).y()
     assert progress_top <= 12
@@ -454,10 +456,11 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
     window.resize(1120, 820)
     window.show_setup_wizard()
     QApplication.processEvents()
+    assert window.size().toTuple() == (1120, 820)
 
     first_visible_tops: list[int] = []
-    frame_heights: list[int] = []
-    frame_tops: list[int] = []
+    workspace_heights: list[int] = []
+    workspace_tops: list[int] = []
     progress_tops: list[int] = []
     back_button_lefts: list[int] = []
     for step_key in (
@@ -476,7 +479,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 9"
         assert wizard.step_count_label.isVisible()
         assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
-        assert "border-top" not in wizard.styleSheet()
+        assert not isinstance(wizard.step_workspace, QFrame)
         _assert_setup_wizard_vertical_scrolling_disabled(wizard)
         assert wizard.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
         _assert_visible_children_within_parent(wizard.step_stack.currentWidget())
@@ -490,8 +493,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             strict=True,
         ):
             assert title in item.accessibleName()
-            assert label.text() == title or label.toolTip() == title
-            assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+            assert label.text() == title
+            assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(title)
         if step_key == "project":
             checkbox = wizard.project_overview_editor.repeat_participant_sessions_checkbox
             assert checkbox.isVisible()
@@ -522,7 +525,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.display_settings_card.title_label.isVisible()
             assert wizard.session_settings_card.title_label.isVisible()
             for card in (wizard.display_settings_card, wizard.session_settings_card):
-                assert card.property("setupFlatSection") != "true"
+                assert card.property("sectionCard") == "true"
                 assert card.card_layout.contentsMargins().left() == 16
                 assert card.card_layout.contentsMargins().top() == 16
                 assert card.title_label.font().weight() > (
@@ -575,7 +578,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                                if item.section.isVisible())
         else:
             first_panel = {
-                "project": wizard.project_overview_editor.project_overview_card,
+                "project": wizard.project_overview_editor.project_workspace,
                 "demographics": wizard.demographics_setup_step,
                 "conditions": wizard.condition_setup_step.condition_details_section,
                 "experiment": wizard.condition_timing_table,
@@ -590,11 +593,11 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
         first_visible_tops.append(first_panel.mapTo(wizard, first_panel.rect().topLeft()).y())
         assert surface.layout().contentsMargins().top() == 24
         assert surface.layout().contentsMargins().bottom() == 24
-        frame_heights.append(wizard.step_card.height())
-        frame_tops.append(wizard.step_card.mapTo(wizard, wizard.step_card.rect().topLeft()).y())
+        workspace_heights.append(wizard.step_workspace.height())
+        workspace_tops.append(wizard.step_workspace.mapTo(wizard, QPoint()).y())
         progress_tops.append(
             wizard.progress_panel_shell.mapTo(
-                wizard.step_card,
+                wizard.step_workspace,
                 wizard.progress_panel_shell.rect().topLeft(),
             ).y()
         )
@@ -619,8 +622,8 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
                 assert bottom <= wizard.height()
 
     assert max(first_visible_tops) - min(first_visible_tops) <= 1
-    assert len(set(frame_heights)) == 1
-    assert len(set(frame_tops)) == 1
+    assert len(set(workspace_heights)) == 1
+    assert len(set(workspace_tops)) == 1
     assert len(set(progress_tops)) == 1
     assert len(set(back_button_lefts)) == 1
     assert progress_tops[0] <= 12
@@ -642,11 +645,11 @@ def test_major_tabs_share_page_container_width_presets(
     assert window.setup_wizard_page.shell.page_container.width_preset == "full"
     assert window.setup_wizard_page.shell.page_container.max_content_width() == 16_777_215
     assert window.setup_wizard_page.property("launchSurfaceRoot") == "true"
-    assert window.setup_wizard_page.step_card.property("launchSurfaceFrame") == "true"
-    assert window.setup_wizard_page.step_card.sizePolicy().verticalPolicy() == (
+    assert not isinstance(window.setup_wizard_page.step_workspace, QFrame)
+    assert window.setup_wizard_page.step_workspace.sizePolicy().verticalPolicy() == (
         QSizePolicy.Policy.Expanding
     )
-    assert window.setup_wizard_page.step_card.isAncestorOf(
+    assert window.setup_wizard_page.step_workspace.isAncestorOf(
         window.setup_wizard_page.progress_panel_shell
     )
     assert window.conditions_page.embedded is True
@@ -1079,6 +1082,9 @@ def test_demographics_builder_edits_previews_reorders_and_restores(
     assert wizard.step_count_label.text() == "Step 2 of 9"
     step = wizard.demographics_setup_step
     editor = step.editor
+    outline = step.question_list.parentWidget()
+    assert outline is not None and outline.property("sectionCard") != "true"
+    assert editor.property("sectionCard") != "true"
     defaults = default_demographics_questions()
     assert document.project.demographics_questions == defaults
     colorblind_row = next(index for index, question in enumerate(defaults)

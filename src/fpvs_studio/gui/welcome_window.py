@@ -59,7 +59,7 @@ class WelcomeWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.launch_surface)
 
-        self.headline_label = QLabel("Welcome to FPVS Studio", self.hero_container)
+        self.headline_label = QLabel("Projects", self.hero_container)
         self.headline_label.setObjectName("welcome_headline_label")
         self.headline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         hero_layout.addWidget(self.headline_label)
@@ -85,8 +85,11 @@ class WelcomeWindow(QWidget):
         self.create_button.clicked.connect(self.create_requested.emit)
         self.action_layout.addWidget(self.create_button, 0, 0)
 
-        self.import_project_button = QPushButton("Import New Project", self.hero_container)
+        self.import_project_button = QPushButton("Import Project Bundle", self.hero_container)
         self.import_project_button.setObjectName("import_project_bundle_button")
+        self.import_project_button.setToolTip(
+            f"Drop a {PROJECT_BUNDLE_SUFFIX} file anywhere in this window to import it."
+        )
         mark_welcome_action(self.import_project_button, "secondary")
         self.import_project_button.setMinimumHeight(52)
         self.import_project_button.clicked.connect(
@@ -94,7 +97,7 @@ class WelcomeWindow(QWidget):
         )
         self.action_layout.addWidget(self.import_project_button, 0, 1)
 
-        self.manage_projects_button = QPushButton("Open Existing Project", self.hero_container)
+        self.manage_projects_button = QPushButton("Open Project", self.hero_container)
         self.manage_projects_button.setObjectName("open_projects_button")
         mark_welcome_action(self.manage_projects_button, "primary")
         self.manage_projects_button.setDefault(True)
@@ -103,7 +106,7 @@ class WelcomeWindow(QWidget):
         self.action_layout.addWidget(self.manage_projects_button, 1, 0)
 
         self.root_folder_setup_button = QPushButton(
-            "Change Root Folder...",
+            "Change Root Folder…",
             self.hero_container,
         )
         self.root_folder_setup_button.setObjectName("welcome_root_folder_setup_button")
@@ -165,11 +168,7 @@ class WelcomeWindow(QWidget):
             self.settings_button,
         ):
             button.setEnabled(not self._import_busy)
-        self.bundle_drop_hint_label.setText(
-            "Import in progress… Keep FPVS Studio open."
-            if self._import_busy
-            else ""
-        )
+        self.bundle_drop_hint_label.setText("Importing project…" if self._import_busy else "")
         self.bundle_drop_hint_label.setVisible(self._import_busy)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802

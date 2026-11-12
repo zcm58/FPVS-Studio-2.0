@@ -170,13 +170,14 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert open_projects_button is not None
     assert root_folder_button is not None
 
-    assert headline.text() == "Welcome to FPVS Studio"
+    assert headline.text() == "Projects"
     assert welcome.bundle_drop_hint_label.text() == ""
     assert welcome.bundle_drop_hint_label.isHidden()
     assert create_button.text() == "Create Project"
-    assert import_project_button.text() == "Import New Project"
-    assert open_projects_button.text() == "Open Existing Project"
-    assert root_folder_button.text() == "Change Root Folder..."
+    assert import_project_button.text() == "Import Project Bundle"
+    assert ".fpvsbundle" in import_project_button.toolTip()
+    assert open_projects_button.text() == "Open Project"
+    assert root_folder_button.text() == "Change Root Folder…"
     assert create_button.property("welcomeRole") == "secondary"
     assert import_project_button.property("welcomeRole") != "primary"
     assert open_projects_button.property("welcomeRole") == "primary"
@@ -276,6 +277,11 @@ def test_welcome_primary_open_action_fits_and_stays_first(qtbot, size, backgroun
         text_width = button.fontMetrics().horizontalAdvance(button.text())
         assert button.contentsRect().width() >= text_width
     assert welcome.bundle_drop_hint_label.isVisible() is busy
+    assert welcome.bundle_drop_hint_label.text() == ("Importing project…" if busy else "")
+    for label in (welcome.headline_label, welcome.bundle_drop_hint_label):
+        if label.isVisible():
+            text_width = label.fontMetrics().horizontalAdvance(label.text())
+            assert label.contentsRect().width() >= text_width
 
 
 def test_welcome_compact_actions_keep_open_first(qtbot):
@@ -623,10 +629,12 @@ def test_manage_projects_dialog_lists_projects_from_saved_root(
     assert QApplication.clipboard().text() == str(scaffold.project_root)
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_manage_projects_dialog_explains_invalid_project_root_selection(
     qtbot,
     qapp,
     controller: StudioController,
+    background,
 ) -> None:
     root_dir = controller.load_fpvs_root_dir()
     assert root_dir is not None
@@ -644,6 +652,7 @@ def test_manage_projects_dialog_explains_invalid_project_root_selection(
 
     dialog = ManageProjectsDialog(entries=entries)
     qtbot.addWidget(dialog)
+    dialog.setPalette(QPalette(QColor(background)))
     dialog.resize(dialog.minimumSize())
     dialog.show()
     qapp.processEvents()
@@ -667,7 +676,16 @@ def test_manage_projects_dialog_explains_invalid_project_root_selection(
     assert guidance_label.height() >= wrapped_bounds.height()
     assert not open_button.isEnabled()
     assert not delete_button.isEnabled()
+    assert dialog.size().toTuple() == (860, 520)
+    assert not any(
+        widget.property("sectionCard") == "true" for widget in dialog.findChildren(QWidget)
+    )
     assert_visible_children_within_parent(dialog)
+    dialog.set_loading()
+    assert dialog.empty_label.isVisible()
+    assert dialog.empty_label.text() == "Loading projects…"
+    assert dialog.status_badge.isHidden()
+    assert dialog.path_label.isHidden()
 
 
 def test_manage_projects_dialog_filters_by_name_and_path(

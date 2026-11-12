@@ -105,7 +105,7 @@ class DisplaySettingsEditor(QWidget):
         *,
         object_name_prefix: str = "",
         editable: bool = True,
-        framed: bool = False,
+        show_heading: bool = False,
         show_scope_label: bool = True,
         parent: QWidget | None = None,
     ) -> None:
@@ -121,6 +121,8 @@ class DisplaySettingsEditor(QWidget):
         self.refresh_hz_combo.setObjectName(
             _prefixed_object_name(object_name_prefix, "refresh_hz_combo")
         )
+        self.refresh_hz_combo.setAccessibleName("Monitor refresh rate")
+        self.refresh_hz_combo.setPlaceholderText("60 Hz (default)")
         for refresh_hz in APPROVED_MONITOR_REFRESH_RATES_HZ:
             self.refresh_hz_combo.addItem(f"{refresh_hz:g} Hz", userData=refresh_hz)
         self.refresh_hz_combo.setToolTip(
@@ -188,6 +190,9 @@ class DisplaySettingsEditor(QWidget):
         self.runtime_background_scope_label.setObjectName(
             _prefixed_object_name(object_name_prefix, "runtime_background_scope_label")
         )
+        self.runtime_background_scope_label.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred,
+        )
         self.runtime_background_scope_label.setWordWrap(True)
 
         self.contrast_background_note_label = QLabel(
@@ -251,7 +256,7 @@ class DisplaySettingsEditor(QWidget):
         self.timing_summary_label.hide()
         self.form_layout.addRow(self.timing_status_label)
         if show_scope_label:
-            self.form_layout.addRow("", self.runtime_background_scope_label)
+            self.form_layout.addRow(self.runtime_background_scope_label)
         else:
             self.runtime_background_scope_label.setText("")
             self.runtime_background_scope_label.setVisible(False)
@@ -276,14 +281,14 @@ class DisplaySettingsEditor(QWidget):
             self.summary_layout.addRow(label_text, value_label)
 
         content_parent: QWidget = self
-        if framed:
+        if show_heading:
             self.card = SectionCard(
                 title="Display Settings",
-                subtitle="Monitor, FPVS timing, and presentation background.",
                 object_name=_prefixed_object_name(object_name_prefix, "display_settings_card"),
+                framed=False,
                 parent=self,
             )
-            self.card.card_layout.setContentsMargins(12, 10, 12, 10)
+            self.card.card_layout.setContentsMargins(0, 0, 0, 0)
             self.card.card_layout.setSpacing(8)
             self.card.body_layout.setSpacing(8)
             content_parent = self.card
@@ -297,6 +302,7 @@ class DisplaySettingsEditor(QWidget):
         target_layout.addWidget(self.summary_container)
 
         if self.card is not None:
+            self.card.card_layout.addStretch(1)
             layout = QVBoxLayout(self)
             layout.setContentsMargins(0, 0, 0, 0)
             layout.addWidget(content_parent)
@@ -420,7 +426,7 @@ class DisplaySettingsEditor(QWidget):
 
     def refresh(self) -> None:
         background_color = self._normalized_background_color()
-        preferred_refresh = self._document.project.settings.display.preferred_refresh_hz or 60.0
+        preferred_refresh = self._document.project.settings.display.preferred_refresh_hz
         protocol = self._document.project.settings.protocol
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         stream = is_attentional_blink_stream_project(self._document.project)
@@ -474,7 +480,9 @@ class DisplaySettingsEditor(QWidget):
         self.form_container.setVisible(self._editable)
         self.summary_container.setVisible(not self._editable)
         if not self._editable:
-            self.summary_value_labels["refresh"].setText(f"{preferred_refresh:.2f} Hz")
+            self.summary_value_labels["refresh"].setText(
+                "60 Hz (default)" if preferred_refresh is None else f"{preferred_refresh:.2f} Hz"
+            )
             rates = {
                 effective_condition_base_hz(self._document.project, condition)
                 for condition in self._document.project.conditions
@@ -587,7 +595,7 @@ class DisplaySettingsEditor(QWidget):
         )
         return f"Display verified at {verification.approved_hz:g} Hz. "
 
-    def _sync_refresh_combo(self, preferred_refresh: float) -> None:
+    def _sync_refresh_combo(self, preferred_refresh: float | None) -> None:
         with QSignalBlocker(self.refresh_hz_combo):
             unsupported_indices = [
                 index
@@ -597,6 +605,9 @@ class DisplaySettingsEditor(QWidget):
             ]
             for index in reversed(unsupported_indices):
                 self.refresh_hz_combo.removeItem(index)
+            if preferred_refresh is None:
+                self.refresh_hz_combo.setCurrentIndex(-1)
+                return
             selected_index = self.refresh_hz_combo.findData(preferred_refresh)
             if selected_index < 0:
                 self.refresh_hz_combo.insertItem(

@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -25,7 +24,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressDialog,
     QPushButton,
-    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -40,7 +38,6 @@ from fpvs_studio.core.models import DisplaySettings, normalize_manual_removed_el
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
-    PAGE_SECTION_GAP,
     DialogHeader,
     NonHomePageShell,
     SectionCard,
@@ -715,7 +712,7 @@ class RunPage(QWidget):
 
         self.runtime_settings_editor = DisplaySettingsEditor(
             document,
-            framed=True,
+            show_heading=True,
             parent=self,
         )
         self.refresh_hz_combo = self.runtime_settings_editor.refresh_hz_combo
@@ -726,86 +723,58 @@ class RunPage(QWidget):
             self.runtime_settings_editor.runtime_background_scope_label
         )
 
-        self.compile_button = QPushButton("Preview Session Plan", self)
-        self.compile_button.setObjectName("compile_session_button")
-        self.compile_button.clicked.connect(self.compile_session)
-        mark_secondary_action(self.compile_button)
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("launch_session_button")
         mark_launch_action(self.launch_button)
         self.launch_button.setToolTip(
-            "Launch Experiment with fullscreen display verification and timing checks."
+            "Start a fullscreen session with display and timing checks."
         )
         self.launch_button.setMinimumHeight(42)
         self.launch_button.clicked.connect(self.launch_session)
-
-        button_row = QWidget(self)
-        button_layout = QHBoxLayout(button_row)
-        button_layout.setContentsMargins(0, 0, 0, 0)
-        button_layout.setSpacing(PAGE_SECTION_GAP)
-        button_layout.addWidget(self.compile_button)
-        button_layout.addStretch(1)
-        button_layout.addWidget(self.launch_button)
+        self.compile_button = QPushButton("Preview Session Plan", self)
+        self.compile_button.setObjectName("compile_session_button")
+        self.compile_button.setToolTip("Inspect condition order and timing before launching.")
+        self.compile_button.clicked.connect(self.compile_session)
+        mark_secondary_action(self.compile_button)
 
         controls_card = SectionCard(
             title="Run Controls",
             object_name="run_controls_card",
+            framed=False,
             parent=self,
         )
-        controls_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        controls_card.card_layout.setContentsMargins(0, 0, 0, 0)
         controls_card.card_layout.setSpacing(8)
         controls_card.body_layout.setSpacing(8)
         self.recording_summary = QLabel(self)
         self.recording_summary.setObjectName("run_recording_summary")
         self.recording_summary.setWordWrap(True)
         controls_card.body_layout.addWidget(self.recording_summary)
-        controls_card.body_layout.addWidget(button_row)
+        controls_card.body_layout.addWidget(self.launch_button)
+        controls_card.body_layout.addWidget(self.compile_button)
 
-        self.summary_stack = QStackedWidget(self)
-        self.summary_stack.setObjectName("run_summary_stack")
-        self.summary_empty_panel = QFrame(self.summary_stack)
-        self.summary_empty_panel.setObjectName("run_summary_empty_state")
-        empty_layout = QVBoxLayout(self.summary_empty_panel)
-        empty_layout.setContentsMargins(16, 14, 16, 14)
-        empty_layout.setSpacing(8)
-        empty_title = QLabel("No session preview yet", self.summary_empty_panel)
-        empty_title.setObjectName("run_summary_empty_title")
-        empty_body = QLabel(
-            "Preview the session plan to reveal block order, launch diagnostics, "
-            "and feedback details.",
-            self.summary_empty_panel,
-        )
-        empty_body.setObjectName("run_summary_empty_body")
-        empty_body.setWordWrap(True)
-        empty_layout.addWidget(empty_title)
-        empty_layout.addWidget(empty_body)
-        empty_layout.addStretch(1)
-
-        self.summary_text = QPlainTextEdit(self.summary_stack)
+        self.summary_text = QPlainTextEdit(self)
         self.summary_text.setObjectName("session_summary_text")
+        self.summary_text.setAccessibleName("Session details")
         self.summary_text.setReadOnly(True)
         self.summary_text.setMaximumBlockCount(500)
-        self.summary_text.setPlaceholderText(
-            "Preview the session plan or launch to populate runtime diagnostics."
-        )
-
-        self.summary_stack.addWidget(self.summary_empty_panel)
-        self.summary_stack.addWidget(self.summary_text)
+        self.summary_text.setPlaceholderText("No session preview yet.")
 
         summary_card = SectionCard(
-            title="Session Summary & Runtime Feedback",
+            title="Session Details",
             object_name="run_summary_card",
+            framed=False,
             parent=self,
         )
-        summary_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        summary_card.card_layout.setContentsMargins(0, 8, 0, 0)
         summary_card.card_layout.setSpacing(8)
         summary_card.body_layout.setSpacing(8)
-        summary_card.body_layout.addWidget(self.summary_stack)
-        self.open_run_folder_button = QPushButton("Open Run Folder", summary_card)
+        summary_card.body_layout.addWidget(self.summary_text)
+        self.open_run_folder_button = QPushButton("Open Folder", summary_card)
         self.open_run_folder_button.setObjectName("run_open_folder_button")
         self.open_run_folder_button.clicked.connect(self._open_run_folder)
         mark_secondary_action(self.open_run_folder_button)
-        self.copy_run_folder_button = QPushButton("Copy Run Folder", summary_card)
+        self.copy_run_folder_button = QPushButton("Copy Folder Path", summary_card)
         self.copy_run_folder_button.setObjectName("run_copy_folder_button")
         self.copy_run_folder_button.clicked.connect(self._copy_run_folder)
         mark_secondary_action(self.copy_run_folder_button)
@@ -820,21 +789,25 @@ class RunPage(QWidget):
         self.readiness_badge.setMinimumHeight(34)
         self.readiness_badge.setMinimumWidth(224)
 
-        self.readiness_summary_value = QLabel("Not computed yet.", self)
+        self.readiness_summary_value = QLabel(self)
         self.readiness_summary_value.setObjectName("run_readiness_summary_value")
+        self.readiness_summary_value.setTextFormat(Qt.TextFormat.PlainText)
         self.readiness_summary_value.setWordWrap(True)
         self.readiness_summary_value.setMinimumHeight(24)
 
         self.readiness_checklist = QListWidget(self)
         self.readiness_checklist.setObjectName("run_readiness_checklist")
+        self.readiness_checklist.setAccessibleName("Launch readiness checks")
         _configure_read_only_list(self.readiness_checklist)
+        self.readiness_checklist.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
 
         readiness_card = SectionCard(
             title="Launch Readiness",
             object_name="run_readiness_card",
+            framed=False,
             parent=self,
         )
-        readiness_card.card_layout.setContentsMargins(12, 10, 12, 10)
+        readiness_card.card_layout.setContentsMargins(0, 0, 0, 0)
         readiness_card.card_layout.setSpacing(8)
         readiness_card.body_layout.setSpacing(8)
         readiness_card.body_layout.addWidget(self.readiness_badge)
@@ -842,12 +815,13 @@ class RunPage(QWidget):
         readiness_card.body_layout.addWidget(self.readiness_checklist, 1)
 
         self.shell = NonHomePageShell(
-            title="Run / Runtime",
+            title="Run",
             subtitle="",
             layout_mode="three_column",
             width_preset="medium",
             parent=self,
         )
+        self.shell.set_content_spacing(24)
         self.shell.set_column_stretches(4, 3, 3)
         self.shell.add_column_widget(0, self.runtime_settings_editor)
         self.shell.add_column_widget(1, readiness_card, stretch=1)
@@ -901,10 +875,7 @@ class RunPage(QWidget):
         except Exception as error:
             _show_runtime_error_dialog(self, "Compile Error", error)
             return
-        self._set_summary(
-            session_plan,
-            extra_lines=["Status: session preview refreshed."],
-        )
+        self._set_summary(session_plan)
 
     def preflight_session(self) -> None:
         if not self.is_launch_busy():
@@ -919,11 +890,6 @@ class RunPage(QWidget):
         self._set_summary(
             session_plan,
             extra_lines=["Status: launch checks passed."],
-        )
-        QMessageBox.information(
-            self,
-            "Preflight Passed",
-            "Preflight succeeded for the current session launch.",
         )
 
     def launch_session(self) -> None:
@@ -1259,35 +1225,29 @@ class RunPage(QWidget):
         return _coerce_participant_launch_details(self._prompt_participant_number())
 
     def _refresh_summary(self) -> None:
-        self._refresh_readiness_panel()
         session_plan = self._document.last_session_plan
-        if session_plan is None:
-            validation = self._document.validation_report(refresh_hz=self.current_refresh_hz())
-            if validation.issues:
-                self.summary_stack.setCurrentWidget(self.summary_text)
-                lines = [f"- {issue.message}" for issue in validation.issues]
-                self.summary_text.setPlainText("\n".join(lines))
-                return
-            self.summary_text.clear()
-            self.summary_stack.setCurrentWidget(self.summary_empty_panel)
+        if session_plan is not None:
+            self._set_summary(session_plan)
             return
-        self._set_summary(session_plan)
+        self._refresh_readiness_panel()
+        validation = self._document.validation_report(refresh_hz=self.current_refresh_hz())
+        self.summary_text.setPlainText("\n".join(
+            f"- {issue.message}" for issue in validation.issues
+        ))
 
     def _refresh_readiness_panel(self) -> None:
         self.recording_summary.setText(self._document.recording_setup_summary())
         report = self._status_report()
         self.readiness_badge.set_state(report.badge_state, report.status_label)
-        summary_text = report.status_summary
-        if report.preview_note:
-            summary_text = f"{summary_text} {report.preview_note}"
-        self.readiness_summary_value.setText(summary_text)
+        self.readiness_summary_value.setText(report.status_summary)
+        self.readiness_summary_value.setVisible(report.badge_state != "ready")
         _set_list_items(self.readiness_checklist, report.readiness_items)
+        self.readiness_checklist.setVisible(bool(report.readiness_items))
         self._update_launch_buttons(report)
 
     def _set_summary(
         self, session_plan: SessionPlan, *, extra_lines: list[str] | None = None
     ) -> None:
-        self.summary_stack.setCurrentWidget(self.summary_text)
         lines = [
             f"Session ID: {session_plan.session_id}",
             f"Random Order Seed: {session_plan.random_seed}",

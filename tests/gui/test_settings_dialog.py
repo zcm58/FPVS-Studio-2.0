@@ -124,7 +124,9 @@ def test_settings_categories_fit_minimum_and_default_sizes(
             assert not isinstance(ancestor, SectionCard), name
             ancestor = ancestor.parentWidget()
 
-    assert dialog.root_folder_setup_button.toolTip() == str(root_path)
+    assert dialog.root_folder_value.toolTip() == str(root_path)
+    assert root_path.name not in dialog.root_folder_value.text()
+    assert str(root_path) in dialog.root_folder_value.accessibleName()
     assert not dialog.detailed_run_exports_checkbox.isChecked()
     assert "participant_summary.xlsx" in dialog.detailed_run_exports_checkbox.toolTip()
     assert "always saved" in dialog.detailed_run_exports_checkbox.toolTip()
@@ -141,7 +143,12 @@ def test_settings_categories_fit_minimum_and_default_sizes(
             label for label in page.findChildren(QLabel)
             if label.isVisible() and label.property("settingsSectionTitle") == "true"
         ]
-        if category not in {"Workspace", "Recording"}:
+        if category == "Workspace":
+            assert [label.text() for label in titles] == ["FPVS Studio Root Folder"]
+            assert dialog.root_folder_value.isVisible()
+            assert dialog.library_button.isVisible() is library
+            assert dialog.library_button.text() == "Manage Library Access…"
+        if category != "Recording":
             assert titles, category
         title_left_edges = {label.mapTo(page, label.rect().topLeft()).x() for label in titles}
         assert len(title_left_edges) <= 1, category
@@ -255,8 +262,10 @@ def test_settings_root_details_follow_new_root_selection(qtbot, tmp_path) -> Non
     qtbot.addWidget(dialog)
     select_settings_category(dialog, "Workspace")
     dialog.show()
+    assert str(tmp_path) in dialog.root_folder_value.accessibleName()
     qtbot.mouseClick(dialog.root_folder_setup_button, Qt.MouseButton.LeftButton)
-    assert dialog.root_folder_setup_button.toolTip() == str(updated_root)
+    assert dialog.root_folder_value.text().endswith(updated_root.name)
+    assert str(updated_root) in dialog.root_folder_value.accessibleName()
 
 
 def test_settings_navigation_supports_mouse_keyboard_and_keeps_saved_choices(qtbot, tmp_path):

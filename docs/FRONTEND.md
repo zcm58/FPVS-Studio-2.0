@@ -62,6 +62,9 @@ interaction.
 
 ## GUI Architecture
 
+- Use headings, alignment, spacing and dividers to group content within an
+  existing surface. Give interactive lists, editors and preview canvases a
+  visible boundary where it helps users locate or operate them.
 - First-run startup shows a concise FPVS Studio Root Folder setup guide before the
   native folder picker when no valid root is configured.
 - Home is the daily launch surface for ready projects, centered around one launch
@@ -88,8 +91,8 @@ interaction.
   the stepper, with a 24 px bottom inset. All steps must fit without clipping or
   required scrolling; the page layout map lives in
   [GUI workflow](GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
-- Demographics uses a reorderable question outline and a selected inline card. The
-  card's prompt, response type, and actions remain reachable at `1120x820`. Large
+- Demographics pairs a reorderable question outline with an inline editor. The
+  prompt, response type, and actions remain reachable at `1120x820`. Large
   questionnaires and choice lists scroll inside their own panels.
 - Project uses two aligned sibling cards for Project details and Experiment setup,
   with distinct headings and compact field labels. Its description
@@ -110,7 +113,7 @@ interaction.
   the instructions and Cancel preserves them. Default and short condition names
   are accepted subject to core's existing nonempty name schema.
   Conditions uses the available vertical space for its list and word editors;
-  its details card retains its natural height above the source area. Ready Conditions
+  its details retain their natural height above the source area. Ready Conditions
   has aligned navigator/editor tops, with search above the list and no routine hint. See
   [GUI workflow](GUI_WORKFLOW.md) for mode labels and sizing acceptance.
   Raw image-folder selection is permissive; uniform rectangular sets are valid native inputs, while inconsistent
@@ -137,11 +140,11 @@ interaction.
 - Fixation and Response are split guided setup areas: Fixation handles color-change
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
-- Open Existing Project is the welcome entry point for Manage Projects
+- Open Project is the Welcome entry point for Manage Projects
   and the first, primary blue action with initial focus and Enter activation.
-  Create Project, Import New Project and Change Root Folder remain secondary actions.
+  Create Project, Import Project Bundle and Change Root Folder remain secondary actions.
   Manage Projects opens known projects or moves project folders to the Windows Recycle Bin with
-  confirmation. Import New Project uses the same reviewed `.fpvsbundle` import workflow
+  confirmation. Import Project Bundle uses the same reviewed `.fpvsbundle` import workflow
   exposed in the File menu, and Welcome accepts dropped local `.fpvsbundle` files while
   keeping modal staged progress visible. Successful bundle exports remain on a persistent
   result page until the user opens/copies the destination or selects Done. Bundle export
@@ -165,6 +168,8 @@ interaction.
   compilation, session planning, and runtime flow remain outside widgets.
 - Keep presentation refreshes demand-driven: hidden Home/Assets/Run pages defer
   document notifications until shown, and closed Find Action refreshes on reopening.
+  Buttons use the theme's hover, pressed and keyboard focus styles. Primary buttons
+  use a focus border that contrasts with their fill in both themes.
   AB previews share derived descriptions within one edit only. Manage Projects scans
   through the app-owned job lifecycle with loading, close and retry states; see
   [GUI responsiveness](GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness).

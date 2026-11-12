@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QFileDialog,
-    QFrame,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
@@ -76,8 +75,10 @@ class FixationCrossDataDialog(QDialog):
                 "participant sessions in this project."
             ),
             object_name="fixation_cross_data_card",
+            framed=False,
             parent=self,
         )
+        self.data_card.card_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.addWidget(self.data_card, 1)
 
         status_row = QHBoxLayout()
@@ -85,14 +86,10 @@ class FixationCrossDataDialog(QDialog):
         status_row.setSpacing(8)
         self.status_badge = StatusBadgeLabel(parent=self.data_card)
         self.status_badge.setObjectName("fixation_cross_data_status_badge")
-        status_row.addWidget(self.status_badge)
-        self.export_path_label = PathValueLabel(parent=self.data_card)
+        status_row.addWidget(self.status_badge, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.export_path_label = PathValueLabel(parent=self.data_card, single_line=True)
         self.export_path_label.setObjectName("fixation_cross_data_export_path")
-        self.export_path_label.setMinimumWidth(0)
-        self.export_path_label.setSizePolicy(
-            QSizePolicy.Policy.Ignored,
-            QSizePolicy.Policy.Preferred,
-        )
+        self.export_path_label.setProperty("pathValue", "false")
         self.export_path_label.setVisible(False)
         status_row.addWidget(self.export_path_label, 1)
         self.data_card.body_layout.addLayout(status_row)
@@ -142,9 +139,8 @@ class FixationCrossDataDialog(QDialog):
         return self.is_loading or self.is_exporting
 
     def _build_state_page(self) -> QWidget:
-        page = QFrame(self.state_stack)
+        page = QWidget(self.state_stack)
         page.setObjectName("fixation_cross_data_message_panel")
-        page.setProperty("setupMetricStrip", "true")
         layout = QVBoxLayout(page)
         layout.setContentsMargins(24, 18, 24, 18)
         layout.setSpacing(8)
@@ -178,11 +174,10 @@ class FixationCrossDataDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
 
-        metrics_panel = QFrame(page)
+        metrics_panel = QWidget(page)
         metrics_panel.setObjectName("fixation_cross_data_metrics_panel")
-        metrics_panel.setProperty("setupMetricStrip", "true")
         metrics_layout = QGridLayout(metrics_panel)
-        metrics_layout.setContentsMargins(12, 8, 12, 8)
+        metrics_layout.setContentsMargins(0, 4, 0, 6)
         metrics_layout.setHorizontalSpacing(12)
         metrics_layout.setVerticalSpacing(3)
         self.accuracy_value_label = QLabel("—", metrics_panel)
@@ -228,7 +223,7 @@ class FixationCrossDataDialog(QDialog):
 
         self.export_feedback_label = QLabel(page)
         self.export_feedback_label.setObjectName("fixation_cross_data_export_feedback")
-        self.export_feedback_label.setProperty("setupMetricValue", "true")
+        self.export_feedback_label.setProperty("sectionCardRole", "subtitle")
         self.export_feedback_label.setWordWrap(True)
         self.export_feedback_label.setTextInteractionFlags(
             Qt.TextInteractionFlag.TextSelectableByMouse
@@ -236,7 +231,7 @@ class FixationCrossDataDialog(QDialog):
         self.export_feedback_label.setMinimumWidth(0)
         self.export_feedback_label.setSizePolicy(
             QSizePolicy.Policy.Ignored,
-            QSizePolicy.Policy.Minimum,
+            QSizePolicy.Policy.Preferred,
         )
         self.export_feedback_label.setVisible(False)
         layout.addWidget(self.export_feedback_label)
@@ -318,10 +313,7 @@ class FixationCrossDataDialog(QDialog):
             return
         self.export_state_name = "success"
         self.status_badge.set_state("ready", "Excel Exported")
-        self.export_path_label.set_path_text(str(result), max_length=72)
-        self.export_path_label.setVisible(True)
-        self.export_feedback_label.setText("Excel workbook exported successfully.")
-        self.export_feedback_label.setVisible(True)
+        self.export_path_label.set_path_text(str(result))
 
     @Slot(object)
     def _on_export_failed(self, error: object) -> None:
@@ -335,20 +327,16 @@ class FixationCrossDataDialog(QDialog):
     def _show_export_pending(self, output_path: Path) -> None:
         self.export_state_name = "pending"
         self.status_badge.set_state("pending", "Exporting Excel")
-        self.export_path_label.set_path_text(str(output_path), max_length=72)
+        self.status_badge.show()
+        self.export_path_label.set_path_text(str(output_path))
         self.export_path_label.setVisible(True)
-        self.export_feedback_label.setText("Writing the selected workbook in the background...")
-        self.export_feedback_label.setToolTip("")
-        self.export_feedback_label.setVisible(True)
+        self.export_feedback_label.hide()
         self._sync_action_enabled_states()
 
     def _show_export_error(self, error: object) -> None:
         self.export_state_name = "error"
         self.status_badge.set_state("error", "Export Failed")
-        message = describe_error("Export fixation results", error)
-        self.export_feedback_label.setText(
-            f"{message} The loaded fixation results are still available."
-        )
+        self.export_feedback_label.setText(describe_error("Export fixation results", error))
         self.export_feedback_label.setToolTip(str(error))
         self.export_feedback_label.setVisible(True)
         if isinstance(error, FixationExportError):
@@ -378,6 +366,7 @@ class FixationCrossDataDialog(QDialog):
         self.state_name = "loading"
         self.export_state_name = "idle"
         self.status_badge.set_state("pending", "Loading")
+        self.status_badge.show()
         self.state_title_label.setText("Loading fixation task accuracy...")
         self.state_detail_label.setText("Reading included session history from this project.")
         self.state_detail_label.setToolTip("")
@@ -422,7 +411,7 @@ class FixationCrossDataDialog(QDialog):
         self._summary = summary
         self.state_name = "populated"
         self.export_state_name = "idle"
-        self.status_badge.set_state("ready", "Data Ready")
+        self.status_badge.hide()
         self.export_path_label.setVisible(False)
         self.export_feedback_label.setVisible(False)
         self.accuracy_value_label.setText(f"{summary.accuracy_percent:.1f}%")

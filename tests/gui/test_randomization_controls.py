@@ -593,7 +593,8 @@ def test_plain_language_choices_fit_session_and_review(
         wizard.open_wizard(step_key="review", allow_step_jumps=True)
         QApplication.processEvents()
         assert_visible_children_within_parent(wizard.review_step_surface)
-        text = " ".join(label.text() for label in wizard.review_card.findChildren(QLabel))
+        labels = wizard.review_checklist_container.findChildren(QLabel)
+        text = " ".join(label.text() for label in labels)
         for title in ("Image / word order:", "Condition order:",
                       "Fixation cross color change timing:"):
             assert title in text

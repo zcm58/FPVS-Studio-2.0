@@ -6,9 +6,10 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QPoint, QRect, Qt
-from PySide6.QtGui import QPalette
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QLabel,
     QListWidget,
     QMessageBox,
@@ -31,6 +32,7 @@ from fpvs_studio.core.condition_template_profiles import (
 )
 from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
 from fpvs_studio.gui import controller as controller_module
+from fpvs_studio.gui.components import studio_theme_stylesheet
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -94,9 +96,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.participant_tutorial_checkbox is not None
     assert project_editor.participant_tutorial_checkbox.text() == "Enable participant tutorial"
     assert project_editor.participant_tutorial_checkbox.toolTip()
-    assert project_editor.project_overview_card.maximumWidth() == 1040
-    assert project_editor.project_overview_card.title_label.text() == "Project Details"
-    assert project_editor.project_overview_card.title_label.isVisible() is False
+    assert project_editor.project_workspace.maximumWidth() == 1040
     setup_icon = project_editor.findChild(QLabel, "setup_project_icon")
     assert setup_icon is None
     assert project_editor.findChild(QLabel, "project_overview_title") is None
@@ -104,8 +104,7 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.findChild(QWidget, "project_overview_checklist") is None
     assert project_editor.findChild(QWidget, "project_condition_profile_group") is not None
     assert project_editor.findChild(QWidget, "project_condition_profile_actions") is not None
-    assert dashboard.step_title_label.isVisible() is False
-    assert dashboard.step_status_badge.isVisible() is False
+    assert dashboard.shell.title_label.text() == "Project"
     assert project_editor.project_root_value.wordWrap() is False
     assert project_editor.project_root_value.maximumHeight() <= 34
     assert str(window.document.project_root) in {
@@ -178,36 +177,25 @@ def test_setup_project_contrast_profile_applies_required_background(
     )
 
 
-@pytest.fixture
-def _restore_native_theme(qapp):
-    original_mode = qapp.property("studioThemeMode")
-    original_palette = QPalette(qapp.palette())
-    yield
-    qapp.styleHints().setColorScheme({
-        "light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark,
-    }.get(original_mode, Qt.ColorScheme.Unknown))
-    qapp.setPalette(original_palette)
-    qapp.setProperty("studioThemeMode", original_mode)
-    QApplication.processEvents()
-
-
-@pytest.mark.parametrize("theme_mode", ["light", "dark"])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 @pytest.mark.parametrize("has_conditions", [False, True], ids=["empty", "with-conditions"])
 def test_project_details_template_actions_fit_at_setup_default_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
-    theme_mode: str,
+    background: str,
     has_conditions: bool,
-    _restore_native_theme,
 ) -> None:
-    controller.set_theme_mode(theme_mode)
     _, window = _open_created_project(
         controller,
         qtbot,
         tmp_path,
         "Long Project Name For Template Layout Verification",
     )
+    palette = QPalette(window.palette())
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    window.setPalette(palette)
+    window.setStyleSheet(studio_theme_stylesheet(palette))
     guide = window.setup_wizard_page
     editor = guide.project_overview_editor
     if has_conditions:
@@ -242,20 +230,18 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     if has_conditions:
         assert apply_button.isEnabled()
     assert editor.findChild(QWidget, "project_overview_checklist") is None
-    assert editor.project_overview_card.width() <= 1040
+    workspace = editor.project_workspace
+    assert workspace.width() <= 1040
     assert editor.project_details_heading.text() == "Project details"
     assert editor.experiment_setup_heading.text() == "Experiment setup"
     assert editor.project_description_edit.height() >= 100
     details_card = editor.project_details_card
     setup_card = editor.experiment_setup_card
-    wrapper = editor.project_overview_card
-    assert wrapper.property("setupFlatSection") == "true"
-    assert details_card.parentWidget() is setup_card.parentWidget()
-    assert wrapper.isAncestorOf(details_card)
-    assert wrapper.isAncestorOf(setup_card)
+    assert not isinstance(workspace, QFrame)
+    assert details_card.parentWidget() is workspace
+    assert setup_card.parentWidget() is workspace
     for card in (details_card, setup_card):
         assert card.property("sectionCard") == "true"
-        assert card.property("setupFlatSection") != "true"
         margins = card.card_layout.contentsMargins()
         assert (margins.left(), margins.top(), margins.right(), margins.bottom()) == (
             16, 16, 16, 16,
@@ -305,7 +291,7 @@ def test_project_details_template_actions_fit_at_setup_default_size(
         text_width = button.fontMetrics().horizontalAdvance(button.text())
         assert button.width() >= text_width + 24
         assert button.minimumWidth() >= text_width + 24
-    assert_visible_children_within_parent(editor.project_overview_card)
+    assert_visible_children_within_parent(workspace)
     assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
@@ -407,7 +393,6 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(guide.add_condition_button, Qt.MouseButton.LeftButton)
     assert information_prompts == []
     assert next_button.isEnabled()
-    qtbot.waitUntil(lambda: "image sources" in guide.step_status_label.text().lower())
 
     condition_id = guide.condition_setup_step.selected_condition_id()
     assert isinstance(condition_id, str)
@@ -442,7 +427,7 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     assert guide.experiment_step_surface.content.objectName() == (
         "setup_wizard_experiment_settings_page"
     )
-    assert not guide.step_title_label.isVisible()
+    assert guide.shell.title_label.text() == "Timing"
     assert guide.display_settings_card.isAncestorOf(guide.runtime_settings_editor)
     assert guide.session_settings_card.isAncestorOf(guide.session_structure_editor)
     assert not guide.display_settings_card.isAncestorOf(guide.session_structure_editor)
@@ -473,11 +458,11 @@ def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.fixation_step_surface
     assert guide.fixation_step_surface.content is guide.fixation_schedule_editor
-    assert guide.step_title_label.text() == "Fixation"
+    assert guide.shell.title_label.text() == "Fixation"
     qtbot.mouseClick(next_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.response_step_surface
     assert guide.response_step_surface.content is guide.fixation_response_editor
-    assert guide.step_title_label.text() == "Response"
+    assert guide.shell.title_label.text() == "Response and Appearance"
     assert guide.fixation_response_editor.preview_widget is not None
 
     qtbot.mouseClick(back_button, Qt.MouseButton.LeftButton)

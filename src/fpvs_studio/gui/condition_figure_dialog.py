@@ -213,7 +213,8 @@ class ConditionFigureDialog(QDialog):
         form.addRow("Stimulus selection", mode_row)
         layout.addLayout(form)
 
-        card = SectionCard(title="Stimulus previews", parent=self)
+        card = SectionCard(title="Stimulus previews", framed=False, parent=self)
+        card.card_layout.setContentsMargins(0, 0, 0, 0)
         grid = QGridLayout()
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(6)

@@ -63,12 +63,15 @@ def test_timing_can_select_shared_display_rate_and_resolve_legacy_durations(
         if initial_refresh is None:
             assert combo.currentIndex() == -1
             assert combo.placeholderText() == "Select display rate"
+            assert display.refresh_hz_combo.currentIndex() == -1
+            assert display.refresh_hz_combo.placeholderText() == "60 Hz (default)"
+            assert display.current_refresh_hz() == 60.0
             assert not table.duration_spins[first].isEnabled()
             assert table.total_stimulation_labels[first].text() == "Unresolved"
         elif initial_refresh == 75.0:
             assert "not approved" in combo.currentText()
 
-        # Choosing the default must persist even when Display already shows 60 Hz.
+        # Selecting 60 Hz persists an explicit target even when the fallback is 60 Hz.
         combo.setCurrentIndex(combo.findData(60.0))
         QApplication.processEvents()
         assert document.project.settings.display.preferred_refresh_hz == 60.0

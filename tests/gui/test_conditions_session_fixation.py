@@ -446,6 +446,8 @@ def test_fixation_color_change_mode_toggles_relevant_controls(
     assert page.target_count_min_spin.isEnabled()
     assert page.target_count_max_spin.isEnabled()
     assert page.no_repeat_count_checkbox.isEnabled()
+    assert page.fixation_behavior_layout.labelForField(page.no_repeat_count_checkbox) is None
+    assert page.no_repeat_count_checkbox.text() == "Use different change counts in consecutive runs"
 
 
 def test_fixation_response_key_picker_updates_model_with_keyboard_buttons(
@@ -473,8 +475,8 @@ def test_fixation_response_key_picker_updates_model_with_keyboard_buttons(
     g_key_button = page.response_key_popover.key_button("g")
     assert f_key_button is not None
     assert g_key_button is not None
-    assert f_key_button.property("hoverAnimationEnabled") is True
-    assert g_key_button.property("hoverAnimationEnabled") is True
+    assert f_key_button.graphicsEffect() is None
+    assert g_key_button.graphicsEffect() is None
     assert page.response_key_popover.key_button("left") is None
     assert page.response_key_popover.key_button("right") is None
     assert page.response_key_popover.key_button("up") is None

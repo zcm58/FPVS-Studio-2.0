@@ -8,13 +8,14 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, Signal
 from PySide6.QtGui import QPalette, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -480,7 +481,6 @@ def test_setup_wizard_conditions_step_accepts_default_and_short_names_with_posit
     assert "Needs name" not in step.condition_list.currentItem().toolTip()
     assert window.document.get_condition(condition_id).name == "Condition 1"
     assert "Continuous Display" in step.condition_list.currentItem().text()
-    assert not guide.step_status_label.isVisible()
     assert not step.base_source_card.status_badge.isVisible()
     assert not step.oddball_source_card.status_badge.isVisible()
     assert step.name_check_status.text() == "Complete"
@@ -630,7 +630,10 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Image Presentation Modes")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="conditions")
+    assert step.condition_scope_label.text() == "Add your first condition"
+    assert not step.condition_list_hint.isVisible()
 
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     condition_id = step.selected_condition_id()
@@ -647,13 +650,23 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     assert sinusoidal_index >= 0
     assert "Neutral Gray (#808080)" in step.timing_template_combo.toolTip()
 
+    window.document.update_display_settings(background_color="#000000")
     step.timing_template_combo.setCurrentIndex(sinusoidal_index)
     QApplication.processEvents()
     condition = window.document.get_condition(condition_id)
     assert condition is not None
     assert condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
-    assert "Neutral Gray" in step.presentation_mode_help.text()
-    assert "Timing" in step.presentation_mode_help.text()
+    assert step.presentation_mode_help.text() == "Choose Neutral Gray in Display & Session."
+    assert step.presentation_mode_help.isVisible()
+    assert not step.condition_list_hint.isVisible()
+    assert step.presentation_mode_help.height() >= step.presentation_mode_help.heightForWidth(
+        step.presentation_mode_help.width()
+    )
+    _assert_visible_children_within_parent(step)
+
+    window.document.update_display_settings(background_color="#808080")
+    QApplication.processEvents()
+    assert not step.presentation_mode_help.isVisible()
 
     step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.WORD.value))
     QApplication.processEvents()
@@ -669,7 +682,10 @@ def test_setup_wizard_contrast_modulation_is_available_for_images_only(
     assert step.timing_template_combo.currentData() == DutyCycleMode.CONTINUOUS
     assert "resets Sinusoidal Contrast Modulation" in step.timing_template_combo.toolTip()
     assert "Neutral Gray" not in step.presentation_mode_help.text()
-    assert "words" in step.condition_list_hint.text()
+    assert not step.condition_list_hint.isVisible()
+    assert "per line" in step.base_words_edit.placeholderText()
+    assert "per line" in step.oddball_words_edit.placeholderText()
+    assert "per line" in step.oddball_words_edit.toolTip()
 
     step.modality_combo.setCurrentIndex(step.modality_combo.findData(StimulusModality.IMAGE.value))
     QApplication.processEvents()
@@ -837,6 +853,8 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     assert window.size().width() == 1120
     assert window.size().height() == 820
     assert step.condition_scope_label.text() == "This condition"
+    assert not isinstance(step.condition_details_section, QFrame)
+    assert not isinstance(step.all_conditions_section, QFrame)
     assert step.condition_scope_label.toolTip() == long_name.strip()
     assert long_name.strip() in step.condition_list.currentItem().toolTip()
     assert step.condition_name_edit.toolTip() == long_name.strip()
@@ -854,6 +872,7 @@ def test_condition_scope_and_long_content_fit_minimum_setup_size(
     if modality == StimulusModality.IMAGE:
         assert step.sources_row.isVisible()
         for card in (step.base_source_card, step.oddball_source_card):
+            assert card.property("setupSourceCard") == "true"
             assert card.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
             _assert_visible_children_within_parent(card)
         instructions_bottom = step.instructions_button.mapTo(
@@ -933,7 +952,8 @@ def test_condition_blocker_focus_selects_missing_word_role_without_opening_dialo
 
     assert step.selected_condition_id() == condition_id
     assert step.oddball_words_edit.hasFocus()
-    assert "words" in step.condition_list_hint.text()
+    assert "per line" in step.oddball_words_edit.placeholderText()
+    assert not step.condition_list_hint.isVisible()
 
 
 @pytest.mark.parametrize("window_size", [(1120, 820), (1120, 960), (1448, 1086)])
@@ -1526,6 +1546,8 @@ def _restore_native_theme(qapp):
     original_mode = qapp.property("studioThemeMode")
     original_palette = QPalette(qapp.palette())
     yield
+    # Finish pytest-qt's deferred widget cleanup before broadcasting a palette change.
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     qapp.styleHints().setColorScheme({
         "light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark,
     }.get(original_mode, Qt.ColorScheme.Unknown))

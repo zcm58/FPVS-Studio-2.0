@@ -9,9 +9,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QGuiApplication, QPalette
-from PySide6.QtWidgets import QLabel, QWidget
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QColor, QGuiApplication, QPalette, QResizeEvent
+from PySide6.QtWidgets import QLabel, QSizePolicy, QWidget
 
 PAGE_MARGIN_X = 24
 PAGE_MARGIN_Y = 18
@@ -271,7 +271,9 @@ class StatusBadgeLabel(QLabel):
 class PathValueLabel(QLabel):
     """Selectable label that shows a shortened path and preserves the full path tooltip."""
 
-    def __init__(self, text: str | QWidget = "", parent: QWidget | None = None) -> None:
+    def __init__(
+        self, text: str | QWidget = "", parent: QWidget | None = None, *, single_line: bool = False,
+    ) -> None:
         if isinstance(text, QWidget):
             if parent is None:
                 parent = text
@@ -279,10 +281,38 @@ class PathValueLabel(QLabel):
         else:
             label_text = text
         super().__init__(label_text, parent)
+        self._single_line = single_line
         self.setObjectName("path_value_label")
         self.setProperty("pathValue", "true")
-        self.setWordWrap(True)
+        self.setWordWrap(not single_line)
         self.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        if single_line:
+            self.setTextFormat(Qt.TextFormat.PlainText)
+            self.setIndent(0)
+            self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
+            self.set_path_text(label_text)
 
     def set_path_text(self, text: str, *, max_length: int = 72) -> None:
-        set_truncated_label_text(self, text, max_length=max_length)
+        if self._single_line:
+            self.setToolTip(text)
+            self.setAccessibleName(text)
+            self._refresh_single_line_text()
+        else:
+            set_truncated_label_text(self, text, max_length=max_length)
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
+        super().resizeEvent(event)
+        if self._single_line:
+            self._refresh_single_line_text()
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if self._single_line and event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            self._refresh_single_line_text()
+
+    def _refresh_single_line_text(self) -> None:
+        width = max(0, self.contentsRect().width() - 2 * self.margin())
+        display_text = self.fontMetrics().elidedText(
+            self.toolTip(), Qt.TextElideMode.ElideMiddle, width,
+        )
+        self.setText(display_text)

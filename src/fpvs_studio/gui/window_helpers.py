@@ -221,7 +221,7 @@ class LauncherReadinessReport:
     badge_state: str
     status_summary: str
     readiness_items: tuple[str, ...]
-    preview_note: str | None = None
+    first_blocker: str | None = None
 
 
 def _truncate_line(value: str, max_length: int) -> str:
@@ -239,8 +239,11 @@ def _configure_read_only_list(widget: QListWidget) -> None:
 
 def _set_list_items(widget: QListWidget, lines: list[str] | tuple[str, ...]) -> None:
     widget.clear()
-    for line in lines:
+    for index, line in enumerate(lines):
         widget.addItem(line)
+        item = widget.item(index)
+        if item is not None:
+            item.setToolTip(line)
 
 
 def _conditions_have_assigned_assets(document: ProjectDocument, ordered_conditions: list) -> bool:
@@ -304,7 +307,6 @@ def _launcher_readiness_report(
 
     conditions_ready = bool(ordered_conditions)
     assets_ready = _conditions_have_assigned_assets(document, ordered_conditions)
-    preview_available = document.last_session_plan is not None
     local_display_check = (
         conditions_ready and assets_ready and bool(blocking_issues or timing_warnings)
         and document.local_display_can_resolve_validation()
@@ -330,19 +332,18 @@ def _launcher_readiness_report(
         badge_state = "ready"
 
     if not conditions_ready:
-        status_summary = "Add at least one condition before launching."
+        status_summary = "Add at least one condition."
     elif not assets_ready:
         status_summary = (
             "Finish masking sources in Condition Modifiers."
             if any(condition_masking(document.project, item) for item in ordered_conditions)
-            else "Finish the image sources in Design, or word lists in Conditions."
+            else "Add stimulus sources in Setup → Conditions."
         )
     elif local_display_check:
         status_summary = "Launch to confirm the local display and validate its refresh rate."
     elif blocking_issue_count > 0:
-        status_summary = (
-            f"Validation at {refresh_hz:.2f} Hz reports {blocking_issue_count} blocking issue(s)."
-        )
+        issue_label = "issue" if blocking_issue_count == 1 else "issues"
+        status_summary = f"{blocking_issue_count} blocking {issue_label} at {refresh_hz:.2f} Hz."
     elif timing_warnings:
         status_summary = (
             "Launch is allowed with approximate whole-frame timing. "
@@ -351,48 +352,25 @@ def _launcher_readiness_report(
     else:
         status_summary = f"Launch requirements are satisfied at {refresh_hz:.2f} Hz."
 
+    first_blocker = (
+        blocking_issues[0].message if assets_ready and blocking_issues and not local_display_check
+        else None
+    )
     readiness_items: list[str] = []
     if conditions_ready:
-        readiness_items.append(f"Complete: Conditions configured: {len(ordered_conditions)}.")
-    else:
-        readiness_items.append("Needs setup: Add at least one condition.")
-
+        readiness_items.append(f"Conditions configured: {len(ordered_conditions)}")
     if assets_ready:
-        readiness_items.append("Complete: Stimulus assignments present for all conditions.")
-    else:
-        readiness_items.append("Needs setup: Finish each condition's stimulus sources in Setup.")
-
-    if local_display_check:
-        readiness_items.append(f"Check local display: {status_summary}")
-    elif blocking_issue_count > 0:
-        readiness_items.append(
-            f"Warning: Validation ({refresh_hz:.2f} Hz): {blocking_issue_count} blocking issue(s)."
-        )
-        readiness_items.append(
-            f"Warning: First blocker: {_truncate_line(blocking_issues[0].message, 120)}"
-        )
-    elif timing_warnings:
-        readiness_items.append(
-            f"Warning: {_truncate_line(timing_warnings[0].message, 160)}"
-        )
-    else:
-        readiness_items.append(f"Complete: Validation ({refresh_hz:.2f} Hz) clear.")
-
-    readiness_items.append("Runtime path: fullscreen session with display and timing checks.")
+        readiness_items.append("Stimulus sources assigned for all conditions.")
+        if first_blocker:
+            readiness_items.append(f"First blocker: {first_blocker}")
+        elif badge_state == "ready":
+            readiness_items.append(f"Validation passed at {refresh_hz:.2f} Hz.")
     return LauncherReadinessReport(
         status_label=status_label,
         badge_state=badge_state,
         status_summary=status_summary,
         readiness_items=tuple(readiness_items),
-        preview_note=(
-            "Session preview available for inspection. Launch will still collect "
-            "participant details, compile, and run launch checks automatically."
-            if preview_available
-            else (
-                "Launch will collect participant details, compile, and run launch checks "
-                "automatically."
-            )
-        ),
+        first_blocker=first_blocker,
     )
 
 

@@ -52,12 +52,10 @@ from fpvs_studio.gui.components import (
     NonHomePageShell,
     SectionCard,
     SetupProgressStepper,
-    StatusBadgeLabel,
     apply_setup_wizard_theme,
     configure_setup_form,
     mark_primary_action,
     mark_secondary_action,
-    refresh_widget_style,
 )
 from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.condition_setup_step import (
@@ -102,7 +100,7 @@ _ESTIMATED_INTER_CONDITION_BREAK_SECONDS = 30
 _SETUP_STEP_SURFACE_MAX_WIDTH = 880
 _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH = 1040
 _SETUP_STEP_SURFACE_MIN_HEIGHT = 360
-_SETUP_STEP_CARD_MAX_HEIGHT = 552
+_SETUP_STEP_WORKSPACE_MAX_HEIGHT = 552
 
 
 @dataclass
@@ -254,7 +252,6 @@ class SetupWizardPage(QWidget):
         )
         self.runtime_settings_editor = DisplaySettingsEditor(
             document,
-            framed=False,
             show_scope_label=False,
             parent=self,
         )
@@ -268,8 +265,6 @@ class SetupWizardPage(QWidget):
             self.image_display_size_editor.draft_changed.connect(self.schedule_refresh)
         self.session_structure_editor = SessionStructureEditor(
             document,
-            title="Session",
-            subtitle="Block order and participant start behavior.",
             framed=False,
             parent=self,
         )
@@ -359,16 +354,6 @@ class SetupWizardPage(QWidget):
         progress_panel_shell_layout.addStretch(1)
         self.progress_panel_shell = progress_panel_shell
 
-        self.step_title_label = QLabel(self)
-        self.step_title_label.setObjectName("setup_wizard_step_title")
-        self.step_title_label.setProperty("sectionCardRole", "title")
-        self.step_title_label.setWordWrap(True)
-        self.step_status_badge = StatusBadgeLabel("Step not checked", self)
-        self.step_status_badge.setObjectName("setup_wizard_ready_badge")
-        self.step_status_label = QLabel(self)
-        self.step_status_label.setObjectName("setup_wizard_step_status_label")
-        self.step_status_label.setWordWrap(True)
-
         self.step_stack = _CurrentWidgetStack(self)
         self.step_stack.setObjectName("setup_wizard_step_stack")
         self.step_stack.setSizePolicy(
@@ -385,28 +370,17 @@ class SetupWizardPage(QWidget):
         )
         guided_layout = QVBoxLayout(self.guided_panel)
         guided_layout.setContentsMargins(0, 0, 0, 0)
-        guided_layout.setSpacing(8)
-        guided_layout.addWidget(self.step_title_label)
-        guided_layout.addWidget(self.step_status_badge)
-        guided_layout.addWidget(self.step_status_label)
         guided_layout.addWidget(self.step_stack)
 
-        step_card = SectionCard(
-            title="",
-            object_name="setup_wizard_current_step_card",
-            parent=self,
-        )
-        self.step_card = step_card
-        step_card.setProperty("sectionCard", "false")
-        step_card.setProperty("launchSurfaceFrame", "true")
-        step_card.setMinimumHeight(0)
-        step_card.setSizePolicy(
+        self.step_workspace = QWidget(self)
+        self.step_workspace.setObjectName("setup_wizard_step_workspace")
+        self.step_workspace.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Expanding,
         )
-        step_card.title_label.setVisible(False)
-        step_card.card_layout.setContentsMargins(12, 8, 12, 8)
-        step_card.body_layout.setSpacing(8)
+        self.step_workspace_layout = QVBoxLayout(self.step_workspace)
+        self.step_workspace_layout.setContentsMargins(12, 8, 12, 8)
+        self.step_workspace_layout.setSpacing(8)
 
         self.advanced_stack = _CurrentWidgetStack(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
@@ -434,8 +408,8 @@ class SetupWizardPage(QWidget):
         step_content_layout.setSpacing(0)
         step_content_layout.addWidget(self.content_stack, 1)
 
-        step_card.body_layout.addWidget(progress_panel_shell, 0, Qt.AlignmentFlag.AlignTop)
-        step_card.body_layout.addWidget(self.step_content_anchor, 1)
+        self.step_workspace_layout.addWidget(progress_panel_shell, 0, Qt.AlignmentFlag.AlignTop)
+        self.step_workspace_layout.addWidget(self.step_content_anchor, 1)
 
         self.setup_wizard_back_button = QPushButton("Back", self)
         self.setup_wizard_back_button.setObjectName("setup_wizard_back_button")
@@ -484,7 +458,7 @@ class SetupWizardPage(QWidget):
         button_layout.addWidget(self.setup_wizard_next_button)
         button_layout.addWidget(self.review_save_button)
 
-        self.shell.add_content_widget(step_card, stretch=1)
+        self.shell.add_content_widget(self.step_workspace, stretch=1)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -594,11 +568,6 @@ class SetupWizardPage(QWidget):
             self._refresh_timer.start()
 
     def _build_step_pages(self) -> None:
-        project_layout = self.project_overview_editor.layout()
-        assert project_layout is not None
-        project_layout.setAlignment(
-            self.project_overview_editor.project_overview_card, Qt.AlignmentFlag(0)
-        )
         self.project_step_surface = _SetupStepSurface(
             self.project_overview_editor,
             object_name="setup_wizard_project_surface",
@@ -638,14 +607,12 @@ class SetupWizardPage(QWidget):
         self.display_settings_card = self._settings_step_card(
             self.runtime_settings_editor,
             title="Display",
-            subtitle="",
             object_name="setup_wizard_display_settings_card",
         )
         self.runtime_settings_editor.refresh_hz_combo.setMinimumWidth(120)
         self.session_settings_card = self._settings_step_card(
             self.session_structure_editor,
             title="Session",
-            subtitle="",
             object_name="setup_wizard_session_settings_card",
         )
         configure_setup_form(self.session_structure_editor.session_layout, stacked=True)
@@ -675,18 +642,8 @@ class SetupWizardPage(QWidget):
             max_width=_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH,
             parent=self,
         )
-        self.image_size_settings_card = self._settings_step_card(
-            self.image_display_size_editor,
-            title=("Display Geometry" if is_masking_project(self._document.project)
-                   else "Character Size" if is_letter_stream_project(self._document)
-                   else "Image Size"),
-            subtitle=("Calibrate the display used by your masking stimuli and questions."
-                      if is_masking_project(self._document.project) else
-                      "Set the on-screen stimulus size and calibrate the viewing geometry."),
-            object_name="setup_wizard_image_size_settings_card",
-        )
         self.image_size_step_surface = _SetupStepSurface(
-            self.image_size_settings_card,
+            self.image_display_size_editor,
             object_name="setup_wizard_image_size_surface",
             max_width=(760 if is_letter_stream_project(self._document)
                        else _SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH),
@@ -719,32 +676,14 @@ class SetupWizardPage(QWidget):
         self.step_stack.addWidget(self.fixation_step_surface)
         self.step_stack.addWidget(self.response_step_surface)
         self.step_stack.addWidget(self.review_step_surface)
-        for card in (
-            self.project_overview_editor.project_overview_card,
-            self.display_settings_card,
-            self.image_size_settings_card,
-            self.session_settings_card,
-            self.review_card,
-        ):
-            card.title_label.setVisible(
-                card in (self.display_settings_card, self.session_settings_card)
-            )
-            if card.subtitle_label is not None:
-                card.subtitle_label.hide()
-            framed = card in (self.display_settings_card, self.session_settings_card)
-            card.setProperty("setupFlatSection", "false" if framed else "true")
-            if framed:
-                card.card_layout.setContentsMargins(16, 16, 16, 16)
-            else:
-                card.card_layout.setContentsMargins(0, 0, 0, 0)
-            refresh_widget_style(card)
 
     def _settings_step_card(
-        self, editor: QWidget, *, title: str, subtitle: str, object_name: str
+        self, editor: QWidget, *, title: str, object_name: str
     ) -> SectionCard:
-        card = SectionCard(title=title, subtitle=subtitle, object_name=object_name, parent=self)
+        card = SectionCard(title=title, object_name=object_name, parent=self)
         card.setMaximumWidth(_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH)
         card.setMinimumWidth(0)
+        card.card_layout.setContentsMargins(16, 16, 16, 16)
         card.card_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         card.body_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         card.body_layout.addWidget(editor)
@@ -830,37 +769,18 @@ class SetupWizardPage(QWidget):
         )
 
     def _review_step_page(self) -> QWidget:
-        page = QWidget(self)
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
-
-        self.review_card = SectionCard(
-            title="Review Your Experiment",
-            subtitle="Please confirm your experiment settings.",
-            object_name="setup_wizard_review_card",
-            parent=page,
-        )
-        self.review_card.setMinimumWidth(700)
-        self.review_card.setMaximumWidth(_SETUP_STEP_WORKBENCH_SURFACE_MAX_WIDTH)
-        self.review_card.card_layout.setContentsMargins(14, 10, 14, 10)
-        self.review_card.card_layout.setSpacing(6)
-        self.review_card.body_layout.setSpacing(6)
-
-        self.review_checklist_container = QWidget(self.review_card)
+        self.review_checklist_container = QWidget(self)
         self.review_checklist_container.setObjectName("setup_wizard_review_checklist")
+        self.review_checklist_container.setMinimumWidth(700)
         self.review_checklist_layout = QGridLayout(self.review_checklist_container)
         self.review_checklist_layout.setContentsMargins(0, 0, 0, 0)
-        self.review_checklist_layout.setHorizontalSpacing(8)
+        self.review_checklist_layout.setHorizontalSpacing(24)
         self.review_checklist_layout.setVerticalSpacing(8)
         self.review_checklist_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         for column_index in range(2):
             self.review_checklist_layout.setColumnStretch(column_index, 1)
         self._review_summary_widgets: list[_ReviewSummaryWidgets] = []
-        self.review_card.body_layout.addWidget(self.review_checklist_container)
-
-        layout.addWidget(self.review_card)
-        return page
+        return self.review_checklist_container
 
     def _go_back(self) -> None:
         if not self.flush_pending_edits(defer_timing=self._current_step_key() == "session"):
@@ -1134,20 +1054,14 @@ class SetupWizardPage(QWidget):
             self.native_timing_summary_label.setText("\n".join(timing_lines))
 
         self._refresh_progress_steps()
-        page_titles = {
-            "project": "Set up your experiment",
-            "demographics": "Configure demographics",
-            "conditions": "Configure your conditions",
-            "experiment": "Set your timing",
-            "session": "Configure display and session",
-            "image_size": "Calibrate your display" if is_masking_project(self._document.project)
-            else "Set your character size" if is_letter_stream_project(self._document)
-            else "Set your image size",
-            "fixation": "Configure fixation",
-            "response": "Configure responses and appearance",
-            "review": "Review your experiment",
-        }
-        self.shell.title_label.setText(page_titles[step_key])
+        if step_key == "image_size":
+            if is_masking_project(self._document.project):
+                title = "Display Geometry"
+            elif is_letter_stream_project(self._document):
+                title = "Character Size"
+        elif step_key == "response":
+            title = "Response and Appearance"
+        self.shell.title_label.setText(title)
         self.shell.title_label.setAlignment(
             Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft
         )
@@ -1155,15 +1069,10 @@ class SetupWizardPage(QWidget):
         page_layout = self.shell.page_container.layout()
         assert page_layout is not None
         page_layout.setSpacing(8)
-        self.step_title_label.setText(title)
         if step_key == "review":
             self._refresh_review_summary()
 
         navigation_busy = self._next_navigation_busy()
-        self.step_title_label.setVisible(False)
-        self.step_status_badge.setVisible(False)
-        self.step_status_label.setText(self._step_status_text(self._active_step_index))
-        self.step_status_label.setVisible(False)
         self.setup_wizard_back_button.setEnabled(
             self._active_step_index > 0 and not navigation_busy
         )
@@ -1192,21 +1101,21 @@ class SetupWizardPage(QWidget):
         viewport_height = self.shell.page_container.scroll_area.viewport().height()
         if viewport_height <= 0:
             return
-        maximum = _SETUP_STEP_CARD_MAX_HEIGHT + 100 + max(0, self.height() - 800)
+        maximum = _SETUP_STEP_WORKSPACE_MAX_HEIGHT + 100 + max(0, self.height() - 800)
         viewport_height = min(viewport_height, maximum)
 
-        card_margins = self.step_card.card_layout.contentsMargins()
+        workspace_margins = self.step_workspace_layout.contentsMargins()
         progress_height = self.progress_panel_shell.sizeHint().height()
-        body_spacing = self.step_card.body_layout.spacing()
+        workspace_spacing = self.step_workspace_layout.spacing()
         content_height = max(
             0,
             viewport_height
-            - card_margins.top()
-            - card_margins.bottom()
+            - workspace_margins.top()
+            - workspace_margins.bottom()
             - progress_height
-            - body_spacing,
+            - workspace_spacing,
         )
-        self.step_card.setMaximumHeight(viewport_height)
+        self.step_workspace.setMaximumHeight(viewport_height)
         self.step_content_anchor.setMaximumHeight(content_height)
         self.content_stack.setMaximumHeight(content_height)
         self.guided_panel.setMaximumHeight(content_height)
@@ -1284,7 +1193,7 @@ class SetupWizardPage(QWidget):
         section = QFrame(self.review_checklist_container)
         section.setProperty("reviewSummarySection", "true")
         section_layout = QVBoxLayout(section)
-        section_layout.setContentsMargins(10, 6, 10, 6)
+        section_layout.setContentsMargins(0, 8, 0, 4)
         section_layout.setSpacing(3)
 
         title_label = QLabel(section)
@@ -1402,7 +1311,6 @@ class SetupWizardPage(QWidget):
                 except ValueError:
                     cadence_summary = "Stream timing needs correction"
         fixation = project.settings.fixation_task
-        refresh_hz = self.runtime_settings_editor.current_refresh_hz()
         default_lead_in = project.settings.presentation.pre_stream_fixation_seconds
         modes = sorted({_timing_template_label(item.duty_cycle_mode) for item in conditions})
         mode_summary = modes[0] if len(modes) == 1 else f"Mixed presentation ({len(modes)} modes)"
@@ -1423,16 +1331,16 @@ class SetupWizardPage(QWidget):
             size_summary = f"Character height: {height.values[0]:g} {unit}"
         pre_count = sum(len(item.pre_task_bindings) for item in conditions)
         post_count = sum(len(item.post_task_bindings) for item in conditions)
-        refresh_check = (
-            " · Refresh rate checked"
-            if self.runtime_settings_editor.refresh_is_verified()
-            else ""
-        )
+        refresh_summary = "Refresh rate: Not set"
+        if display.preferred_refresh_hz is not None:
+            refresh_summary = f"Refresh rate: {display.preferred_refresh_hz:g} Hz"
+            if self.runtime_settings_editor.refresh_is_verified():
+                refresh_summary += " · Checked"
         response = (
-            f"Response: {fixation.response_key.upper()} "
-            f"within {fixation.response_window_seconds:g} s"
+            f"Accuracy tracking: {fixation.response_key.upper()} · "
+            f"{fixation.response_window_seconds:g} s response window"
             if fixation.accuracy_task_enabled
-            else "Response scoring: Off"
+            else "Accuracy tracking: Off"
         )
         tutorial = (
             "Off (accuracy tracking is off)"
@@ -1441,18 +1349,29 @@ class SetupWizardPage(QWidget):
             if fixation.participant_tutorial_enabled
             else "Off"
         )
+        condition_count = len(conditions)
+        condition_label = "condition" if condition_count == 1 else "conditions"
         presentation_total = session_presentation_count(project, conditions)
-        session_count_summary = (
-            f"{session.block_count} bursts per SOA · {presentation_total} total · "
-            "all shuffled together"
-            if letter_stream and session.randomize_across_blocks else
-            f"{session.block_count} group repeats · {presentation_total} presentations"
-            if masking_project or letter_stream else
-            (f"{max(condition_presentation_counts(project).values(), default=0)} blocks · "
-             f"{presentation_total} presentations")
-            if session.condition_ordering == "randomized_blocks" and not masking_project else
-            f"{presentation_total} presentations · shuffled without adjacent repeats"
-        )
+        presentation_label = "presentation" if presentation_total == 1 else "presentations"
+        presentation_summary = f"{presentation_total} {presentation_label}"
+        block_prefix = ""
+        if session.condition_ordering == "randomized_blocks":
+            block_count = max(condition_presentation_counts(project).values(), default=0)
+            block_label = "block" if block_count == 1 else "blocks"
+            block_prefix = f"{block_count} {block_label} · "
+        if letter_stream and session.randomize_across_blocks:
+            burst_label = "burst" if session.block_count == 1 else "bursts"
+            session_count_summary = (
+                f"{session.block_count} {burst_label} per SOA · {presentation_total} total · "
+                "all shuffled together"
+            )
+        elif masking_project or letter_stream:
+            repeat_label = "group repeat" if session.block_count == 1 else "group repeats"
+            session_count_summary = f"{session.block_count} {repeat_label} · {presentation_summary}"
+        elif block_prefix:
+            session_count_summary = f"{block_prefix}{presentation_summary}"
+        else:
+            session_count_summary = f"{presentation_summary} · shuffled without adjacent repeats"
         seed_summary: tuple[str, ...] = ()
         if supports_independent_randomization(project):
             reuse_modes = effective_randomization_modes(project)
@@ -1465,18 +1384,11 @@ class SetupWizardPage(QWidget):
                                       ("fixation", "Fixation cross color change timing"))
             )
             if session.saved_condition_order is not None:
-                block_prefix = (
-                    f"{max(condition_presentation_counts(project).values(), default=0)} blocks · "
-                    if session.condition_ordering == "randomized_blocks" else ""
-                )
                 if reuse_modes.condition_order == "fixed":
-                    session_count_summary = (
-                        f"{block_prefix}{presentation_total} presentations · saved order"
-                    )
+                    session_count_summary = f"{block_prefix}{presentation_summary} · saved order"
                 else:
                     session_count_summary = (
-                        f"{block_prefix}{presentation_total} presentations · "
-                        "new order (saved order inactive)"
+                        f"{block_prefix}{presentation_summary} · new order (saved order inactive)"
                     )
         return (
             ("project", "Project", (project.meta.name, f"Participant tutorial: {tutorial}")),
@@ -1484,10 +1396,13 @@ class SetupWizardPage(QWidget):
                 "conditions",
                 "Conditions",
                 (
-                    f"{len(conditions)} conditions · {mode_summary}"
+                    f"{condition_count} {condition_label} · {mode_summary}"
                     if conditions
                     else "No conditions",
-                    f"Task flow: {pre_count} pre-condition, {post_count} post-condition bindings",
+                    *(
+                        (f"Participant tasks: {pre_count} before conditions, {post_count} after",)
+                        if pre_count or post_count else ()
+                    ),
                     *(
                         ("SOA: " + ", ".join(
                             f"{item.attentional_blink.soa_ms:g} ms" for item in conditions
@@ -1506,7 +1421,7 @@ class SetupWizardPage(QWidget):
                 "display",
                 "Display",
                 (
-                    f"Monitor: {refresh_hz:g} Hz{refresh_check}",
+                    refresh_summary,
                     self._display_background_label(str(display.background_color)),
                 ),
             ),
@@ -1539,7 +1454,6 @@ class SetupWizardPage(QWidget):
                         if fixation.show_cross else
                         f"Fixation cross: Off · blank lead-in {default_lead_in:g} s"
                     ),
-                    f"Accuracy tracking: {'On' if fixation.accuracy_task_enabled else 'Off'}",
                     response,
                 ),
             ),
@@ -1598,23 +1512,6 @@ class SetupWizardPage(QWidget):
             "#101010": "Dark gray background",
             "#808080": "Neutral gray background",
         }.get(background_color, background_color)
-
-    def _step_status_text(self, index: int) -> str:
-        step_key = _WIZARD_STEPS[index][0]
-        if step_key == "project" and not self._project_details_ready():
-            return self._project_details_blocker()
-        if self._step_valid(index):
-            return "Ready" if step_key == "review" else "Complete"
-        if step_key == "conditions":
-            ordered_conditions = self._document.ordered_conditions()
-            if not ordered_conditions:
-                return "Add a condition"
-            if not self._conditions_have_required_trigger_codes(ordered_conditions):
-                return "Set trigger codes"
-            return self._condition_setup_blocker()
-        if step_key == "review":
-            return "Review blockers"
-        return self._current_step_blocker() if index == self._active_step_index else "Needs setup"
 
     def _current_step_valid(self) -> bool:
         return self._step_valid(self._active_step_index)
@@ -1737,12 +1634,6 @@ class SetupWizardPage(QWidget):
         if not self._document.project_root:
             return "Choose a project folder"
         return "Project details needed"
-
-    @staticmethod
-    def _conditions_have_required_trigger_codes(ordered_conditions: list) -> bool:
-        return all(
-            is_guided_trigger_code(condition.trigger_code) for condition in ordered_conditions
-        )
 
     def _refresh_progress_steps(self) -> None:
         current = self._active_step_index

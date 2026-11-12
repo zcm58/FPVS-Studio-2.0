@@ -24,9 +24,8 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui.components import (
     PathValueLabel,
-    SectionCard,
     StatusBadgeLabel,
-    apply_studio_theme,
+    apply_dialog_theme,
     mark_destructive_action,
     mark_error_text,
     mark_primary_action,
@@ -76,22 +75,12 @@ class ManageProjectsDialog(QDialog):
         layout.setContentsMargins(18, 18, 18, 18)
         layout.setSpacing(12)
 
-        self.project_card = SectionCard(
-            title="Manage Projects",
-            subtitle=("Open, rename, or move a project to the Trash."
-                      if sys.platform == "darwin"
-                      else "Open, rename, or move a project to the Recycle Bin."),
-            object_name="manage_projects_card",
-            parent=self,
-        )
-        layout.addWidget(self.project_card, 1)
-
         body = QHBoxLayout()
         body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(12)
-        self.project_card.body_layout.addLayout(body)
+        body.setSpacing(18)
+        layout.addLayout(body, 1)
 
-        list_panel = QWidget(self.project_card)
+        list_panel = QWidget(self)
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(8)
@@ -99,35 +88,36 @@ class ManageProjectsDialog(QDialog):
 
         self.filter_edit = QLineEdit(list_panel)
         self.filter_edit.setObjectName("manage_projects_filter_edit")
-        self.filter_edit.setPlaceholderText("Search projects..")
+        self.filter_edit.setPlaceholderText("Search projects…")
         self.filter_edit.textChanged.connect(self._apply_filter)
         list_layout.addWidget(self.filter_edit)
 
-        self.project_list = QListWidget(self.project_card)
+        self.project_list = QListWidget(list_panel)
         self.project_list.setObjectName("manage_projects_list")
         self.project_list.setMinimumWidth(320)
         self.project_list.currentRowChanged.connect(self._sync_selection)
         list_layout.addWidget(self.project_list, 1)
 
-        detail_panel = QWidget(self.project_card)
+        detail_panel = QWidget(self)
         detail_layout = QVBoxLayout(detail_panel)
         detail_layout.setContentsMargins(0, 0, 0, 0)
         detail_layout.setSpacing(10)
         body.addWidget(detail_panel, 1)
 
-        self.status_badge = StatusBadgeLabel(parent=detail_panel)
-        self.status_badge.setObjectName("manage_projects_status_badge")
-        detail_layout.addWidget(self.status_badge)
-
-        self.name_label = QLabel("No project selected", detail_panel)
+        self.name_label = QLabel(detail_panel)
         self.name_label.setObjectName("manage_projects_name_label")
         self.name_label.setProperty("sectionCardRole", "title")
+        self.name_label.setTextFormat(Qt.TextFormat.PlainText)
         self.name_label.setWordWrap(True)
         detail_layout.addWidget(self.name_label)
 
-        folder_label = QLabel("Project Folder", detail_panel)
-        folder_label.setProperty("setupMetricLabel", "true")
-        detail_layout.addWidget(folder_label)
+        self.status_badge = StatusBadgeLabel(parent=detail_panel)
+        self.status_badge.setObjectName("manage_projects_status_badge")
+        detail_layout.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignLeft)
+
+        self.folder_label = QLabel("Project Folder", detail_panel)
+        self.folder_label.setProperty("setupMetricLabel", "true")
+        detail_layout.addWidget(self.folder_label)
 
         self.path_label = PathValueLabel(detail_panel)
         self.path_label.setObjectName("manage_projects_path_label")
@@ -194,7 +184,7 @@ class ManageProjectsDialog(QDialog):
         action_row.addWidget(self.close_button)
         layout.addLayout(action_row)
 
-        apply_studio_theme(self)
+        apply_dialog_theme(self)
         self.ensurePolished()
         self.set_project_entries(entries)
 
@@ -277,6 +267,8 @@ class ManageProjectsDialog(QDialog):
         self.project_list.setEnabled(not self._loading and not self._load_error)
         self.retry_button.setVisible(bool(self._load_error))
         self.empty_label.setVisible(not has_entry)
+        for widget in (self.name_label, self.status_badge, self.folder_label, self.path_label):
+            widget.setVisible(has_entry)
         self.empty_label.setText(
             "Loading projects…" if self._loading else
             "Could not load projects. Check the root folder and try again." if self._load_error else
@@ -294,13 +286,6 @@ class ManageProjectsDialog(QDialog):
         self.rename_button.setEnabled(entry.can_rename if entry else False)
 
         if entry is None:
-            self.status_badge.set_state(
-                "warning" if self._load_error else "pending",
-                "Load Failed" if self._load_error else
-                "Loading" if self._loading else "No Selection",
-            )
-            self.name_label.setText("No project selected")
-            self.path_label.set_path_text("No project selected")
             return
 
         self.status_badge.set_state(entry.status_state, entry.status_text)

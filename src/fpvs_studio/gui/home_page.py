@@ -167,9 +167,9 @@ class HomePage(QWidget):
 
         self.new_project_button = QPushButton("Create Project", self)
         self.new_project_button.setObjectName("home_create_project_button")
-        self.import_project_button = QPushButton("Import New Project", self)
+        self.import_project_button = QPushButton("Import Project Bundle", self)
         self.import_project_button.setObjectName("home_import_project_button")
-        self.open_project_button = QPushButton("Open Existing Project", self)
+        self.open_project_button = QPushButton("Open Project", self)
         self.open_project_button.setObjectName("home_open_project_button")
         self.launch_button = QPushButton("Launch Experiment", self)
         self.launch_button.setObjectName("home_launch_experiment_button")
@@ -198,12 +198,20 @@ class HomePage(QWidget):
         self.launch_status_label = StatusBadgeLabel("Setup Required", self)
         self.launch_status_label.setObjectName("home_launch_status_indicator")
         self.launch_status_label.setMinimumHeight(34)
-        self.launch_status_label.setMinimumWidth(224)
+        self.launch_status_label.setWordWrap(False)
+        self.launch_status_label.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+        )
         self.launch_status_summary = QLabel(self)
         self.launch_status_summary.setObjectName("home_launch_status_summary")
-        self.launch_status_summary.setWordWrap(True)
+        self.launch_status_summary.setTextFormat(Qt.TextFormat.PlainText)
         self.launch_status_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.launch_status_summary.setMinimumHeight(28)
+        self.launch_status_summary.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred,
+        )
+        self.launch_status_summary.setWordWrap(True)
+        self.launch_status_summary.installEventFilter(self)
         self.launch_status_summary.setVisible(False)
 
         self.launch_surface = LaunchSurfaceFrame(
@@ -247,22 +255,17 @@ class HomePage(QWidget):
         self.current_project_header.setTextFormat(Qt.TextFormat.PlainText)
         self.current_project_header.installEventFilter(self)
 
-        self.current_project_subtitle = QLabel(
-            "Open a project, confirm its identity, and launch quickly.",
-            identity_text,
-        )
+        self.current_project_subtitle = QLabel(identity_text)
         self.current_project_subtitle.setObjectName("home_current_project_subtitle")
-        self.current_project_subtitle.setWordWrap(True)
-        self.current_project_subtitle.setMaximumHeight(
-            self.current_project_subtitle.fontMetrics().lineSpacing() * 2 + 4
-        )
+        self.current_project_subtitle.setTextFormat(Qt.TextFormat.PlainText)
         self.current_project_subtitle.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
         self.current_project_subtitle.setSizePolicy(
-            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Ignored,
             QSizePolicy.Policy.Preferred,
         )
+        self.current_project_subtitle.installEventFilter(self)
 
         identity_text_layout.addWidget(self.current_project_header)
         identity_text_layout.addWidget(self.current_project_subtitle)
@@ -437,12 +440,12 @@ class HomePage(QWidget):
         self._bind_button_to_action(
             self.import_project_button,
             import_project_bundle_action,
-            "Import New Project",
+            "Import Project Bundle",
         )
         self._bind_button_to_action(
             self.open_project_button,
             open_project_action,
-            "Open Existing Project",
+            "Open Project",
         )
         self._bind_button_to_action(
             self.launch_button,
@@ -524,12 +527,11 @@ class HomePage(QWidget):
         report = self._status_report()
 
         self._refresh_project_title()
-        subtitle_text = self._project_description_text(project.meta.description)
-        self.current_project_subtitle.setText(subtitle_text)
-        self.current_project_subtitle.setToolTip(
-            " ".join(project.meta.description.split())
-        )
-        self.current_project_subtitle.setVisible(bool(subtitle_text))
+        description = " ".join(project.meta.description.split())
+        self.current_project_subtitle.setToolTip(description)
+        self.current_project_subtitle.setAccessibleName(description)
+        self.current_project_subtitle.setVisible(bool(description))
+        self._refresh_text_preview(self.current_project_subtitle)
 
         self.condition_count_value.setText(str(len(ordered_conditions)))
         burst_mode = (
@@ -591,9 +593,6 @@ class HomePage(QWidget):
     def _sync_hero_height(self) -> None:
         panel = self.launch_surface.hero_container
         layout = self.launch_surface.hero_layout
-        self.current_project_subtitle.setMaximumHeight(
-            self.current_project_subtitle.fontMetrics().lineSpacing() * 2 + 4,
-        )
         panel.setMinimumHeight(max(
             _HOME_HERO_MIN_HEIGHT, layout.minimumSize().height(),
             layout.totalHeightForWidth(panel.width()),
@@ -608,6 +607,12 @@ class HomePage(QWidget):
         label.setToolTip(name)
         label.setAccessibleDescription(name)
 
+    @staticmethod
+    def _refresh_text_preview(label: QLabel) -> None:
+        label.setText(label.fontMetrics().elidedText(
+            label.toolTip(), Qt.TextElideMode.ElideRight, label.contentsRect().width(),
+        ))
+
     def _refresh_project_update_notice(self) -> None:
         label = self.project_update_label
         label.setText(label.fontMetrics().elidedText(
@@ -615,14 +620,17 @@ class HomePage(QWidget):
         ))
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
-        if watched is self.current_project_header and event.type() in (
-            QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange,
-        ):
-            self._refresh_project_title()
-        elif watched is getattr(self, "project_update_label", None) and event.type() in (
-            QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange,
-        ):
-            self._refresh_project_update_notice()
+        if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            if watched is getattr(self, "current_project_header", None):
+                self._refresh_project_title()
+            elif watched is getattr(self, "current_project_subtitle", None):
+                self._refresh_text_preview(self.current_project_subtitle)
+            elif (
+                watched is self.launch_status_summary and not self.launch_status_summary.wordWrap()
+            ):
+                self._refresh_text_preview(self.launch_status_summary)
+            elif watched is getattr(self, "project_update_label", None):
+                self._refresh_project_update_notice()
         return super().eventFilter(watched, event)
 
     def _refresh_sophia_mode_ticker(self) -> None:
@@ -641,15 +649,6 @@ class HomePage(QWidget):
         preferred_refresh = self._document.project.settings.display.preferred_refresh_hz
         return float(preferred_refresh if preferred_refresh is not None else 60.0)
 
-    @staticmethod
-    def _project_description_text(description: str) -> str:
-        compact = " ".join(description.split())
-        if not compact:
-            return ""
-        if len(compact) > 96:
-            compact = f"{compact[:93]}..."
-        return compact
-
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
         self.launch_status_label.set_state(report.badge_state, report.status_label)
         is_ready = report.badge_state == "ready"
@@ -658,16 +657,20 @@ class HomePage(QWidget):
         self._set_setup_action_state(is_ready=is_ready or local_display_check)
         self.launch_status_summary.setText("")
         self.launch_status_summary.setToolTip("")
+        self.launch_status_summary.setAccessibleName("")
         self.launch_status_summary.setVisible(False)
         if is_ready:
             self.launch_button.setToolTip(self._normal_launch_tooltip)
             self.launch_button.setStatusTip(self._normal_launch_status_tip)
             return
-        blocker_text = (
-            report.status_summary if local_display_check else _first_actionable_blocker(report)
-        )
-        self.launch_status_summary.setText(_home_blocker_summary_text(blocker_text))
+        blocker_text = report.first_blocker or report.status_summary
         self.launch_status_summary.setToolTip(blocker_text)
+        self.launch_status_summary.setAccessibleName(blocker_text)
+        self.launch_status_summary.setWordWrap(report.first_blocker is None)
+        if report.first_blocker:
+            self._refresh_text_preview(self.launch_status_summary)
+        else:
+            self.launch_status_summary.setText(blocker_text)
         self.launch_status_summary.setVisible(True)
         self.launch_button.setToolTip(blocker_text)
         self.launch_button.setStatusTip(blocker_text)
@@ -701,12 +704,11 @@ class HomePage(QWidget):
         metric_cell = QFrame(self)
         metric_cell.setObjectName("home_metric_cell")
         cell_layout = QVBoxLayout(metric_cell)
-        cell_layout.setContentsMargins(14, 12, 14, 12)
-        cell_layout.setSpacing(8)
+        cell_layout.setContentsMargins(12, 10, 12, 10)
+        cell_layout.setSpacing(4)
         row_label = QLabel(label_text, metric_cell)
         row_label.setObjectName("home_metric_label")
         row_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        value_widget.setProperty("homeValueRole", "primary")
         value_widget.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cell_layout.addWidget(row_label)
         cell_layout.addWidget(value_widget)
@@ -744,18 +746,3 @@ class HomePage(QWidget):
     @property
     def _normal_launch_status_tip(self) -> str:
         return self._launch_status_tip_text
-
-
-def _first_actionable_blocker(report: LauncherReadinessReport) -> str:
-    for item in report.readiness_items:
-        if item.startswith(("Needs setup:", "Warning:")):
-            return item
-    return report.status_summary
-
-
-def _home_blocker_summary_text(blocker_text: str) -> str:
-    for prefix in ("Needs setup: ", "Warning: "):
-        if blocker_text.startswith(prefix):
-            return blocker_text.removeprefix(prefix)
-    return blocker_text
-

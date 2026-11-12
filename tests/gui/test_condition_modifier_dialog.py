@@ -25,6 +25,7 @@ from fpvs_studio.core.condition_modifiers import (
 )
 from fpvs_studio.core.modifier_presets import list_modifier_presets
 from fpvs_studio.core.task_models import TaskBinding, TaskFontFamily, TaskOccurrence
+from fpvs_studio.gui.components import SectionCard
 from fpvs_studio.gui.condition_modifier_dialog import (
     ConditionModifierDialog,
     _read_preview_thumbnails,
@@ -98,6 +99,14 @@ def test_counting_tabs_fit_and_preserve_baseline_fields(qtbot, tmp_path: Path, s
     dialog.show()
     assert dialog.duration_spin.value() == 30
     assert dialog.copy_button.isVisible()
+    phase_sections = dialog.overview.findChildren(SectionCard)
+    assert [section.title_label.text() for section in phase_sections] == [
+        "Session baseline", "Before FPVS", "During FPVS", "After FPVS",
+    ]
+    assert all(section.property("sectionCard") == "false" for section in phase_sections)
+    for section in phase_sections:
+        text_color = section.title_label.palette().color(QPalette.ColorRole.WindowText)
+        assert (text_color.lightness() > 128) is dark
     for index in range(3):
         dialog.tabs.setCurrentIndex(index)
         _fit(dialog, size=size)

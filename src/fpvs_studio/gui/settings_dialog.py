@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio import __version__
 from fpvs_studio.gui.components import (
     DialogHeader,
+    PathValueLabel,
     apply_dialog_theme,
     mark_error_text,
     mark_primary_action,
@@ -198,23 +199,31 @@ class AppSettingsDialog(QDialog):
         workspace_layout = QVBoxLayout(workspace)
         workspace_layout.setContentsMargins(0, 0, 0, 0)
         workspace_layout.setSpacing(8)
-        workspace_actions = QHBoxLayout()
-        workspace_actions.setSpacing(12)
-        self.root_folder_setup_button = QPushButton("Root Folder Setup...", self)
+        root_row = QHBoxLayout()
+        root_row.addWidget(_section_title("FPVS Studio Root Folder", workspace))
+        root_row.addStretch(1)
+        self.root_folder_setup_button = QPushButton("Root Folder Setup...", workspace)
         self.root_folder_setup_button.setObjectName("root_folder_setup_button")
-        self.root_folder_setup_button.setToolTip(str(fpvs_root_dir))
         mark_secondary_action(self.root_folder_setup_button)
         self.root_folder_setup_button.setEnabled(self._on_show_root_folder_setup is not None)
         self.root_folder_setup_button.clicked.connect(self._show_root_folder_setup)
-        workspace_actions.addWidget(self.root_folder_setup_button, 1)
-        self.manage_templates_button = QPushButton("Manage Condition Templates...", self)
+        root_row.addWidget(self.root_folder_setup_button)
+        workspace_layout.addLayout(root_row)
+        self.root_folder_value = PathValueLabel(workspace)
+        self.root_folder_value.setObjectName("settings_root_folder_value")
+        self._set_workspace_root(fpvs_root_dir)
+        workspace_layout.addWidget(self.root_folder_value)
+
+        workspace_layout.addSpacing(12)
+        workspace_actions = QHBoxLayout()
+        workspace_actions.setSpacing(12)
+        self.manage_templates_button = QPushButton("Manage Condition Templates...", workspace)
         self.manage_templates_button.setObjectName("manage_condition_templates_button")
         mark_secondary_action(self.manage_templates_button)
         self.manage_templates_button.setEnabled(self._on_manage_condition_templates is not None)
         self.manage_templates_button.clicked.connect(self._manage_condition_templates)
-        workspace_actions.addWidget(self.manage_templates_button, 1)
-        workspace_layout.addLayout(workspace_actions)
-        self.library_button = QPushButton("Experiment Library / Manage Access...", self)
+        workspace_actions.addWidget(self.manage_templates_button)
+        self.library_button = QPushButton("Manage Library Access…", workspace)
         self.library_button.setObjectName("settings_experiment_library")
         self.library_button.setToolTip(
             "Connect with a lab access code or disconnect this computer."
@@ -222,7 +231,9 @@ class AppSettingsDialog(QDialog):
         mark_secondary_action(self.library_button)
         self.library_button.setVisible(on_show_library is not None)
         self.library_button.clicked.connect(self._show_library)
-        workspace_layout.addWidget(self.library_button)
+        workspace_actions.addWidget(self.library_button)
+        workspace_actions.addStretch(1)
+        workspace_layout.addLayout(workspace_actions)
         participant = QWidget(self)
         participant.setObjectName("settings_participant_section")
         participant.setProperty("settingsSection", "true")
@@ -422,14 +433,13 @@ class AppSettingsDialog(QDialog):
         advanced_layout.addWidget(_section_title("Developer tools", advanced))
         self.developer_mode_checkbox = QCheckBox("Enable developer mode", advanced)
         self.developer_mode_checkbox.setObjectName("developer_mode_checkbox")
+        self.developer_mode_checkbox.setToolTip("Restart FPVS Studio to apply this change.")
         self.developer_mode_checkbox.setChecked(developer_mode_requested)
         self.developer_mode_checkbox.setEnabled(on_developer_mode_changed is not None)
         self.developer_mode_checkbox.toggled.connect(self._toggle_developer_mode)
         advanced_layout.addWidget(self.developer_mode_checkbox)
         help_label = QLabel(
-            "Enables developer tools, including publishing experiments to the Library. "
-            "Changes take effect after restarting FPVS Studio. "
-            "Publishing also requires your GitHub account's write access.", advanced,
+            "Publishing to the Experiment Library requires GitHub write access.", advanced,
         )
         help_label.setWordWrap(True)
         advanced_layout.addWidget(help_label)
@@ -472,21 +482,19 @@ class AppSettingsDialog(QDialog):
         self.crash_reports_checkbox.toggled.connect(self._configure_crash_reports)
         diagnostics_layout.addWidget(self.crash_reports_checkbox)
         crash_help = QLabel(
-            "After Studio stops unexpectedly, send a small report when you next open it. "
-            "Reports contain the Studio and OS versions, failure category and sanitized "
+            "Studio sends a report on the next launch after a crash. "
+            "Reports contain the Studio and OS versions, failure category, and sanitized "
             "stack locations. They exclude error messages, full logs, projects, stimuli "
-            "and participant records. Reports go to the FPVS Studio maintainer through "
-            "the reporting service, which sends an email notification.", diagnostics,
+            "and participant records. The reporting service notifies the Studio maintainer.",
+            diagnostics,
         )
         crash_help.setWordWrap(True)
         crash_help.setProperty("dialogHelp", "true")
         diagnostics_layout.addWidget(crash_help)
         consent_help = QLabel(
-            "On by default. You can turn this off at any time using the switch above. "
-            "Your choice is saved on this computer. Turning it off discards queued reports "
-            "and revokes access when connected. Reports already sent or in flight "
-            "cannot be recalled. "
-            "Manual bug reports remain available in the File menu.", diagnostics,
+            "This setting applies to this computer. Turning it off discards queued reports "
+            "and revokes access when connected. Reports already sent or in transit "
+            "cannot be recalled. Use File to send a manual bug report.", diagnostics,
         )
         consent_help.setWordWrap(True)
         consent_help.setProperty("dialogHelp", "true")
@@ -744,7 +752,12 @@ class AppSettingsDialog(QDialog):
             return
         updated_root = self._on_show_root_folder_setup(self)
         if updated_root is not None:
-            self.root_folder_setup_button.setToolTip(str(updated_root))
+            self._set_workspace_root(updated_root)
+
+    def _set_workspace_root(self, root: Path) -> None:
+        full_path = str(root)
+        self.root_folder_value.set_path_text(full_path)
+        self.root_folder_value.setAccessibleName(f"FPVS Studio Root Folder: {full_path}")
 
     def _show_library(self) -> None:
         if self._on_show_library is not None:

@@ -42,6 +42,7 @@ from fpvs_studio.core.serialization import (
 )
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import document_runtime, main_window, run_page
+from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.run_page import (
     TEST_MODE_PARTICIPANT_NUMBER,
@@ -389,7 +390,9 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
     readiness_text = _list_widget_text(run_readiness_list)
     assert "[OK]" not in readiness_text
     assert "[TODO]" not in readiness_text
-    assert "fullscreen session with display and timing checks" in readiness_text.lower()
+    assert readiness_text == ""
+    assert window.run_page.readiness_summary_value.text() == "Add at least one condition."
+    assert "display and timing checks" in run_launch_button.toolTip().lower()
     assert run_status_label.text()
 
     _prepare_compile_ready_project(window, tmp_path / "home-status-preflight")
@@ -435,6 +438,53 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
             in window.run_page.summary_text.toPlainText().lower()
         ),
     )
+
+
+@pytest.mark.parametrize("size", [(960, 640), (1120, 720)])
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_run_controls_and_session_details_fit(
+    qtbot, controller, tmp_path, size, background,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Run Layout")
+    page = run_page.RunPage(document)
+    qtbot.addWidget(page)
+    page.setPalette(QPalette(QColor(background)))
+    apply_studio_theme(page)
+    page.resize(*size)
+    page.show()
+    _prepare_compile_ready_project(window, tmp_path / "run-layout")
+    page.refresh()
+    QApplication.processEvents()
+
+    assert page.size().toTuple() == size
+    assert page.launch_button.y() < page.compile_button.y()
+    card = page.runtime_settings_editor.card
+    assert card is not None and card.subtitle_label is None
+    assert card.title_label.y() <= card.card_layout.contentsMargins().top() + 2
+    for section in (
+        card,
+        page.launch_button.parentWidget(),
+        page.summary_text.parentWidget(),
+        page.readiness_checklist.parentWidget(),
+    ):
+        assert section.property("sectionCard") == "false"
+    scope_label = page.runtime_background_scope_label
+    assert scope_label.isVisible()
+    assert scope_label.contentsRect().width() >= scope_label.fontMetrics().horizontalAdvance(
+        scope_label.text(),
+    )
+    assert page.readiness_checklist.focusPolicy() == Qt.FocusPolicy.StrongFocus
+    assert page.readiness_checklist.accessibleName() == "Launch readiness checks"
+    assert not page.readiness_summary_value.isVisible()
+    assert page.summary_text.accessibleName() == "Session details"
+    assert page.summary_text.placeholderText() == "No session preview yet."
+    _assert_visible_children_within_parent(page, allow_scroll_content=True)
+    for button in (page.launch_button, page.compile_button):
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+
+    page.compile_button.click()
+    assert "Session ID:" in page.summary_text.toPlainText()
+    assert "Block 1:" in page.summary_text.toPlainText()
 
 
 def test_run_page_launch_uses_fixed_current_runtime_defaults(

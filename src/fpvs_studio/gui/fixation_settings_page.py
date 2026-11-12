@@ -25,7 +25,6 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.randomization import supports_independent_randomization
 from fpvs_studio.core.validation import ConditionFixationGuidance
-from fpvs_studio.gui.animations import ButtonHoverAnimator
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     FiniteDoubleSpinBox,
@@ -181,7 +180,6 @@ class ResponseKeyPickerPopover(QFrame):
         super().__init__(parent, Qt.WindowType.Popup)
         self.setObjectName("response_key_picker_popover")
         self._key_buttons: dict[str, QPushButton] = {}
-        self._hover_animators: list[ButtonHoverAnimator] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -207,7 +205,6 @@ class ResponseKeyPickerPopover(QFrame):
                     button.setMinimumWidth(36)
                 button.clicked.connect(lambda _checked=False, value=key: self._select_key(value))
                 self._key_buttons[key] = button
-                self._hover_animators.append(ButtonHoverAnimator(button, parent=self))
                 row_layout.addWidget(button)
             row_layout.addStretch(1)
             layout.addLayout(row_layout)
@@ -398,7 +395,7 @@ class FixationSettingsEditor(QWidget):
         self.target_count_max_spin.valueChanged.connect(self._apply_fixation_settings)
 
         self.no_repeat_count_checkbox = QCheckBox(
-            "No immediate repeat between consecutive condition runs",
+            "Use different change counts in consecutive runs",
             self,
         )
         self.no_repeat_count_checkbox.setObjectName("no_immediate_repeat_count_checkbox")
@@ -524,7 +521,7 @@ class FixationSettingsEditor(QWidget):
         )
         self.fixation_behavior_layout.addRow("Minimum changes", self.target_count_min_spin)
         self.fixation_behavior_layout.addRow("Maximum changes", self.target_count_max_spin)
-        self.fixation_behavior_layout.addRow("No immediate repeat", self.no_repeat_count_checkbox)
+        self.fixation_behavior_layout.addRow(self.no_repeat_count_checkbox)
 
         self.fixation_timing_group = QWidget(self.fixation_panel)
         timing_layout = QFormLayout(self.fixation_timing_group)

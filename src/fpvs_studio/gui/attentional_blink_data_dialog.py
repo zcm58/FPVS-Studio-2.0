@@ -59,12 +59,14 @@ class AttentionalBlinkDataDialog(QDialog):
         root.setSpacing(12)
         self.data_card = SectionCard(
             title="T1 and T2 Accuracy",
-            subtitle="Compare T1 and T2 recall by SOA and inspect learning across numbered bursts.",
-            object_name="attentional_blink_data_card", parent=self,
+            object_name="attentional_blink_data_card", framed=False, parent=self,
         )
+        self.data_card.card_layout.setContentsMargins(0, 0, 0, 0)
         root.addWidget(self.data_card, 1)
         self.status_badge = StatusBadgeLabel(parent=self)
-        self.data_card.body_layout.addWidget(self.status_badge)
+        self.data_card.body_layout.addWidget(
+            self.status_badge, alignment=Qt.AlignmentFlag.AlignLeft,
+        )
         self.summary_label = QLabel(self)
         self.summary_label.setWordWrap(True)
         self.data_card.body_layout.addWidget(self.summary_label)
@@ -165,6 +167,7 @@ class AttentionalBlinkDataDialog(QDialog):
         self.status_badge.set_state(
             "error" if state == "error" else "pending" if state == "loading" else "info", title,
         )
+        self.status_badge.show()
         self.summary_label.setText(message)
         self.summary_label.setToolTip("")
         self.tabs.hide()
@@ -201,7 +204,7 @@ class AttentionalBlinkDataDialog(QDialog):
             return
         self._summary = result
         self.state_name = "populated"
-        self.status_badge.set_state("ready", "Data Ready")
+        self.status_badge.hide()
         self.summary_label.setText(
             f"{result.included_session_count} included sessions · "
             f"{result.included_burst_count} included bursts · "
@@ -306,6 +309,7 @@ class AttentionalBlinkDataDialog(QDialog):
         )
         self._active_export_task = task
         self.status_badge.set_state("pending", "Exporting Excel")
+        self.status_badge.show()
         self.feedback_label.setText("Writing the workbook in the background…")
         self.feedback_label.setToolTip("")
         self.feedback_label.show()

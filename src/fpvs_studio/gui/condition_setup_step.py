@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.attentional_blink_stream import describe_attentional_blink_stream
+from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     ExperimentCategory,
@@ -421,9 +422,7 @@ class ConditionSetupStep(QWidget):
         list_layout = QVBoxLayout(list_panel)
         list_layout.setContentsMargins(0, 0, 0, 0)
         list_layout.setSpacing(8)
-        self.condition_list_hint = QLabel(
-            "Add a condition, then choose its stimuli.", list_panel
-        )
+        self.condition_list_hint = QLabel(list_panel)
         self.condition_list_hint.setObjectName("setup_conditions_list_hint")
         self.condition_list_hint.setProperty("setupMetricLabel", "true")
         self.condition_list_hint.setWordWrap(True)
@@ -579,9 +578,8 @@ class ConditionSetupStep(QWidget):
             self.condition_name_edit,
         )
 
-        self.condition_details_section = QFrame(self)
+        self.condition_details_section = QWidget(self)
         self.condition_details_section.setObjectName("setup_conditions_details_section")
-        self.condition_details_section.setProperty("conditionDetailsSection", "true")
         self.condition_details_section.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum,
         )
@@ -630,9 +628,8 @@ class ConditionSetupStep(QWidget):
         self.ab_stream_summary.setWordWrap(True)
         self.ab_stream_summary.hide()
 
-        self.all_conditions_section = QFrame(list_panel)
+        self.all_conditions_section = QWidget(list_panel)
         self.all_conditions_section.setObjectName("setup_conditions_all_conditions_section")
-        self.all_conditions_section.setProperty("conditionDetailsSection", "true")
         all_conditions_layout = QVBoxLayout(self.all_conditions_section)
         all_conditions_layout.setContentsMargins(10, 8, 10, 8)
         all_conditions_layout.setSpacing(6)
@@ -646,10 +643,6 @@ class ConditionSetupStep(QWidget):
         repeats_row.addWidget(self.target_repeats_spin, 1)
         repeats_row.addWidget(self.repeat_calculator_button)
         all_conditions_layout.addLayout(repeats_row)
-        repeat_help = QLabel("Advisory target; timing is unchanged.", self.all_conditions_section)
-        repeat_help.setProperty("setupMetricLabel", "true")
-        repeat_help.setWordWrap(True)
-        all_conditions_layout.addWidget(repeat_help)
         list_layout.addWidget(self.all_conditions_section)
 
         self.base_source_card = SetupSourceCard(
@@ -777,8 +770,6 @@ class ConditionSetupStep(QWidget):
         workspace_layout.addWidget(list_panel, 0)
         workspace_layout.addWidget(detail_panel, 1)
         if document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
-            self.condition_details_section.setProperty("conditionDetailsSection", "false")
-            self.condition_details_section.setProperty("setupFlatSection", "true")
             self.condition_details_section.setMinimumHeight(0)
             details_section_layout.setContentsMargins(12, 0, 0, 0)
             details_section_layout.setSpacing(12)
@@ -821,6 +812,8 @@ class ConditionSetupStep(QWidget):
         title_label = QLabel(title, column)
         title_label.setObjectName(f"{editor.objectName()}_label")
         title_label.setProperty("setupMetricValue", "true")
+        title_label.setBuddy(editor)
+        editor.setToolTip("Enter one word or short phrase per line.")
         layout.addWidget(title_label)
         layout.addWidget(editor)
         layout.addWidget(count_label)
@@ -881,6 +874,8 @@ class ConditionSetupStep(QWidget):
                 self.condition_list.setCurrentItem(first_match)
         self._apply_condition_search()
         self._refresh_editor()
+
+    def _refresh_legacy_condition_actions(self) -> bool:
         conflicts = category_conflict_condition_ids(self._document.project)
         can_separate = (
             self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
@@ -908,7 +903,10 @@ class ConditionSetupStep(QWidget):
                 "This older experiment contains incompatible conditions. "
                 "Separate them into their own experiment to continue."
             )
-            self.condition_list_hint.show()
+        else:
+            self.condition_list_hint.clear()
+        self.condition_list_hint.setVisible(bool(conflicts))
+        return bool(conflicts)
 
     def flush_pending_edits(self) -> None:
         self._base_words_committer.flush()
@@ -1034,7 +1032,7 @@ class ConditionSetupStep(QWidget):
 
     def _refresh_editor(self, *_args: object) -> None:
         condition = self._current_condition()
-        self.condition_list_hint.show()
+        has_legacy_conflicts = self._refresh_legacy_condition_actions()
         enabled = condition is not None and not self.is_busy()
         self.condition_list.setEnabled(not self.is_busy())
         self.condition_search_edit.setEnabled(not self.is_busy())
@@ -1106,7 +1104,6 @@ class ConditionSetupStep(QWidget):
         if condition is None:
             self.condition_scope_label.setText("Add your first condition")
             self.condition_scope_label.setToolTip("")
-            self.condition_list_hint.setText("Add a condition, then choose its stimuli.")
             self.presentation_mode_help.setText("")
             self.presentation_mode_help.hide()
             with QSignalBlocker(self.condition_name_edit):
@@ -1163,16 +1160,17 @@ class ConditionSetupStep(QWidget):
                     "Add a catch condition for one extra target-absent sequence in this variant "
                     "block. Its position and SOA are randomized."
                 )
-            self.condition_list_hint.setText(
-                f"{masking.variant.title()} catch · once per variant block. "
-                "Its EEG marker is the condition's Trigger Code."
-                if masking is not None and condition.masking_catch else
-                f"{masking.variant.title()} masking · {masking.soa_ms:g} ms SOA. "
-                "Edit sources, colors and participant questions in Condition Modifiers."
-                if masking is not None else
-                "This condition has no stimulus sources. Add a condition modifier "
-                "or create a condition with image or word sources."
-            )
+            if not has_legacy_conflicts:
+                self.condition_list_hint.setText(
+                    f"{masking.variant.title()} catch · once per variant block. "
+                    "Its EEG marker is the condition's Trigger Code."
+                    if masking is not None and condition.masking_catch else
+                    "Edit sources, colors and participant questions in Condition Modifiers."
+                    if masking is not None else
+                    "This condition has no stimulus sources. Add a condition modifier "
+                    "or create a condition with image or word sources."
+                )
+                self.condition_list_hint.show()
             self.presentation_button.setEnabled(False)
             self.modality_combo.setEnabled(False)
             return
@@ -1183,20 +1181,16 @@ class ConditionSetupStep(QWidget):
         self.condition_scope_label.setText("This condition")
         self.condition_scope_label.setToolTip(condition.name)
         self.condition_scope_label.setAccessibleDescription(f"Editing {condition.name}")
-        if base_ready and oddball_ready:
-            self.condition_list_hint.clear()
-            self.condition_list_hint.hide()
-        elif modality == StimulusModality.WORD:
-            self.condition_list_hint.setText("Enter base and oddball words below, one per line.")
-        else:
-            self.condition_list_hint.setText(
-                "Choose Base Images and Oddball Images for this condition."
+        needs_neutral_background = (
+            condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
+            and not is_sinusoidal_neutral_background(
+                self._document.project.settings.display.background_color,
             )
-        contrast_mode = condition.duty_cycle_mode == DutyCycleMode.SINUSOIDAL
-        self.presentation_mode_help.setText(
-            "Neutral Gray required; set it in Timing." if contrast_mode else ""
         )
-        self.presentation_mode_help.setVisible(contrast_mode)
+        self.presentation_mode_help.setText(
+            "Choose Neutral Gray in Display & Session." if needs_neutral_background else ""
+        )
+        self.presentation_mode_help.setVisible(needs_neutral_background)
         with QSignalBlocker(self.condition_name_edit):
             self.condition_name_edit.setText(condition.name)
             self.condition_name_edit.setToolTip(condition.name)
@@ -1262,11 +1256,6 @@ class ConditionSetupStep(QWidget):
                 base_hz=protocol.base_hz, cycle_slots=protocol.oddball_every_n,
                 soa_ms=settings.soa_ms, t2_slot_index=settings.t2_slot_index,
             )
-            self.condition_list_hint.setText(
-                "Conditions"
-            )
-            self.condition_list_hint.setProperty("setupSourceTitle", "true")
-            self.condition_list_hint.show()
             recall_help = (
                 "Two questions after each burst record and score T1 and T2 recall separately."
                 if any(item.task_id == "ab-recall" for item in condition.post_task_bindings)

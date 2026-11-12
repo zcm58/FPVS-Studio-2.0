@@ -21,17 +21,11 @@ from PySide6.QtWidgets import (
 from fpvs_studio.core.project_bundle import BundleExportStage, BundleImportStage
 from fpvs_studio.gui.components import (
     PathValueLabel,
-    StatusBadgeLabel,
     mark_primary_action,
     mark_secondary_action,
     refresh_widget_style,
 )
-from fpvs_studio.gui.design_system import (
-    FONT_SIZE_BODY,
-    FONT_SIZE_PAGE_TITLE,
-    FONT_SIZE_SECTION_TITLE,
-    resolve_studio_theme,
-)
+from fpvs_studio.gui.design_system import FONT_SIZE_PAGE_TITLE, resolve_studio_theme
 
 _ProcessingStage = BundleExportStage | BundleImportStage
 _EXPORT_STEP_STAGE_ORDER: tuple[_ProcessingStage, ...] = (
@@ -126,13 +120,9 @@ class _BundleProcessingPage(QWidget):
         self,
         *,
         object_prefix: str,
-        eyebrow: str,
         title: str,
-        message: str,
-        detail: str,
-        status_badge_text: str,
         status_hint: str,
-        complete_badge_text: str,
+        complete_activity_text: str,
         stage_order: tuple[_ProcessingStage, ...],
         step_labels: dict[_ProcessingStage, tuple[str, str]],
         activity_labels: dict[_ProcessingStage, str] | None = None,
@@ -143,7 +133,7 @@ class _BundleProcessingPage(QWidget):
         self._activity_labels = activity_labels or {
             stage: label for stage, (_number, label) in step_labels.items()
         }
-        self._complete_badge_text = complete_badge_text
+        self._complete_activity_text = complete_activity_text
         self._default_title = title
         self.setObjectName(f"{object_prefix}_page")
         self.setProperty("bundleProcessingPage", "true")
@@ -153,9 +143,7 @@ class _BundleProcessingPage(QWidget):
         self.content = QFrame(self)
         self.content.setObjectName(f"{object_prefix}_content")
         self.content.setProperty("bundleProcessingCard", "true")
-        self.content.setMaximumWidth(980)
-        self.content.setMinimumHeight(350)
-        self.content.setMinimumWidth(0)
+        self.content.setMaximumWidth(880)
         self.content.setSizePolicy(
             QSizePolicy.Policy.Expanding,
             QSizePolicy.Policy.Preferred,
@@ -165,54 +153,34 @@ class _BundleProcessingPage(QWidget):
         content_layout.setContentsMargins(28, 24, 28, 24)
         content_layout.setSpacing(14)
 
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(18)
-        heading_layout = QVBoxLayout()
-        heading_layout.setContentsMargins(0, 0, 0, 0)
-        heading_layout.setSpacing(6)
-
-        self.eyebrow_label = QLabel(eyebrow, self.content)
-        self.eyebrow_label.setObjectName(f"{object_prefix}_eyebrow_label")
-        self.eyebrow_label.setProperty("bundleProcessingRole", "eyebrow")
-        self.eyebrow_label.setMinimumWidth(0)
-        heading_layout.addWidget(self.eyebrow_label)
-
         self.title_label = QLabel(title, self.content)
         self.title_label.setObjectName(f"{object_prefix}_title_label")
         self.title_label.setProperty("bundleProcessingRole", "title")
         self.title_label.setMinimumWidth(0)
+        self.title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.title_label.setWordWrap(True)
         title_font = self.title_label.font()
         title_font.setPointSize(FONT_SIZE_PAGE_TITLE)
         title_font.setBold(True)
         self.title_label.setFont(title_font)
-        heading_layout.addWidget(self.title_label)
+        content_layout.addWidget(self.title_label)
 
-        header_layout.addLayout(heading_layout, 1)
-
-        self.status_badge = StatusBadgeLabel(parent=self.content)
-        self.status_badge.setObjectName(f"{object_prefix}_status_badge")
-        self.status_badge.setProperty("bundleProcessingStatusBadge", "true")
-        self.status_badge.setMinimumWidth(132)
-        self.status_badge.set_state("info", status_badge_text)
-        header_layout.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignTop)
-        content_layout.addLayout(header_layout)
-
-        self.context_card = QFrame(self.content)
+        self.context_card = QWidget(self.content)
         self.context_card.setObjectName(f"{object_prefix}_context_card")
-        self.context_card.setProperty("bundleProcessingContext", "true")
         context_layout = QGridLayout(self.context_card)
-        context_layout.setContentsMargins(14, 10, 14, 10)
+        context_layout.setContentsMargins(0, 6, 0, 6)
         context_layout.setHorizontalSpacing(12)
-        context_layout.setVerticalSpacing(5)
+        context_layout.setVerticalSpacing(8)
         self.source_heading_label = QLabel("Source", self.context_card)
         self.source_heading_label.setProperty("bundleProcessingRole", "contextLabel")
-        self.source_value_label = PathValueLabel(parent=self.context_card)
+        self.source_value_label = PathValueLabel(parent=self.context_card, single_line=True)
         self.source_value_label.setObjectName(f"{object_prefix}_source_value")
+        self.source_value_label.setProperty("pathValue", "false")
         self.destination_heading_label = QLabel("Destination", self.context_card)
         self.destination_heading_label.setProperty("bundleProcessingRole", "contextLabel")
-        self.destination_value_label = PathValueLabel(parent=self.context_card)
+        self.destination_value_label = PathValueLabel(parent=self.context_card, single_line=True)
         self.destination_value_label.setObjectName(f"{object_prefix}_destination_value")
+        self.destination_value_label.setProperty("pathValue", "false")
         context_layout.addWidget(self.source_heading_label, 0, 0)
         context_layout.addWidget(self.source_value_label, 0, 1)
         context_layout.addWidget(self.destination_heading_label, 1, 0)
@@ -221,32 +189,10 @@ class _BundleProcessingPage(QWidget):
         self.context_card.hide()
         content_layout.addWidget(self.context_card)
 
-        self.message_label = QLabel(message, self.content)
-        self.message_label.setObjectName(f"{object_prefix}_message_label")
-        self.message_label.setProperty("bundleProcessingRole", "message")
-        self.message_label.setWordWrap(True)
-        self.message_label.setMinimumWidth(0)
-        message_font = self.message_label.font()
-        message_font.setPointSize(FONT_SIZE_SECTION_TITLE)
-        message_font.setBold(True)
-        self.message_label.setFont(message_font)
-        content_layout.addWidget(self.message_label)
-
-        self.detail_label = QLabel(detail, self.content)
-        self.detail_label.setObjectName(f"{object_prefix}_detail_label")
-        self.detail_label.setProperty("bundleProcessingRole", "detail")
-        self.detail_label.setWordWrap(True)
-        self.detail_label.setMinimumWidth(0)
-        detail_font = self.detail_label.font()
-        detail_font.setPointSize(FONT_SIZE_BODY)
-        self.detail_label.setFont(detail_font)
-        content_layout.addWidget(self.detail_label)
-
-        self.activity_card = QFrame(self.content)
+        self.activity_card = QWidget(self.content)
         self.activity_card.setObjectName(f"{object_prefix}_activity_card")
-        self.activity_card.setProperty("bundleProcessingActivity", "true")
         activity_layout = QHBoxLayout(self.activity_card)
-        activity_layout.setContentsMargins(14, 10, 14, 10)
+        activity_layout.setContentsMargins(0, 8, 0, 8)
         activity_layout.setSpacing(12)
         self.spinner = SpinnerWidget(parent=self.activity_card)
         activity_layout.addWidget(self.spinner)
@@ -285,7 +231,11 @@ class _BundleProcessingPage(QWidget):
         layout.setContentsMargins(40, 42, 40, 42)
         layout.setSpacing(0)
         layout.addStretch(1)
-        layout.addWidget(self.content, 0, Qt.AlignmentFlag.AlignHCenter)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(self.content, 1)
+        row.addStretch()
+        layout.addLayout(row)
         layout.addStretch(1)
         self.reset_steps()
 
@@ -300,9 +250,9 @@ class _BundleProcessingPage(QWidget):
     ) -> None:
         self.title_label.setText(title or self._default_title)
         self.source_heading_label.setText(source_label)
-        self.source_value_label.set_path_text(str(source_path), max_length=92)
+        self.source_value_label.set_path_text(str(source_path))
         self.destination_heading_label.setText(destination_label)
-        self.destination_value_label.set_path_text(str(destination_path), max_length=92)
+        self.destination_value_label.set_path_text(str(destination_path))
         self.context_card.show()
 
     def start(self) -> None:
@@ -321,15 +271,13 @@ class _BundleProcessingPage(QWidget):
         if stage == "complete":
             for step in self._steps.values():
                 step.set_state("complete")
-            self.status_badge.set_state("ready", self._complete_badge_text)
-            self.current_activity_label.setText("Complete")
+            self.current_activity_label.setText(self._complete_activity_text)
             self.spinner.stop()
             return
         if stage not in self._steps:
             return
         active_index = self._stage_order.index(stage)
         activity_text = self._activity_labels[stage]
-        self.status_badge.set_state("info", f"{activity_text}...")
         self.current_activity_label.setText(f"{activity_text}…")
         self.spinner.start()
         for index, step_stage in enumerate(self._stage_order):
@@ -356,16 +304,9 @@ class BundleExportProcessingPage(_BundleProcessingPage):
     def __init__(self, *, parent: QWidget | None = None) -> None:
         super().__init__(
             object_prefix="bundle_export_processing",
-            eyebrow="FPVS Studio Project Bundle",
             title="Exporting project bundle",
-            message="Preparing a portable copy of this project.",
-            detail=(
-                "Validating project settings, checking stimulus files, and writing the "
-                ".fpvsbundle archive."
-            ),
-            status_badge_text="Export running",
             status_hint="Keep FPVS Studio open until the export finishes.",
-            complete_badge_text="Bundle ready",
+            complete_activity_text="Bundle ready",
             stage_order=_EXPORT_STEP_STAGE_ORDER,
             step_labels=_EXPORT_STEP_LABELS,
             parent=parent,
@@ -378,31 +319,14 @@ class BundleImportProcessingPage(_BundleProcessingPage):
     def __init__(self, *, parent: QWidget | None = None) -> None:
         super().__init__(
             object_prefix="bundle_import_processing",
-            eyebrow="FPVS Studio Project Import",
             title="Importing project bundle",
-            message="Creating a local FPVS Studio project from the selected bundle.",
-            detail=(
-                "Verifying the bundle, setting up base and oddball image filepaths, "
-                "and preparing the imported project."
-            ),
-            status_badge_text="Import running",
             status_hint="Keep FPVS Studio open until the import finishes.",
-            complete_badge_text="Project ready",
+            complete_activity_text="Project ready",
             stage_order=_IMPORT_STEP_STAGE_ORDER,
             step_labels=_IMPORT_STEP_LABELS,
             activity_labels=_IMPORT_ACTIVITY_LABELS,
             parent=parent,
         )
-        self.content.setMinimumWidth(820)
-        self.context_card.setProperty("bundleProcessingContext", "flat")
-        self.activity_card.setProperty("bundleProcessingActivity", "flat")
-        context_layout = self.context_card.layout()
-        if isinstance(context_layout, QGridLayout):
-            context_layout.setContentsMargins(0, 6, 0, 6)
-            context_layout.setVerticalSpacing(8)
-        activity_layout = self.activity_card.layout()
-        if activity_layout is not None:
-            activity_layout.setContentsMargins(0, 8, 0, 8)
 
 
 def _format_file_size(size_bytes: int) -> str:
@@ -432,28 +356,15 @@ class BundleExportResultPage(QWidget):
         card = QFrame(self)
         card.setObjectName("bundle_export_result_card")
         card.setProperty("bundleResultCard", "true")
-        card.setMaximumWidth(880)
-        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        card.setMaximumWidth(760)
+        card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(28, 24, 28, 24)
         card_layout.setSpacing(13)
 
-        header = QHBoxLayout()
-        header.setContentsMargins(0, 0, 0, 0)
-        header.setSpacing(18)
-        success_icon = QLabel("✓", card)
-        success_icon.setObjectName("bundle_export_result_success_icon")
-        success_icon.setProperty("bundleResultRole", "successIcon")
-        success_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        success_icon.setFixedSize(68, 68)
-        header.addWidget(success_icon, 0, Qt.AlignmentFlag.AlignTop)
-
         heading = QVBoxLayout()
         heading.setContentsMargins(0, 0, 0, 0)
         heading.setSpacing(5)
-        eyebrow = QLabel("PROJECT EXPORT", card)
-        eyebrow.setProperty("bundleResultRole", "eyebrow")
-        heading.addWidget(eyebrow)
         title = QLabel("Project bundle ready", card)
         title.setObjectName("bundle_export_result_title")
         title.setProperty("bundleResultRole", "title")
@@ -461,68 +372,49 @@ class BundleExportResultPage(QWidget):
         self.subtitle_label = QLabel(card)
         self.subtitle_label.setObjectName("bundle_export_result_subtitle")
         self.subtitle_label.setProperty("bundleResultRole", "lead")
+        self.subtitle_label.setTextFormat(Qt.TextFormat.PlainText)
         self.subtitle_label.setWordWrap(True)
         heading.addWidget(self.subtitle_label)
-        self.status_badge = StatusBadgeLabel(parent=card)
-        self.status_badge.setObjectName("bundle_export_result_status")
-        self.status_badge.set_state("ready", "Export complete")
-        heading.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignLeft)
-        header.addLayout(heading, 1)
-        card_layout.addLayout(header)
+        card_layout.addLayout(heading)
 
-        file_card = QFrame(card)
-        file_card.setObjectName("bundle_export_result_file_card")
-        file_card.setProperty("bundleWorkflowCard", "true")
-        file_layout = QHBoxLayout(file_card)
-        file_layout.setContentsMargins(16, 12, 16, 12)
-        file_layout.setSpacing(12)
-        file_mark = QLabel("FPVS", file_card)
-        file_mark.setProperty("bundleWorkflowRole", "fileMark")
-        file_mark.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        file_mark.setFixedSize(48, 48)
-        file_layout.addWidget(file_mark)
-        file_text = QVBoxLayout()
+        file_text = QHBoxLayout()
         file_text.setContentsMargins(0, 0, 0, 0)
-        file_text.setSpacing(3)
-        self.filename_label = QLabel(file_card)
+        file_text.setSpacing(12)
+        self.filename_label = PathValueLabel(parent=card, single_line=True)
         self.filename_label.setObjectName("bundle_export_result_filename")
+        self.filename_label.setProperty("pathValue", "false")
         self.filename_label.setProperty("bundleWorkflowRole", "fileName")
-        self.metadata_label = QLabel(file_card)
+        self.metadata_label = QLabel(card)
         self.metadata_label.setObjectName("bundle_export_result_metadata")
         self.metadata_label.setProperty("bundleWorkflowRole", "meta")
-        file_text.addWidget(self.filename_label)
+        file_text.addWidget(self.filename_label, 1)
         file_text.addWidget(self.metadata_label)
-        file_layout.addLayout(file_text, 1)
-        card_layout.addWidget(file_card)
+        card_layout.addLayout(file_text)
 
         saved_heading = QLabel("Saved to", card)
         saved_heading.setProperty("bundleWorkflowRole", "sectionTitle")
-        card_layout.addWidget(saved_heading)
-        self.path_label = PathValueLabel(parent=card)
+        self.path_label = PathValueLabel(parent=card, single_line=True)
         self.path_label.setObjectName("bundle_export_result_path")
-        card_layout.addWidget(self.path_label)
+        self.path_label.setProperty("pathValue", "false")
+        location = QHBoxLayout()
+        location.setSpacing(12)
+        location.addWidget(saved_heading)
+        location.addWidget(self.path_label, 1)
+        card_layout.addLayout(location)
 
-        contents_card = QFrame(card)
-        contents_card.setObjectName("bundle_export_result_contents")
-        contents_card.setProperty("bundleWorkflowCard", "true")
-        contents_layout = QVBoxLayout(contents_card)
-        contents_layout.setContentsMargins(16, 12, 16, 12)
+        contents_layout = QVBoxLayout()
+        contents_layout.setContentsMargins(0, 0, 0, 0)
         contents_layout.setSpacing(7)
-        contents_heading = QLabel("Bundle contents", contents_card)
+        contents_heading = QLabel("Bundle contents", card)
         contents_heading.setProperty("bundleWorkflowRole", "sectionTitle")
         contents_layout.addWidget(contents_heading)
-        self.file_count_label = QLabel(contents_card)
-        for label in (
-            QLabel("✓  Project settings", contents_card),
-            self.file_count_label,
-            QLabel("✓  Manifest and integrity hashes", contents_card),
-        ):
-            label.setProperty("bundleWorkflowRole", "checkItem")
-            contents_layout.addWidget(label)
-        excluded = QLabel("Not included: cache, logs, and runs", contents_card)
+        self.contents_label = QLabel(card)
+        self.contents_label.setWordWrap(True)
+        contents_layout.addWidget(self.contents_label)
+        excluded = QLabel("Not included: cache, logs, and runs", card)
         excluded.setProperty("bundleWorkflowRole", "meta")
         contents_layout.addWidget(excluded)
-        card_layout.addWidget(contents_card)
+        card_layout.addLayout(contents_layout)
 
         self.copy_path_button = QPushButton("Copy Path", card)
         self.copy_path_button.setObjectName("bundle_export_result_copy_path")
@@ -546,15 +438,14 @@ class BundleExportResultPage(QWidget):
         buttons.addWidget(self.done_button)
         card_layout.addLayout(buttons)
 
-        unchanged_note = QLabel("The current project remains unchanged.", card)
-        unchanged_note.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        unchanged_note.setProperty("bundleWorkflowRole", "meta")
-        card_layout.addWidget(unchanged_note)
-
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(40, 36, 40, 36)
+        layout.setContentsMargins(40, 28, 40, 28)
         layout.addStretch(1)
-        layout.addWidget(card)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(card, 1)
+        row.addStretch()
+        layout.addLayout(row)
         layout.addStretch(1)
 
     def set_result(
@@ -565,17 +456,18 @@ class BundleExportResultPage(QWidget):
         packaged_file_count: int,
     ) -> None:
         self._bundle_path = Path(bundle_path)
-        self.subtitle_label.setText(
-            f"{project_name} is ready to share with another FPVS Studio user."
-        )
-        self.filename_label.setText(self._bundle_path.name)
+        self.subtitle_label.setText(project_name)
+        self.filename_label.set_path_text(self._bundle_path.name)
         try:
             size_text = _format_file_size(self._bundle_path.stat().st_size)
         except OSError:
             size_text = "Size unavailable"
-        self.metadata_label.setText(f"{size_text}   •   Created just now")
-        self.path_label.set_path_text(str(self._bundle_path), max_length=110)
-        self.file_count_label.setText(f"✓  {packaged_file_count:,} packaged files")
+        self.metadata_label.setText(size_text)
+        self.path_label.set_path_text(str(self._bundle_path))
+        self.contents_label.setText(
+            f"Project settings, {packaged_file_count:,} packaged files, "
+            "manifest and integrity hashes"
+        )
 
     def _request_copy_path(self) -> None:
         if self._bundle_path is not None:

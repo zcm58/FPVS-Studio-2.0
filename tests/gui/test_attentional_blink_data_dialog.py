@@ -73,22 +73,28 @@ def dialog(qtbot, tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("size", [(920, 600), (1080, 680)])
-def test_data_and_partial_recall_remain_readable_at_minimum_and_default(dialog, size):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_data_and_partial_recall_remain_readable_at_minimum_and_default(dialog, size, background):
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     dialog.resize(*size)
     assert dialog.is_loading
     assert not dialog.close_button.isEnabled()
     DeferredTask.instances[-1].complete(_summary())
     QApplication.processEvents()
     assert dialog.state_name == "populated"
-    assert dialog.windowTitle() == "T1 and T2 Accuracy â€” FPVS Studio"
+    assert dialog.windowTitle() == "T1 and T2 Accuracy — FPVS Studio"
     assert dialog.data_card.title_label.text() == "T1 and T2 Accuracy"
+    assert dialog.data_card.property("sectionCard") == "false"
+    assert not dialog.status_badge.isVisible()
     assert dialog.soa_table.columnCount() == 7
     assert dialog.soa_table.item(0, 1).text() == "4"
     assert dialog.soa_table.item(0, 2).text() == "1"
     assert dialog.soa_table.item(0, 3).text() == "1 / 1"
     assert dialog.soa_table.item(0, 4).text() == "100.0%"
     assert dialog.soa_table.item(0, 5).text() == "0 / 0"
-    assert dialog.soa_table.item(0, 6).text() == "â€”"
+    assert dialog.soa_table.item(0, 6).text() == "—"
     assert dialog.soa_table.horizontalScrollBar().maximum() == 0
     for column in range(dialog.soa_table.columnCount()):
         header = dialog.soa_table.horizontalHeaderItem(column)
@@ -98,7 +104,7 @@ def test_data_and_partial_recall_remain_readable_at_minimum_and_default(dialog, 
         assert dialog.soa_table.item(0, column).textAlignment() == Qt.AlignmentFlag.AlignCenter
     assert "interrupted final write" in dialog.summary_label.text()
     assert dialog.bursts_table.item(0, 1).text() == "1"
-    assert dialog.bursts_table.item(0, 3).text() == "3 â†’ 3"
+    assert dialog.bursts_table.item(0, 3).text() == "3 → 3"
     assert dialog.bursts_table.item(0, 4).text() == "Yes"
     assert "aborted" in dialog.bursts_table.item(0, 8).text()
     assert "long-session-id" in dialog.bursts_table.item(0, 0).toolTip()

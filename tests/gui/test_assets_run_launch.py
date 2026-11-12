@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -17,6 +18,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
 )
 from tests.gui.helpers import (
+    _assert_visible_children_within_parent,
     _ImmediateProgressTask,
     _open_created_project,
     _prepare_compile_ready_project,
@@ -25,6 +27,8 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.enums import RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.gui.assets_pages import AssetsPage
+from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.main_window import ParticipantNumberDialog
 from fpvs_studio.runtime import launcher as runtime_launcher
@@ -78,7 +82,47 @@ def test_assets_preprocessing_import_and_materialize_updates_status(
         in window.document.project.stimulus_sets[0].available_variants
     )
     assert window.document.manifest is not None
-    assert "Catalog status:" in window.assets_page.assets_status_text.toPlainText()
+    status = window.assets_page.assets_status_text.toPlainText()
+    assert "Catalog:" in status
+    assert "Enabled variants:" not in status
+
+
+@pytest.mark.parametrize("size", [(960, 640), (1120, 720)])
+def test_assets_tools_fit_and_keep_full_source_path(
+    qtbot, controller, tmp_path, monkeypatch, size,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Stimuli Manager")
+    page = AssetsPage(document)
+    qtbot.addWidget(page)
+    apply_studio_theme(page)
+    page.resize(*size)
+    page.show()
+    QApplication.processEvents()
+    assert "Add a condition in Setup" in page.assets_status_text.toPlainText()
+    assert not page.import_source_button.isEnabled()
+
+    source_parent = tmp_path / "long-experiment-stimulus-source-folder"
+    _prepare_compile_ready_project(window, source_parent)
+    with monkeypatch.context() as missing_sources:
+        missing_sources.setattr(document, "condition_rows", lambda: [])
+        page.refresh()
+        assert page.assets_status_text.toPlainText() == (
+            "Add stimulus sources in Setup → Conditions."
+        )
+    page.refresh()
+    page.assets_table.selectRow(0)
+    QApplication.processEvents()
+
+    assert page.size().toTuple() == size
+    source = page.assets_table.item(0, 2)
+    assert source.text() == document.condition_rows()[0].stimulus_set.source_dir
+    assert source.toolTip() == source.text()
+    assert page.import_source_button.isEnabled()
+    assert page.assets_table.accessibleName() == "Stimulus sources"
+    assert not page.shell.page_container.scroll_area.verticalScrollBar().isVisible()
+    _assert_visible_children_within_parent(page)
+    for button in (page.import_source_button, page.refresh_button, page.materialize_button):
+        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
 
 
 def test_assets_import_allows_mixed_resolution_for_later_normalization(
@@ -352,7 +396,7 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
     _prepare_compile_ready_project(window, tmp_path / "preview-then-launch")
 
     window.run_page.compile_session()
-    assert "session preview refreshed" in window.run_page.summary_text.toPlainText().lower()
+    assert "Session ID:" in window.run_page.summary_text.toPlainText()
 
     original_compile = window.document.compile_session
     compile_calls: list[float] = []

@@ -12,6 +12,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QLabel,
     QMessageBox,
 )
@@ -43,7 +44,9 @@ def test_review_actions_share_bottom_navigation_and_switch_with_steps(
         assert not guide.setup_wizard_return_home_button.isVisible()
         assert_visible_children_within_parent(navigation)
         assert_visible_children_within_parent(guide.review_step_surface)
-        card_bottom = guide.step_card.mapTo(guide, guide.step_card.rect().bottomLeft()).y()
+        workspace_bottom = guide.step_workspace.mapTo(
+            guide, guide.step_workspace.rect().bottomLeft(),
+        ).y()
         buttons = (
             guide.review_return_home_button,
             guide.setup_wizard_back_button,
@@ -52,8 +55,8 @@ def test_review_actions_share_bottom_navigation_and_switch_with_steps(
         for button in buttons:
             assert button.isVisible()
             assert button.parentWidget() is navigation
-            assert not guide.step_card.isAncestorOf(button)
-            assert button.mapTo(guide, button.rect().topLeft()).y() > card_bottom
+            assert not guide.step_workspace.isAncestorOf(button)
+            assert button.mapTo(guide, button.rect().topLeft()).y() > workspace_bottom
             assert button.mapTo(guide, button.rect().bottomLeft()).y() < guide.height()
             assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
         for left, right in zip(buttons, buttons[1:], strict=False):
@@ -119,21 +122,25 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     guide.fixation_settings_editor.fixation_accuracy_checkbox.setChecked(True)
     guide.fixation_settings_editor._set_response_key("g")
     window.main_stack.setCurrentWidget(guide)
+    window.document.update_display_settings(preferred_refresh_hz=None)
     guide.open_wizard(step_key="review")
     QApplication.processEvents()
     assert guide.step_stack.currentWidget() is guide.review_step_surface
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     QApplication.processEvents()
-    review_card = guide.review_card
-    label_text = "\n".join(label.text() for label in review_card.findChildren(QLabel))
-    assert "Review Your Experiment" in label_text
+    review_card = guide.review_checklist_container
+    label_text = "\n".join(
+        label.text() for label in review_card.findChildren(QLabel) if label.isVisible()
+    )
+    assert guide.shell.title_label.text() == "Review"
     assert "2 conditions" in label_text
-    assert "4 presentations" in label_text
-    assert "Accuracy tracking: On" in label_text
-    assert "Response: G within" in label_text
+    assert "2 blocks · 4 presentations" in label_text
+    assert "Accuracy tracking: G" in label_text
+    assert "response window" in label_text
+    assert label_text.count("Accuracy tracking:") == 1
     assert "Participant tutorial: On" in label_text
-    assert "Task flow: 0 pre-condition, 0 post-condition bindings" in label_text
-    assert "Monitor:" in label_text
+    assert "Participant tasks:" not in label_text
+    assert "Refresh rate: Not set" in label_text
     assert "Display verification required" not in label_text
     assert not [
         label
@@ -144,8 +151,13 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
     assert not any(item.fixation_edit_button.isVisible() for item in guide._review_summary_widgets)
     assert_visible_children_within_parent(review_card)
 
+    window.document.update_display_settings(preferred_refresh_hz=120)
     guide.open_wizard(step_key="review", allow_step_jumps=True)
     QApplication.processEvents()
+    assert any(
+        label.isVisible() and label.text() == "Refresh rate: 120 Hz"
+        for label in review_card.findChildren(QLabel)
+    )
     assert_visible_children_within_parent(guide.review_step_surface)
     assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
     for label in review_card.findChildren(QLabel):
@@ -208,7 +220,32 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_review_aligns_card_rows_with_session_spanning_size_and_response_at_setup_minimum(
+def test_review_uses_singular_counts_at_setup_minimum(
+    qtbot, controller: StudioController, tmp_path: Path, background,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Review Counts")
+    condition_id = document.create_condition(name="Faces")
+    document.update_condition_timing(presentation_counts={condition_id: 1})
+    guide = window.setup_wizard_page
+    palette = guide.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    guide.setPalette(palette)
+    window.resize(1120, 820)
+    window.show_setup_wizard(step_key="review")
+    QApplication.processEvents()
+
+    checklist_labels = guide.review_checklist_container.findChildren(QLabel)
+    labels = [label for label in checklist_labels if label.isVisible()]
+    assert any(label.text().startswith("1 condition · ") for label in labels)
+    assert any(label.text() == "1 block · 1 presentation" for label in labels)
+    assert_visible_children_within_parent(guide.review_step_surface)
+    for label in labels:
+        if label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width()), label.text()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
+def test_review_aligns_summary_rows_with_session_spanning_size_and_response_at_setup_minimum(
     qtbot, controller: StudioController, tmp_path: Path, background,
 ):
     document, window = _open_created_project(controller, qtbot, tmp_path, "Review grouping")
@@ -226,6 +263,8 @@ def test_review_aligns_card_rows_with_session_spanning_size_and_response_at_setu
     window.show_setup_wizard(step_key="review", allow_step_jumps=True)
     QApplication.processEvents()
     assert guide.review_step_surface.content.maximumWidth() == 1040
+    assert guide.review_step_surface.content is guide.review_checklist_container
+    assert not isinstance(guide.review_checklist_container, QFrame)
     assert guide.review_step_surface.content.mapTo(
         guide.review_step_surface, QPoint(0, 0),
     ).y() == 24
@@ -234,6 +273,10 @@ def test_review_aligns_card_rows_with_session_spanning_size_and_response_at_setu
     assert set(sections) == {
         "project", "conditions", "experiment", "display", "session", "image_size", "response",
     }
+    for section in sections.values():
+        assert section.parentWidget() is guide.review_checklist_container
+        assert section.property("reviewSummarySection") == "true"
+        assert section.property("sectionCard") != "true"
     for left_key, right_key in (("project", "conditions"), ("experiment", "display")):
         left, right = (sections[key].geometry() for key in (left_key, right_key))
         assert left.top() == right.top()
@@ -253,7 +296,7 @@ def test_review_aligns_card_rows_with_session_spanning_size_and_response_at_setu
     assert sections["experiment"].geometry().bottom() < session.top()
     assert guide.review_checklist_layout.verticalSpacing() == 8
     assert_visible_children_within_parent(guide.review_step_surface)
-    for label in guide.review_card.findChildren(QLabel):
+    for label in guide.review_checklist_container.findChildren(QLabel):
         if label.isVisible() and label.text():
             if label.wordWrap():
                 assert label.height() >= label.heightForWidth(label.width()), label.text()
@@ -275,13 +318,15 @@ def test_setup_review_reports_effective_tutorial_and_response_state(
     window.resize(1120, 720)
     guide.open_wizard(step_key="review", allow_step_jumps=True)
     QApplication.processEvents()
-    text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
+    labels = guide.review_checklist_container.findChildren(QLabel)
+    text = "\n".join(label.text() for label in labels)
     assert "Accuracy tracking: Off" in text
-    assert "Response scoring: Off" in text
+    assert "Response scoring:" not in text
+    assert text.count("Accuracy tracking:") == 1
     assert "Participant tutorial: Off (accuracy tracking is off)" in text
     assert "Participant tutorial: On" not in text
     assert_visible_children_within_parent(guide.review_step_surface)
-    for label in guide.review_card.findChildren(QLabel):
+    for label in guide.review_checklist_container.findChildren(QLabel):
         if label.isVisible() and label.wordWrap():
             assert label.height() >= label.heightForWidth(label.width()), label.text()
 
@@ -294,7 +339,8 @@ def test_setup_review_reports_effective_tutorial_and_response_state(
     assert guide.project_overview_editor.participant_tutorial_checkbox.isVisible()
     guide.project_overview_editor.participant_tutorial_checkbox.setChecked(False)
     guide.open_wizard(step_key="review", allow_step_jumps=True)
-    text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
+    labels = guide.review_checklist_container.findChildren(QLabel)
+    text = "\n".join(label.text() for label in labels)
     assert "Participant tutorial: Off" in text
     assert "accuracy tracking is off" not in text
 

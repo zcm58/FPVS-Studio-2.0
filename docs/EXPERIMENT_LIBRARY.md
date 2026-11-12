@@ -86,7 +86,7 @@ Download from library** from Welcome or Home. Create Project also offers **Creat
 manually**, followed by the existing category, template, name and folder steps. Back
 returns through those steps without discarding a manual draft. Selecting the Library
 opens the browser without creating an empty project; cancelling leaves projects intact.
-**Settings > Experiment Library / Manage Access...** opens the same connection controls.
+**Settings > Workspace > Manage Library Access…** opens the same connection controls.
 Enter the lab access code and a friendly computer name, then select **Connect**.
 No GitHub account, Git installation, installer, administrator rights, or application
 restart is needed to browse and download experiments.

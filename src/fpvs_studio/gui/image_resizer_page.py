@@ -24,7 +24,6 @@ from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
     NonHomePageShell,
     PathValueLabel,
-    StatusBadgeLabel,
     apply_image_resizer_theme,
     mark_primary_action,
     mark_secondary_action,
@@ -58,7 +57,7 @@ class ImageResizerPage(QWidget):
 
         self.shell = NonHomePageShell(
             title="Image Resizer",
-            subtitle="Optimize a folder of images into FPVS-ready square PNG copies.",
+            subtitle="Save center-cropped square PNG copies for FPVS.",
             width_preset="full",
             parent=self,
         )
@@ -78,26 +77,19 @@ class ImageResizerPage(QWidget):
         controls_layout = QVBoxLayout(controls_panel)
         controls_layout.setContentsMargins(0, 0, 0, 0)
         controls_layout.setSpacing(12)
-        controls_heading = QLabel("Optimize Images for FPVS", controls_panel)
+        controls_heading = QLabel("Batch Setup", controls_panel)
         controls_heading.setObjectName("image_resizer_controls_heading")
-        controls_intro = QLabel(
-            "Choose a source folder and Studio will create resized PNG copies.",
-            controls_panel,
-        )
-        controls_intro.setObjectName("image_resizer_controls_copy")
-        controls_intro.setWordWrap(True)
         controls_layout.addWidget(controls_heading)
-        controls_layout.addWidget(controls_intro)
 
         form = QGridLayout()
-        form.setContentsMargins(0, 10, 0, 0)
+        form.setContentsMargins(0, 0, 0, 0)
         form.setHorizontalSpacing(10)
         form.setVerticalSpacing(12)
         form.setColumnStretch(0, 0)
         form.setColumnStretch(1, 1)
         form.setColumnStretch(2, 0)
 
-        self.source_value = PathValueLabel(controls_panel)
+        self.source_value = PathValueLabel(controls_panel, single_line=True)
         self.source_value.setObjectName("image_resizer_source_value")
         self.source_button = QPushButton("Choose Source Folder", controls_panel)
         self.source_button.setObjectName("image_resizer_source_button")
@@ -112,7 +104,7 @@ class ImageResizerPage(QWidget):
             controls_panel,
         )
 
-        self.output_value = PathValueLabel(controls_panel)
+        self.output_value = PathValueLabel(controls_panel, single_line=True)
         self.output_value.setObjectName("image_resizer_output_value")
         self.output_button = QPushButton("Choose Output Folder", controls_panel)
         self.output_button.setObjectName("image_resizer_output_button")
@@ -129,15 +121,17 @@ class ImageResizerPage(QWidget):
 
         self.size_combo = QComboBox(controls_panel)
         self.size_combo.setObjectName("image_resizer_size_combo")
-        self.size_combo.addItem("512 x 512", userData=512)
-        self.size_combo.addItem("256 x 256", userData=256)
-        self.size_combo.addItem("1024 x 1024", userData=1024)
-        size_label = _field_label("Output size", controls_panel)
+        self.size_combo.setAccessibleName("Output size in pixels")
+        self.size_combo.addItem("512 × 512", userData=512)
+        self.size_combo.addItem("256 × 256", userData=256)
+        self.size_combo.addItem("1024 × 1024", userData=1024)
+        size_label = _field_label("Output size (px)", controls_panel)
+        size_label.setBuddy(self.size_combo)
         form.addWidget(size_label, 2, 0)
         form.addWidget(self.size_combo, 2, 1, 1, 2)
         controls_layout.addLayout(form)
 
-        self.optimize_button = QPushButton("Optimize Images for FPVS", controls_panel)
+        self.optimize_button = QPushButton("Resize Images", controls_panel)
         self.optimize_button.setObjectName("image_resizer_optimize_button")
         self.optimize_button.clicked.connect(self._start_optimization)
         mark_primary_action(self.optimize_button)
@@ -167,29 +161,18 @@ class ImageResizerPage(QWidget):
         results_layout.setSpacing(12)
         results_heading = QLabel("Results", results_panel)
         results_heading.setObjectName("image_resizer_results_heading")
-        results_intro = QLabel(
-            "Optimization results appear here after the batch finishes.",
-            results_panel,
-        )
-        results_intro.setObjectName("image_resizer_results_copy")
-        results_intro.setWordWrap(True)
         results_layout.addWidget(results_heading)
-        results_layout.addWidget(results_intro)
 
-        self.status_badge = StatusBadgeLabel(parent=results_panel)
-        self.status_badge.setObjectName("image_resizer_status_badge")
-        self.status_badge.set_state("pending", "Choose source and output folders")
-        self.result_label = QLabel("No images optimized yet.", results_panel)
+        self.result_label = QLabel(results_panel)
         self.result_label.setObjectName("image_resizer_result_label")
         self.result_label.setWordWrap(True)
-        results_layout.addWidget(self.status_badge)
         results_layout.addWidget(self.result_label)
         results_layout.addStretch(1)
-        self.open_output_button = QPushButton("Open Output Folder", results_panel)
+        self.open_output_button = QPushButton("Open Folder", results_panel)
         self.open_output_button.setObjectName("image_resizer_open_output_button")
         self.open_output_button.clicked.connect(self._open_output_folder)
         mark_secondary_action(self.open_output_button)
-        self.copy_output_button = QPushButton("Copy Output Folder", results_panel)
+        self.copy_output_button = QPushButton("Copy Folder Path", results_panel)
         self.copy_output_button.setObjectName("image_resizer_copy_output_button")
         self.copy_output_button.clicked.connect(self._copy_output_folder)
         mark_secondary_action(self.copy_output_button)
@@ -222,7 +205,6 @@ class ImageResizerPage(QWidget):
         layout.addLayout(footer)
         apply_image_resizer_theme(self)
         self._refresh_paths()
-        self._refresh_output_actions()
         self._refresh_enabled_state()
 
     @Slot()
@@ -282,24 +264,21 @@ class ImageResizerPage(QWidget):
     def _refresh_paths(self) -> None:
         source_text = str(self._source_dir) if self._source_dir is not None else "Not selected"
         output_text = str(self._output_dir) if self._output_dir is not None else "Not selected"
-        self.source_value.set_path_text(source_text, max_length=118)
-        self.output_value.set_path_text(output_text, max_length=118)
+        self.source_value.set_path_text(source_text)
+        self.output_value.set_path_text(output_text)
 
     def _refresh_enabled_state(self) -> None:
         reason = self._disabled_reason()
-        self.optimize_button.setEnabled(reason is None)
-        if self._active_task is not None or self._successful_output_dir is not None:
-            return
-        if reason is None:
-            self.status_badge.set_state("ready", "Ready to optimize")
-            self.result_label.setText("Ready to optimize the selected source folder.")
-        else:
-            self.status_badge.set_state("pending", "Optimize unavailable")
-            self.result_label.setText(reason)
+        self.optimize_button.setEnabled(self._active_task is None and reason is None)
+        self._refresh_output_actions()
+        if self._active_task is None:
+            self.result_label.setText(reason or "No batch results yet.")
 
     def _disabled_reason(self) -> str | None:
-        if self._source_dir is None or self._output_dir is None:
-            return "Select a source folder and an output folder to optimize images."
+        if self._source_dir is None:
+            return "Choose a source folder."
+        if self._output_dir is None:
+            return "Choose an output folder."
         if not self._source_dir.exists():
             return "The selected source folder no longer exists."
         if not self._source_dir.is_dir():
@@ -326,17 +305,17 @@ class ImageResizerPage(QWidget):
         output_dir = self._output_dir
         task = ProgressTask(
             parent_widget=self,
-            label="Optimizing images for FPVS...",
+            label="Resizing images…",
             callback=lambda: optimize_image_folder_for_fpvs(
                 input_dir=source_dir,
                 output_dir=output_dir,
                 target_size=target_size,
             ),
-            window_title="Optimizing Images",
+            window_title="Resizing Images",
         )
         self._active_task = task
         self.optimize_button.setEnabled(False)
-        self.status_badge.set_state("info", "Optimizing images")
+        self.result_label.setText("Resizing images…")
         task.succeeded.connect(self._on_optimization_succeeded)
         task.failed.connect(self._on_optimization_failed)
         task.finished.connect(self._on_optimization_finished)
@@ -345,23 +324,17 @@ class ImageResizerPage(QWidget):
     @Slot(object)
     def _on_optimization_succeeded(self, result: object) -> None:
         if not isinstance(result, ImageFolderOptimizationResult):
-            self.status_badge.set_state("error", "Optimization failed")
-            self.result_label.setText("Studio received an unexpected optimizer result.")
+            self.result_label.setText("Batch failed. Studio received an unexpected result.")
             self._successful_output_dir = None
             self._refresh_output_actions()
             return
         self._successful_output_dir = result.output_dir
-        if result.failed_files:
-            self.status_badge.set_state("warning", "Optimization finished with failures")
-        else:
-            self.status_badge.set_state("ready", "Optimization complete")
         self.result_label.setText(_format_result(result))
         self._refresh_output_actions()
 
     @Slot(object)
     def _on_optimization_failed(self, error: object) -> None:
-        self.status_badge.set_state("error", "Optimization failed")
-        self.result_label.setText("No output paths were changed.")
+        self.result_label.setText("Batch failed.")
         self._successful_output_dir = None
         self._refresh_output_actions()
         _show_error_dialog(self, "Image Resizer Error", _coerce_exception(error))
@@ -369,7 +342,7 @@ class ImageResizerPage(QWidget):
     @Slot()
     def _on_optimization_finished(self) -> None:
         self._active_task = None
-        self._refresh_enabled_state()
+        self.optimize_button.setEnabled(self._disabled_reason() is None)
 
     @Slot()
     def _open_output_folder(self) -> None:
@@ -402,15 +375,12 @@ def _add_field_row(
 
 
 def _format_result(result: ImageFolderOptimizationResult) -> str:
-    parts = [
-        (
-            f"Optimized {result.processed_count} image(s) to "
-            f"{result.target_size} x {result.target_size} PNG."
-        ),
-        f"Output folder: {result.output_dir}",
-    ]
+    image_count = result.processed_count
+    image_label = "image" if image_count == 1 else "images"
+    size = result.target_size
+    parts = [f"Resized {image_count} {image_label} to {size} × {size} px."]
     if result.skipped_files:
-        parts.append(f"Skipped {len(result.skipped_files)} file(s).")
+        parts.append(f"Files skipped: {len(result.skipped_files)}")
     if result.failed_files:
-        parts.append(f"Failed {len(result.failed_files)} file(s).")
+        parts.append(f"Files failed: {len(result.failed_files)}")
     return "\n".join(parts)

@@ -548,7 +548,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
 def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
     qtbot, controller: StudioController, tmp_path: Path, background, mode,
 ):
-    _document, window = _open_created_project(controller, qtbot, tmp_path, "Image size grouping")
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Image size grouping")
     guide = window.setup_wizard_page
     palette = guide.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -596,6 +596,16 @@ def test_image_size_groups_stimulus_and_display_calibration_without_clipping(
             )
     assert editor.preview_value_label.alignment() & Qt.AlignmentFlag.AlignLeft
     assert editor.presentation_summary_label.alignment() & Qt.AlignmentFlag.AlignLeft
+    if mode == "natural_width":
+        assert editor.presentation_summary_label.text() == "Natural aspect, 5 deg wide"
+        defaults = document.project.settings.presentation.defaults
+        document.update_presentation_settings(
+            defaults=defaults.model_copy(update={"transform": StimulusTransform.ROT180}),
+        )
+        QApplication.processEvents()
+        assert editor.presentation_summary_label.text() == (
+            "Natural aspect, 5 deg wide · rotate 180 degrees"
+        )
     assert editor.use_current_resolution_checkbox.isVisible()
     for control in (editor.width_degrees_spin, editor.height_degrees_spin):
         if not control.isEnabled():
@@ -815,9 +825,10 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert preview_captures["state"] & Qt.WindowState.WindowFullScreen
 
     guide.open_wizard(step_key="review")
-    review_text = "\n".join(label.text() for label in guide.review_card.findChildren(QLabel))
-    assert "Natural aspect, 6.5 deg wide; none" in review_text
-    assert "Viewing distance: 75 cm" in review_text
+    labels = guide.review_checklist_container.findChildren(QLabel)
+    review_labels = {label.text() for label in labels}
+    assert "Natural aspect, 6.5 deg wide" in review_labels
+    assert "Viewing distance: 75 cm · 1920 × 1080 px" in review_labels
     next_bottom = guide.setup_wizard_next_button.mapTo(
         guide,
         QPoint(0, guide.setup_wizard_next_button.height()),
@@ -834,9 +845,8 @@ def test_setup_wizard_experiment_image_size_controls_update_preview_and_review(
     assert guide.fixation_step_surface.content is guide.fixation_schedule_editor
     assert guide.findChild(QPushButton, "setup_wizard_advanced_button") is None
     _assert_setup_wizard_vertical_scrolling_disabled(guide)
-    assert not guide.step_title_label.isVisible()
-    assert not guide.step_status_badge.isVisible()
-    assert guide.step_card.property("launchSurfaceFrame") == "true"
+    assert guide.shell.title_label.text() == "Fixation"
+    assert guide.step_workspace.property("launchSurfaceFrame") is None
     assert guide.step_count_label.isVisible()
     assert not hasattr(guide.fixation_schedule_editor.fixation_panel, "title_label")
     assert guide.fixation_schedule_editor.fixation_panel.objectName() == "fixation_settings_panel"

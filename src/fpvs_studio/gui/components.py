@@ -90,7 +90,6 @@ __all__ = [
     "apply_image_resizer_theme",
     "apply_image_size_preview_dialog_theme",
     "apply_non_home_shell_theme",
-    "apply_project_overview_theme",
     "apply_section_card_theme",
     "apply_setup_wizard_theme",
     "apply_studio_theme",
@@ -107,7 +106,6 @@ __all__ = [
     "home_page_stylesheet",
     "image_resizer_stylesheet",
     "image_size_preview_dialog_stylesheet",
-    "project_overview_stylesheet",
     "mark_error_text",
     "mark_form_field_action",
     "mark_compact_info_action",
@@ -389,7 +387,7 @@ class SetupProgressStepper(QWidget):
     _LABEL_TOP = 34
     _LABEL_HEIGHT = 22
     _STEPPER_HEIGHT = 58
-    _SLOT_LABEL_MARGIN = 4
+    _SLOT_LABEL_MARGIN = 2
 
     def __init__(
         self,
@@ -455,7 +453,7 @@ class SetupProgressStepper(QWidget):
         self._position_step_widgets()
 
     def sizeHint(self) -> QSize:
-        return QSize(920, self._STEPPER_HEIGHT)
+        return QSize(1040, self._STEPPER_HEIGHT)
 
     def minimumSizeHint(self) -> QSize:
         return QSize(680, self._STEPPER_HEIGHT)
@@ -1318,6 +1316,19 @@ def condition_modifier_stylesheet(theme: StudioTheme | QPalette | None = None) -
         color: {theme.selected_text};
         background-color: {theme.primary};
     }}
+    QToolButton#modifier_advanced_toggle {{
+        color: {theme.text_primary};
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 3px 5px;
+    }}
+    QToolButton#modifier_advanced_toggle:hover {{
+        background-color: {theme.surface_alt};
+    }}
+    QToolButton#modifier_advanced_toggle:focus {{
+        border-color: {theme.focus_ring};
+    }}
     """
 
 
@@ -1503,7 +1514,6 @@ def apply_attentional_blink_stream_theme(widget: QWidget) -> None:
 def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     color_page_background = theme.page_background
-    color_surface = theme.surface
     color_surface_alt = theme.surface_alt
     color_surface_elevated = theme.surface_elevated
     color_border = theme.border
@@ -1555,32 +1565,12 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS + 2}px;
     }}
-    QFrame[bundleProcessingContext="true"],
-    QFrame[bundleProcessingActivity="true"],
-    QFrame[bundleWorkflowCard="true"] {{
-        background-color: {color_surface};
-        border: 1px solid {color_border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
-    }}
-    QFrame[bundleProcessingContext="flat"],
-    QFrame[bundleProcessingActivity="flat"] {{
-        background-color: transparent;
-        border: none;
-        border-radius: 0;
-    }}
-    QLabel[bundleWorkflowRole="eyebrow"],
-    QLabel[bundleResultRole="eyebrow"] {{
-        color: {color_primary};
-        font-size: {FONT_SIZE_BODY}px;
-        font-weight: 700;
-    }}
     QLabel[bundleWorkflowRole="title"],
     QLabel[bundleResultRole="title"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_PAGE_TITLE + 2}px;
         font-weight: 700;
     }}
-    QLabel[bundleWorkflowRole="lead"],
     QLabel[bundleResultRole="lead"] {{
         color: {color_text_secondary};
         font-size: {FONT_SIZE_BODY + 1}px;
@@ -1595,47 +1585,16 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_BODY + 1}px;
         font-weight: 700;
     }}
-    QLabel[bundleWorkflowRole="fileMark"] {{
-        background-color: {color_info_bg};
-        border: 1px solid {color_info_border};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        color: {color_info_text};
-        font-size: {FONT_SIZE_META}px;
-        font-weight: 700;
-    }}
     QLabel[bundleWorkflowRole="meta"],
     QLabel[bundleWorkflowRole="note"] {{
         color: {color_text_secondary};
         font-size: {FONT_SIZE_BODY}px;
-    }}
-    QLabel[bundleWorkflowRole="checkItem"] {{
-        color: {color_success_text};
-        font-size: {FONT_SIZE_BODY + 1}px;
-    }}
-    QLabel[bundleResultRole="successIcon"] {{
-        background-color: {color_success_bg};
-        border: 2px solid {color_success_border};
-        border-radius: 34px;
-        color: {color_success_text};
-        font-size: {FONT_SIZE_PAGE_TITLE + 8}px;
-        font-weight: 700;
-    }}
-    QLabel[bundleProcessingRole="eyebrow"] {{
-        color: {color_primary};
-        font-size: {FONT_SIZE_BODY}px;
-        font-weight: 700;
     }}
     QLabel[bundleProcessingRole="title"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_PAGE_TITLE + 2}px;
         font-weight: 700;
     }}
-    QLabel[bundleProcessingRole="message"] {{
-        color: {color_text_primary};
-        font-size: {FONT_SIZE_SECTION_TITLE + 1}px;
-        font-weight: 700;
-    }}
-    QLabel[bundleProcessingRole="detail"],
     QLabel[bundleProcessingRole="statusHint"] {{
         color: {color_text_secondary};
         font-size: {FONT_SIZE_BODY + 1}px;
@@ -1648,11 +1607,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel[bundleProcessingRole="activity"] {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_BODY + 1}px;
-        font-weight: 700;
-    }}
-    QLabel[importDisplayRole="eyebrow"] {{
-        color: {color_primary};
-        font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
     QLabel[importDisplayRole="title"] {{
@@ -1670,32 +1624,22 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
-    QLabel[importDisplayRole="info"] {{
-        background-color: {color_info_bg};
-        border: 1px solid {color_info_border};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        color: {color_info_text};
-        padding: 10px 12px;
-    }}
-    QLabel[bundleProcessingStatusBadge="true"] {{
-        font-size: {FONT_SIZE_CONTROL + 1}px;
-    }}
     QLabel[processingStepNumber="true"] {{
-        border: 1px solid {color_info_border};
+        border: 1px solid {color_border_soft};
         border-radius: 15px;
-        background-color: {color_info_bg};
-        color: {color_info_text};
+        background-color: transparent;
+        color: {theme.text_muted};
         font-size: {FONT_SIZE_BODY}px;
         font-weight: 700;
     }}
     QLabel[processingStepNumber="true"][processingStepState="active"] {{
-        border-color: {color_success_border};
-        background-color: {color_success_bg};
-        color: {color_success_text};
+        border-color: {color_primary_border};
+        background-color: {color_primary};
+        color: {theme.selected_text};
     }}
     QLabel[processingStepNumber="true"][processingStepState="active"][processingStepPulse="on"] {{
-        border-color: {color_success_border};
-        background-color: {color_success_border};
+        border-color: {color_primary_hover};
+        background-color: {color_primary_hover};
         color: {theme.selected_text};
     }}
     QLabel[processingStepNumber="true"][processingStepState="complete"] {{
@@ -1708,7 +1652,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_BODY + 1}px;
         font-weight: 600;
     }}
-    QLabel[processingStepLabel="true"][processingStepState="active"],
     QLabel[processingStepLabel="true"][processingStepState="complete"] {{
         color: {color_success_text};
     }}
@@ -1802,6 +1745,10 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton:focus {{
         border: 2px solid {theme.focus_ring};
     }}
+    QPushButton[launchActionRole="primary"]:focus,
+    QPushButton[primaryActionRole="true"]:focus {{
+        border-color: {theme.selected_text};
+    }}
     QPushButton[formFieldAction="true"] {{
         padding: 3px 12px;
         min-height: 22px;
@@ -1891,6 +1838,9 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QListWidget#run_readiness_checklist::item {{
         padding: 4px 6px;
     }}
+    QListWidget#run_readiness_checklist:focus {{
+        border-color: {theme.focus_ring};
+    }}
     QWidget[setupProgressStepper="true"] {{
         background-color: transparent;
     }}
@@ -1939,7 +1889,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-top: 2px solid {color_primary};
         max-height: 2px;
     }}
-    QFrame[conditionDetailsSection="true"],
     QFrame[setupSourceCard="true"] {{
         border: 1px solid {color_border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
@@ -2001,19 +1950,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         color: {color_text_primary};
-    }}
-    QFrame#run_summary_empty_state {{
-        border: 1px dashed {color_border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {color_surface_elevated};
-    }}
-    QLabel#run_summary_empty_title {{
-        color: {color_text_primary};
-        font-size: {FONT_SIZE_SECTION_TITLE}px;
-        font-weight: 700;
-    }}
-    QLabel#run_summary_empty_body {{
-        color: {color_text_secondary};
     }}
     QLabel#home_launch_status_summary,
     QLabel#run_readiness_summary_value {{
@@ -2077,12 +2013,11 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         padding-top: 4px;
     }}
     QFrame#home_metrics_panel {{
-        border: 1px solid {theme.border_soft};
-        border-radius: 8px;
-        background-color: {theme.surface_elevated};
+        border-top: 1px solid {theme.border_soft};
+        border-bottom: 1px solid {theme.border_soft};
+        background-color: transparent;
     }}
     QFrame#home_metric_cell {{
-        border-right: 1px solid {theme.border_soft};
         background-color: transparent;
     }}
     QLabel#home_metric_label {{
@@ -2092,7 +2027,7 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QLabel[homeValueRole="primary"] {{
         color: {theme.text_primary};
-        font-size: 20px;
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
     }}
     QLabel#home_recording_summary {{
@@ -2111,6 +2046,19 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QLabel#home_launch_status_indicator {{
         min-height: 28px;
+        border: none;
+        background-color: transparent;
+        padding: 0;
+        color: {theme.text_secondary};
+    }}
+    QLabel#home_launch_status_indicator[statusState="ready"] {{
+        color: {theme.success_text};
+    }}
+    QLabel#home_launch_status_indicator[statusState="warning"] {{
+        color: {theme.warning_text};
+    }}
+    QLabel#home_launch_status_indicator[statusState="error"] {{
+        color: {theme.error_text};
     }}
     QLabel#home_launch_status_summary {{
         color: {theme.text_secondary};
@@ -2121,28 +2069,6 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
 
 def apply_home_page_theme(widget: QWidget) -> None:
     widget.setStyleSheet(home_page_stylesheet(widget.palette()))
-
-
-def project_overview_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
-    theme = _resolved_theme(theme)
-    return f"""
-    QFrame#dashboard_project_overview_card {{
-        background-color: transparent;
-    }}
-    QLabel#project_overview_title {{
-        color: {theme.text_primary};
-        font-size: 24px;
-        font-weight: 700;
-    }}
-    QLabel#project_overview_subtitle {{
-        color: {theme.text_secondary};
-        font-size: 13px;
-    }}
-    """
-
-
-def apply_project_overview_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(project_overview_stylesheet(widget.palette()))
 
 
 def fixation_settings_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
@@ -2230,11 +2156,6 @@ def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
         font-weight: 700;
         color: {theme.text_primary};
     }}
-    QLabel#image_resizer_controls_copy,
-    QLabel#image_resizer_results_copy {{
-        color: {theme.text_secondary};
-        font-size: {FONT_SIZE_BODY}px;
-    }}
     QLabel[imageResizerFieldLabel="true"] {{
         color: {theme.text_primary};
         font-weight: 600;
@@ -2250,7 +2171,7 @@ def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
 
 
 def apply_image_resizer_theme(widget: QWidget) -> None:
-    widget.setStyleSheet(image_resizer_stylesheet(widget.palette()))
+    _apply_palette_stylesheet(widget, image_resizer_stylesheet)
 
 
 def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
@@ -2261,20 +2182,14 @@ def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {theme.surface};
     }}
-    QFrame#setup_wizard_current_step_card,
-    QFrame[setupFlatSection="true"] {{
+    QFrame[sectionCard="false"] {{
         border: none;
         background-color: transparent;
     }}
-    QFrame[experimentSettingsSection="true"] {{
-        border: 1px solid {theme.border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {theme.surface_elevated};
-    }}
     QFrame[reviewSummarySection="true"] {{
-        border: 1px solid {theme.border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {theme.surface_elevated};
+        border: none;
+        border-top: 1px solid {theme.border_soft};
+        background-color: transparent;
     }}
     QFrame[reviewChecklistRow="true"] {{
         border: none;
@@ -2380,11 +2295,11 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     }}
     QLabel#welcome_headline_label {{
         color: {theme.text_primary};
-        font-size: 44px;
+        font-size: {FONT_SIZE_PAGE_TITLE}px;
         font-weight: 700;
     }}
     QLabel#welcome_bundle_drop_hint {{
-        color: {theme.text_hint};
+        color: {theme.text_secondary};
         font-size: {FONT_SIZE_BODY}px;
     }}
     QPushButton {{
@@ -2419,6 +2334,11 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     }}
     QPushButton:focus {{
         border: 2px solid {theme.focus_ring};
+    }}
+    QPushButton:disabled, QPushButton[welcomeRole="primary"]:disabled {{
+        border-color: {theme.border_soft};
+        background-color: {theme.surface_alt};
+        color: {theme.disabled_text};
     }}
     """
     )

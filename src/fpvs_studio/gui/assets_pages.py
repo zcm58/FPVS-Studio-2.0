@@ -29,7 +29,6 @@ from fpvs_studio.gui.components import (
     NonHomePageShell,
     mark_primary_action,
 )
-from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.document import ConditionStimulusRow, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
     _coerce_exception,
@@ -52,40 +51,48 @@ class AssetsPage(QWidget):
         self._active_task_error_title = "Asset Task Error"
 
         controls_row = QWidget(self)
-        controls_layout = QHBoxLayout(controls_row)
+        controls_layout = QVBoxLayout(controls_row)
         controls_layout.setContentsMargins(0, 0, 0, 0)
-        controls_layout.setSpacing(PAGE_SECTION_GAP)
+        controls_layout.setSpacing(8)
 
-        variants_label = QLabel("Enabled Variants", controls_row)
-        variants_label.setProperty("sectionCardRole", "subtitle")
-        controls_layout.addWidget(variants_label)
+        variants_row = QHBoxLayout()
+        variants_row.setSpacing(PAGE_SECTION_GAP)
+        variants_row.addWidget(QLabel("Variants", controls_row))
         for variant in StimulusVariant:
             checkbox = QCheckBox(_variant_label(variant), controls_row)
             checkbox.setObjectName(f"variant_checkbox_{variant.value}")
             checkbox.stateChanged.connect(self._apply_supported_variants)
             if variant == StimulusVariant.ORIGINAL:
                 checkbox.setEnabled(False)
+                checkbox.setToolTip("Original stimuli are always available to the project.")
             self._variant_checkboxes[variant] = checkbox
-            controls_layout.addWidget(checkbox)
-        controls_layout.addStretch(1)
+            variants_row.addWidget(checkbox)
+        variants_row.addStretch(1)
+        controls_layout.addLayout(variants_row)
 
-        self.import_source_button = QPushButton("Import Selected Source Folder...", self)
+        self.import_source_button = QPushButton("Import Source Folder…", self)
         self.import_source_button.setObjectName("assets_import_source_button")
+        self.import_source_button.setToolTip("Import a folder for the selected image source.")
         self.import_source_button.clicked.connect(self._import_selected_source)
         self.refresh_button = QPushButton("Refresh Source Details", self)
         self.refresh_button.setObjectName("assets_refresh_button")
         self.refresh_button.clicked.connect(self._refresh_inspection)
-        self.materialize_button = QPushButton("Build Supported Variants", self)
+        self.materialize_button = QPushButton("Build Variants", self)
         self.materialize_button.setObjectName("materialize_assets_button")
         mark_primary_action(self.materialize_button)
         self.materialize_button.clicked.connect(self._materialize_assets)
 
-        controls_layout.addWidget(self.import_source_button)
-        controls_layout.addWidget(self.refresh_button)
-        controls_layout.addWidget(self.materialize_button)
+        actions_row = QHBoxLayout()
+        actions_row.setSpacing(PAGE_SECTION_GAP)
+        actions_row.addWidget(self.import_source_button)
+        actions_row.addWidget(self.refresh_button)
+        actions_row.addStretch(1)
+        actions_row.addWidget(self.materialize_button)
+        controls_layout.addLayout(actions_row)
 
         self.assets_table = QTableWidget(0, 6, self)
         self.assets_table.setObjectName("assets_table")
+        self.assets_table.setAccessibleName("Stimulus sources")
         self.assets_table.setHorizontalHeaderLabels(
             ["Condition", "Role", "Source Path", "Items", "Resolution", "Available Variants"]
         )
@@ -95,7 +102,7 @@ class AssetsPage(QWidget):
         self.assets_table.setAlternatingRowColors(True)
         self.assets_table.setWordWrap(False)
         self.assets_table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
-        self.assets_table.setMinimumHeight(420)
+        self.assets_table.setMinimumHeight(300)
         self.assets_table.verticalHeader().setVisible(False)
         header = self.assets_table.horizontalHeader()
         header.setStretchLastSection(False)
@@ -111,6 +118,7 @@ class AssetsPage(QWidget):
 
         self.assets_status_text = QPlainTextEdit(self)
         self.assets_status_text.setObjectName("assets_status_text")
+        self.assets_status_text.setAccessibleName("Stimulus catalog and readiness")
         self.assets_status_text.setReadOnly(True)
         self.assets_status_text.setMaximumBlockCount(200)
         self.assets_status_text.setMinimumHeight(72)
@@ -181,12 +189,11 @@ class AssetsPage(QWidget):
                     raise RuntimeError(
                         f"Unsupported stimulus modality '{row.stimulus_set.modality}'."
                     )
-                source_item = self._set_table_item(row_index, 2, elide_middle(source_text, 72))
+                source_item = self._set_table_item(row_index, 2, source_text)
                 source_item.setData(
                     Qt.ItemDataRole.UserRole,
                     (row.condition_id, row.role),
                 )
-                source_item.setToolTip(source_text)
                 self._set_table_item(
                     row_index,
                     3,
@@ -230,22 +237,20 @@ class AssetsPage(QWidget):
         return item
 
     def _build_status_text(self, rows: list[ConditionStimulusRow]) -> str:
+        if not rows:
+            if self._document.project.conditions:
+                return "Add stimulus sources in Setup → Conditions."
+            return "Add a condition in Setup to manage its stimulus sources here."
         manifest = self._document.manifest
-        lines = [
-            f"Stimulus source rows: {len(rows)}",
-            "Enabled variants: "
-            + ", ".join(
-                _variant_label(item) for item in self._document.project.settings.supported_variants
-            ),
-        ]
         if manifest is None:
-            lines.append("Catalog status: no tracked stimulus sets yet.")
+            lines = ["No stimulus sets tracked in the catalog."]
         else:
-            lines.append(
-                "Catalog status: "
-                f"{len(manifest.sets)} stimulus set(s), updated "
+            count = len(manifest.sets)
+            set_label = "set" if count == 1 else "sets"
+            lines = [
+                f"Catalog: {count} stimulus {set_label}, updated "
                 f"{manifest.generated_at.isoformat(timespec='seconds')}."
-            )
+            ]
         validation = self._document.validation_report(
             refresh_hz=self._document.project.settings.display.preferred_refresh_hz or 60.0
         )

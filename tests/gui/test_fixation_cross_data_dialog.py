@@ -166,18 +166,25 @@ def test_view_menu_order_and_action_load_active_project(
     assert dialog.state_name == "no_data"
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_dialog_shows_loading_then_populated_data_without_clipping(
     qtbot,
     tmp_path: Path,
     monkeypatch,
+    background,
 ) -> None:
     dialog = _deferred_dialog(qtbot, tmp_path, monkeypatch)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
 
     assert dialog.minimumWidth() == 720
     assert dialog.minimumHeight() == 480
     assert dialog.width() == 800
     assert dialog.height() == 520
     assert dialog.state_name == "loading"
+    assert dialog.data_card.property("sectionCard") == "false"
+    assert dialog.state_page.property("setupMetricStrip") is None
     assert dialog.state_title_label.text() == "Loading fixation task accuracy..."
     assert dialog.refresh_button.isEnabled() is False
     assert dialog.export_button.isEnabled() is False
@@ -200,11 +207,12 @@ def test_dialog_shows_loading_then_populated_data_without_clipping(
     assert dialog.width() == 720
     assert dialog.height() == 480
     assert dialog.state_name == "populated"
-    assert dialog.status_badge.text() == "Data Ready"
+    assert not dialog.status_badge.isVisible()
     assert dialog.accuracy_value_label.text() == "75.0%"
     assert dialog.accuracy_value_label.toolTip() == "18 hits / 24 targets"
     assert dialog.mean_rt_value_label.text() == "412.5 ms"
     assert dialog.included_sessions_value_label.text() == "3"
+    assert dialog.accuracy_value_label.parentWidget().property("setupMetricStrip") is None
     assert dialog.conditions_table.rowCount() == 2
     assert dialog.conditions_table.item(0, 0).text() == long_name
     assert dialog.conditions_table.item(0, 0).toolTip() == long_name
@@ -290,7 +298,7 @@ def test_excel_export_chooser_cancel_has_no_side_effects(
     assert len(_DeferredBackgroundTask.instances) == task_count
     assert export_calls == []
     assert dialog.export_state_name == "idle"
-    assert dialog.status_badge.text() == "Data Ready"
+    assert not dialog.status_badge.isVisible()
     assert dialog.export_button.isEnabled()
     assert dialog.state_stack.currentWidget() is dialog.results_page
 
@@ -367,7 +375,7 @@ def test_excel_export_uses_selected_path_and_reports_async_success(
     assert dialog.export_state_name == "success"
     assert dialog.status_badge.text() == "Excel Exported"
     assert dialog.export_path_label.toolTip() == str(actual_path)
-    assert "exported successfully" in dialog.export_feedback_label.text().lower()
+    assert not dialog.export_feedback_label.isVisible()
     assert dialog.export_button.isEnabled()
     assert dialog.refresh_button.isEnabled()
     assert dialog.close_button.isEnabled()
@@ -392,6 +400,8 @@ def test_excel_export_error_keeps_loaded_results_and_allows_retry(
         lambda *_args, **_kwargs: (str(selected_path), "Excel Workbooks (*.xlsx)"),
     )
 
+    dialog.resize(720, 480)
+    QApplication.processEvents()
     dialog.export_button.click()
     error = PermissionError(13, "Access is denied", str(selected_path))
     _DeferredBackgroundTask.instances[1].fail(error)
@@ -401,18 +411,18 @@ def test_excel_export_error_keeps_loaded_results_and_allows_retry(
     assert "folder" in dialog.export_feedback_label.text()
     assert "[Errno" not in dialog.export_feedback_label.text()
     assert dialog.export_feedback_label.toolTip() == str(error)
-    assert "still available" in dialog.export_feedback_label.text()
     assert dialog.state_name == "populated"
     assert dialog.state_stack.currentWidget() is dialog.results_page
     assert dialog.conditions_table.rowCount() == 2
     assert dialog.export_button.isEnabled()
     assert dialog.refresh_button.isEnabled()
     assert dialog.close_button.isEnabled()
-    dialog.resize(720, 480)
     QApplication.processEvents()
     assert dialog.width() == 720
     assert dialog.height() == 480
     assert_visible_children_within_parent(dialog)
+    feedback = dialog.export_feedback_label
+    assert feedback.height() >= feedback.heightForWidth(feedback.width())
 
 
 def test_fixation_data_action_is_disabled_during_bundle_processing(

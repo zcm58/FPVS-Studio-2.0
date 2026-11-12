@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from PySide6.QtCore import QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QColorDialog, QLabel, QSpinBox
+from PySide6.QtWidgets import QApplication, QColorDialog, QFrame, QLabel, QSpinBox
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.attentional_blink_stream import iter_attentional_blink_stream_cycles
@@ -661,10 +661,11 @@ def test_conditions_hide_oddball_word_editors_and_keep_questionnaire(qtbot, stre
     assert not step.modality_combo.isVisible()
     assert not step.presentation_button.isVisible()
     assert step.task_button.isVisible()
+    assert not step.condition_list_hint.isVisible()
     assert "SOA 100 ms" in step.ab_stream_summary.text()
     assert not step.ab_stream_summary.isVisible()
     assert "score T1 and T2 recall separately" in step.task_button.toolTip()
-    assert step.condition_details_section.property("setupFlatSection") == "true"
+    assert not isinstance(step.condition_details_section, QFrame)
     assert step.trigger_code_spin.width() <= 160
     assert step.add_condition_button.width() > step.duplicate_condition_button.width()
     assert step.duplicate_condition_button.y() == step.remove_condition_button.y()
@@ -838,20 +839,14 @@ def test_all_stream_setup_steps_fit_default_window(
         assert wizard.step_count_label.text() == f"Step {wizard._active_step_index + 1} of 9"
         assert wizard.step_count_label.isVisible()
         assert wizard.shell.title_label.alignment() & Qt.AlignmentFlag.AlignLeft
-        assert "border-top" not in wizard.styleSheet()
-        for card in (
-            wizard.project_overview_editor.project_overview_card,
-            wizard.display_settings_card, wizard.image_size_settings_card,
-            wizard.session_settings_card, wizard.review_card,
-        ):
-            framed = card in (wizard.display_settings_card, wizard.session_settings_card)
-            assert card.property("setupFlatSection") == ("false" if framed else "true")
+        assert not isinstance(wizard.step_workspace, QFrame)
+        assert not isinstance(wizard.review_checklist_container, QFrame)
+        assert not isinstance(wizard.project_overview_editor.project_workspace, QFrame)
+        assert wizard.image_size_step_surface.content is wizard.image_display_size_editor
+        for card in (wizard.display_settings_card, wizard.session_settings_card):
+            assert card.property("sectionCard") == "true"
             if card.isVisible():
-                assert card.title_label.isVisible() == (
-                    card in (wizard.display_settings_card, wizard.session_settings_card)
-                )
-                if card.subtitle_label is not None:
-                    assert not card.subtitle_label.isVisible()
+                assert card.title_label.isVisible()
         surface = wizard.step_stack.currentWidget()
         if step_key == "experiment":
             assert wizard.native_timing_summary_label.isVisible()
@@ -888,6 +883,6 @@ def test_all_stream_setup_steps_fit_default_window(
                 assert sections["experiment"] == (
                     "10 Hz · 9 s bursts · T1 1 Hz · 6 T1 / 5 T2",
                 )
-            for label in wizard.review_card.findChildren(QLabel):
+            for label in wizard.review_checklist_container.findChildren(QLabel):
                 if label.isVisible() and label.wordWrap():
                     assert label.height() >= label.heightForWidth(label.width()), label.text()
