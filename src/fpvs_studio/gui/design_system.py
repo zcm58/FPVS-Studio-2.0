@@ -23,6 +23,7 @@ FONT_SIZE_META = 12
 FONT_SIZE_BODY = 13
 FONT_SIZE_CONTROL = 13
 FONT_SIZE_SECTION_TITLE = 16
+FONT_SIZE_DIALOG_TITLE = 18
 FONT_SIZE_PAGE_TITLE = 24
 
 CONTENT_MAX_WIDTHS: dict[str, int] = {
@@ -251,14 +252,21 @@ def set_truncated_label_text(label: QLabel, text: str, *, max_length: int) -> No
 
 
 class StatusBadgeLabel(QLabel):
-    """Small badge-style label used for readiness and summary states."""
+    """Semantic status with an optional inline presentation for local state."""
 
-    def __init__(self, text: str = "", parent: QWidget | None = None) -> None:
+    def __init__(
+        self, text: str = "", parent: QWidget | None = None, *, inline: bool = False,
+    ) -> None:
         super().__init__(text, parent)
         self.setObjectName("status_badge_label")
         self.setProperty("statusBadge", "true")
+        if inline:
+            self.setProperty("statusPresentation", "inline")
         self.setWordWrap(True)
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+            if inline else Qt.AlignmentFlag.AlignCenter
+        )
 
     def set_state(self, state: str, text: str) -> None:
         self.setText(text)

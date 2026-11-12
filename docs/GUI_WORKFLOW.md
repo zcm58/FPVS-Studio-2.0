@@ -316,6 +316,9 @@ The [runtime contract](RUNTIME_EXECUTION.md#session-flow) owns timeout/cleanup r
 
 ## Welcome Flow
 
+Welcome shows the running version as `FPVS Studio Version <version>` above its
+project actions. Open Project remains the default action.
+
 ### Experiment Library
 
 **View > Experiment Library...** and **Create Project > Download from library** open
@@ -888,8 +891,8 @@ The authoring window is organized around two user-facing modes:
     and style it as the primary enabled action
   - `Complete Setup` opens the guided setup workflow at the earliest incomplete step
     using the existing setup-step completion checks
-  - when launch is disabled, the Home card, launch button tooltip, and status tip show
-    the first actionable setup blocker
+  - when launch is disabled, the first actionable setup blocker appears below the
+    project identity and remains available in the launch button tooltip and status tip
   - when Recording Reminder and its ticker display option are enabled, Home shows a green
     horizontally scrolling `RECORDING REMINDER ENABLED` ticker at the top of the launch panel
   - returning from app-expanded Setup restores the compact Home footprint unless

@@ -461,6 +461,17 @@ def test_run_controls_and_session_details_fit(
     card = page.runtime_settings_editor.card
     assert card is not None and card.subtitle_label is None
     assert card.title_label.y() <= card.card_layout.contentsMargins().top() + 2
+    title = page.shell.title_label
+    workspace = page.shell.content_frame
+    assert title.property("studioTextRole") == "pageTitle"
+    assert title.alignment() & Qt.AlignmentFlag.AlignLeft
+    assert title.mapTo(page, title.rect().topLeft()).x() == workspace.mapTo(
+        page, workspace.rect().topLeft(),
+    ).x()
+    assert page.readiness_badge.property("statusPresentation") == "inline"
+    assert page.readiness_badge.contentsRect().width() >= (
+        page.readiness_badge.fontMetrics().horizontalAdvance(page.readiness_badge.text())
+    )
     for section in (
         card,
         page.launch_button.parentWidget(),

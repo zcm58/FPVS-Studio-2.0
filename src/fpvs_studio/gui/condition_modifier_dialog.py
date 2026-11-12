@@ -427,8 +427,11 @@ class ConditionModifierDialog(QDialog):
             self.workflow_labels.append(label)
             flow.addWidget(section, index // 2, index % 2, Qt.AlignmentFlag.AlignTop)
         overview.addLayout(flow)
-        self.recorded_label = _label("", self.overview)
-        overview.addWidget(self.recorded_label)
+        overview.addSpacing(6)
+        recorded_section = self._flat_section("Recorded data", self.overview)
+        self.recorded_label = _label("", recorded_section)
+        recorded_section.body_layout.addWidget(self.recorded_label)
+        overview.addWidget(recorded_section)
         self.advanced_button = QPushButton("Advanced steps…", self.overview)
         self.advanced_button.clicked.connect(self._open_advanced)
         self.advanced_button.hide()
@@ -1252,7 +1255,7 @@ class ConditionModifierDialog(QDialog):
                 "Type the final number immediately after the stream, then continue.",
             )
             self.recorded_label.setText(
-                "Recorded data: starting and final numbers, subtraction step, interval duration, "
+                "Starting and final numbers, subtraction step, interval duration, "
                 "estimated steps and counting rate, and available baseline comparison. "
                 "The estimate does not verify arithmetic accuracy."
             )
@@ -1270,7 +1273,7 @@ class ConditionModifierDialog(QDialog):
                 "Visibility → target identity → frequency → self-paced break and fixation.",
             )
             self.recorded_label.setText(
-                "Recorded data: realized frame timing, target identity, selected answers, "
+                "Realized frame timing, target identity, selected answers, "
                 "identity correctness and response times. "
                 + ("Catch trials use PAS to score absence; identity is unscored."
                    if catch_enabled else "Native source properties are retained.")
@@ -1290,7 +1293,7 @@ class ConditionModifierDialog(QDialog):
                 "Choose exactly four of eight images and Submit. Choices can be revised.",
             )
             self.recorded_label.setText(
-                "Recorded data: target and foil identities, presentation order, selected images, "
+                "Target and foil identities, presentation order, selected images, "
                 "response time, target hits out of four and exact-set correctness."
             )
         for label, text in zip(self.workflow_labels, phase_copy, strict=True):

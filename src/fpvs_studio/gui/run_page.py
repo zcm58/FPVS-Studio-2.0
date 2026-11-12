@@ -46,6 +46,7 @@ from fpvs_studio.gui.components import (
     mark_launch_action,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
 )
 from fpvs_studio.gui.demographics_form import DemographicsForm
 from fpvs_studio.gui.document import LaunchSummary, ProjectDocument
@@ -748,6 +749,7 @@ class RunPage(QWidget):
         controls_card.body_layout.setSpacing(8)
         self.recording_summary = QLabel(self)
         self.recording_summary.setObjectName("run_recording_summary")
+        mark_text_role(self.recording_summary, "supporting")
         self.recording_summary.setWordWrap(True)
         controls_card.body_layout.addWidget(self.recording_summary)
         controls_card.body_layout.addWidget(self.launch_button)
@@ -784,16 +786,14 @@ class RunPage(QWidget):
         run_action_row.addWidget(self.copy_run_folder_button)
         summary_card.body_layout.addLayout(run_action_row)
 
-        self.readiness_badge = StatusBadgeLabel("Setup Required", self)
+        self.readiness_badge = StatusBadgeLabel("Setup Required", self, inline=True)
         self.readiness_badge.setObjectName("run_readiness_badge")
-        self.readiness_badge.setMinimumHeight(34)
-        self.readiness_badge.setMinimumWidth(224)
 
         self.readiness_summary_value = QLabel(self)
         self.readiness_summary_value.setObjectName("run_readiness_summary_value")
+        mark_text_role(self.readiness_summary_value, "supporting")
         self.readiness_summary_value.setTextFormat(Qt.TextFormat.PlainText)
         self.readiness_summary_value.setWordWrap(True)
-        self.readiness_summary_value.setMinimumHeight(24)
 
         self.readiness_checklist = QListWidget(self)
         self.readiness_checklist.setObjectName("run_readiness_checklist")
@@ -819,6 +819,7 @@ class RunPage(QWidget):
             subtitle="",
             layout_mode="three_column",
             width_preset="medium",
+            align_header_to_content=True,
             parent=self,
         )
         self.shell.set_content_spacing(24)

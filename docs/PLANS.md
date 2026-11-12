@@ -9,6 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Desktop text hierarchy](exec-plans/active/desktop-text-hierarchy.md) | Welcome version and shared text roles implemented. Visible verification pending. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Visible checks passed. Physical discovery and reconnect acceptance pending. |
 | [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Show higher fixed refresh rates and link to Advanced display |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |

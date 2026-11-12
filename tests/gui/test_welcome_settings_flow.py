@@ -170,7 +170,8 @@ def test_welcome_window_copy_and_primary_hierarchy(controller: StudioController)
     assert open_projects_button is not None
     assert root_folder_button is not None
 
-    assert headline.text() == "Projects"
+    assert headline.text() == f"FPVS Studio Version {__version__}"
+    assert headline.property("studioTextRole") == "pageTitle"
     assert welcome.bundle_drop_hint_label.text() == ""
     assert welcome.bundle_drop_hint_label.isHidden()
     assert create_button.text() == "Create Project"
@@ -263,6 +264,8 @@ def test_welcome_primary_open_action_fits_and_stays_first(qtbot, size, backgroun
     qtbot.wait(10)
     assert welcome.size().toTuple() == size
     assert_visible_children_within_parent(welcome)
+    assert welcome.headline_label.text() == f"FPVS Studio Version {__version__}"
+    assert welcome.headline_label.geometry().bottom() < welcome.action_container.y()
     assert welcome.findChild(QLabel, "welcome_sharing_status") is None
     assert welcome.action_layout.itemAtPosition(0, 0).widget() is welcome.manage_projects_button
     buttons = (
@@ -278,6 +281,8 @@ def test_welcome_primary_open_action_fits_and_stays_first(qtbot, size, backgroun
         assert button.contentsRect().width() >= text_width
     assert welcome.bundle_drop_hint_label.isVisible() is busy
     assert welcome.bundle_drop_hint_label.text() == ("Importing project…" if busy else "")
+    if busy:
+        assert welcome.bundle_drop_hint_label.y() > welcome.action_container.geometry().bottom()
     for label in (welcome.headline_label, welcome.bundle_drop_hint_label):
         if label.isVisible():
             text_width = label.fontMetrics().horizontalAdvance(label.text())

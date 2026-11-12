@@ -60,6 +60,35 @@ vertical space. Elision is allowed only when deliberate and when the complete va
 remains available through a tested tooltip, copy action, or equivalent accessible
 interaction.
 
+## Shared text hierarchy
+
+Use `components.mark_text_role(label, role)` when placing a standalone `QLabel` in
+a themed surface. The shared stylesheet owns type size, weight and theme colors.
+Use `NonHomePageShell`, `DialogHeader`, or `SectionCard` when the label belongs to
+one of those groups.
+
+| Role | Use |
+| --- | --- |
+| `pageTitle` | The page's one task or identity heading |
+| `dialogTitle` | A dialog's in-content heading |
+| `sectionTitle` | A named group of controls, data or workflow steps |
+| `body` | Primary instructions, authored content and data summaries |
+| `supporting` | Scope, interpretation or a recovery step placed beside the related content |
+| `metadata` | Compact contextual facts such as the Setup step count |
+
+- Align the heading and its content to the same edge. Use
+  `NonHomePageShell(align_header_to_content=True)` for a left-aligned heading within
+  a bounded workspace. The centered Welcome title and action grid share one axis.
+- Keep space within a group tighter than space between groups. Place a heading
+  directly above what it names, and put field labels next to their controls using
+  `QFormLayout` and buddies. Setup forms use `configure_setup_form`.
+- Keep visible supporting text when it changes a decision, explains a result or
+  helps someone recover. Put optional detail in a tooltip or disclosure. Preserve
+  authored content and complete values when a layout deliberately elides them.
+- Use `StatusBadgeLabel(inline=True)` for local readiness or progress text beside
+  its subject. Keep the state explicit in words and use semantic colors. Keep
+  action-specific errors beside the affected control or in the recovery dialog.
+
 ## GUI Architecture
 
 - Use headings, alignment, spacing and dividers to group content within an
@@ -72,6 +101,7 @@ interaction.
   launch action.
 - Welcome and Home share the same launch-surface frame/styling so opening a ready
   project keeps a stable outer window and card treatment.
+  Welcome shows `FPVS Studio Version <version>` using the running build's metadata.
   Home's four project actions use two rows at the `760x520` minimum and one row at
   `1120x720`. Empty optional descriptions are hidden; authored descriptions remain visible.
 - Main-window styles use the shared palette observer and refresh the existing Setup
@@ -201,10 +231,8 @@ interaction.
 
 ## Setup text hierarchy
 
-The user prefers application GUIs without secondary explanatory text. Keep headings,
-control labels, essential current status and actionable errors visible; put optional
-explanations and technical detail in tooltips instead of subtitles and help paragraphs.
-Preserve participant-authored instructions and information needed for the current decision.
+Apply the [shared text hierarchy](#shared-text-hierarchy) throughout Setup. Preserve
+participant-authored instructions and information needed for the current decision.
 
 Use one task heading per step. Top-aligned content shares a 24 px inset and uses
 bounded workspaces. Project, Review and ordinary image geometry use the same 1040 px

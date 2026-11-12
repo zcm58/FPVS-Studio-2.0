@@ -56,6 +56,7 @@ from fpvs_studio.gui.components import (
     configure_setup_form,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
 )
 from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.condition_setup_step import (
@@ -317,6 +318,7 @@ class SetupWizardPage(QWidget):
         title_row.addWidget(self.shell.title_label, 1)
         self.step_count_label = QLabel(self)
         self.step_count_label.setObjectName("setup_wizard_step_count")
+        mark_text_role(self.step_count_label, "metadata")
         title_row.addWidget(self.step_count_label)
         self.shell.page_container.header_layout.insertLayout(0, title_row)
 
@@ -431,6 +433,7 @@ class SetupWizardPage(QWidget):
         mark_secondary_action(self.review_return_home_button)
         self.setup_wizard_next_hint_label = QLabel(self)
         self.setup_wizard_next_hint_label.setObjectName("setup_wizard_next_hint_label")
+        mark_text_role(self.setup_wizard_next_hint_label, "metadata")
         self.setup_wizard_next_hint_label.setAlignment(
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
         )
@@ -1197,7 +1200,7 @@ class SetupWizardPage(QWidget):
         section_layout.setSpacing(3)
 
         title_label = QLabel(section)
-        title_label.setProperty("reviewSummarySectionTitle", "true")
+        mark_text_role(title_label, "sectionTitle")
         header = QHBoxLayout()
         header.addWidget(title_label, 1)
         fixation_edit_button = QPushButton("Fixation", section)
@@ -1243,7 +1246,7 @@ class SetupWizardPage(QWidget):
         label = QLabel(row)
         label.setWordWrap(True)
         label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        label.setProperty("reviewChecklistLine", "true")
+        mark_text_role(label, "body")
         row_layout.addWidget(label, 1, Qt.AlignmentFlag.AlignVCenter)
         return row, label
 

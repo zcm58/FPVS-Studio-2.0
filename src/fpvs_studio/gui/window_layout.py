@@ -13,7 +13,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.gui.components import apply_non_home_shell_theme, apply_section_card_theme
+from fpvs_studio.gui.components import (
+    apply_non_home_shell_theme,
+    apply_section_card_theme,
+    mark_text_role,
+)
 from fpvs_studio.gui.design_system import (
     CARD_PADDING_X,
     CARD_PADDING_Y,
@@ -145,6 +149,7 @@ class NonHomePageShell(QWidget):
         subtitle: str,
         layout_mode: str = "single_column",
         width_preset: str = "wide",
+        align_header_to_content: bool = False,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -159,9 +164,11 @@ class NonHomePageShell(QWidget):
 
         self.title_label = QLabel(title, self.page_container.header_widget)
         self.title_label.setObjectName("non_home_shell_title")
+        mark_text_role(self.title_label, "pageTitle")
         _configure_centered_page_header_label(self.title_label)
         self.subtitle_label = QLabel(subtitle, self.page_container.header_widget)
         self.subtitle_label.setObjectName("non_home_shell_subtitle")
+        mark_text_role(self.subtitle_label, "supporting")
         self.subtitle_label.setWordWrap(True)
         self.subtitle_label.setVisible(bool(subtitle))
         _configure_centered_page_header_label(self.subtitle_label)
@@ -169,6 +176,10 @@ class NonHomePageShell(QWidget):
         self.page_container.header_layout.addWidget(self.title_label)
         self.page_container.header_layout.addWidget(self.subtitle_label)
         self.page_container.header_widget.setVisible(True)
+        if align_header_to_content:
+            self.page_container.content_layout.addWidget(self.page_container.header_widget)
+            for label in (self.title_label, self.subtitle_label):
+                label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
 
         self.content_frame = QFrame(self.page_container.content_frame)
         self.content_frame.setObjectName("non_home_shell_content_frame")

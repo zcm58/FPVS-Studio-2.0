@@ -32,6 +32,7 @@ from fpvs_studio.gui.components import (
     mark_home_launch_action,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
     set_action_link_text,
 )
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
@@ -195,7 +196,7 @@ class HomePage(QWidget):
 
         self.launch_button.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
-        self.launch_status_label = StatusBadgeLabel("Setup Required", self)
+        self.launch_status_label = StatusBadgeLabel("Setup Required", self, inline=True)
         self.launch_status_label.setObjectName("home_launch_status_indicator")
         self.launch_status_label.setMinimumHeight(34)
         self.launch_status_label.setWordWrap(False)
@@ -204,9 +205,11 @@ class HomePage(QWidget):
         )
         self.launch_status_summary = QLabel(self)
         self.launch_status_summary.setObjectName("home_launch_status_summary")
+        mark_text_role(self.launch_status_summary, "supporting")
         self.launch_status_summary.setTextFormat(Qt.TextFormat.PlainText)
-        self.launch_status_summary.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.launch_status_summary.setMinimumHeight(28)
+        self.launch_status_summary.setAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
         self.launch_status_summary.setSizePolicy(
             QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred,
         )
@@ -233,9 +236,11 @@ class HomePage(QWidget):
         launch_panel_layout.setSpacing(PAGE_SECTION_GAP)
         self.launch_surface.hero_container.setMinimumHeight(_HOME_HERO_MIN_HEIGHT)
 
-        identity_row = QHBoxLayout()
-        identity_row.setContentsMargins(0, 0, 0, 0)
-        identity_row.setSpacing(PAGE_SECTION_GAP)
+        identity_layout = QGridLayout()
+        identity_layout.setContentsMargins(0, 0, 0, 0)
+        identity_layout.setHorizontalSpacing(PAGE_SECTION_GAP)
+        identity_layout.setVerticalSpacing(6)
+        identity_layout.setColumnStretch(1, 1)
         self.project_icon = create_home_project_icon(launch_panel)
         identity_text = QWidget(launch_panel)
         identity_text_layout = QVBoxLayout(identity_text)
@@ -244,6 +249,7 @@ class HomePage(QWidget):
 
         self.current_project_header = QLabel(identity_text)
         self.current_project_header.setObjectName("home_current_project_header")
+        mark_text_role(self.current_project_header, "pageTitle")
         self.current_project_header.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
         )
@@ -257,6 +263,7 @@ class HomePage(QWidget):
 
         self.current_project_subtitle = QLabel(identity_text)
         self.current_project_subtitle.setObjectName("home_current_project_subtitle")
+        mark_text_role(self.current_project_subtitle, "supporting")
         self.current_project_subtitle.setTextFormat(Qt.TextFormat.PlainText)
         self.current_project_subtitle.setAlignment(
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
@@ -269,18 +276,21 @@ class HomePage(QWidget):
 
         identity_text_layout.addWidget(self.current_project_header)
         identity_text_layout.addWidget(self.current_project_subtitle)
-        identity_row.addWidget(
+        identity_layout.addWidget(
             self.project_icon,
+            0,
             0,
             Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop,
         )
-        identity_row.addWidget(identity_text, 1)
-        identity_row.addWidget(
+        identity_layout.addWidget(identity_text, 0, 1)
+        identity_layout.addWidget(
             self.launch_status_label,
             0,
+            2,
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop,
         )
-        launch_panel_layout.addLayout(identity_row)
+        identity_layout.addWidget(self.launch_status_summary, 1, 1, 1, 2)
+        launch_panel_layout.addLayout(identity_layout)
 
         self.project_update_notice = QWidget(launch_panel)
         self.project_update_notice.setObjectName("home_project_update_notice")
@@ -330,8 +340,6 @@ class HomePage(QWidget):
         )
         self.fixation_task_value = self._new_value_label("home_fixation_task_value")
         self.accuracy_task_value = self._new_value_label("home_accuracy_task_value")
-
-        launch_panel_layout.addWidget(self.launch_status_summary)
 
         metrics_panel = QFrame(launch_panel)
         metrics_panel.setObjectName("home_metrics_panel")

@@ -99,12 +99,14 @@ def test_counting_tabs_fit_and_preserve_baseline_fields(qtbot, tmp_path: Path, s
     dialog.show()
     assert dialog.duration_spin.value() == 30
     assert dialog.copy_button.isVisible()
-    phase_sections = dialog.overview.findChildren(SectionCard)
-    assert [section.title_label.text() for section in phase_sections] == [
-        "Session baseline", "Before FPVS", "During FPVS", "After FPVS",
+    sections = dialog.overview.findChildren(SectionCard)
+    assert [section.title_label.text() for section in sections] == [
+        "Session baseline", "Before FPVS", "During FPVS", "After FPVS", "Recorded data",
     ]
-    assert all(section.property("sectionCard") == "false" for section in phase_sections)
-    for section in phase_sections:
+    assert dialog.recorded_label.parentWidget() is sections[-1]
+    assert "The estimate does not verify arithmetic accuracy." in dialog.recorded_label.text()
+    assert all(section.property("sectionCard") == "false" for section in sections)
+    for section in sections:
         text_color = section.title_label.palette().color(QPalette.ColorRole.WindowText)
         assert (text_color.lightness() > 128) is dark
     for index in range(3):

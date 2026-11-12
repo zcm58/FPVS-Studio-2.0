@@ -194,6 +194,11 @@ def test_home_actions_fit_minimum_and_default_sizes_and_resize_back(
             assert subtitle.accessibleName() == description
         if long_blocker:
             blocker = page.launch_status_summary
+            title = page.current_project_header
+            blocker_origin = blocker.mapTo(page, blocker.rect().topLeft())
+            title_origin = title.mapTo(page, title.rect().topLeft())
+            assert blocker_origin.x() == title_origin.x()
+            assert title_origin.y() + title.height() <= blocker_origin.y()
             width = blocker.contentsRect().width()
             assert blocker.text() == blocker.fontMetrics().elidedText(
                 long_blocker, Qt.TextElideMode.ElideRight, width,
@@ -788,7 +793,9 @@ def test_incomplete_home_launch_state_is_error_and_disabled(
     assert status_label.width() >= status_label.fontMetrics().horizontalAdvance(status_label.text())
     assert status_label.height() >= status_label.fontMetrics().height()
     assert status_summary.isVisible()
-    assert status_summary.alignment() == Qt.AlignmentFlag.AlignCenter
+    assert status_summary.alignment() == (
+        Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+    )
     assert status_summary.text() == "Add at least one condition."
     assert status_summary.toolTip() == home_launch_button.toolTip()
     assert home_launch_button.isEnabled() is False

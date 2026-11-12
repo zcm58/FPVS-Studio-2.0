@@ -12,7 +12,7 @@ import sys
 from collections.abc import Callable
 from html import escape
 from math import isfinite
-from typing import Any
+from typing import Any, Literal
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -51,6 +51,7 @@ from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
     FONT_SIZE_BODY,
     FONT_SIZE_CONTROL,
+    FONT_SIZE_DIALOG_TITLE,
     FONT_SIZE_META,
     FONT_SIZE_PAGE_TITLE,
     FONT_SIZE_SECTION_TITLE,
@@ -113,6 +114,7 @@ __all__ = [
     "mark_home_launch_action",
     "mark_primary_action",
     "mark_secondary_action",
+    "mark_text_role",
     "mark_destructive_action",
     "mark_welcome_action",
     "set_action_link_text",
@@ -182,15 +184,15 @@ class DialogHeader(QWidget):
     def __init__(
         self,
         title: str,
-        subtitle: str,
+        subtitle: str = "",
         *,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.title_label = QLabel(title, self)
-        self.title_label.setProperty("dialogHeading", "true")
+        mark_text_role(self.title_label, "dialogTitle")
         self.subtitle_label = QLabel(subtitle, self)
-        self.subtitle_label.setProperty("dialogHelp", "true")
+        mark_text_role(self.subtitle_label, "supporting")
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
@@ -200,6 +202,7 @@ class DialogHeader(QWidget):
             label.setMinimumWidth(0)
             label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
             layout.addWidget(label)
+        self.subtitle_label.setVisible(bool(subtitle))
 
 
 def configure_setup_form(form: QFormLayout, *, stacked: bool = False) -> None:
@@ -1008,6 +1011,66 @@ def mark_error_text(label: QLabel) -> None:
     apply_error_text_style(label)
 
 
+TextRole = Literal["pageTitle", "dialogTitle", "sectionTitle", "body", "supporting", "metadata"]
+
+
+def mark_text_role(label: QLabel, role: TextRole) -> None:
+    """Assign type during construction and inherit the surface's active theme."""
+    label.setProperty("studioTextRole", role)
+
+
+def _text_role_stylesheet(theme: StudioTheme) -> str:
+    return f"""
+    QLabel[studioTextRole="pageTitle"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_PAGE_TITLE}px;
+        font-weight: 700;
+    }}
+    QLabel[studioTextRole="dialogTitle"],
+    QLabel[dialogHeading="true"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_DIALOG_TITLE}px;
+        font-weight: 700;
+    }}
+    QLabel[studioTextRole="sectionTitle"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_SECTION_TITLE}px;
+        font-weight: 700;
+    }}
+    QLabel[studioTextRole="body"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[studioTextRole="supporting"],
+    QLabel[dialogHelp="true"] {{
+        color: {theme.text_secondary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[studioTextRole="metadata"] {{
+        color: {theme.text_secondary};
+        font-size: {FONT_SIZE_META}px;
+    }}
+    """
+
+
+def _inline_status_stylesheet(theme: StudioTheme) -> str:
+    return f"""
+    QLabel[statusBadge="true"][statusPresentation="inline"] {{
+        border: none;
+        background-color: transparent;
+        padding: 0;
+        color: {theme.text_secondary};
+        font-size: {FONT_SIZE_META}px;
+        font-weight: 700;
+    }}
+    QLabel[statusPresentation="inline"][statusState="ready"] {{ color: {theme.success_text}; }}
+    QLabel[statusPresentation="inline"][statusState="warning"] {{ color: {theme.warning_text}; }}
+    QLabel[statusPresentation="inline"][statusState="info"] {{ color: {theme.info_text}; }}
+    QLabel[statusPresentation="inline"][statusState="pending"] {{ color: {theme.pending_text}; }}
+    QLabel[statusPresentation="inline"][statusState="error"] {{ color: {theme.error_text}; }}
+    """
+
+
 def _resolved_theme(theme: StudioTheme | QPalette | None = None) -> StudioTheme:
     if isinstance(theme, StudioTheme):
         return theme
@@ -1163,15 +1226,6 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QDialog[studioDialog="true"] {{
         background-color: {theme.page_background};
         color: {theme.text_primary};
-        font-size: {FONT_SIZE_BODY}px;
-    }}
-    QLabel[dialogHeading="true"] {{
-        color: {theme.text_primary};
-        font-size: 18px;
-        font-weight: 700;
-    }}
-    QLabel[dialogHelp="true"] {{
-        color: {theme.text_secondary};
         font-size: {FONT_SIZE_BODY}px;
     }}
     QFrame#settings_sidebar {{
@@ -1951,11 +2005,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         background-color: {color_surface_elevated};
         color: {color_text_primary};
     }}
-    QLabel#home_launch_status_summary,
-    QLabel#run_readiness_summary_value {{
-        color: {color_text_secondary};
-    }}
-    """
+    """ + _text_role_stylesheet(theme) + _inline_status_stylesheet(theme)
 
 
 def apply_studio_theme(widget: QWidget) -> None:
@@ -1981,19 +2031,12 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     return (
         launch_surface_frame_stylesheet(theme)
+        + _text_role_stylesheet(theme)
+        + _inline_status_stylesheet(theme)
         + f"""
     QWidget#home_page {{
         color: {theme.text_primary};
         font-size: 13px;
-    }}
-    QLabel#home_current_project_header {{
-        font-size: 28px;
-        font-weight: 700;
-        color: {theme.text_primary};
-    }}
-    QLabel#home_current_project_subtitle {{
-        font-size: 13px;
-        color: {theme.text_secondary};
     }}
     QWidget#sophia_mode_ticker {{
         background-color: transparent;
@@ -2008,9 +2051,6 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton#home_edit_setup_button {{
         font-size: 14px;
         padding: 7px 12px;
-    }}
-    QFrame#home_launch_panel QLabel#home_launch_status_summary {{
-        padding-top: 4px;
     }}
     QFrame#home_metrics_panel {{
         border-top: 1px solid {theme.border_soft};
@@ -2043,25 +2083,6 @@ def home_page_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton[launchActionRole="primary"],
     QPushButton[homeActionRole="primary"] {{
         font-weight: 700;
-    }}
-    QLabel#home_launch_status_indicator {{
-        min-height: 28px;
-        border: none;
-        background-color: transparent;
-        padding: 0;
-        color: {theme.text_secondary};
-    }}
-    QLabel#home_launch_status_indicator[statusState="ready"] {{
-        color: {theme.success_text};
-    }}
-    QLabel#home_launch_status_indicator[statusState="warning"] {{
-        color: {theme.warning_text};
-    }}
-    QLabel#home_launch_status_indicator[statusState="error"] {{
-        color: {theme.error_text};
-    }}
-    QLabel#home_launch_status_summary {{
-        color: {theme.text_secondary};
     }}
     """
     )
@@ -2106,16 +2127,7 @@ def apply_fixation_settings_theme(widget: QWidget) -> None:
 
 def non_home_shell_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
-    return f"""
-    QLabel#non_home_shell_title {{
-        font-size: {FONT_SIZE_PAGE_TITLE}px;
-        font-weight: 700;
-        color: {theme.text_primary};
-    }}
-    QLabel#non_home_shell_subtitle {{
-        color: {theme.text_secondary};
-        font-size: {FONT_SIZE_BODY}px;
-    }}
+    return _text_role_stylesheet(theme) + f"""
     QFrame#non_home_shell_footer_strip {{
         border: 1px solid {theme.border_soft};
         border-radius: {CARD_CORNER_RADIUS}px;
@@ -2203,14 +2215,6 @@ def section_card_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel[sectionCardRole="subtitle"] {{
         color: {theme.text_secondary};
     }}
-    QLabel[reviewSummarySectionTitle="true"] {{
-        color: {theme.text_primary};
-        font-weight: 700;
-        padding-top: 2px;
-    }}
-    QLabel[reviewChecklistLine="true"] {{
-        color: {theme.text_primary};
-    }}
     QLabel[reviewCheckIcon="true"] {{
         border: 1px solid {theme.success_border};
         border-radius: 10px;
@@ -2242,6 +2246,7 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     theme = _resolved_theme(theme)
     return (
         section_card_stylesheet(theme)
+        + _text_role_stylesheet(theme)
         + launch_surface_frame_stylesheet(theme)
         + f"""
     QWidget#setup_wizard_page QScrollArea#page_container_scroll_area,
@@ -2254,13 +2259,6 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QWidget#setup_wizard_page {{
         color: {theme.text_primary};
         font-size: {FONT_SIZE_BODY}px;
-    }}
-    QLabel#setup_wizard_next_hint_label {{
-        color: {theme.text_secondary};
-        font-size: {FONT_SIZE_META}px;
-    }}
-    QLabel#setup_wizard_step_count {{
-        color: {theme.text_secondary}; font-size: {FONT_SIZE_META}px;
     }}
     QPushButton#setup_wizard_condition_presentation_button,
     QPushButton#setup_wizard_condition_task_button,
@@ -2289,18 +2287,10 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     theme = _resolved_theme(theme)
     return (
         launch_surface_frame_stylesheet(theme)
+        + _text_role_stylesheet(theme)
         + f"""
     QWidget#welcome_hero_container {{
         background: transparent;
-    }}
-    QLabel#welcome_headline_label {{
-        color: {theme.text_primary};
-        font-size: {FONT_SIZE_PAGE_TITLE}px;
-        font-weight: 700;
-    }}
-    QLabel#welcome_bundle_drop_hint {{
-        color: {theme.text_secondary};
-        font-size: {FONT_SIZE_BODY}px;
     }}
     QPushButton {{
         border: 1px solid {theme.border};

@@ -19,10 +19,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio import __version__
 from fpvs_studio.core.project_bundle import PROJECT_BUNDLE_SUFFIX
 from fpvs_studio.gui.components import (
     LaunchSurfaceFrame,
     apply_welcome_window_theme,
+    mark_text_role,
     mark_welcome_action,
     refresh_widget_style,
 )
@@ -59,24 +61,24 @@ class WelcomeWindow(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.launch_surface)
 
-        self.headline_label = QLabel("Projects", self.hero_container)
+        self.headline_label = QLabel(f"FPVS Studio Version {__version__}", self.hero_container)
         self.headline_label.setObjectName("welcome_headline_label")
         self.headline_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        mark_text_role(self.headline_label, "pageTitle")
         hero_layout.addWidget(self.headline_label)
 
         self.bundle_drop_hint_label = QLabel("", self.hero_container)
         self.bundle_drop_hint_label.setObjectName("welcome_bundle_drop_hint")
-        self.bundle_drop_hint_label.setProperty("bundleWorkflowRole", "meta")
+        mark_text_role(self.bundle_drop_hint_label, "supporting")
         self.bundle_drop_hint_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.bundle_drop_hint_label.hide()
-        hero_layout.addWidget(self.bundle_drop_hint_label)
 
         self.action_container = QWidget(self.hero_container)
         self.action_container.setObjectName("welcome_action_container")
         self.action_layout = QGridLayout(self.action_container)
         self.action_layout.setHorizontalSpacing(12)
         self.action_layout.setVerticalSpacing(12)
-        self.action_layout.setContentsMargins(0, 10, 0, 0)
+        self.action_layout.setContentsMargins(0, 0, 0, 0)
 
         self.create_button = QPushButton("Create Project", self.hero_container)
         self.create_button.setObjectName("create_project_button")
@@ -127,6 +129,7 @@ class WelcomeWindow(QWidget):
             0,
             Qt.AlignmentFlag.AlignHCenter,
         )
+        hero_layout.addWidget(self.bundle_drop_hint_label)
 
         self._apply_theme_styles()
         self.setTabOrder(self.manage_projects_button, self.create_button)
@@ -271,11 +274,9 @@ class WelcomeWindow(QWidget):
             if columns == 2:
                 positions = ((0, 0), (0, 1), (1, 0), (1, 1))
                 self.action_layout.setVerticalSpacing(12)
-                self.action_layout.setContentsMargins(0, 10, 0, 0)
             else:
                 positions = ((0, 0), (1, 0), (2, 0), (3, 0))
                 self.action_layout.setVerticalSpacing(4)
-                self.action_layout.setContentsMargins(0, 4, 0, 0)
             for button, (row, column) in zip(buttons, positions, strict=True):
                 self.action_layout.addWidget(button, row, column)
             self.action_layout.addWidget(

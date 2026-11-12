@@ -780,11 +780,9 @@ class PresentationSettingsDialog(QDialog):
                 else "Project presentation defaults"
             ),
             (
-                "This condition inherits project defaults unless overridden. "
-                "Apply keeps your edits; Cancel leaves it unchanged."
+                "This condition inherits project defaults unless overridden."
                 if condition is not None
-                else "Defaults for all conditions without overrides. "
-                "Apply keeps your edits; Cancel leaves defaults unchanged."
+                else "Conditions inherit these defaults unless they have overrides."
             ),
             parent=self,
         )

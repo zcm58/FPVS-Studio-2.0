@@ -67,6 +67,9 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   styles; no one-off shared-concept `setStyleSheet` rules. Preserve established visual
   identity. Use [UI design guidance](../../../docs/design-docs/agent-ui-design.md)
   for substantial layout work without adding an approval stage.
+- Follow the [shared text hierarchy](../../../docs/FRONTEND.md#shared-text-hierarchy).
+  Use `mark_text_role` for standalone labels and shared heading components for groups.
+  Place scope, status and recovery next to the content or control they explain.
 - Keep headings, fields, essential status and actionable errors visible. Optional
   explanation belongs in tooltips. Preserve participant instructions and decision
   information; do not add routine subtitles, footer guidance or Setup Advanced buttons.

@@ -133,6 +133,9 @@ def test_setup_wizard_review_summarizes_actual_settings_and_supports_editing(
         label.text() for label in review_card.findChildren(QLabel) if label.isVisible()
     )
     assert guide.shell.title_label.text() == "Review"
+    assert guide.step_count_label.property("studioTextRole") == "metadata"
+    assert all(item.title_label.property("studioTextRole") == "sectionTitle"
+               for item in guide._review_summary_widgets)
     assert "2 conditions" in label_text
     assert "2 blocks · 4 presentations" in label_text
     assert "Accuracy tracking: G" in label_text
