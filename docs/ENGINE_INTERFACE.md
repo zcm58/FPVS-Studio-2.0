@@ -219,6 +219,12 @@ captures responses made during the last frame, and supplies the missing duration
 that frame. The final `frame_intervals` list therefore covers every completed compiled
 frame.
 
+After playback, the engine derives the optional `RunExecutionSummary.playback_cadence`
+from the measured stream flips, beginning at frame zero and ending at the neutral
+terminal flip. Warmup and any pre-stream marker flip are outside this span. A
+missing measured boundary leaves the cadence unavailable even if another timing
+consumer can use a fallback timestamp. See [playback cadence reporting](RUNTIME_EXECUTION.md#playback-cadence-reporting).
+
 Without a photodiode, returned flip times and recorded trigger markers are software and
 electrical evidence, not proof of photon onset. They cannot measure panel scanout or pixel
 response latency, so the engine must not claim physical display-onset accuracy from them.

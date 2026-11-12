@@ -84,6 +84,16 @@ RANDOMIZATION_PROVENANCE_HEADER = [
     "stimulus_randomization_mode",
     "fixation_randomization_mode",
 ]
+_PLAYBACK_CADENCE_HEADER = [
+    "playback_cadence_status",
+    "playback_cadence_expected_duration_s",
+    "playback_cadence_observed_duration_s",
+    "playback_cadence_duration_error_ms",
+    "playback_cadence_observed_refresh_hz",
+    "playback_cadence_observed_oddball_hz",
+    "playback_cadence_earliest_offset_ms",
+    "playback_cadence_latest_offset_ms",
+]
 SESSION_CONDITION_HISTORY_HEADER = [
     "logged_at_utc",
     "project_id",
@@ -148,6 +158,7 @@ SESSION_CONDITION_HISTORY_HEADER = [
     "participant_session_number",
     "manual_removed_electrodes",
     "manual_removed_electrodes_recorded",
+    *_PLAYBACK_CADENCE_HEADER,
 ]
 PARTICIPANT_SUMMARY_HEADER = [
     "PID",
@@ -767,21 +778,21 @@ def write_session_artifacts(
     output_dir.mkdir(parents=True, exist_ok=True)
     write_json_file(output_dir / "session_plan.json", session_plan)
     _write_execution_summary(output_dir / "session_summary.json", summary)
-    ab_results = {result.run_id: result for result in summary.run_results}
+    run_results = {result.run_id: result for result in summary.run_results}
     ordered_entries = session_plan.ordered_entries()
     scene_entries = [entry for entry in ordered_entries
-                     if entry.run_spec.scene_stream is not None and entry.run_id in ab_results]
+                     if entry.run_spec.scene_stream is not None and entry.run_id in run_results]
     if scene_entries:
         _write_csv(
             output_dir / MASKING_SCENE_EVENTS_FILENAME, MASKING_SCENE_EVENTS_HEADER,
             (row for entry in scene_entries for row in masking_scene_event_rows(
-                entry.run_spec, ab_results[entry.run_id], entry=entry,
+                entry.run_spec, run_results[entry.run_id], entry=entry,
             )),
         )
     ab_entries = [
         entry for entry in ordered_entries
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkRunSpec)
-        and entry.run_id in ab_results
+        and entry.run_id in run_results
     ]
     if ab_entries:
         _write_csv(
@@ -789,13 +800,13 @@ def write_session_artifacts(
             ATTENTIONAL_BLINK_EVENTS_HEADER,
             (
                 row for entry in ab_entries
-                for row in _attentional_blink_event_rows(entry.run_spec, ab_results[entry.run_id])
+                for row in _attentional_blink_event_rows(entry.run_spec, run_results[entry.run_id])
             ),
         )
     stream_entries = [
         entry for entry in ordered_entries
         if isinstance(entry.run_spec.attentional_blink, AttentionalBlinkStreamRunSpec)
-        and entry.run_id in ab_results
+        and entry.run_id in run_results
     ]
     if stream_entries:
         _write_csv(
@@ -804,7 +815,7 @@ def write_session_artifacts(
             (
                 row for entry in stream_entries
                 for row in _attentional_blink_stream_event_rows(
-                    entry.run_spec, ab_results[entry.run_id], entry=entry,
+                    entry.run_spec, run_results[entry.run_id], entry=entry,
                 )
             ),
         )
@@ -854,6 +865,7 @@ def write_session_artifacts(
             "condition_presentation_count",
             *RANDOMIZATION_PROVENANCE_HEADER,
             "ordering_policy",
+            *_PLAYBACK_CADENCE_HEADER,
         ],
         [
             (
@@ -869,6 +881,7 @@ def write_session_artifacts(
                 entry.condition_presentation_count,
                 *_run_randomization_values(entry.run_spec),
                 session_plan.ordering_policy,
+                *_playback_cadence_values(run_results.get(entry.run_id)),
             )
             for entry in ordered_entries
         ],
@@ -1384,7 +1397,24 @@ def _session_condition_history_row(
         summary.participant_session_number or "",
         ";".join(summary.participant_metadata.manual_removed_electrodes or []),
         summary.participant_metadata.manual_removed_electrodes is not None,
+        *_playback_cadence_values(run_result),
     ]
+
+
+def _playback_cadence_values(run_result: RunExecutionSummary | None) -> tuple[object, ...]:
+    cadence = run_result.playback_cadence if run_result is not None else None
+    if cadence is None:
+        return (None,) * len(_PLAYBACK_CADENCE_HEADER)
+    return (
+        cadence.status,
+        cadence.expected_duration_s,
+        cadence.observed_duration_s,
+        cadence.duration_error_ms,
+        cadence.observed_refresh_hz,
+        cadence.observed_oddball_hz,
+        cadence.earliest_offset_ms,
+        cadence.latest_offset_ms,
+    )
 
 
 def _block_accuracy_percentages(

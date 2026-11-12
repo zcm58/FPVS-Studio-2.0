@@ -21,6 +21,7 @@ from fpvs_studio.core.execution import (
     FixationResponseRecord,
     FrameIntervalRecord,
     ParticipantMetadata,
+    PlaybackCadence,
     ResponseRecord,
     RunExecutionSummary,
     RuntimeMetadata,
@@ -31,7 +32,7 @@ from fpvs_studio.core.run_spec import StimulusEvent
 from fpvs_studio.core.serialization import read_json_file, write_json_file
 from fpvs_studio.engines.registry import register_engine, unregister_engine
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
-from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT
+from fpvs_studio.runtime.export_modes import EXPORT_MODE_COMPACT, EXPORT_MODE_FULL
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
     launch_session,
@@ -61,6 +62,102 @@ def _stable_native_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
             mode_reference="60/1",
         ),
     )
+
+
+@pytest.mark.parametrize("export_mode", [EXPORT_MODE_FULL, EXPORT_MODE_COMPACT])
+def test_session_exports_playback_cadence_and_preserves_legacy_history(
+    multi_condition_project, multi_condition_project_root, monkeypatch, export_mode,
+) -> None:
+    multi_condition_project.settings.session.block_count = 1
+    project_root = multi_condition_project_root
+    plan = compile_session_plan(
+        multi_condition_project, project_root=project_root, refresh_hz=60.0, random_seed=77,
+    )
+    entries = plan.ordered_entries()
+    expected_duration = entries[0].run_spec.display.total_frames / 60.0
+    cadence_by_run_id = {
+        entries[0].run_id: PlaybackCadence(
+            status="measured",
+            expected_duration_s=expected_duration,
+            observed_duration_s=expected_duration + 0.008125,
+            duration_error_ms=8.125,
+            observed_refresh_hz=59.995812,
+            observed_oddball_hz=1.199916,
+            earliest_offset_ms=0.0,
+            latest_offset_ms=8.125,
+        ),
+        entries[1].run_id: PlaybackCadence(
+            status="incomplete_flip_timing",
+            expected_duration_s=entries[1].run_spec.display.total_frames / 60.0,
+        ),
+    }
+    run_condition = StubEngine.run_condition
+
+    def run_condition_with_cadence(engine, *args, **kwargs):
+        result = run_condition(engine, *args, **kwargs)
+        return result.model_copy(update={"playback_cadence": cadence_by_run_id.get(result.run_id)})
+
+    monkeypatch.setattr(StubEngine, "run_condition", run_condition_with_cadence)
+    history_path = project_root / "logs" / "session_condition_history.csv"
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+    legacy_row = {
+        "participant_number": "0040",
+        "session_id": "legacy-session",
+        "project_name": 'Existing, "β" study',
+    }
+    with history_path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=list(legacy_row))
+        writer.writeheader()
+        writer.writerow(legacy_row)
+
+    register_engine("stub-cadence-export", lambda: StubEngine({}))
+    try:
+        summary = launch_session(
+            project_root, plan, participant_number=PARTICIPANT_NUMBER,
+            launch_settings=LaunchSettings(
+                experiment_test_mode=True, serial_enabled=False,
+                engine_name="stub-cadence-export", export_mode=export_mode,
+            ),
+        )
+    finally:
+        unregister_engine("stub-cadence-export")
+
+    expected_values = {
+        "playback_cadence_status": "measured",
+        "playback_cadence_expected_duration_s": str(expected_duration),
+        "playback_cadence_observed_duration_s": str(expected_duration + 0.008125),
+        "playback_cadence_duration_error_ms": "8.125",
+        "playback_cadence_observed_refresh_hz": "59.995812",
+        "playback_cadence_observed_oddball_hz": "1.199916",
+        "playback_cadence_earliest_offset_ms": "0.0",
+        "playback_cadence_latest_offset_ms": "8.125",
+    }
+    legacy, *history_rows = _read_csv_rows(history_path)
+    assert {column: legacy[column] for column in legacy_row} == legacy_row
+    assert list(legacy)[-len(expected_values):] == list(expected_values)
+    assert all(legacy[column] == "" for column in expected_values)
+    assert [row["run_id"] for row in history_rows] == [entry.run_id for entry in entries]
+    assert {column: history_rows[0][column] for column in expected_values} == expected_values
+    assert history_rows[1]["playback_cadence_status"] == "incomplete_flip_timing"
+    assert history_rows[1]["playback_cadence_expected_duration_s"] != ""
+    assert all(history_rows[1][column] == "" for column in list(expected_values)[2:])
+    assert all(history_rows[2][column] == "" for column in expected_values)
+
+    if export_mode == EXPORT_MODE_FULL:
+        assert summary.output_dir is not None
+        output = project_root / summary.output_dir
+        condition_rows = _read_csv_rows(output / "conditions.csv")
+        assert list(condition_rows[0])[-len(expected_values):] == list(expected_values)
+        assert [row["run_id"] for row in condition_rows] == [entry.run_id for entry in entries]
+        for condition_row, history_row in zip(condition_rows, history_rows, strict=True):
+            assert all(condition_row[column] == history_row[column] for column in expected_values)
+        saved_run = read_json_file(
+            output / entries[0].run_id / "run_summary.json", RunExecutionSummary,
+        )
+        assert saved_run.playback_cadence == cadence_by_run_id[entries[0].run_id]
+    else:
+        assert summary.output_dir is None
+        assert not (project_root / "runs").exists()
 
 
 @pytest.mark.parametrize("scoring_source", ["absent", None, "hardware_timestamp"])

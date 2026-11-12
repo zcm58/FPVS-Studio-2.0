@@ -245,6 +245,19 @@ class FrameIntervalRecord(FPVSBaseModel):
     interval_s: float = Field(gt=0)
 
 
+class PlaybackCadence(FPVSBaseModel):
+    """Whole-run cadence on the presentation clock, from first to terminal flip."""
+
+    status: Literal["measured", "incomplete_playback", "incomplete_flip_timing"]
+    expected_duration_s: float = Field(ge=0, allow_inf_nan=False)
+    observed_duration_s: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    duration_error_ms: float | None = Field(default=None, allow_inf_nan=False)
+    observed_refresh_hz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    observed_oddball_hz: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+    earliest_offset_ms: float | None = Field(default=None, allow_inf_nan=False)
+    latest_offset_ms: float | None = Field(default=None, allow_inf_nan=False)
+
+
 class FixationTargetOnsetRecord(FPVSBaseModel):
     """Actual flip time for one compiled fixation target onset."""
 
@@ -516,6 +529,7 @@ class RunExecutionSummary(FPVSBaseModel):
     task_abort_reason: str | None = None
     warnings: list[str] = Field(default_factory=list)
     runtime_metadata: RuntimeMetadata | None = None
+    playback_cadence: PlaybackCadence | None = None
     frame_intervals: list[FrameIntervalRecord] = Field(default_factory=list)
     fixation_target_onsets: list[FixationTargetOnsetRecord] = Field(default_factory=list)
     attentional_blink_onsets: list[AttentionalBlinkOnsetRecord] | None = None
@@ -527,12 +541,14 @@ class RunExecutionSummary(FPVSBaseModel):
     output_dir: str | None = None
 
     @model_serializer(mode="wrap")
-    def serialize_optional_randomization(
+    def serialize_optional_run_fields(
         self, handler: SerializerFunctionWrapHandler,
     ) -> dict[str, Any]:
         payload: dict[str, Any] = handler(self)
         if self.randomization is None:
             payload.pop("randomization", None)
+        if self.playback_cadence is None:
+            payload.pop("playback_cadence", None)
         return payload
 
     @field_validator("participant_number")

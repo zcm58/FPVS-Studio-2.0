@@ -282,6 +282,8 @@ The PsychoPy implementation:
   completed compiled frame, including the final continuous image or 50%-blank interval
 - records frame intervals and runtime metadata; validated execution models and timing QC
   are materialized after playback rather than in the frame loop
+- summarizes [playback cadence](#playback-cadence-reporting) from complete measured
+  flip timing, separately from single-frame timing misses
 - treats strict timing misses as post-run quality-control flags instead of aborting
   playback; `RuntimeMetadata` records `timing_qc_strict_violation`,
   `timing_qc_strict_violation_reason`, `timing_qc_first_bad_phase`,
@@ -1130,7 +1132,7 @@ Project-level reporting index:
   - append-only one-row-per-condition-occurrence session history
   - includes participant number, age, sex, handedness, colorblind status, random order
     seed, per-run stimulus shuffle seed, run timing, block/order metadata, abort
-    fields, timing-QC metadata, fixation metrics, and block accuracy
+    fields, timing-QC metadata, playback cadence, fixation metrics, and block accuracy
   - used for compact reporting and for participant/seed-history lookup when detailed
     run folders are not written
 
@@ -1292,6 +1294,7 @@ Per session, full export mode:
 - `runtime_metadata.json`
 - `participant_metadata.csv`
 - `conditions.csv`
+  - includes the [playback cadence](#playback-cadence-reporting) columns
 - `events.csv`
 - `attentional_blink_events.csv` when AB runs have execution results
 - `fixation_events.csv`
@@ -1305,6 +1308,7 @@ Per run, full export mode:
 
 - `runspec.json`
 - `run_summary.json`
+  - includes `playback_cadence` when supplied by the engine
 - `runtime_metadata.json`
 - `display_report.json`
   - a display-compatibility report derived from the compiled run timing, including
@@ -1672,9 +1676,40 @@ Full-session `conditions.csv` and project-level `logs/session_condition_history.
 include `requested_stream_duration_seconds` and `resolved_stream_duration_seconds`.
 Legacy count-based runs leave requested seconds blank; resolved seconds equal stream
 frames divided by the compiled refresh rate. These are planned stream lengths;
-measured playback remains in timing-QC records. Lead-in, participant tasks, transitions
-and feedback are excluded. Existing history rows and participant/visit identity remain
-intact when the added columns are introduced.
+see [playback cadence reporting](#playback-cadence-reporting) for measured playback.
+Lead-in, participant tasks, transitions and feedback are excluded. Existing history
+rows and participant/visit identity remain intact when the added columns are introduced.
+
+## Playback cadence reporting
+
+The optional `RunExecutionSummary.playback_cadence` records software-observed timing
+for one stream, from the first measured playback flip through the neutral terminal
+flip. Warmup, a pre-stream marker, and work after the terminal flip are outside that
+span. The report is calculated after playback and leaves the compiled frame and
+trigger schedules in effect.
+
+| Field | Meaning |
+| --- | --- |
+| `status` | `measured`, `incomplete_playback`, or `incomplete_flip_timing`. |
+| `expected_duration_s` | Compiled stream frames divided by compiled refresh rate. |
+| `observed_duration_s` | Duration between the first and terminal measured flips. |
+| `duration_error_ms` | Observed minus expected duration. A negative value means playback ended ahead of the compiled timeline. |
+| `observed_refresh_hz` | Completed stream frames divided by observed duration. |
+| `observed_oddball_hz` | Number of oddball intervals divided by the measured flip span between the first and last compiled `oddball_onset` frames. Available for regularly spaced oddball schedules with at least two onsets. |
+| `earliest_offset_ms`, `latest_offset_ms` | Minimum and maximum signed phase offsets at stream frame boundaries relative to the compiled timeline, starting from the first flip. |
+
+Incomplete playback, missing flip measurements, or fallback timestamps leave the
+observed values unavailable. Full export keeps the object in `run_summary.json`.
+The same fields appear with a `playback_cadence_` prefix in full-session
+`conditions.csv` and in `logs/session_condition_history.csv` for both export modes.
+Historical runs and engines without the summary leave the added fields blank.
+
+Single-frame timing QC still flags long intervals. Cadence can show a persistent
+rate difference across a complete run even when no single frame misses its threshold.
+The reported rates are timing evidence. The protocol and analysis targets remain
+the fixed configured frequencies. The software flip clock measures delivery in
+Studio's timebase. Qualifying the physical display rate requires measuring light
+onsets against an independently calibrated timebase.
 
 ## Condition presentation identity
 

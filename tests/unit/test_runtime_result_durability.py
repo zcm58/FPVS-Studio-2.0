@@ -72,7 +72,7 @@ def test_session_preserves_bom_history_across_launch_and_retry(execution, export
     old_rows = _read_csv_rows(path)
     header = list(session_export.SESSION_CONDITION_HISTORY_HEADER)
     if layout == "legacy":
-        header = header[:-2]
+        header = header[:header.index("manual_removed_electrodes")]
     elif layout == "reordered":
         header.remove("participant_number")
         header.insert(0, "participant_number")

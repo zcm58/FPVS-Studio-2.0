@@ -76,6 +76,7 @@ from fpvs_studio.engines.psychopy_tasks import render_task_step
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import (
     TimingConfig,
+    measure_playback_cadence,
     measure_window_refresh_hz,
     timing_config_for_run,
     timing_violation_reason,
@@ -501,6 +502,7 @@ class PsychoPyEngine(PresentationEngine):
         pre_stream_qc_frames = 0
         stream_onset_interval_s: float | None = None
         raw_frame_intervals: list[float | None] = [None] * run_spec.display.total_frames
+        flip_timestamps_complete = True
         raw_responses: list[tuple[str, int, float | None]] = []
         raw_fixation_target_onsets: list[tuple[int, int, float]] = []
         ab_events = run_spec.stimulus_sequence if run_spec.attentional_blink is not None else []
@@ -689,9 +691,11 @@ class PsychoPyEngine(PresentationEngine):
                             )
                         flip_time = flip()
                         current_has_timestamp = flip_time is not None
-                        current_time_s = (
-                            float(flip_time) if current_has_timestamp else run_clock_get_time()
-                        )
+                        if current_has_timestamp:
+                            current_time_s = float(flip_time)
+                        else:
+                            current_time_s = run_clock_get_time()
+                            flip_timestamps_complete = False
                         if frame_index == 0 and current_has_timestamp:
                             first_stream_flip_time = current_time_s
                         ab_index = ab_onset_indices.get(frame_index)
@@ -756,11 +760,11 @@ class PsychoPyEngine(PresentationEngine):
                             default_fixation_stim.draw()
                         terminal_flip_time = flip()
                         terminal_has_timestamp = terminal_flip_time is not None
-                        terminal_time_s = (
-                            float(terminal_flip_time)
-                            if terminal_has_timestamp
-                            else run_clock_get_time()
-                        )
+                        if terminal_has_timestamp:
+                            terminal_time_s = float(terminal_flip_time)
+                        else:
+                            terminal_time_s = run_clock_get_time()
+                            flip_timestamps_complete = False
                         if last_flip_has_timestamp == terminal_has_timestamp:
                             raw_frame_intervals[completed_frames - 1] = (
                                 terminal_time_s - last_flip_time
@@ -812,6 +816,12 @@ class PsychoPyEngine(PresentationEngine):
             for frame_index, interval_s in enumerate(raw_frame_intervals)
             if interval_s is not None
         ]
+        playback_cadence = measure_playback_cadence(
+            run_spec,
+            completed_frames=completed_frames,
+            frame_intervals=frame_intervals,
+            flip_timestamps_complete=flip_timestamps_complete,
+        )
         response_log = [
             ResponseRecord(
                 response_index=response_index,
@@ -901,6 +911,7 @@ class PsychoPyEngine(PresentationEngine):
             abort_reason=abort_reason if self._aborted else None,
             warnings=self._graphics_readiness_warnings(graphics_readiness),
             runtime_metadata=runtime_metadata,
+            playback_cadence=playback_cadence,
             frame_intervals=frame_intervals,
             fixation_target_onsets=fixation_target_onsets,
             attentional_blink_onsets=attentional_blink_onsets,

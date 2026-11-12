@@ -26,7 +26,7 @@ historical release draft does not authorize publishing an old version.
 | [Results reporting](exec-plans/active/remote-experiment-results-reporting.md) | Deployed integration and synthetic acceptance recorded; real two-machine presentation/metrics and shutdown cancellation remain operational checks |
 | [Whole-project review uploads](exec-plans/active/streamlined-project-submission.md) | Desktop/service deployment recorded; authenticated live upload/email/publication qualification remains unperformed |
 | [Studio/Toolbox/OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md) | Completed handoff/shared reporting implemented; manual workflow and hardware/montage qualification remain separate |
-| [Unicorn recording](exec-plans/active/unicorn-hybrid-black-support.md) | Trigger Tester and normal Studio markers verified in raw BDF. Offline timing report verified on the two-minute run. Broader receiver, Toolbox and physical timing checks remain open. |
+| [Unicorn recording](exec-plans/active/unicorn-hybrid-black-support.md) | Raw BDF markers and offline timing report verified. Fullscreen bench repeats characterized software cadence. Broader receiver, Toolbox and physical timing checks remain open. |
 
 ## Planned Work
 

@@ -27,8 +27,9 @@ from fpvs_studio.core.enums import (
     StimulusModality,
     StimulusTransform,
 )
+from fpvs_studio.core.execution import FrameIntervalRecord
 from fpvs_studio.core.models import ImageGeometrySettings, ImageResolution
-from fpvs_studio.core.run_spec import FixationEvent, TriggerEvent
+from fpvs_studio.core.run_spec import FixationEvent, RunSpec, TriggerEvent
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.engines import psychopy_engine as psychopy_engine_module
 from fpvs_studio.engines import psychopy_macos_display as psychopy_macos_display_module
@@ -49,6 +50,7 @@ from fpvs_studio.engines.psychopy_stimuli import (
     release_stimuli,
 )
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
+from fpvs_studio.engines.psychopy_timing import measure_playback_cadence
 from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_backend
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend
@@ -2467,12 +2469,43 @@ def test_psychopy_engine_terminal_offset_closes_continuous_and_blank_final_frame
     assert [record.interval_s for record in summary.frame_intervals] == pytest.approx(
         [interval_s, interval_s]
     )
+    assert summary.playback_cadence is not None
+    assert summary.playback_cadence.status == "measured"
+    assert summary.playback_cadence.observed_duration_s == pytest.approx(2 * interval_s)
     assert _image_stims(captures)[0].draw_count == expected_image_draw_count
     assert [record["frame_index"] for record in trigger_backend.records] == [0]
     assert summary.runtime_metadata is not None
     assert summary.runtime_metadata.condition_cache_gpu_synchronized is True
     assert summary.runtime_metadata.condition_cache_cleanup_succeeded is True
     assert summary.runtime_metadata.condition_cache_unique_variant_count == 1
+
+
+@pytest.mark.parametrize(
+    ("missing_flips", "interval_count"), [({0, 1, 2}, 2), ({2}, 1)],
+)
+def test_psychopy_engine_cadence_requires_native_flip_timestamps(
+    monkeypatch, sample_project, sample_project_root, missing_flips, interval_count,
+) -> None:
+    run_spec = _two_event_run_spec(sample_project, sample_project_root, duplicate_image=True)
+    fake_psychopy = _build_fake_psychopy({}, flip_times=[], flip_return_none_indices=missing_flips)
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    try:
+        summary = engine.run_condition(
+            run_spec,
+            sample_project_root,
+            runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
+            trigger_backend=_RecordingTriggerBackend(),
+        )
+    finally:
+        engine.close_session()
+
+    assert summary.completed_frames == 2
+    assert len(summary.frame_intervals) == interval_count
+    assert summary.playback_cadence is not None
+    assert summary.playback_cadence.status == "incomplete_flip_timing"
+    assert summary.playback_cadence.observed_duration_s is None
 
 
 def test_psychopy_engine_terminal_offset_captures_final_frame_response(
@@ -3756,3 +3789,114 @@ def test_graphics_failed_frame_cleanup_handles_cycles_without_changing_exception
     assert second.__context__ is first
     assert str(first) == "first"
     assert str(second) == "second"
+
+
+@pytest.fixture
+def playback_cadence_run(sample_project, sample_project_root) -> RunSpec:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 3
+    return compile_run_spec(sample_project, refresh_hz=60.0, project_root=sample_project_root)
+
+
+def test_playback_cadence_measures_offsets_through_the_terminal_boundary(
+    playback_cadence_run: RunSpec,
+) -> None:
+    durations = [1 / 60.0] * 150
+    durations[0] -= 0.001
+    durations[75] += 0.003
+    durations[-1] -= 0.0015
+    cadence = measure_playback_cadence(
+        playback_cadence_run,
+        completed_frames=150,
+        frame_intervals=tuple(
+            FrameIntervalRecord(frame_index=index, interval_s=interval_s)
+            for index, interval_s in enumerate(durations)
+        ),
+        flip_timestamps_complete=True,
+    )
+
+    assert cadence.status == "measured"
+    assert cadence.expected_duration_s == 2.5
+    assert cadence.observed_duration_s == pytest.approx(2.5005)
+    assert cadence.duration_error_ms == pytest.approx(0.5)
+    assert cadence.earliest_offset_ms == pytest.approx(-1.0)
+    assert cadence.latest_offset_ms == pytest.approx(2.0)
+    assert cadence.observed_refresh_hz == pytest.approx(150 / 2.5005)
+    assert cadence.observed_oddball_hz == pytest.approx(2 / (100 / 60.0 + 0.003))
+
+
+@pytest.mark.parametrize(
+    ("problem", "status"),
+    [
+        ("partial", "incomplete_playback"),
+        ("fallback", "incomplete_flip_timing"),
+        ("missing_terminal", "incomplete_flip_timing"),
+        ("wrong_index", "incomplete_flip_timing"),
+        ("nonfinite", "incomplete_flip_timing"),
+        ("nonpositive", "incomplete_flip_timing"),
+    ],
+)
+def test_playback_cadence_requires_complete_observed_flip_coverage(
+    playback_cadence_run: RunSpec, problem: str, status: str,
+) -> None:
+    intervals = [FrameIntervalRecord(frame_index=index, interval_s=1 / 60) for index in range(150)]
+    if problem == "missing_terminal":
+        intervals.pop()
+    elif problem == "wrong_index":
+        intervals[40], intervals[41] = intervals[41], intervals[40]
+    elif problem in ("nonfinite", "nonpositive"):
+        invalid_interval = float("inf") if problem == "nonfinite" else 0.0
+        intervals[75] = FrameIntervalRecord.model_construct(
+            frame_index=75, interval_s=invalid_interval,
+        )
+    cadence = measure_playback_cadence(
+        playback_cadence_run,
+        completed_frames=149 if problem == "partial" else 150,
+        frame_intervals=intervals,
+        flip_timestamps_complete=problem != "fallback",
+    )
+
+    assert cadence.status == status
+    assert cadence.expected_duration_s == 2.5
+    assert cadence.observed_duration_s is None
+    assert cadence.duration_error_ms is None
+    assert cadence.observed_refresh_hz is None
+    assert cadence.observed_oddball_hz is None
+    assert cadence.earliest_offset_ms is None
+    assert cadence.latest_offset_ms is None
+
+
+def test_playback_cadence_reports_an_empty_stream_as_incomplete(
+    playback_cadence_run: RunSpec,
+) -> None:
+    playback_cadence_run.display.total_frames = 0
+    cadence = measure_playback_cadence(
+        playback_cadence_run,
+        completed_frames=0,
+        frame_intervals=[],
+        flip_timestamps_complete=True,
+    )
+
+    assert cadence.status == "incomplete_playback"
+    assert cadence.expected_duration_s == 0.0
+
+
+@pytest.mark.parametrize("oddball_frames", [(), (40,), (40, 90, 139), (40, 40, 90), (40, 150)])
+def test_playback_cadence_only_measures_regular_planned_oddballs(
+    playback_cadence_run: RunSpec, oddball_frames: tuple[int, ...],
+) -> None:
+    playback_cadence_run.trigger_events = [
+        TriggerEvent(frame_index=frame, code=55, label="oddball_onset") for frame in oddball_frames
+    ]
+    cadence = measure_playback_cadence(
+        playback_cadence_run,
+        completed_frames=150,
+        frame_intervals=[
+            FrameIntervalRecord(frame_index=index, interval_s=1 / 60) for index in range(150)
+        ],
+        flip_timestamps_complete=True,
+    )
+
+    assert cadence.status == "measured"
+    assert cadence.observed_duration_s == pytest.approx(2.5)
+    assert cadence.observed_oddball_hz is None

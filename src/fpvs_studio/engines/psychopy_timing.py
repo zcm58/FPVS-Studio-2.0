@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from math import isfinite
+from itertools import pairwise
+from math import fsum, isfinite
 from typing import Any
 
+from fpvs_studio.core.execution import FrameIntervalRecord, PlaybackCadence
 from fpvs_studio.core.run_spec import RunSpec
 
 WARMUP_SETTLE_FRAMES = 30
@@ -110,3 +112,68 @@ def estimate_refresh_hz(
     if not source_intervals:
         return None
     return 1.0 / (sum(source_intervals) / len(source_intervals))
+
+
+def measure_playback_cadence(
+    run_spec: RunSpec,
+    *,
+    completed_frames: int,
+    frame_intervals: Sequence[FrameIntervalRecord],
+    flip_timestamps_complete: bool,
+) -> PlaybackCadence:
+    """Measure a complete stream from the first flip through the terminal flip."""
+    total_frames = run_spec.display.total_frames
+    refresh_hz = run_spec.display.refresh_hz
+    expected_duration_s = total_frames / refresh_hz
+    if not total_frames or completed_frames != total_frames:
+        return PlaybackCadence(
+            status="incomplete_playback", expected_duration_s=expected_duration_s,
+        )
+    if (
+        not flip_timestamps_complete
+        or len(frame_intervals) != total_frames
+        or any(
+            interval.frame_index != index
+            or not isfinite(interval.interval_s)
+            or interval.interval_s <= 0
+            for index, interval in enumerate(frame_intervals)
+        )
+    ):
+        return PlaybackCadence(
+            status="incomplete_flip_timing", expected_duration_s=expected_duration_s,
+        )
+
+    durations = [interval.interval_s for interval in frame_intervals]
+    observed_duration_s = fsum(durations)
+    duration_error_ms = 1000 * (observed_duration_s - expected_duration_s)
+    elapsed_s = 0.0
+    earliest_offset_ms = min(0.0, duration_error_ms)
+    latest_offset_ms = max(0.0, duration_error_ms)
+    for boundary in range(1, total_frames):
+        elapsed_s += durations[boundary - 1]
+        offset_ms = 1000 * (elapsed_s - boundary / refresh_hz)
+        earliest_offset_ms = min(earliest_offset_ms, offset_ms)
+        latest_offset_ms = max(latest_offset_ms, offset_ms)
+
+    return PlaybackCadence(
+        status="measured",
+        expected_duration_s=expected_duration_s,
+        observed_duration_s=observed_duration_s,
+        duration_error_ms=duration_error_ms,
+        observed_refresh_hz=total_frames / observed_duration_s,
+        observed_oddball_hz=_measure_oddball_hz(run_spec, durations),
+        earliest_offset_ms=earliest_offset_ms,
+        latest_offset_ms=latest_offset_ms,
+    )
+
+
+def _measure_oddball_hz(run_spec: RunSpec, durations: list[float]) -> float | None:
+    frames = [
+        event.frame_index for event in run_spec.trigger_events if event.label == "oddball_onset"
+    ]
+    if len(frames) < 2 or not 0 <= frames[0] < frames[-1] < len(durations):
+        return None
+    gap = frames[1] - frames[0]
+    if gap <= 0 or any(right - left != gap for left, right in pairwise(frames)):
+        return None
+    return (len(frames) - 1) / fsum(durations[frames[0] : frames[-1]])

@@ -377,6 +377,24 @@ tests require a user-approved safe visible setup; never use offscreen Qt locally
 
 ## Decision And Progress Log
 
+- 2026-11-12: Repeated the 6 Hz / 1.2 Hz software timing check in fullscreen twice
+  on the same fixed `60/1` Windows display mode. Windows listed no higher progressive
+  mode at the active resolution. Each run completed 7,200 frames, and the local test
+  receiver saw one code `1` followed by 144 codes `55`. The repeats used software
+  timing only. Measured stream durations were 119.963301 s and 119.962986 s,
+  respectively 36.699 ms and 37.014 ms ahead of the 120 s compiled duration. The
+  software-observed refresh rates were 60.018355 Hz and 60.018513 Hz. Mean oddball
+  flip periods were 833.068499 ms and 833.075278 ms. The longest measured
+  frame was 22.3004 ms and 21.9711 ms, respectively, with no interval above
+  25 ms. The marker callback and corresponding flip spans differed by at most
+  0.006 ms. The repeated fullscreen observations support a stable software timing
+  offset for this setup. Panel-light timing and EEG clock calibration remain open.
+  Added [playback cadence reporting](../../RUNTIME_EXECUTION.md#playback-cadence-reporting)
+  to retain this evidence independently of single-frame timing QC in both export modes.
+  The fixed 6 Hz / 1.2 Hz target remains the analysis reference. The requested
+  physical drift limit of 0.1 ms over 120 s is about 0.83 ppm. The setup still
+  needs optical qualification against an independently calibrated reference.
+
 - 2026-11-12: Ran the offline timing report on the saved two-minute 6 Hz / 1.2 Hz
   Recorder BDF and Studio acquisition log. All 145 sent markers matched in order
   (one code 1 and 144 code 55), all oddball callback frame gaps were 50, and the
