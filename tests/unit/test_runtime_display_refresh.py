@@ -85,6 +85,117 @@ def test_windows_mode_preserves_exact_fraction() -> None:
     assert mode.fraction_text == "60000/1001"
 
 
+def _windows_signal_records(virtual: bool):
+    windows = windows_display_module
+    path = windows._DisplayConfigPathInfo()
+    path.flags = windows._DISPLAYCONFIG_PATH_ACTIVE
+    path.targetInfo.targetAvailable = True
+    path.targetInfo.refreshRate = windows._DisplayConfigRational(60, 1)
+    path.targetInfo.scanLineOrdering = 1
+    path.targetInfo.scaling = 1
+    path.targetInfo.id = 256
+    path.targetInfo.adapterId = path.sourceInfo.adapterId = windows._Luid(73, 9)
+    target, source, desktop = (windows._DisplayConfigModeInfo() for _ in range(3))
+    for mode, kind, identifier in ((target, 2, 256), (source, 1, 0), (desktop, 3, 256)):
+        mode.infoType, mode.id, mode.adapterId = kind, identifier, path.targetInfo.adapterId
+    source.data.sourceMode.width, source.data.sourceMode.height = (1920, 1080)
+    signal = target.data.targetMode.targetVideoSignalInfo
+    signal.pixelRate = 138_700_000
+    signal.hSyncFreq = windows._DisplayConfigRational(138_700_000, 2080)
+    signal.vSyncFreq = windows._DisplayConfigRational(60, 1)
+    signal.activeSize = windows._DisplayConfig2DRegion(1920, 1080)
+    signal.totalSize = windows._DisplayConfig2DRegion(2080, 1111)
+    signal.scanLineOrdering = 1
+    desktop.data.desktopImageInfo.pathSourceSize = windows._PointL(1920, 1080)
+    desktop.data.desktopImageInfo.desktopImageRegion = windows._RectL(0, 0, 1920, 1080)
+    flags = windows._QDC_ONLY_ACTIVE_PATHS
+    if virtual:
+        flags |= windows._QDC_VIRTUAL_MODE_AWARE
+        path.flags |= windows._DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE
+        path.targetInfo.modeInfoIdx.parts.targetModeInfoIdx = 0
+        path.targetInfo.modeInfoIdx.parts.desktopModeInfoIdx = 2
+        path.sourceInfo.modeInfoIdx.parts.sourceModeInfoIdx = 1
+    else:
+        path.targetInfo.modeInfoIdx.modeInfoIdx = 0
+        path.sourceInfo.modeInfoIdx.modeInfoIdx = 1
+    return path, (target, source, desktop), flags
+
+
+@pytest.mark.parametrize("virtual", [True, False])
+def test_windows_query_preserves_nominal_and_distinct_signal_rate(monkeypatch, virtual):
+    windows = windows_display_module
+    path, modes, flags = _windows_signal_records(virtual)
+
+    def buffer_sizes(query_flags, path_count, mode_count):
+        assert query_flags == flags
+        path_count._obj.value = 1
+        mode_count._obj.value = len(modes) + 1
+        return 0
+
+    def query_config(query_flags, path_count, paths, mode_count, returned_modes, _topology):
+        assert query_flags == flags
+        paths[0] = path
+        for index, mode in enumerate(modes):
+            returned_modes[index] = mode
+        mode_count._obj.value = len(modes)
+        return 0
+
+    user32 = SimpleNamespace(
+        GetDisplayConfigBufferSizes=buffer_sizes, QueryDisplayConfig=query_config,
+    )
+    monkeypatch.setattr(windows, "_source_device_name", lambda *_: r"\\.\DISPLAY1")
+    active = windows._query_active_display_paths_with_flags(user32, flags)
+    mode = _select_primary_display_mode(r"\\.\DISPLAY1", active)
+
+    assert mode.fraction_text == "60/1"
+    assert mode.hz == 60.0
+    assert mode.signal_refresh_hz == pytest.approx(60.020425119435)
+
+
+@pytest.mark.parametrize("case", [
+    "no_target", "wrong_target_type", "wrong_target_id", "wrong_adapter", "no_pixel_rate",
+    "no_active_size", "no_total_size", "interlaced", "unknown_scanline", "missing_sync",
+    "scaled", "desktop_size", "no_desktop", "virtual_refresh", "vsync_divided",
+])
+def test_windows_signal_metadata_omits_unusable_modes(case):
+    windows = windows_display_module
+    path, modes, flags = _windows_signal_records(virtual=True)
+    target, source, desktop = modes
+    signal = target.data.targetMode.targetVideoSignalInfo
+    if case == "no_target":
+        path.targetInfo.modeInfoIdx.parts.targetModeInfoIdx = 0xFFFF
+    elif case == "wrong_target_type":
+        target.infoType = 1
+    elif case == "wrong_target_id":
+        target.id += 1
+    elif case == "wrong_adapter":
+        target.adapterId.HighPart += 1
+    elif case == "no_pixel_rate":
+        signal.pixelRate = 0
+    elif case == "no_active_size":
+        signal.activeSize.cx = 0
+    elif case == "no_total_size":
+        signal.totalSize.cy = 0
+    elif case == "interlaced":
+        signal.scanLineOrdering = 2
+    elif case == "unknown_scanline":
+        path.targetInfo.scanLineOrdering = 0
+    elif case == "missing_sync":
+        signal.hSyncFreq.Denominator = 0
+    elif case == "scaled":
+        source.data.sourceMode.width = 1600
+    elif case == "desktop_size":
+        desktop.data.desktopImageInfo.desktopImageRegion.right = 1600
+    elif case == "no_desktop":
+        path.targetInfo.modeInfoIdx.parts.desktopModeInfoIdx = 0xFFFF
+    elif case == "virtual_refresh":
+        path.flags |= windows._DISPLAYCONFIG_PATH_BOOST_REFRESH_RATE
+    else:
+        signal.videoStandard.additionalSignalInfo.vSyncFreqDivider = 2
+
+    assert windows._signal_refresh_hz(path, modes, flags) is None
+
+
 @pytest.mark.parametrize(("numerator", "denominator", "dynamic"), [
     (120, 1, False), (60_000, 1_001, False), (60, 1, True),
 ])
@@ -265,6 +376,27 @@ def test_verifier_keeps_exact_60_mode_when_psychopy_estimate_is_5994(
 
     assert result.approved_hz == 60.0
     assert result.display_mode.mode_reference == "60/1"
+
+
+def test_windows_verifier_logs_nominal_signal_and_probe_rates(monkeypatch, caplog) -> None:
+    monkeypatch.setattr(
+        windows_display_module,
+        "query_windows_display_mode",
+        lambda name: WindowsDisplayMode(
+            r"\\.\DISPLAY1", 60, 1, signal_refresh_hz=60.020425119,
+        ),
+    )
+    monkeypatch.setattr("fpvs_studio.runtime.display_mode.sys.platform", "win32")
+    presentation_engine, _ = _engine(60.0185)
+
+    with caplog.at_level("INFO", logger="fpvs_studio.runtime.display_refresh"):
+        result = verify_primary_display_refresh(presentation_engine)
+
+    assert result.approved_hz == 60.0
+    assert result.display_mode.signal_refresh_hz == pytest.approx(60.020425119)
+    assert "nominal=60.000000 Hz, scan timing=60.020425 Hz, PsychoPy probe=60.018500 Hz" in (
+        caplog.text
+    )
 
 
 def test_verifier_maps_linux_native_mode_to_nearest_approved_rate(

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sys
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -19,6 +20,7 @@ from fpvs_studio.runtime.display_mode import (
     query_primary_native_display_mode,
 )
 
+LOGGER = logging.getLogger(__name__)
 PSYCHOPY_STABILITY_RELATIVE_TOLERANCE = 0.005
 # The authored 59.94 label represents 60000/1001 (59.9400599...). This narrow
 # tolerance admits that display fraction without conflating it with integer 60/1.
@@ -174,6 +176,16 @@ def _verify_primary_display_refresh_in_process(
             "but PsychoPy observed "
             f"{psychopy_measured_hz:.3f} Hz. Confirm the presentation display, disable "
             "variable refresh, and close graphics-intensive applications before retrying."
+        )
+
+    if display_mode.signal_refresh_hz is not None:
+        LOGGER.info(
+            "Display refresh for %s: nominal=%.6f Hz, scan timing=%.6f Hz, "
+            "PsychoPy probe=%.6f Hz.",
+            display_mode.display_name,
+            display_mode.hz,
+            display_mode.signal_refresh_hz,
+            psychopy_measured_hz,
         )
 
     return DisplayRefreshVerification(

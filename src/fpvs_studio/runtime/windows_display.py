@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ctypes
 import sys
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -17,7 +18,14 @@ _DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x00000001
 _DISPLAY_DEVICE_PRIMARY_DEVICE = 0x00000004
 _DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME = 1
 _DISPLAYCONFIG_PATH_ACTIVE = 0x00000001
+_DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE = 0x00000008
 _DISPLAYCONFIG_PATH_BOOST_REFRESH_RATE = 0x00000010
+_DISPLAYCONFIG_PATH_VIRTUAL_MODE_IDX_INVALID = 0xFFFF
+_DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE = 1
+_DISPLAYCONFIG_MODE_INFO_TYPE_TARGET = 2
+_DISPLAYCONFIG_MODE_INFO_TYPE_DESKTOP_IMAGE = 3
+_DISPLAYCONFIG_SCALING_IDENTITY = 1
+_DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE = 1
 _ENUM_CURRENT_SETTINGS = 0xFFFFFFFF
 _DM_INTERLACED = 0x00000002
 _MONITORINFOF_PRIMARY = 0x00000001
@@ -319,12 +327,13 @@ class WindowsRefreshRecommendation:
 
 @dataclass(frozen=True)
 class WindowsDisplayMode:
-    """Exact driver-configured refresh mode for one active Windows display path."""
+    """Nominal refresh mode and optional signal timing for one active Windows path."""
 
     display_device_name: str
     numerator: int
     denominator: int
     dynamic_refresh_enabled: bool = False
+    signal_refresh_hz: float | None = None
 
     def __post_init__(self) -> None:
         if self.numerator <= 0 or self.denominator <= 0:
@@ -345,6 +354,7 @@ class _ActiveDisplayPath:
     numerator: int
     denominator: int
     dynamic_refresh_enabled: bool
+    signal_refresh_hz: float | None = None
 
 
 def _load_user32() -> Any:
@@ -415,6 +425,95 @@ def _source_device_name(user32: Any, path: _DisplayConfigPathInfo) -> str:
     return str(request.viewGdiDeviceName).strip()
 
 
+def _matches_mode(
+    mode: _DisplayConfigModeInfo,
+    expected_type: int,
+    path_info: _DisplayConfigPathSourceInfo | _DisplayConfigPathTargetInfo,
+) -> bool:
+    return bool(
+        mode.infoType == expected_type
+        and mode.id == path_info.id
+        and mode.adapterId.LowPart == path_info.adapterId.LowPart
+        and mode.adapterId.HighPart == path_info.adapterId.HighPart
+    )
+
+
+def _signal_refresh_hz(
+    path: _DisplayConfigPathInfo,
+    modes: Sequence[_DisplayConfigModeInfo],
+    query_flags: int,
+) -> float | None:
+    target = path.targetInfo
+    source = path.sourceInfo
+    if (
+        target.scaling != _DISPLAYCONFIG_SCALING_IDENTITY
+        or target.scanLineOrdering != _DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE
+        or path.flags & _DISPLAYCONFIG_PATH_BOOST_REFRESH_RATE
+    ):
+        return None
+    virtual_mode = bool(
+        query_flags & _QDC_VIRTUAL_MODE_AWARE
+        and path.flags & _DISPLAYCONFIG_PATH_SUPPORT_VIRTUAL_MODE
+    )
+    target_index = (
+        target.modeInfoIdx.parts.targetModeInfoIdx if virtual_mode
+        else target.modeInfoIdx.modeInfoIdx
+    )
+    source_index = (
+        source.modeInfoIdx.parts.sourceModeInfoIdx if virtual_mode
+        else source.modeInfoIdx.modeInfoIdx
+    )
+    mode_index_limit = (
+        min(len(modes), _DISPLAYCONFIG_PATH_VIRTUAL_MODE_IDX_INVALID)
+        if virtual_mode else len(modes)
+    )
+    if target_index >= mode_index_limit or source_index >= mode_index_limit:
+        return None
+    target_mode = modes[target_index]
+    source_mode = modes[source_index]
+    if not (
+        _matches_mode(target_mode, _DISPLAYCONFIG_MODE_INFO_TYPE_TARGET, target)
+        and _matches_mode(source_mode, _DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE, source)
+    ):
+        return None
+    signal = target_mode.data.targetMode.targetVideoSignalInfo
+    active_width, active_height = signal.activeSize.cx, signal.activeSize.cy
+    total_width, total_height = signal.totalSize.cx, signal.totalSize.cy
+    if (
+        not signal.pixelRate
+        or not 0 < active_width <= total_width
+        or not 0 < active_height <= total_height
+        or signal.scanLineOrdering != _DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE
+        or signal.videoStandard.additionalSignalInfo.vSyncFreqDivider
+        or not all((
+            signal.hSyncFreq.Numerator, signal.hSyncFreq.Denominator,
+            signal.vSyncFreq.Numerator, signal.vSyncFreq.Denominator,
+        ))
+        or (source_mode.data.sourceMode.width, source_mode.data.sourceMode.height)
+        != (active_width, active_height)
+    ):
+        return None
+    if virtual_mode:
+        desktop_index = target.modeInfoIdx.parts.desktopModeInfoIdx
+        if desktop_index >= mode_index_limit:
+            return None
+        desktop_mode = modes[desktop_index]
+        if not _matches_mode(desktop_mode, _DISPLAYCONFIG_MODE_INFO_TYPE_DESKTOP_IMAGE, target):
+            return None
+        desktop = desktop_mode.data.desktopImageInfo
+        region = desktop.desktopImageRegion
+        if (
+            (desktop.pathSourceSize.x, desktop.pathSourceSize.y) != (active_width, active_height)
+            or (region.right - region.left, region.bottom - region.top)
+            != (active_width, active_height)
+        ):
+            return None
+
+    # Windows can label the configured refresh as 60/1 even if the scan timing
+    # implies a slightly different rate. Retain both without using this value as a clock.
+    return int(signal.pixelRate) / (int(total_width) * int(total_height))
+
+
 def _query_active_display_paths_with_flags(
     user32: Any,
     query_flags: int,
@@ -462,6 +561,7 @@ def _query_active_display_paths_with_flags(
             raise _windows_error("QueryDisplayConfig", result)
 
         active_paths: list[_ActiveDisplayPath] = []
+        available_modes = modes[:mode_count.value]
         for index in range(path_count.value):
             path = paths[index]
             if not int(path.flags) & _DISPLAYCONFIG_PATH_ACTIVE:
@@ -477,6 +577,7 @@ def _query_active_display_paths_with_flags(
                     dynamic_refresh_enabled=bool(
                         int(path.flags) & _DISPLAYCONFIG_PATH_BOOST_REFRESH_RATE
                     ),
+                    signal_refresh_hz=_signal_refresh_hz(path, available_modes, query_flags),
                 )
             )
         return active_paths
@@ -532,6 +633,7 @@ def _select_primary_display_mode(
         numerator=selected_path.numerator,
         denominator=selected_path.denominator,
         dynamic_refresh_enabled=selected_path.dynamic_refresh_enabled,
+        signal_refresh_hz=selected_path.signal_refresh_hz,
     )
 
 

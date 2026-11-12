@@ -110,6 +110,11 @@ asks a runtime-owned platform adapter for the selected display's configured
 native mode, then asks the engine for one fullscreen observation per session. Windows
 continues to use `QueryDisplayConfig`; its exact fraction is authoritative for approved-
 rate selection, so `60000/1001` maps to `59.94 Hz` while `60/1` maps to `60 Hz`.
+For a progressive, unscaled Windows signal with complete mode data, refresh verification
+logs the nominal rate, the configured pixel clock divided by total pixels per frame, and
+the PsychoPy probe result. The signal calculation can expose a rate such as 60.020425 Hz
+under a 60 Hz mode label. It is a driver configuration value. Use the exported playback
+cadence to evaluate observed timing over the full condition.
 KDE Linux uses `kscreen-doctor --json` to select the enabled priority output, resolve
 its current mode, and read its VRR policy. Linux X11 uses the active primary XRandR
 mode. Floating Linux mode metadata maps to the nearest approved FPVS rate only within

@@ -377,6 +377,19 @@ tests require a user-approved safe visible setup; never use offscreen Qt locally
 
 ## Decision And Progress Log
 
+- 2026-11-12: On the built-in Lenovo display, same-PC PsychoPy 2026.1.1
+  fullscreen repeats ended 37.790 and 36.478 ms early over 120 s. A minimal
+  PsychoPy 2026.2.5 loop ended 37.233 ms early, and 7,200 Windows kernel
+  vertical-blank intervals ended 37.323 ms early. The driver labels the mode
+  `60/1`; its configured 138.700 MHz pixel clock and 2,080 × 1,111 scan totals
+  imply 60.020425 Hz. The alternate 48 Hz Studio repeats ended 12.643 and
+  11.831 ms late. The driver retained the original clock when asked to apply
+  a corrected 60 Hz mode. Restored the original 1920 × 1080 / 60 Hz display
+  configuration after the trials. The current software endpoint target is
+  ±1 ms over 120 s. The built-in modes remain outside it. Record native
+  signal timing as diagnostic evidence alongside the nominal mode and PsychoPy
+  observation. Physical timing remains unmeasured.
+
 - 2026-11-12: Repeated the 6 Hz / 1.2 Hz software timing check in fullscreen twice
   on the same fixed `60/1` Windows display mode. Windows listed no higher progressive
   mode at the active resolution. Each run completed 7,200 frames, and the local test

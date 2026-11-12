@@ -26,6 +26,7 @@ class NativeDisplayMode:
     pixel_width: int | None = None
     pixel_height: int | None = None
     display_device_name: str | None = None
+    signal_refresh_hz: float | None = None
 
     def __post_init__(self) -> None:
         if not isfinite(self.refresh_hz) or self.refresh_hz <= 0:
@@ -36,6 +37,10 @@ class NativeDisplayMode:
             raise ValueError("Native display name must not be blank.")
         if not self.source_name.strip():
             raise ValueError("Native display source name must not be blank.")
+        if self.signal_refresh_hz is not None and (
+            not isfinite(self.signal_refresh_hz) or self.signal_refresh_hz <= 0
+        ):
+            raise ValueError("Signal refresh rate must be finite and positive.")
 
     @property
     def hz(self) -> float:
@@ -89,6 +94,7 @@ def query_native_display_mode(display_device_name: str | None = None) -> NativeD
             variable_refresh_label=(
                 "Dynamic Refresh Rate" if windows_mode.dynamic_refresh_enabled else None
             ),
+            signal_refresh_hz=windows_mode.signal_refresh_hz,
         )
 
     if sys.platform == "darwin":
