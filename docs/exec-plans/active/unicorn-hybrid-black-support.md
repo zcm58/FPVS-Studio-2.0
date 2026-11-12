@@ -13,6 +13,12 @@ and physical timing qualification remain pending; exports retain that evidence s
 Automated verification uses fakes. Hardware and timing acceptance remain separate from
 software checks.
 
+Trigger Tester can submit individual UDP event markers on the effective project
+port using the same adapter as normal launches. The dialog reports local submission
+and leaves receipt verification to Recorder. The [visible smoke path](../../GUI_WORKFLOW.md#trigger-tester)
+includes comparing a short known sequence against a saved raw BDF. This check is
+pending on the physical headset.
+
 The 2026-10-12 [Studio/Toolbox integration decision](studio-toolbox-integration.md)
 adds a core-owned built-in hardware declaration registry and automatic completed-session
 config handoffs for both existing recording choices. This supersedes the earlier

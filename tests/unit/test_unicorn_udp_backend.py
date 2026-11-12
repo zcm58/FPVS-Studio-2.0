@@ -11,6 +11,7 @@ from fpvs_studio.runtime.triggers import (
     TriggerEmissionError,
     build_trigger_backend,
 )
+from fpvs_studio.triggers.manual import send_test_trigger
 from fpvs_studio.triggers.null_backend import NullBackend
 from fpvs_studio.triggers.unicorn_udp_backend import (
     UnicornUDPBackend,
@@ -50,6 +51,29 @@ class _FakeSocket:
         self.close_calls += 1
         if self.close_error:
             raise self.close_error
+
+
+def test_unicorn_manual_test_submits_one_datagram_and_closes_each_time() -> None:
+    sockets = [_FakeSocket() for _ in range(4)]
+    pending = iter(sockets)
+    backend = UnicornUDPBackend(65535, socket_factory=lambda *_args: next(pending))
+
+    for code in (1, 5, 5, 9):
+        send_test_trigger(backend, code)
+
+    for fake_socket, payload in zip(sockets, (b"1", b"5", b"5", b"9"), strict=True):
+        assert fake_socket.blocking == [False]
+        assert fake_socket.attempts == [(payload, ("127.0.0.1", 65535))]
+        assert fake_socket.close_calls == 1
+
+
+def test_unicorn_manual_test_rejects_idle_before_opening_a_socket() -> None:
+    def unexpected_socket(*_args: int) -> _FakeSocket:
+        pytest.fail("Idle code must not open a UDP socket")
+
+    backend = UnicornUDPBackend(socket_factory=unexpected_socket)
+    with pytest.raises(ValueError, match="Idle code 0 requires a hardware output"):
+        send_test_trigger(backend, 0)
 
 
 def test_unicorn_prepares_nonblocking_socket_once_and_exact_ascii_payloads() -> None:

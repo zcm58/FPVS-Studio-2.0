@@ -1,4 +1,4 @@
-"""Send operator-selected digits through the existing hardware adapters."""
+"""Send operator-selected digits through the existing trigger adapters."""
 
 from __future__ import annotations
 
@@ -44,6 +44,7 @@ from fpvs_studio.triggers.manual import send_test_trigger
 from fpvs_studio.triggers.parallel_backend import ParallelPortBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.serial_port_access import SerialPortAccessError, check_serial_port_access
+from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
 LOGGER = logging.getLogger(__name__)
 
@@ -75,6 +76,7 @@ class TriggerTesterDialog(QDialog):
         self._baudrate = triggers.baudrate
         self._pulse_width_ms = recording.brainproducts_pulse_width_ms
         self._parallel_address = recording.brainproducts_parallel_address
+        self._unicorn_udp_port = recording.unicorn_udp_port
         self._output = ""
         self._task: BackgroundTask | None = None
         self._checked_port: tuple[str, str] | None = None
@@ -91,6 +93,7 @@ class TriggerTesterDialog(QDialog):
         self.output_combo.addItem("BioSemi USB Trigger Interface", "serial")
         self.output_combo.addItem("BrainVision (TriggerBox / Plus)", "brainproducts_triggerbox")
         self.output_combo.addItem("BrainVision (actiCHamp parallel port)", "brainproducts_parallel")
+        self.output_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
         self.output_combo.setAccessibleName("Recording output")
         form.addRow("Recording output", self.output_combo)
         self.port_edit = QLineEdit(self)
@@ -113,7 +116,8 @@ class TriggerTesterDialog(QDialog):
         form.addRow(self._port_label, port_row)
         layout.addLayout(form)
 
-        layout.addWidget(QLabel("Press 0–9 to send the matching trigger code.", self))
+        self._digit_hint = QLabel(self)
+        layout.addWidget(self._digit_hint)
         codes = QHBoxLayout()
         self.digit_buttons = tuple(QPushButton(str(code), self) for code in range(10))
         for code, button in enumerate(self.digit_buttons):
@@ -124,7 +128,6 @@ class TriggerTesterDialog(QDialog):
             button.setMinimumWidth(36)
             button.clicked.connect(lambda _checked=False, code=code: self._send(code))
             codes.addWidget(button, 1)
-        self.digit_buttons[0].setToolTip("0 writes idle and may not appear as a marker.")
         layout.addLayout(codes)
 
         self.status_label = QLabel(self)
@@ -215,14 +218,31 @@ class TriggerTesterDialog(QDialog):
             self.manual_port_button.setChecked(False)
         self._stop_finding_port()
         parallel = self._output == "brainproducts_parallel"
-        endpoint = "Parallel address" if parallel else "COM port"
-        self._port_label.setText(endpoint)
-        self.port_edit.setAccessibleName(endpoint)
-        self.port_edit.setReadOnly(parallel)
-        self.port_edit.setToolTip("" if parallel else "Press Enter to check the COM port.")
-        self.port_edit.setText(
-            f"0x{self._parallel_address:X}" if parallel and self._parallel_address is not None
-            else self._ports.get(self._output, "")
+        unicorn = self._output == "unicorn_udp"
+        if unicorn:
+            label = "UDP endpoint"
+            value = f"127.0.0.1:{self._unicorn_udp_port}"
+            tip = "Match Recorder’s Trigger UDP Input. Set the port in Settings > Recording."
+        elif parallel:
+            label = "Parallel address"
+            value = f"0x{self._parallel_address:X}" if self._parallel_address is not None else ""
+            tip = ""
+        else:
+            label = "COM port"
+            value = self._ports.get(self._output, "")
+            tip = "Press Enter to check the COM port."
+        self._port_label.setText(label)
+        self.port_edit.setAccessibleName(label)
+        self.port_edit.setReadOnly(parallel or unicorn)
+        self.port_edit.setToolTip(tip)
+        self.port_edit.setText(value)
+        self._digit_hint.setText(
+            "Press 1–9 to send the matching trigger code." if unicorn
+            else "Press 0–9 to send the matching trigger code."
+        )
+        self.digit_buttons[0].setToolTip(
+            "Unicorn Recorder UDP uses event codes 1–9 in Trigger Tester." if unicorn
+            else "0 writes idle and may not appear as a marker."
         )
         self._port_changed()
         if self.isVisible():
@@ -248,7 +268,11 @@ class TriggerTesterDialog(QDialog):
     @Slot()
     def _port_changed(self) -> None:
         self._checked_port = None
-        self.status_label.setText(self._configuration_issue())
+        status = (
+            "Enable Trigger UDP Input in Unicorn Recorder and record to verify markers."
+            if self._output == "unicorn_udp" else self._configuration_issue()
+        )
+        self.status_label.setText(status)
         self.status_label.setToolTip("")
         self._refresh_controls()
 
@@ -304,8 +328,8 @@ class TriggerTesterDialog(QDialog):
         )
         self.close_button.setEnabled(idle)
         can_send = idle and not self._configuration_issue()
-        for button in self.digit_buttons:
-            button.setEnabled(can_send)
+        for code, button in enumerate(self.digit_buttons):
+            button.setEnabled(can_send and (code != 0 or self._output != "unicorn_udp"))
 
     @Slot()
     def _check_port(self) -> None:
@@ -428,13 +452,14 @@ class TriggerTesterDialog(QDialog):
         self.status_label.setToolTip(str(error))
 
     def _send(self, code: int) -> None:
-        if self._task is not None or self._configuration_issue():
+        if not self.digit_buttons[code].isEnabled():
             return
         output = self._output
         port = self._checked_port[1] if self._checked_port is not None else ""
         address = self._parallel_address
         baudrate = self._baudrate
         pulse_width_ms = self._pulse_width_ms
+        unicorn_port = self._unicorn_udp_port
 
         def send() -> int:
             backend: TriggerBackend
@@ -444,6 +469,8 @@ class TriggerTesterDialog(QDialog):
                 backend = BrainProductsTriggerBoxBackend(port=port, pulse_width_ms=pulse_width_ms)
             elif output == "brainproducts_parallel" and address is not None:
                 backend = ParallelPortBackend(address, pulse_width_ms=pulse_width_ms)
+            elif output == "unicorn_udp":
+                backend = UnicornUDPBackend(unicorn_port)
             else:
                 raise ValueError("Choose a configured recording output.")
             send_test_trigger(backend, code)
@@ -537,6 +564,11 @@ class TriggerTesterDialog(QDialog):
 
     @Slot(object)
     def _show_send_success(self, code: object) -> None:
+        if self._output == "unicorn_udp":
+            self.status_label.setText(
+                f"Studio submitted UDP trigger {code}. Verify receipt in Unicorn Recorder."
+            )
+            return
         self.status_label.setText(
             "Studio wrote 0 (idle). It may not appear as a marker." if code == 0
             else f"Studio sent trigger {code}. Check the recording software."
@@ -544,9 +576,14 @@ class TriggerTesterDialog(QDialog):
 
     @Slot(object)
     def _remember_send_error(self, error: object) -> None:
+        failure = _coerce_exception(error)
+        if self._output == "unicorn_udp":
+            self.status_label.setText("Unicorn UDP trigger test failed. See details, then retry.")
+            self.status_label.setToolTip(str(failure))
+            return
         self._checked_port = None
         self.status_label.setText(self._configuration_issue())
-        self._pending_error = ("Send Test Trigger", _coerce_exception(error), None)
+        self._pending_error = ("Send Test Trigger", failure, None)
 
     @Slot()
     def _finish_task(self) -> None:

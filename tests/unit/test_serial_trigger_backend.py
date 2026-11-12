@@ -133,7 +133,7 @@ def test_manual_test_rejects_invalid_digits_without_opening_the_port(code: objec
 
 
 def test_manual_test_rejects_log_only_output() -> None:
-    with pytest.raises(ValueError, match="hardware output"):
+    with pytest.raises(ValueError, match="recording output"):
         send_test_trigger(NullBackend(), 1)
 
 

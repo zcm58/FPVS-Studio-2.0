@@ -637,8 +637,8 @@ task controls and visible acceptance are documented in
 ### Trigger Tester
 
 Open a project, then choose **Tools > Trigger Tester**. The tester preselects the
-effective project recording device and uses its BioSemi baud rate and Brain Products
-pulse width. Press `0`–`9` on the top row or numeric keypad, or click a digit.
+effective project recording device and uses its configured parameters. Press a
+digit on the top row or numeric keypad, or click its button.
 
 For **BrainVision (TriggerBox / Plus)**, Studio automatically looks for a single
 TriggerBox listed by the driver, opens and closes the connection without sending a
@@ -662,11 +662,18 @@ points to the listed port before opening anything.
 Detected ports and COM edits in the tester apply to this dialog only. Recording
 uses the port saved in **Settings > Recording**. Set the parallel I/O address there.
 
+For **Unicorn Recorder UDP**, the tester displays the loopback endpoint using the
+port from **Settings > Recording**. Enable **Trigger UDP Input** in Unicorn Recorder
+on the same computer with the matching IP address and port, and start a recording
+to check saved markers. Each digit `1`–`9` submits one UDP datagram. Digit `0` is
+disabled. The tester reports local submission. Verify receipt in Recorder and
+check the saved `Status` channel in the raw BDF.
+
 Each keypress opens the selected output, sends the digit and releases the connection.
 Wait for the result before sending the next digit. Studio reports the outcome of
 the local write. Use digits `1`–`9` to verify receipt in BrainVision Recorder or
-BioSemi ActiView. Digit `0` writes the idle value, which may be omitted from the
-marker display.
+BioSemi ActiView. For these hardware outputs, digit `0` writes the idle value,
+which may be omitted from the marker display.
 
 #### Visible smoke path
 
@@ -690,6 +697,12 @@ marker display.
    enables the digits after checking the single new port, and verify receipt in
    ActiView. Repeat with another USB serial device added during the scan and verify
    that neither port is opened. Check the dialog at `560x340` during both scans.
+5. Select **Unicorn Recorder UDP**. At `560x340`, check the complete endpoint and
+   status text with the default port `1000` and a saved custom port. Confirm that
+   COM controls are hidden and that keyboard and button input allow `1`–`9` only.
+   With Recorder logging a bench recording, send `1`, `9`, `5`, `5` and compare
+   the order in the saved raw BDF. Switch back to a hardware output and check
+   that `0` is available after any required connection check.
 
 Registered GUI coverage lives in `tests/gui/test_trigger_tester.py`.
 

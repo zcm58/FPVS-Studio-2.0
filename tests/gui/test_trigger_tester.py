@@ -1,4 +1,4 @@
-"""Registered keyboard and worker smoke checks for the hardware trigger tester."""
+"""Registered keyboard and worker smoke checks for Trigger Tester."""
 
 from __future__ import annotations
 
@@ -58,6 +58,7 @@ def hardware(monkeypatch):
     serial = Mock(return_value=object())
     triggerbox = Mock(return_value=object())
     parallel = Mock(return_value=object())
+    unicorn = Mock(return_value=object())
     check = Mock(side_effect=lambda port, **_: SerialPortAccessResult(port, True))
     discover = Mock(return_value=(
         TriggerBoxPortCandidate("COM42", "Brain Products GmbH TriggerBox Plus Virtual Serial Port"),
@@ -70,6 +71,7 @@ def hardware(monkeypatch):
     monkeypatch.setattr(tester_module, "SerialBackend", serial)
     monkeypatch.setattr(tester_module, "BrainProductsTriggerBoxBackend", triggerbox)
     monkeypatch.setattr(tester_module, "ParallelPortBackend", parallel)
+    monkeypatch.setattr(tester_module, "UnicornUDPBackend", unicorn)
     monkeypatch.setattr(tester_module, "check_serial_port_access", check)
     monkeypatch.setattr(tester_module, "discover_triggerbox_ports", discover)
     monkeypatch.setattr(tester_module, "discover_biosemi_ports", discover_biosemi)
@@ -77,17 +79,20 @@ def hardware(monkeypatch):
     monkeypatch.setattr(tester_module, "_show_error_dialog", popup)
     return SimpleNamespace(
         tasks=tasks, send=send, serial=serial, triggerbox=triggerbox, parallel=parallel,
+        unicorn=unicorn,
         check=check, discover=discover, discover_biosemi=discover_biosemi,
         enumerate_ports=enumerate_ports, popup=popup,
     )
 
 
-def _open_tester(qtbot, *, output="serial", address=None):
+def _open_tester(qtbot, *, output="serial", address=None, udp_port=None):
     configuration = {
         "recording_backend": output,
         "brainproducts_serial_port": "COM1234567890",
         "brainproducts_parallel_address": address,
     }
+    if udp_port is not None:
+        configuration["unicorn_udp_port"] = udp_port
     dialog = TriggerTesterDialog(
         configuration, TriggerSettings(serial_port="COM193", baudrate=57600),
     )
@@ -602,3 +607,68 @@ def test_tools_action_opens_tester_without_sending(qtbot, controller, tmp_path, 
     dialog.close()
     assert document.project.settings.triggers.serial_port == saved_port
     assert window.main_stack.currentWidget() is window.home_page
+
+
+@pytest.mark.parametrize("udp_port", [None, 65535])
+def test_unicorn_uses_saved_udp_endpoint_and_accepts_nonzero_digits(qtbot, hardware, udp_port):
+    dialog = _open_tester(qtbot, output="unicorn_udp", udp_port=udp_port)
+    expected_port = 1000 if udp_port is None else udp_port
+
+    assert dialog.output_combo.currentText() == "Unicorn Recorder UDP"
+    assert dialog.port_edit.isVisible() and dialog.port_edit.isReadOnly()
+    assert dialog.port_edit.text() == f"127.0.0.1:{expected_port}"
+    assert dialog.port_edit.accessibleName() == "UDP endpoint"
+    assert not dialog.check_port_button.isVisible()
+    assert not dialog.manual_port_button.isVisible()
+    assert not dialog.find_port_button.isVisible()
+    assert "Enable Trigger UDP Input" in dialog.status_label.text()
+    assert not dialog.digit_buttons[0].isEnabled()
+    assert all(button.isEnabled() for button in dialog.digit_buttons[1:])
+    _assert_dialog_geometry(qtbot, dialog)
+
+    qtbot.keyClick(dialog, Qt.Key.Key_0, Qt.KeyboardModifier.KeypadModifier)
+    assert not hardware.tasks
+    hardware.send.assert_not_called()
+
+    qtbot.keyClick(dialog, Qt.Key.Key_9, Qt.KeyboardModifier.KeypadModifier)
+    assert len(hardware.tasks) == 1
+    assert not any(button.isEnabled() for button in dialog.digit_buttons)
+    _assert_dialog_geometry(qtbot, dialog)
+    hardware.tasks[-1].complete()
+
+    hardware.unicorn.assert_called_once_with(expected_port)
+    hardware.send.assert_called_once_with(hardware.unicorn.return_value, 9)
+    hardware.check.assert_not_called()
+    hardware.discover.assert_not_called()
+    hardware.discover_biosemi.assert_not_called()
+    assert dialog.status_label.text() == (
+        "Studio submitted UDP trigger 9. Verify receipt in Unicorn Recorder."
+    )
+    _assert_dialog_geometry(qtbot, dialog)
+
+
+def test_unicorn_reports_failure_inline_and_can_retry_or_switch_output(qtbot, hardware):
+    dialog = _open_tester(qtbot, output="brainproducts_parallel", address=0xD010)
+    assert dialog.digit_buttons[0].isEnabled()
+    _select_output(dialog, "unicorn_udp")
+    assert not hardware.tasks
+    hardware.send.side_effect = OSError("UDP socket rejected the datagram")
+
+    qtbot.mouseClick(dialog.digit_buttons[5], Qt.MouseButton.LeftButton)
+    hardware.tasks[-1].complete()
+    assert "Unicorn UDP trigger test failed" in dialog.status_label.text()
+    assert "UDP socket rejected the datagram" in dialog.status_label.toolTip()
+    assert dialog.digit_buttons[5].isEnabled()
+    assert not dialog.digit_buttons[0].isEnabled()
+    hardware.popup.assert_not_called()
+    _assert_dialog_geometry(qtbot, dialog)
+
+    hardware.send.side_effect = None
+    qtbot.mouseClick(dialog.digit_buttons[5], Qt.MouseButton.LeftButton)
+    hardware.tasks[-1].complete()
+    assert "Studio submitted UDP trigger 5" in dialog.status_label.text()
+    assert dialog.status_label.toolTip() == ""
+    _select_output(dialog, "brainproducts_parallel")
+    assert dialog.port_edit.text() == "0xD010"
+    assert dialog.digit_buttons[0].isEnabled()
+    _assert_dialog_geometry(qtbot, dialog)

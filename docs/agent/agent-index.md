@@ -21,7 +21,7 @@ owners and targeted tests.
 | `preprocessing` | Image intake, inspection, variants and manifests | `src/fpvs_studio/preprocessing/AGENTS.md` | Relevant asset/manifest test |
 | `runtime` | Launch, preflight, session flow, scoring and participant results/exports | `src/fpvs_studio/runtime/AGENTS.md` | Relevant `docs/RUNTIME_EXECUTION.md` section; [exports](../RUNTIME_EXECUTION.md#exports) |
 | `engine` | Rendering, task-screen fitting, response pointers, graphics lifetime and frame playback | `src/fpvs_studio/engines/AGENTS.md` | Relevant `docs/ENGINE_INTERFACE.md` section |
-| `triggers` | Hardware adapters, port discovery, recovery and Windows write completion | `src/fpvs_studio/triggers/AGENTS.md` | [Recording](../RUNTIME_EXECUTION.md#trigger-behavior) or [Trigger Tester](../GUI_WORKFLOW.md#trigger-tester) |
+| `triggers` | Hardware adapters, local UDP markers, port discovery, recovery and Windows write completion | `src/fpvs_studio/triggers/AGENTS.md` | [Recording](../RUNTIME_EXECUTION.md#trigger-behavior) or [Trigger Tester](../GUI_WORKFLOW.md#trigger-tester) |
 | `updates` | Source/platform routing, updater protocol, cache, downloads and install handoff | `src/fpvs_studio/updates/AGENTS.md` | `docs/PACKAGING.md#in-app-update-flow` |
 | `library` | Catalog, enrollment, submissions and project updates | `src/fpvs_studio/library/AGENTS.md` | Relevant `docs/EXPERIMENT_LIBRARY.md` section |
 | `data-sharing` | Consent, outbox, delivery and comparisons | `src/fpvs_studio/data_sharing/AGENTS.md` | Relevant `docs/DATA_SHARING.md` section |

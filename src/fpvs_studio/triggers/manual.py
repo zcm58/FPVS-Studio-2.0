@@ -1,4 +1,4 @@
-"""One-shot hardware output for an operator's Trigger Tester keypress."""
+"""One-shot output for an operator's Trigger Tester keypress."""
 
 from __future__ import annotations
 
@@ -7,12 +7,14 @@ from fpvs_studio.triggers.serial_backend import SerialBackend
 
 
 def send_test_trigger(backend: TriggerBackend, code: int) -> None:
-    """Send a digit and release the hardware on the calling worker."""
+    """Send a digit and release the output on the calling worker."""
 
     if type(code) is not int or not 0 <= code <= 9:
         raise ValueError("Test trigger code must be an integer from 0 to 9.")
-    if not backend.emits_hardware_triggers:
-        raise ValueError("Choose a hardware output for the test trigger.")
+    if not backend.emits_external_markers:
+        raise ValueError("Choose a recording output for the test trigger.")
+    if code == 0 and not backend.emits_hardware_triggers:
+        raise ValueError("Idle code 0 requires a hardware output.")
 
     try:
         backend.connect()
