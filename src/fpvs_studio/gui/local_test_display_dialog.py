@@ -21,7 +21,6 @@ from fpvs_studio.gui.components import (
     create_double_spin_box,
     mark_primary_action,
 )
-from fpvs_studio.gui.import_display_settings_dialog import detect_primary_display_settings
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 
 if TYPE_CHECKING:
@@ -80,12 +79,12 @@ class LocalTestDisplayDialog(QDialog):
                 "in macOS System Settings > Displays, then retry."
             )
         self.refresh_hz = refresh_hz
-        detected = detect_primary_display_settings()
         self.screen_width_spin = create_double_spin_box(
             parent=self, object_name="local_test_screen_width", minimum=1, maximum=500,
             decimals=2, step=0.25, suffix=" cm",
         )
-        self.screen_width_spin.setValue(detected.screen_width_cm or display.screen_width_cm)
+        self.screen_width_spin.setValue(display.screen_width_cm)
+        self.screen_width_spin.setToolTip("Measure the width across the lit screen.")
         self.distance_spin = create_double_spin_box(
             parent=self, object_name="local_test_viewing_distance", minimum=1, maximum=500,
             decimals=1, step=5, suffix=" cm",

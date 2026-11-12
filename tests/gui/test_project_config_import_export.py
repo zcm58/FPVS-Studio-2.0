@@ -919,11 +919,11 @@ def test_bundle_import_progress_dialog_is_expanded_without_clipping(qtbot, tmp_p
     dialog.finish()
 
 
-def test_import_display_settings_dialog_detect_button_fills_available_values(
+def test_import_display_settings_dialog_detect_button_keeps_edited_width(
     qtbot,
     monkeypatch,
 ) -> None:
-    dialog = ImportDisplaySettingsDialog(DisplaySettings())
+    dialog = ImportDisplaySettingsDialog(DisplaySettings(screen_width_cm=49.5))
     qtbot.addWidget(dialog)
     dialog.show()
     QApplication.processEvents()
@@ -931,16 +931,17 @@ def test_import_display_settings_dialog_detect_button_fills_available_values(
         "fpvs_studio.gui.import_display_settings_dialog.detect_primary_display_settings",
         lambda: DetectedDisplaySettings(
             refresh_hz=119.88,
-            screen_width_cm=61.2,
             screen_width_px=2560,
             screen_height_px=1440,
         ),
     )
 
-    dialog.apply_detected_primary_display()
+    assert dialog.screen_width_cm_spin.value() == 49.5
+    dialog.screen_width_cm_spin.setValue(31.25)
+    dialog.detect_button.click()
 
     assert dialog.refresh_hz_spin.value() == 120.0
-    assert dialog.screen_width_cm_spin.value() == 61.2
+    assert dialog.display_updates()["screen_width_cm"] == 31.25
     assert dialog.screen_width_px_spin.value() == 2560
     assert dialog.screen_height_px_spin.value() == 1440
     assert dialog.detected_refresh_label.text() == "119.88 Hz (use 120 Hz)"
@@ -961,7 +962,6 @@ def test_import_display_settings_dialog_keeps_approved_value_for_unsupported_ref
         "fpvs_studio.gui.import_display_settings_dialog.detect_primary_display_settings",
         lambda: DetectedDisplaySettings(
             refresh_hz=75.0,
-            screen_width_cm=61.2,
             screen_width_px=2560,
             screen_height_px=1440,
         ),
@@ -1026,12 +1026,11 @@ def test_import_display_detection_uses_physical_pixels(monkeypatch, ratio, logic
 
     screen = SimpleNamespace(
         geometry=lambda: QRect(0, 0, *logical), devicePixelRatio=lambda: ratio,
-        physicalSize=lambda: SimpleNamespace(width=lambda: 600.0), refreshRate=lambda: 60.0,
+        refreshRate=lambda: 60.0,
     )
     monkeypatch.setattr(QApplication, "primaryScreen", lambda: screen)
     detected = detect_primary_display_settings()
     assert (detected.screen_width_px, detected.screen_height_px) == (3840, 2160)
-    assert detected.screen_width_cm == 60.0
     assert detected.refresh_hz == 60.0
     assert _primary_screen_width_px() == 3840
 

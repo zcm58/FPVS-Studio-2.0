@@ -35,10 +35,9 @@ from fpvs_studio.gui.components import (
 
 @dataclass(frozen=True)
 class DetectedDisplaySettings:
-    """Best-effort display values from Qt's primary screen."""
+    """Best-effort refresh rate and pixel dimensions of Qt's primary screen."""
 
     refresh_hz: float | None = None
-    screen_width_cm: float | None = None
     screen_width_px: int | None = None
     screen_height_px: int | None = None
 
@@ -102,16 +101,13 @@ class ImportDisplaySettingsDialog(QDialog):
         imported_values = (
             ("Refresh rate", f"{imported_refresh:.2f} Hz"),
             ("Resolution", f"{display.screen_width_px} × {display.screen_height_px} px"),
-            ("Screen width", f"{display.screen_width_cm:.2f} cm"),
         )
         self.detected_refresh_label = QLabel("—", comparison_card)
         self.detected_refresh_label.setWordWrap(True)
         self.detected_resolution_label = QLabel("—", comparison_card)
-        self.detected_width_label = QLabel("—", comparison_card)
         detected_labels = (
             self.detected_refresh_label,
             self.detected_resolution_label,
-            self.detected_width_label,
         )
         for row, ((label_text, imported_text), detected_label) in enumerate(
             zip(imported_values, detected_labels, strict=True),
@@ -175,10 +171,11 @@ class ImportDisplaySettingsDialog(QDialog):
 
         self.detect_button = QPushButton("Detect Primary Display", self)
         self.detect_button.setObjectName("import_display_detect_button")
+        self.detect_button.setToolTip("Detect the primary display's refresh rate and resolution.")
         self.detect_button.clicked.connect(self.apply_detected_primary_display)
         mark_secondary_action(self.detect_button)
 
-        comparison_layout.addWidget(self.detect_button, 4, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
+        comparison_layout.addWidget(self.detect_button, 3, 2, 1, 2, Qt.AlignmentFlag.AlignRight)
 
         values_card = QFrame(self)
         values_card.setObjectName("import_display_values_card")
@@ -207,7 +204,8 @@ class ImportDisplaySettingsDialog(QDialog):
         resolution_row.addWidget(self.screen_height_px_spin)
         values_layout.addLayout(resolution_row, 2, 3)
         helper = QLabel(
-            "Measure viewing distance from the participant's eyes to the screen.",
+            "Measure the width across the lit screen and the viewing distance "
+            "from the participant's eyes to the screen.",
             values_card,
         )
         helper.setProperty("importDisplayRole", "helper")
@@ -281,7 +279,7 @@ class ImportDisplaySettingsDialog(QDialog):
         }
 
     def apply_detected_primary_display(self) -> None:
-        """Fill available fields from Qt's primary screen metadata."""
+        """Fill refresh rate and pixel dimensions from Qt's primary screen metadata."""
 
         detected = detect_primary_display_settings()
         refresh_supported = True
@@ -301,11 +299,6 @@ class ImportDisplaySettingsDialog(QDialog):
                 )
         else:
             self.detected_refresh_label.setText("Unavailable")
-        if detected.screen_width_cm is not None:
-            self.screen_width_cm_spin.setValue(detected.screen_width_cm)
-            self.detected_width_label.setText(f"{detected.screen_width_cm:.2f} cm")
-        else:
-            self.detected_width_label.setText("Unavailable")
         if detected.screen_width_px is not None:
             self.screen_width_px_spin.setValue(detected.screen_width_px)
         if detected.screen_height_px is not None:
@@ -323,7 +316,7 @@ class ImportDisplaySettingsDialog(QDialog):
 
 
 def detect_primary_display_settings() -> DetectedDisplaySettings:
-    """Return best-effort current display values without importing PsychoPy."""
+    """Read the current refresh rate and pixel dimensions without importing PsychoPy."""
 
     screen = QApplication.primaryScreen()
     if screen is None:
@@ -331,15 +324,10 @@ def detect_primary_display_settings() -> DetectedDisplaySettings:
 
     geometry = screen.geometry()
     pixel_ratio = screen.devicePixelRatio()
-    physical_size = screen.physicalSize()
-    screen_width_cm = None
-    if physical_size.width() > 0:
-        screen_width_cm = physical_size.width() / 10.0
 
     refresh_hz = screen.refreshRate()
     return DetectedDisplaySettings(
         refresh_hz=refresh_hz if refresh_hz > 0 else None,
-        screen_width_cm=screen_width_cm,
         screen_width_px=max(1, round(geometry.width() * pixel_ratio)),
         screen_height_px=max(1, round(geometry.height() * pixel_ratio)),
     )

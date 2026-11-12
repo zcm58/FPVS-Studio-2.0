@@ -228,7 +228,8 @@ the check does not report untagged commits on the remote branch.
 
 Choose a local FPVS Studio Root Folder. Mac source testing uses the explicit local
 Test/Pilot path and null trigger output; it must retain native display verification,
-engine observation and timing QC. Physical test calibration remains launch-local.
+engine observation and timing QC. The local dialog starts with the project's physical
+screen width and viewing distance. Enter the measured values for that test.
 When target and detected backing resolutions differ, Home and Run show both sizes
 and ask to save the detected target resolution before compiling. Acceptance saves
 only pixel dimensions/fixed-resolution policy; Cancel saves nothing, and a save error

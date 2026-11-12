@@ -50,13 +50,10 @@ def _mode():
 @pytest.mark.parametrize("matching", [False, True])
 @pytest.mark.parametrize("pixels", [(2880, 1800), (16384, 8640)])
 def test_local_test_display_confirmation_preserves_input_and_fits(
-    qtbot, monkeypatch, sample_project, size, matching, pixels,
+    qtbot, sample_project, size, matching, pixels,
 ):
-    monkeypatch.setattr(
-        local_test_display_dialog, "detect_primary_display_settings",
-        lambda: SimpleNamespace(screen_width_cm=33),
-    )
     display = sample_project.settings.display.model_copy(deep=True)
+    display.screen_width_cm = 49.5
     if matching:
         display.screen_width_px, display.screen_height_px = pixels
     before = display.model_dump()
@@ -68,6 +65,7 @@ def test_local_test_display_confirmation_preserves_input_and_fits(
     QApplication.processEvents()
     assert dialog.size().toTuple() == size
     assert_visible_children_within_parent(dialog)
+    assert dialog.screen_width_spin.value() == 49.5
     assert "120 Hz" in dialog.mode_label.text()
     assert f"{pixels[0]} × {pixels[1]} backing px" in dialog.mode_label.text()
     assert dialog.configured_resolution_label.text() == (
@@ -84,6 +82,7 @@ def test_local_test_display_confirmation_preserves_input_and_fits(
                 Qt.TextFlag.TextWordWrap, label.text(),
             )
             assert label.contentsRect().height() >= required.height(), label.text()
+    dialog.screen_width_spin.setValue(33)
     dialog.distance_spin.setValue(55)
     local = dialog.local_display()
     assert local.screen_width_px == pixels[0]
@@ -374,10 +373,6 @@ def test_rejecting_mac_display_confirmation_preserves_saved_project(
     parent = QDialog()
     qtbot.addWidget(parent)
     monkeypatch.setattr(display_mode, "query_primary_native_display_mode", _mode)
-    monkeypatch.setattr(
-        local_test_display_dialog, "detect_primary_display_settings",
-        lambda: SimpleNamespace(screen_width_cm=33),
-    )
     monkeypatch.setattr(LocalTestDisplayDialog, "exec", lambda _self: QDialog.DialogCode.Rejected)
 
     assert local_test_display_dialog.confirm_local_test_display(document, parent) is None

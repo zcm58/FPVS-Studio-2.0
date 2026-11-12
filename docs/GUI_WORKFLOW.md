@@ -429,9 +429,10 @@ or AB Pilot mode and preserves authored recording settings. If only the saved la
 refresh prevents readiness and an approved refresh can fully resolve it, Home and
 Run offer **Check Local Display** and allow launch to reach local confirmation.
 Structural validation and the actual confirmed display's compilation/preflight still
-block invalid playback; Windows/Linux readiness is unchanged. Before launching, a local
-display dialog confirms viewing distance/physical width and native backing resolution/
-refresh before both Home and Run launches. A mismatch shows configured and detected
+block invalid playback; Windows/Linux readiness is unchanged. Before Home and Run
+launches, the local display dialog shows the detected backing resolution and refresh
+rate. The physical width and viewing distance start from the project values. Enter
+the measured values for the local screen. A mismatch shows configured and detected
 pixel dimensions. **Update resolution and continue** explicitly saves the target
 width/height (and fixed-resolution policy) in the launch worker before compiling;
 save failure blocks playback. Cancel preserves the project. Matching resolutions
@@ -1496,9 +1497,10 @@ restart discovery, template storage and image-readiness signatures reuse that ad
 Disk-full and permission errors identify the storage action needed to retry.
 Legacy relative root settings are
 discarded so the root-folder setup flow can collect an explicit location again. The
-display confirmation dialog compares imported settings with Qt-detected refresh,
-resolution, and physical screen width, preserves editable local values, and exposes
-explicit `Open with Imported Values` and `Apply & Open Project` actions. The visual-angle
+display confirmation dialog's **Detect Primary Display** button fills the refresh and
+pixel resolution fields. Physical screen width starts from the imported value and stays
+as entered when detection runs. Measure the lit screen width and enter it manually.
+The dialog offers `Open with Imported Values` and `Apply & Open Project`. The visual-angle
 target remains imported, and PsychoPy stays behind the engine boundary. Detected
 resolution uses physical pixels (`QScreen.geometry` multiplied by its device pixel
 ratio). The Image Size preview converts its physical dimensions to Qt logical drawing
@@ -1889,6 +1891,16 @@ For GUI coverage:
 Local handoff must document a visible manual smoke path for the changed workflow and
 state whether registered Qt coverage was not run or ran in an explicitly approved
 visible environment.
+
+Run display calibration smoke checks in an approved visible session.
+
+1. Open project bundle display review at `720x640` and `780x660`. Check that the
+   width starts at the imported value, edit it, and select **Detect Primary Display**.
+   Verify the edit persists and that the detected resolution and refresh text fit.
+   Check the review message on a display with an unsupported refresh rate.
+2. On macOS, open Test/Pilot display confirmation at `520x360` and `600x380`.
+   Verify the width starts at the project value and the detected mode fits. Edit
+   the width for the test and confirm that the saved project width is preserved.
 
 Updater visible/manual smoke (run only in an approved visible Windows session):
 
