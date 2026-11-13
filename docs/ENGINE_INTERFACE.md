@@ -219,6 +219,10 @@ captures responses made during the last frame, and supplies the missing duration
 that frame. The final `frame_intervals` list therefore covers every completed compiled
 frame.
 
+During playback, Studio captures intervals from PsychoPy's returned flip timestamps
+with PsychoPy's optional interval recorder disabled. The separate refresh probe uses
+PsychoPy's own recorder. Studio evaluates and reports playback timing after the run.
+
 After playback, the engine derives the optional `RunExecutionSummary.playback_cadence`
 from the measured stream flips, beginning at frame zero and ending at the neutral
 terminal flip. Warmup and any pre-stream marker flip are outside this span. A
