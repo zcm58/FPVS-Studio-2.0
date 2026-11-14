@@ -528,9 +528,13 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert guide.timing_refresh_hz_combo.currentData() == 60.02
     assert window.run_page.refresh_hz_combo.currentData() == 60.02
     assert "Display verified at 60.02 Hz" in editor.timing_status_label.text()
+    assert "Toolbox uses a 60 Hz FFT basis" in editor.timing_status_label.text()
+    assert editor.timing_status_label.property("statusState") == "warning"
     assert "Windows mode 60.000 Hz (60/1)" in editor.timing_status_label.toolTip()
     assert "Display signal 60.020 Hz" in editor.timing_status_label.toolTip()
     assert "PsychoPy observed 60.018 Hz" in editor.timing_status_label.toolTip()
+    assert "36–38 ms in Studio timing tests" in editor.timing_status_label.toolTip()
+    assert "6.002 Hz stream" in editor.timing_status_label.toolTip()
     assert editor.timing_report().realized_base_hz == pytest.approx(6.002)
     assert "condition 145.951 s" in editor.refresh_hz_combo.toolTip()
     assert guide.setup_wizard_next_button.isEnabled()

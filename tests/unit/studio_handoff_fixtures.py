@@ -82,12 +82,19 @@ def build_handoff_fixtures(project_root: Path) -> dict[str, ProjectConfigFile]:
         )],
     )
     result = {"v2-setup.fpvsconfig": export_project_config(project, None)}
-    for backend, label in (("serial", "biosemi"), ("unicorn_udp", "unicorn")):
+    for backend, label, refresh_hz in (
+        ("serial", "biosemi", 60.0),
+        ("unicorn_udp", "unicorn", 60.0),
+        ("unicorn_udp", "unicorn-60-02", 60.02),
+    ):
         selected = project.model_copy(deep=True)
         selected.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+        if refresh_hz == 60.02:
+            selected.settings.display.preferred_refresh_hz = refresh_hz
+            selected.conditions[0].oddball_cycle_repeats_per_sequence = 144
         config = export_project_config(selected, None)
         plan = compile_session_plan(
-            selected, project_root=project_root, refresh_hz=60, random_seed=42,
+            selected, project_root=project_root, refresh_hz=refresh_hz, random_seed=42,
             session_id="fixture-session",
         )
         profile = acquisition_profile_for_recording(backend)
@@ -105,11 +112,14 @@ def build_handoff_fixtures(project_root: Path) -> dict[str, ProjectConfigFile]:
                 run_id=entry.run_id, condition_id=entry.condition_id,
                 condition_name=entry.condition_name,
                 planned_event_count=len(entry.run_spec.trigger_events), state="completed",
+                completed_frames=(
+                    entry.run_spec.display.total_frames if refresh_hz == 60.02 else None
+                ),
                 code_map=[AcquisitionCodeMapEntry(code=1, label="condition_start"),
                           AcquisitionCodeMapEntry(code=55, label="oddball")],
                 attempted_events=[TriggerRecord(
                     trigger_index=index, frame_index=event.frame_index,
-                    time_s=event.frame_index / 60, code=event.code, label=event.label,
+                    time_s=event.frame_index / refresh_hz, code=event.code, label=event.label,
                     backend_name=backend,
                 ) for index, event in enumerate(entry.run_spec.trigger_events)],
             ) for entry in plan.ordered_entries()],

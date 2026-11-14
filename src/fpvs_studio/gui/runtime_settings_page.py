@@ -76,7 +76,10 @@ from fpvs_studio.gui.presentation_settings_dialog import (
     PresentationSettingsDialog,
     presentation_defaults_summary,
 )
-from fpvs_studio.gui.refresh_recommendation_dialog import check_windows_refresh
+from fpvs_studio.gui.refresh_recommendation_dialog import (
+    FRACTIONAL_60_TOOLBOX_NOTICE,
+    check_windows_refresh,
+)
 from fpvs_studio.gui.window_helpers import (
     _RUNTIME_BACKGROUND_COLOR_PRESETS,
     _canonical_runtime_background_hex,
@@ -89,6 +92,7 @@ from fpvs_studio.runtime.display_refresh import (
     DisplayRefreshVerification,
     verify_primary_display_refresh,
 )
+from fpvs_studio.runtime.windows_display import FRACTIONAL_60_REFRESH_HZ
 from fpvs_studio.support.error_explanations import describe_error
 
 LOGGER = logging.getLogger(__name__)
@@ -559,6 +563,22 @@ class DisplaySettingsEditor(QWidget):
                 describe_error("Display verification", self._refresh_measurement_error),
             )
             self.timing_status_label.setToolTip(self._refresh_measurement_error)
+            self.timing_status_label.setVisible(True)
+        elif report.refresh_hz == FRACTIONAL_60_REFRESH_HZ and not ab:
+            self.timing_status_label.setProperty("statusState", "warning")
+            prefix = verification_prefix or "60.02 Hz selected. "
+            self.timing_status_label.setText(
+                f"{prefix}Toolbox uses a 60 Hz FFT basis. Expect a bin offset and "
+                "about 40 ms of timing difference over 120 s."
+            )
+            detail = self.timing_status_label.toolTip()
+            notes = [detail, FRACTIONAL_60_TOOLBOX_NOTICE]
+            if report.realized_base_hz is not None and report.realized_oddball_hz is not None:
+                notes.append(
+                    f"Planned rates: {report.realized_base_hz:.6g} Hz stream and "
+                    f"{report.realized_oddball_hz:.6g} Hz {cadence}."
+                )
+            self.timing_status_label.setToolTip("\n".join(filter(None, notes)))
             self.timing_status_label.setVisible(True)
         elif report.warnings:
             self.timing_status_label.setProperty("statusState", "warning")

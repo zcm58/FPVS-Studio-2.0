@@ -58,6 +58,26 @@ Toolbox still owns raw registration and scientific interpretation. This format
 change cannot infer an EEG file from participant/session metadata or qualify a
 recording. Visible GUI and physical hardware acceptance remain separate.
 
+### Fractional refresh handoff
+
+- [x] Retain the configured display refresh and the compiled session refresh in
+  the existing fields. Verify the 60.02 Hz project restore and completed Unicorn
+  handoff with the planned code 1 and code 55 markers.
+- [x] Enforce one compiled refresh across runs when writing a completed handoff.
+- [x] Verify and retain the compiled cadence in the matching Toolbox import.
+- [x] Show the 60.02 Hz tradeoff in Studio Setup and the Windows launch advisory,
+  and in the Toolbox import review. Keep continuation available.
+
+The [config contract](../../PROJECT_CONFIG.md#display-cadence-in-the-handoff)
+defines the timing fields. This slice keeps the raw samples, marker positions,
+and existing Toolbox FFT method at requested frequencies. Visible smoke path:
+in Setup select 60.02 Hz, then verify the timing notice. Change to 60 Hz to verify
+ordinary status, and select 60.02 Hz again. On a fixed 60.02 Hz Windows display,
+launch from Home or Run and continue at that rate. Import the completed handoff
+into Toolbox and verify the notice describes its nominal analysis basis.
+The shared 60.02 Hz fixture passed the Toolbox import and project save/reopen
+checks in [FPVS Toolbox `3e90420`](https://github.com/zcm58/FPVS-Toolbox/commit/3e90420).
+
 ### Existing integration
 
 - [x] Core-owned built-in declarations for BioSemi ActiveTwo 64 and Unicorn Hybrid

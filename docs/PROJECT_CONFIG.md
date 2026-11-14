@@ -84,3 +84,30 @@ Studio config import creates a new project shell under the configured Studio
 root. FPVS stimulus image libraries remain separate; hashed modular-task media
 retain their existing portable import behavior. See the
 [GUI workflow](GUI_WORKFLOW.md) for the config and bundle actions.
+
+### Display cadence in the handoff
+
+Project saves retain the refresh target in `settings.display.preferred_refresh_hz`.
+Both config kinds carry that setting in `display.preferred_refresh_hz`. A completed
+config also carries the refresh used to compile the run in
+`completed_session.refresh_hz` and the planned marker frames in
+`completed_session.ordered_runs[].trigger_events`. The compiled rate applies to
+every run in that session. The saved target can be absent or differ from the
+compiled rate. Use the completed plan to describe a recorded session's planned
+cadence.
+
+For an ordinary periodic run, the frame gap between consecutive planned oddball
+onsets and the compiled refresh determine the planned oddball rate. The oddball
+rate times `protocol.oddball_every_n` gives the planned base rate. At 60.02 Hz, a
+nominal 6 Hz image stream with an oddball every five images uses 50 display frames
+per oddball cycle, giving 6.002 Hz base and 1.2004 Hz oddball. The authored rates
+remain in `protocol` and condition overrides. Planned cadence is separate from
+observed playback, the recorded marker positions and the EEG sample rate.
+
+Toolbox keeps the configured and compiled rates in the project import receipt.
+Both apps advise researchers of the tradeoff at 60.02 Hz. For a nominal 60 Hz
+design, Toolbox keeps the requested frequencies for its standard FFT. The
+1.2004 Hz planned oddball rate in this example is 0.0004 Hz above the 1.2 Hz
+analysis target. At the same frame count, a nominal 120-second run is about
+40 ms shorter at 60.02 Hz. Studio's software timing tests ended 36–38 ms earlier
+than 120 s. The handoff leaves the recorded markers and sample clock intact.

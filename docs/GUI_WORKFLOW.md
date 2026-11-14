@@ -313,6 +313,15 @@ and verify the project's refresh setting. **Continue at 60 Hz** or
 **Continue at 60.02 Hz** proceeds with normal checks. Continuing is the default
 when there is no higher supported option.
 
+At 60.02 Hz, Display & Session shows the Toolbox timing advisory beside the
+refresh controls. On Windows, the advisory also appears before Home or Run launch
+and before a refresh check, including when no higher mode is available. Choose
+**Continue at 60.02 Hz** to proceed. For a 60 Hz design, Toolbox uses the requested
+frequencies for its usual FFT. The 60.02 Hz frame cadence shifts the stimulus
+frequencies relative to those bins and shortens a nominal 120-second stream by
+about 40 ms. Studio timing tests measured a 36–38 ms difference relative to 120 s.
+See [Display cadence in the handoff](PROJECT_CONFIG.md#display-cadence-in-the-handoff).
+
 On Mac, the check offers Cancel and a bounded probe; failure/cancellation leaves the
 rate unverified and enables retry. Application shutdown cancels a running Setup check.
 The [runtime contract](RUNTIME_EXECUTION.md#session-flow) owns timeout/cleanup rules.

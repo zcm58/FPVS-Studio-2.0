@@ -318,7 +318,7 @@ class _DevModeW(ctypes.Structure):
 
 @dataclass(frozen=True)
 class WindowsRefreshRecommendation:
-    """Higher nominal fixed modes reported for the current presentation resolution."""
+    """Current timing and higher fixed modes at the presentation resolution."""
 
     pixel_width: int
     pixel_height: int
@@ -326,8 +326,8 @@ class WindowsRefreshRecommendation:
     current_hz: float = 60.0
 
     @property
-    def highest_hz(self) -> int:
-        return max(self.higher_rates_hz)
+    def highest_hz(self) -> int | None:
+        return max(self.higher_rates_hz, default=None)
 
 
 @dataclass(frozen=True)
@@ -682,7 +682,7 @@ def query_windows_display_mode(display_device_name: str | None = None) -> Window
 def query_windows_refresh_recommendation(
     display_device_name: str | None = None,
 ) -> WindowsRefreshRecommendation | None:
-    """Find higher progressive modes at the selected display's active resolution."""
+    """Find higher progressive modes and report fixed 60.02 Hz even without one."""
     mode = query_windows_display_mode(display_device_name)
     current_hz = windows_60_hz_refresh_label(mode.hz, mode.signal_refresh_hz)
     if mode.dynamic_refresh_enabled or current_hz is None:
@@ -728,7 +728,7 @@ def query_windows_refresh_recommendation(
         final.dmPelsWidth, final.dmPelsHeight, final.dmBitsPerPel, final.dmDisplayFrequency,
     ) != (*resolution, current.dmBitsPerPel, 60):
         return None
-    if not rates:
+    if not rates and current_hz != FRACTIONAL_60_REFRESH_HZ:
         return None
     # DEVMODE exposes both 60 Hz modes as integer 60. Recheck the exact mode
     # on that same output before reporting a fractional rate to the operator.

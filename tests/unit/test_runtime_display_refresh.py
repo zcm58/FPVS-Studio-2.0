@@ -214,7 +214,8 @@ def test_windows_refresh_recommendation_only_compares_fixed_60(
 
 
 @pytest.mark.parametrize("case", [
-    "higher", "fractional_signal", "fractional_mode", "none", "changed", "changed_signal",
+    "higher", "fractional_signal", "fractional_mode", "fractional_only", "none", "changed",
+    "changed_signal",
     "unavailable",
 ])
 def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, case):
@@ -227,7 +228,7 @@ def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, 
         (1920, 1080, 16, 0, 300),
         (1920, 1080, 32, 2, 240),
     ]
-    if case == "none":
+    if case in {"none", "fractional_only"}:
         candidates = [current, *candidates[3:]]
     reads = []
 
@@ -252,7 +253,7 @@ def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, 
 
     assert ctypes.sizeof(windows_display_module._DevModeW) == 220
     mode = WindowsDisplayMode("presentation display", 60, 1)
-    if case in {"fractional_signal", "changed_signal"}:
+    if case in {"fractional_signal", "fractional_only", "changed_signal"}:
         mode = WindowsDisplayMode("presentation display", 60, 1, signal_refresh_hz=60.020425)
     elif case == "fractional_mode":
         mode = WindowsDisplayMode("presentation display", 3001, 50)
@@ -280,6 +281,11 @@ def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, 
         assert result.higher_rates_hz == (120, 165)
         assert result.highest_hz == 165
         assert result.current_hz == (60.0 if case == "higher" else 60.02)
+    elif case == "fractional_only":
+        assert result is not None
+        assert result.current_hz == 60.02
+        assert result.higher_rates_hz == ()
+        assert result.highest_hz is None
     else:
         assert result is None
 
