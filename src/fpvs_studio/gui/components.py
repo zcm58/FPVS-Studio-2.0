@@ -140,6 +140,7 @@ __all__ = [
     "section_card_stylesheet",
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
+    "widget_animation_duration",
 ]
 
 
@@ -396,14 +397,14 @@ class LaunchSurfaceFrame(QWidget):
         self.content_layout.addStretch(1)
 
 
-def _setup_motion_enabled() -> bool:
+def _system_motion_enabled() -> bool:
     if sys.platform == "win32":
         enabled = wintypes.BOOL()
         spi_get_client_area_animation = 0x1042
         system_parameters_info = ctypes.WinDLL("user32", use_last_error=True).SystemParametersInfoW
         if not system_parameters_info(spi_get_client_area_animation, 0, ctypes.byref(enabled), 0):
             logging.getLogger(__name__).warning(
-                "setup_animation_preference_read_failed", extra={"error": ctypes.get_last_error()}
+                "animation_preference_read_failed", extra={"error": ctypes.get_last_error()}
             )
             return False
         return bool(enabled.value)
@@ -411,6 +412,12 @@ def _setup_motion_enabled() -> bool:
         workspace = import_module("AppKit").NSWorkspace.sharedWorkspace()
         return not workspace.accessibilityDisplayShouldReduceMotion()
     return True
+
+
+def widget_animation_duration(widget: QWidget, maximum_ms: int) -> int:
+    """Limit motion to the Qt style duration and the OS accessibility preference."""
+    duration = widget.style().styleHint(QStyle.StyleHint.SH_Widget_Animation_Duration, None, widget)
+    return min(duration, maximum_ms) if duration > 0 and _system_motion_enabled() else 0
 
 
 class SetupProgressStepper(QWidget):
@@ -567,11 +574,11 @@ class SetupProgressStepper(QWidget):
     def _animate_connectors(self) -> None:
         start, target = self._connector_progress, float(self._active_index)
         self._connector_animation.stop()
-        duration = self.style().styleHint(QStyle.StyleHint.SH_Widget_Animation_Duration, None, self)
-        if start == target or not self.isVisible() or duration <= 0 or not _setup_motion_enabled():
+        duration = widget_animation_duration(self, self._TRANSITION_MS) if self.isVisible() else 0
+        if start == target or duration <= 0:
             self._set_connector_progress(target)
             return
-        self._connector_animation.setDuration(min(duration, self._TRANSITION_MS))
+        self._connector_animation.setDuration(duration)
         self._connector_animation.setStartValue(start)
         self._connector_animation.setEndValue(target)
         self._connector_animation.start()
@@ -1291,9 +1298,9 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_CONTROL}px;
     }}
     QListWidget#settings_navigation::item {{
-        padding: 10px 12px;
-        margin-bottom: 4px;
-        border-left: 3px solid transparent;
+        padding: 9px 14px;
+        margin: 2px 0;
+        border: 1px solid transparent;
         border-radius: 6px;
     }}
     QListWidget#settings_navigation::item:hover {{
@@ -1302,12 +1309,9 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QListWidget#settings_navigation::item:selected {{
         background-color: {theme.surface_alt};
         color: {theme.text_primary};
-        border-left-color: {theme.primary};
     }}
     QListWidget#settings_navigation::item:selected:focus {{
-        border: 1px solid {theme.focus_ring};
-        border-left: 3px solid {theme.primary};
-        padding: 9px 11px;
+        border-color: {theme.focus_ring};
     }}
     QStackedWidget#settings_pages,
     QScrollArea[settingsPageScroll="true"],
@@ -1350,8 +1354,15 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-color: {theme.primary_border};
     }}
     QPushButton[settingsThemeOption="true"]:focus {{
-        border: 2px solid {theme.primary};
+        border: 2px solid {theme.focus_ring};
         padding: 6px 11px;
+    }}
+    QPushButton[settingsThemeOption="true"]:pressed:!checked {{
+        background-color: {theme.surface};
+        border-color: {theme.focus_ring};
+    }}
+    QPushButton[settingsThemeOption="true"]:checked:focus {{
+        border-color: {theme.selected_text};
     }}
     """
 

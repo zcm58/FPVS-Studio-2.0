@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from PySide6.QtCore import QPoint, QPointF, Qt
-from PySide6.QtGui import QColor, QPalette, QWheelEvent
+from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QRectF, Qt
+from PySide6.QtGui import QColor, QImage, QPalette, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 from tests.gui.helpers import assert_visible_children_within_parent, select_settings_category
 
 from fpvs_studio.gui.components import SectionCard
+from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 
@@ -39,6 +40,14 @@ def _assert_visible_settings_text_fits(dialog: AppSettingsDialog) -> None:
                 assert control.width() >= control.sizeHint().width(), control.text()
 
 
+def _assert_category_indicator_aligned(dialog: AppSettingsDialog) -> None:
+    navigation = dialog.navigation
+    indicator = navigation._indicator_rect()
+    assert not indicator.isEmpty()
+    assert QRectF(navigation.viewport().rect()).contains(indicator)
+    assert QRectF(navigation.visualItemRect(navigation.currentItem())).contains(indicator)
+
+
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 @pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
 def test_settings_can_open_directly_to_recording(qtbot, tmp_path, background, size) -> None:
@@ -55,6 +64,9 @@ def test_settings_can_open_directly_to_recording(qtbot, tmp_path, background, si
     dialog.show()
     QApplication.processEvents()
 
+    selector = dialog.recording_editor.biosemi_port_selector
+    # The initial port discovery shows a status row and posts a nested layout request.
+    qtbot.waitUntil(lambda: selector.height() >= selector.minimumSizeHint().height())
     assert dialog.size().toTuple() == size
     assert dialog.navigation.currentItem().text() == "Recording"
     assert dialog.page_title.text() == "Recording"
@@ -64,6 +76,12 @@ def test_settings_can_open_directly_to_recording(qtbot, tmp_path, background, si
     assert dialog.apply_recording_button.isEnabled()
     assert dialog.findChild(QPushButton, "settings_recording_setup") is None
     assert dialog.findChild(QPushButton, "settings_default_recording_setup") is None
+    _assert_category_indicator_aligned(dialog)
+    viewport = dialog.navigation.viewport()
+    image = QImage(viewport.size(), QImage.Format.Format_RGB32)
+    viewport.render(image)
+    marker_center = dialog.navigation._indicator_rect().center().toPoint()
+    assert image.pixelColor(marker_center) == QColor(resolve_studio_theme(palette).primary)
     _assert_visible_settings_text_fits(dialog)
 
 
@@ -75,8 +93,11 @@ def test_settings_can_open_directly_to_recording(qtbot, tmp_path, background, si
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 @pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
 def test_settings_categories_fit_minimum_and_default_sizes(
-    qtbot, tmp_path, test_mode, pilot_mode, library, background, size,
+    qtbot, tmp_path, monkeypatch, test_mode, pilot_mode, library, background, size,
 ) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.gui.settings_dialog.widget_animation_duration", lambda _widget, _limit: 0,
+    )
     root_path = tmp_path / ("Long research project root " * 5)
     dialog = AppSettingsDialog(
         fpvs_root_dir=root_path,
@@ -106,6 +127,7 @@ def test_settings_categories_fit_minimum_and_default_sizes(
     ]
     assert dialog.navigation.currentRow() == dialog.pages.currentIndex() == 0
     assert dialog.page_title.text() == "General"
+    assert 0 < dialog.navigation.sizeHintForColumn(0) <= dialog.navigation.viewport().width()
     assert dialog.navigation.mapTo(dialog, dialog.navigation.rect().topRight()).x() < (
         dialog.pages.mapTo(dialog, dialog.pages.rect().topLeft()).x()
     )
@@ -135,6 +157,8 @@ def test_settings_categories_fit_minimum_and_default_sizes(
         select_settings_category(dialog, category)
         assert dialog.pages.currentIndex() == index
         assert dialog.size().toTuple() == size, category
+        assert dialog.navigation._indicator_animation.state() == QAbstractAnimation.State.Stopped
+        _assert_category_indicator_aligned(dialog)
         _assert_visible_settings_text_fits(dialog)
         page = dialog.pages.currentWidget()
         assert isinstance(page, QScrollArea)
@@ -307,6 +331,49 @@ def test_settings_navigation_supports_mouse_keyboard_and_keeps_saved_choices(qtb
     assert not dialog.isVisible()
     assert export_changes == [True]
     assert theme_changes == ["dark"]
+
+
+def test_settings_category_indicator_can_reverse_and_stops_on_close(
+    qtbot, tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.gui.settings_dialog.widget_animation_duration", lambda _widget, limit: limit,
+    )
+    dialog = AppSettingsDialog(fpvs_root_dir=tmp_path)
+    qtbot.addWidget(dialog)
+    dialog.resize(860, 560)
+    dialog.show()
+    QApplication.processEvents()
+
+    navigation = dialog.navigation
+    animation = navigation._indicator_animation
+    _assert_category_indicator_aligned(dialog)
+    start = navigation._indicator_rect().center().y()
+    diagnostics_row = navigation.count() - 1
+    navigation.setCurrentRow(diagnostics_row)
+    assert dialog.pages.currentIndex() == diagnostics_row
+    assert dialog.page_title.text() == "Diagnostics"
+    assert animation.state() == QAbstractAnimation.State.Running
+    assert 0 < animation.duration() <= 150
+    animation.pause()
+    animation.setCurrentTime(animation.duration() // 8)
+    in_flight = navigation._indicator_rect()
+    destination = navigation.visualItemRect(navigation.currentItem())
+    assert start < in_flight.center().y() < destination.top()
+    assert QRectF(navigation.viewport().rect()).contains(in_flight)
+
+    navigation.setCurrentRow(0)
+    assert dialog.pages.currentIndex() == 0
+    assert dialog.page_title.text() == "General"
+    assert navigation._indicator_rect().center().y() == pytest.approx(in_flight.center().y())
+    animation.setCurrentTime(animation.duration())
+    _assert_category_indicator_aligned(dialog)
+
+    navigation.setCurrentRow(diagnostics_row)
+    assert animation.state() == QAbstractAnimation.State.Running
+    dialog.reject()
+    assert animation.state() == QAbstractAnimation.State.Stopped
+    assert navigation._indicator_row == diagnostics_row
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])

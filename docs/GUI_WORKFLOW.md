@@ -507,6 +507,10 @@ Advanced and Diagnostics selections. A native `QListWidget` supports mouse and k
 selection, and the current category heading appears above its controls on the right.
 The sidebar's Settings heading and the selected category title establish the hierarchy.
 Plain section widgets use the shared dialog styles and theme tokens.
+The sidebar marker moves to the newly selected row in up to 150 ms. The selected
+background, page and keyboard navigation update immediately. Rapid selections
+retarget the marker from its current position. The marker snaps into place when
+Windows Animation effects are off or macOS Reduce motion is on.
 
 General contains Participant runs and eligible Local experiment testing controls.
 Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle. Workspace shows
@@ -540,7 +544,10 @@ no routine success paragraph or additional confirmation is shown.
 
 Visible acceptance covers every category at the minimum/default sizes in Light, Dark
 and Auto, longest paths, relevant unavailable/error states, keyboard selection and
-no clipping. Verify selection
+no clipping. Click between distant categories, then reverse direction quickly with
+the arrow keys. Check that the marker settles on the visible page's category,
+Tab enters that page, and the selected theme button has a visible focus border.
+Confirm instant marker updates in a session with system motion disabled. Verify selection
 survives closing/reopening Settings and controller restart; check deterministic OS
 notifications without changing the host's global OS setting; report native observation
 separately. Theme-only edits must preserve

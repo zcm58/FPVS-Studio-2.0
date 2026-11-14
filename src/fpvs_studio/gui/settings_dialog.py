@@ -7,7 +7,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEasingCurve, QRectF, Qt, QVariantAnimation
+from PySide6.QtGui import QColor, QHideEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -34,7 +35,9 @@ from fpvs_studio.gui.components import (
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
+    widget_animation_duration,
 )
+from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.recording_dialog import (
     RECORDING_HARDWARE_CHOICES,
     RecordingSetupEditor,
@@ -49,6 +52,78 @@ def _section_title(text: str, parent: QWidget) -> QLabel:
     title = QLabel(text, parent)
     title.setProperty("settingsSectionTitle", "true")
     return title
+
+
+class _SettingsNavigation(QListWidget):
+    """Animate the category marker while Qt handles selection and keyboard focus."""
+
+    _TRANSITION_MS = 150
+    _INDICATOR_WIDTH = 3
+    _INDICATOR_HEIGHT = 18
+    _INDICATOR_INSET = 6
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._indicator_row = -1.0
+        self._indicator_animation = QVariantAnimation(self)
+        self._indicator_animation.setEasingCurve(QEasingCurve.Type.OutExpo)
+        self._indicator_animation.valueChanged.connect(self._set_indicator_row)
+        self.currentRowChanged.connect(self._animate_indicator)
+
+    def _animate_indicator(self, index: int) -> None:
+        start, target = self._indicator_row, float(index)
+        self._indicator_animation.stop()
+        duration = (
+            widget_animation_duration(self, self._TRANSITION_MS)
+            if self.isVisible() and min(start, target) >= 0 and start != target
+            else 0
+        )
+        if duration == 0:
+            self._set_indicator_row(target)
+            return
+        self._indicator_animation.setDuration(duration)
+        self._indicator_animation.setStartValue(start)
+        self._indicator_animation.setEndValue(target)
+        self._indicator_animation.start()
+
+    def _set_indicator_row(self, row: float) -> None:
+        self._indicator_row = row
+        self.viewport().update()
+
+    def _indicator_rect(self) -> QRectF:
+        row = self._indicator_row
+        if not 0 <= row < self.count():
+            return QRectF()
+        index = int(row)
+        item_rect = self.visualItemRect(self.item(index))
+        center_y = QRectF(item_rect).center().y()
+        if index + 1 < self.count():
+            next_rect = self.visualItemRect(self.item(index + 1))
+            center_y += (QRectF(next_rect).center().y() - center_y) * (row - index)
+        return QRectF(
+            item_rect.left() + self._INDICATOR_INSET,
+            center_y - self._INDICATOR_HEIGHT / 2,
+            self._INDICATOR_WIDTH,
+            self._INDICATOR_HEIGHT,
+        )
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        indicator = self._indicator_rect()
+        if indicator.isEmpty():
+            return
+        theme = resolve_studio_theme(self.window().palette())
+        radius = self._INDICATOR_WIDTH / 2
+        with QPainter(self.viewport()) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(theme.primary))
+            painter.drawRoundedRect(indicator, radius, radius)
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self._indicator_animation.stop()
+        self._set_indicator_row(float(self.currentRow()))
+        super().hideEvent(event)
 
 
 class AppSettingsDialog(QDialog):
@@ -139,7 +214,7 @@ class AppSettingsDialog(QDialog):
         sidebar.setFixedWidth(200)
         self.header = DialogHeader("Settings", "", parent=sidebar)
         self.header.subtitle_label.hide()
-        self.navigation = QListWidget(sidebar)
+        self.navigation = _SettingsNavigation(sidebar)
         self.navigation.setObjectName("settings_navigation")
         self.navigation.setAccessibleName("Settings categories")
         self.navigation.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -568,6 +643,8 @@ class AppSettingsDialog(QDialog):
         apply_dialog_theme(self)
 
     def _select_category(self, index: int) -> None:
+        if index < 0:
+            return
         self.pages.setCurrentIndex(index)
         self.page_title.setText(self.navigation.item(index).text())
         QWidget.setTabOrder(self.navigation, self._category_focus_controls[index])

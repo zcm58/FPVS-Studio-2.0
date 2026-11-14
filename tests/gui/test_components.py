@@ -307,7 +307,7 @@ def test_nine_setup_steps_expose_complete_labels_at_compact_width(qtbot, dark: b
 def test_stepper_animates_the_connector_and_can_reverse_without_moving_controls(
     qtbot, monkeypatch,
 ) -> None:
-    monkeypatch.setattr(components, "_setup_motion_enabled", lambda: True)
+    monkeypatch.setattr(components, "_system_motion_enabled", lambda: True)
     stepper = SetupProgressStepper(["Project", "Conditions", "Review"])
     qtbot.addWidget(stepper)
     stepper.resize(1040, stepper.minimumHeight())
@@ -341,7 +341,7 @@ def test_stepper_animates_the_connector_and_can_reverse_without_moving_controls(
         circle.mapTo(stepper, circle.rect().center()) for circle in stepper.step_circles
     ] == circles
 
-    monkeypatch.setattr(components, "_setup_motion_enabled", lambda: False)
+    monkeypatch.setattr(components, "_system_motion_enabled", lambda: False)
     stepper.set_active_index(1)
     assert animation.state() == QAbstractAnimation.State.Stopped
     assert connector_colors() == (QColor(theme.primary),) * 2
