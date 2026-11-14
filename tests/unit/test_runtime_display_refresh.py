@@ -21,6 +21,7 @@ from fpvs_studio.runtime.display_mode import (
 )
 from fpvs_studio.runtime.display_refresh import (
     DisplayRefreshVerificationError,
+    approved_refresh_for_native_mode,
     verify_primary_display_refresh,
 )
 from fpvs_studio.runtime.linux_display import (
@@ -212,7 +213,10 @@ def test_windows_refresh_recommendation_only_compares_fixed_60(
     assert windows_display_module.query_windows_refresh_recommendation() is None
 
 
-@pytest.mark.parametrize("case", ["higher", "none", "changed", "unavailable"])
+@pytest.mark.parametrize("case", [
+    "higher", "fractional_signal", "fractional_mode", "none", "changed", "changed_signal",
+    "unavailable",
+])
 def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, case):
     current = (1920, 1080, 32, 0, 60)
     candidates = [
@@ -247,10 +251,19 @@ def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, 
         return 1
 
     assert ctypes.sizeof(windows_display_module._DevModeW) == 220
-    monkeypatch.setattr(
-        windows_display_module, "query_primary_windows_display_mode",
-        lambda: WindowsDisplayMode("presentation display", 60, 1),
-    )
+    mode = WindowsDisplayMode("presentation display", 60, 1)
+    if case in {"fractional_signal", "changed_signal"}:
+        mode = WindowsDisplayMode("presentation display", 60, 1, signal_refresh_hz=60.020425)
+    elif case == "fractional_mode":
+        mode = WindowsDisplayMode("presentation display", 3001, 50)
+
+    def query_mode(name):
+        assert name in {None, "presentation display"}
+        if name is not None and case == "changed_signal":
+            return WindowsDisplayMode("presentation display", 60, 1, signal_refresh_hz=60.0)
+        return mode
+
+    monkeypatch.setattr(windows_display_module, "query_windows_display_mode", query_mode)
     monkeypatch.setattr(
         windows_display_module, "_load_user32",
         lambda: SimpleNamespace(EnumDisplaySettingsW=enumerate_mode),
@@ -261,11 +274,12 @@ def test_windows_refresh_recommendation_enumerates_same_resolution(monkeypatch, 
         return
     result = windows_display_module.query_windows_refresh_recommendation()
     assert reads == [0xFFFFFFFF, *range(len(candidates) + 1), 0xFFFFFFFF]
-    if case == "higher":
+    if case in {"higher", "fractional_signal", "fractional_mode"}:
         assert result is not None
         assert (result.pixel_width, result.pixel_height) == (1920, 1080)
         assert result.higher_rates_hz == (120, 165)
         assert result.highest_hz == 165
+        assert result.current_hz == (60.0 if case == "higher" else 60.02)
     else:
         assert result is None
 
@@ -376,6 +390,51 @@ def test_verifier_keeps_exact_60_mode_when_psychopy_estimate_is_5994(
 
     assert result.approved_hz == 60.0
     assert result.display_mode.mode_reference == "60/1"
+    assert not result.compatible_with(60.02)
+
+
+@pytest.mark.parametrize(
+    ("nominal_hz", "signal_hz", "exact", "platform_name", "expected_hz"),
+    [
+        (60.0, 60.020425, True, "Windows", 60.02),
+        (60.0, 60.0211, True, "Windows", 60.0),
+        (60.0, 60.0185, True, "Windows", 60.0),
+        (60.02, None, True, "Windows", 60.02),
+        (59.94006, 60.020425, True, "Windows", 59.94),
+        (120.0, 60.020425, True, "Windows", 120.0),
+        (60.0, 60.020425, True, "macOS", 60.0),
+        (60.02, None, False, "Linux", 60.02),
+        (60.0184, None, False, "Linux", 60.0),
+        (60.08, None, False, "Linux", 60.0),
+    ],
+)
+def test_native_mode_classification_distinguishes_fractional_60_hz(
+    nominal_hz, signal_hz, exact, platform_name, expected_hz,
+) -> None:
+    mode = NativeDisplayMode(
+        platform_name=platform_name,
+        display_name="Presentation Monitor",
+        refresh_hz=nominal_hz,
+        source_name="Native mode query",
+        exact_refresh=exact,
+        signal_refresh_hz=signal_hz,
+    )
+
+    assert approved_refresh_for_native_mode(mode) == expected_hz
+
+
+def test_verifier_uses_native_fractional_60_mode_without_signal_metadata(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
+        lambda: _native_windows_mode(3001, 50),
+    )
+    presentation_engine, _ = _engine(60.0185)
+
+    result = verify_primary_display_refresh(presentation_engine)
+
+    assert result.approved_hz == 60.02
+    assert result.compatible_with(60.02)
+    assert not result.compatible_with(60.0)
 
 
 def test_windows_verifier_logs_nominal_signal_and_probe_rates(monkeypatch, caplog) -> None:
@@ -392,7 +451,9 @@ def test_windows_verifier_logs_nominal_signal_and_probe_rates(monkeypatch, caplo
     with caplog.at_level("INFO", logger="fpvs_studio.runtime.display_refresh"):
         result = verify_primary_display_refresh(presentation_engine)
 
-    assert result.approved_hz == 60.0
+    assert result.approved_hz == 60.02
+    assert result.compatible_with(60.0)
+    assert result.compatible_with(60.02)
     assert result.display_mode.signal_refresh_hz == pytest.approx(60.020425119)
     assert "nominal=60.000000 Hz, scan timing=60.020425 Hz, PsychoPy probe=60.018500 Hz" in (
         caplog.text
@@ -429,7 +490,9 @@ def test_verifier_rejects_nonapproved_exact_windows_fraction(
     )
     presentation_engine, measured_engine = _engine(59.9)
 
-    with pytest.raises(DisplayRefreshVerificationError, match="59.900000 Hz.*does not match"):
+    with pytest.raises(
+        DisplayRefreshVerificationError, match=r"59\.900000 Hz.*does not match.*60\.02",
+    ):
         verify_primary_display_refresh(presentation_engine)
 
     assert measured_engine.measurement_count == 0

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     ImageGeometryMode,
@@ -70,15 +72,36 @@ def test_refresh_validation_accepts_5994hz_with_realized_rate_warning() -> None:
     assert "Approximate frame timing" in report.warnings[0]
 
 
+def test_refresh_validation_accepts_6002hz_with_realized_rate_warning() -> None:
+    report = validate_display_refresh(
+        60.02,
+        duty_cycle_mode=DutyCycleMode.CONTINUOUS,
+        base_hz=6.0,
+        oddball_every_n=5,
+    )
+
+    assert report.compatible is True
+    assert report.frames_per_cycle == 10
+    assert report.timing_is_exact is False
+    assert report.requested_oddball_hz == 1.2
+    assert report.realized_base_hz == pytest.approx(6.002)
+    assert report.realized_oddball_hz == pytest.approx(1.2004)
+    assert report.errors == []
+    assert "Approximate frame timing" in report.warnings[0]
+
+
 def test_approved_monitor_refresh_rates_are_canonical() -> None:
-    assert APPROVED_MONITOR_REFRESH_RATES_HZ == (59.94, 60.0, 120.0, 144.0, 240.0)
+    assert APPROVED_MONITOR_REFRESH_RATES_HZ == (59.94, 60.0, 60.02, 120.0, 144.0, 240.0)
+    assert approved_monitor_refresh_rate(60.0) == 60.0
+    assert approved_monitor_refresh_rate(60.02) == 60.02
     assert approved_monitor_refresh_rate(144.0) == 144.0
     assert approved_monitor_refresh_rate(75.0) is None
 
 
 def test_measured_refresh_selects_nearest_approved_rate_within_tolerance() -> None:
     assert nearest_approved_monitor_refresh_rate(59.94) == 59.94
-    assert nearest_approved_monitor_refresh_rate(60.02) == 60.0
+    assert nearest_approved_monitor_refresh_rate(60.0) == 60.0
+    assert nearest_approved_monitor_refresh_rate(60.018) == 60.02
     assert nearest_approved_monitor_refresh_rate(143.8) == 144.0
     assert nearest_approved_monitor_refresh_rate(75.0) is None
     assert measured_refresh_matches_configured(144.0, 143.8) is True

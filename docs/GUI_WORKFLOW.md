@@ -295,20 +295,23 @@ Linux retains its existing primary/default display policy.
 Setup's optional **Check refresh rate** action and automatic launch preflight use the native configured
 mode for the selected Windows/Mac monitor (otherwise the primary/default display), plus
 a temporary fullscreen PsychoPy stability
-observation. Windows uses its exact rational display path; KDE Linux uses KScreen's
-structured current-mode and VRR data, while Linux X11 uses XRandR. Variable-refresh
-configurations remain blocking for timing-sensitive playback.
+observation. Windows recognizes a 60.02 Hz signal even when the desktop mode is
+labeled 60 Hz. The timing status shows the verified rate and its tooltip includes
+the signal and project target. KDE Linux uses KScreen's current-mode and VRR data,
+while Linux X11 uses XRandR. Variable-refresh configurations remain blocking for
+timing-sensitive playback.
 
 On Windows, **Check refresh rate**, Run preflight, and launch from Home or Run
 first check for a higher fixed refresh rate when the presentation display uses
-60 Hz. The dialog shows the highest available rate at the current resolution and
+60 or 60.02 Hz. The dialog shows the highest available rate at the current resolution and
 recommends the highest rate supported by Studio timing checks. It shows the
 display number when the workflow supplies a selected display. **Open Advanced
 display settings** opens Windows Settings and ends the pending action. If Settings
 fails to open, the dialog stays open and shows the manual path. After changing the
 rate, return to Studio and use **Check refresh rate** on the same display to update
-and verify the project's refresh setting. **Continue at 60 Hz** proceeds with
-normal checks and is the default when 60 Hz is the highest supported option.
+and verify the project's refresh setting. **Continue at 60 Hz** or
+**Continue at 60.02 Hz** proceeds with normal checks. Continuing is the default
+when there is no higher supported option.
 
 On Mac, the check offers Cancel and a bounded probe; failure/cancellation leaves the
 rate unverified and enables retry. Application shutdown cancels a running Setup check.
@@ -941,7 +944,7 @@ The authoring window is organized around two user-facing modes:
   - Timing and the two-column Display & Session are separate frameless steps; Image Size retains `Configure Presentation...`
     for the full draft-based presentation editor
   - Display exposes an approved monitor-refresh dropdown (`59.94`, `60`,
-    `120`, `144`, or `240 Hz`), optional `Check refresh rate`, and presentation background
+    `60.02`, `120`, `144`, or `240 Hz`), optional `Check refresh rate`, and presentation background
     (`Black`, `Dark Gray`, or `Neutral Gray`). Timing owns `Show an oddball every` for image
     and word experiments; rate/frame recaps are available through tooltips. Neutral Gray is
     required when any image condition uses Contrast Modulation. Timing owns
@@ -1560,10 +1563,10 @@ The dialog offers `Open with Imported Values` and `Apply & Open Project`. The vi
 target remains imported, and PsychoPy stays behind the engine boundary. Detected
 resolution uses physical pixels (`QScreen.geometry` multiplied by its device pixel
 ratio). The Image Size preview converts its physical dimensions to Qt logical drawing
-coordinates so Windows scaling does not enlarge the actual-size stimulus box. Refresh
-measurements are mapped to the nearest approved FPVS refresh rate when they are within
-tolerance; unsupported measurements are shown for review without writing an invalid
-refresh target. Closing or pressing Escape cannot bypass the two explicit open actions.
+coordinates so Windows scaling does not enlarge the actual-size stimulus box. Windows
+refresh detection uses native mode information. Other platforms use Qt and map the
+reported rate within the approved tolerance. Unsupported readings are shown for review.
+Closing or pressing Escape cannot bypass the two explicit open actions.
 It leaves the imported project available under the configured Studio root without
 opening it, so the user can reopen it later through `Open Project`.
 Bundles use the same format on Mac and Windows. Transfer validation rejects ambiguous

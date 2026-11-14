@@ -6,6 +6,7 @@ engine."""
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from math import isclose
 from pathlib import Path
@@ -32,10 +33,7 @@ from fpvs_studio.core.task_models import (
     TaskModuleSpec,
     validate_task_module_repeat_capacity,
 )
-from fpvs_studio.core.validation import (
-    approved_monitor_refresh_rate,
-    validate_display_refresh,
-)
+from fpvs_studio.core.validation import validate_display_refresh
 from fpvs_studio.engines.base import PresentationEngine
 from fpvs_studio.runtime.display_refresh import (
     DisplayRefreshVerificationError,
@@ -45,6 +43,8 @@ from fpvs_studio.runtime.recording import (
     RecordingConfigurationError,
     validate_recording_trigger_schedule,
 )
+
+LOGGER = logging.getLogger(__name__)
 
 
 class PreflightError(ValueError):
@@ -77,23 +77,30 @@ def _verify_connected_refresh_rate(
             f"Run preflight failed because display refresh verification did not pass: {exc}"
         ) from exc
 
+    configured_rates = {run_spec.display.refresh_hz for run_spec in run_specs}
     mismatched_rates = sorted(
-        {
-            run_spec.display.refresh_hz
-            for run_spec in run_specs
-            if approved_monitor_refresh_rate(run_spec.display.refresh_hz)
-            != verification.approved_hz
-        }
+        rate for rate in configured_rates if not verification.compatible_with(rate)
     )
     if mismatched_rates:
         configured_text = ", ".join(f"{refresh_hz:g} Hz" for refresh_hz in mismatched_rates)
         display_mode = verification.display_mode
+        scan_timing = (
+            f", scan timing {display_mode.signal_refresh_hz:.6f} Hz"
+            if display_mode.signal_refresh_hz is not None else ""
+        )
         raise PreflightError(
             f"Run preflight failed because {display_mode.platform_name} reports display mode "
-            f"{display_mode.mode_text}, verified by "
+            f"{display_mode.mode_text}{scan_timing}, matching approved FPVS rate "
+            f"{verification.approved_hz:g} Hz and verified by "
             f"PsychoPy at {verification.psychopy_measured_hz:.3f} Hz, but the compiled "
             f"session expects {configured_text}. "
             "Return to Experiment settings and detect the display refresh rate again."
+        )
+    if verification.approved_hz != 60.0 and 60.0 in configured_rates:
+        LOGGER.info(
+            "Using the compiled 60 Hz schedule with Windows nominal 60 Hz mode "
+            "and %.6f Hz scan timing.",
+            verification.display_mode.signal_refresh_hz,
         )
 
 

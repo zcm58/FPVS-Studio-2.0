@@ -30,25 +30,27 @@ def _assert_dialog_fit(dialog, size):
 
 
 @pytest.mark.parametrize("size", [(520, 280), (560, 300)])
+@pytest.mark.parametrize("current_hz", [60.0, 60.02])
 @pytest.mark.parametrize(
-    ("rates", "has_supported_upgrade", "guidance"),
+    ("rates", "has_supported_upgrade", "guidance_template"),
     [
         ((120,), True, "Choose 120 Hz in Windows for Studio timing checks."),
         ((144, 360), True, "Choose 144 Hz in Windows for Studio timing checks."),
         (
             (360,), False,
-            "60 Hz is the highest Studio-supported rate Windows reported at this resolution.",
+            "{current:g} Hz is the highest Studio-supported rate Windows reported "
+            "at this resolution.",
         ),
     ],
 )
 def test_recommendation_copy_actions_and_fit(
-    qtbot, monkeypatch, size, rates, has_supported_upgrade, guidance,
+    qtbot, monkeypatch, size, current_hz, rates, has_supported_upgrade, guidance_template,
 ):
     parent = QWidget()
     qtbot.addWidget(parent)
     parent.show()
     dialog = advisory.RefreshRecommendationDialog(
-        WindowsRefreshRecommendation(7680, 4320, rates), parent,
+        WindowsRefreshRecommendation(7680, 4320, rates, current_hz=current_hz), parent,
         display_device_name=r"\\.\DISPLAY12",
     )
     qtbot.addWidget(dialog)
@@ -59,8 +61,9 @@ def test_recommendation_copy_actions_and_fit(
     qtbot.waitUntil(dialog.isVisible)
 
     visible_text = [label.text() for label in dialog.findChildren(QLabel) if label.isVisible()]
-    assert f"60 Hz in use · {max(rates)} Hz available" in visible_text
-    assert guidance in visible_text
+    assert f"{current_hz:g} Hz in use · {max(rates)} Hz available" in visible_text
+    assert guidance_template.format(current=current_hz) in visible_text
+    assert dialog.continue_button.text() == f"Continue at {current_hz:g} Hz"
     assert dialog.details_label.text() == "Display 12 · 7680 × 4320"
     assert dialog.settings_hint.isVisible() == has_supported_upgrade
     if has_supported_upgrade:

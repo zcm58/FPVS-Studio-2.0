@@ -45,6 +45,7 @@ class RefreshRecommendationDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
+        current_hz = recommendation.current_hz
         highest = recommendation.highest_hz
         recommended_hz = max(
             (
@@ -56,10 +57,11 @@ class RefreshRecommendationDialog(QDialog):
         guidance = (
             f"Choose {recommended_hz} Hz in Windows for Studio timing checks."
             if recommended_hz is not None
-            else "60 Hz is the highest Studio-supported rate Windows reported at this resolution."
+            else f"{current_hz:g} Hz is the highest Studio-supported rate "
+            "Windows reported at this resolution."
         )
         layout.addWidget(DialogHeader(
-            f"60 Hz in use · {highest} Hz available", guidance, parent=self,
+            f"{current_hz:g} Hz in use · {highest} Hz available", guidance, parent=self,
         ))
         display = windows_display_label(display_device_name) if display_device_name else None
         resolution = f"{recommendation.pixel_width} × {recommendation.pixel_height}"
@@ -93,7 +95,7 @@ class RefreshRecommendationDialog(QDialog):
             "Open Advanced display settings", QDialogButtonBox.ButtonRole.ActionRole,
         )
         self.continue_button = buttons.addButton(
-            "Continue at 60 Hz", QDialogButtonBox.ButtonRole.AcceptRole,
+            f"Continue at {current_hz:g} Hz", QDialogButtonBox.ButtonRole.AcceptRole,
         )
         primary_button = (
             self.settings_button if recommended_hz is not None else self.continue_button

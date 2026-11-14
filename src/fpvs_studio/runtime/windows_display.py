@@ -6,6 +6,7 @@ import ctypes
 import sys
 from collections.abc import Sequence
 from dataclasses import dataclass
+from math import isclose
 from typing import Any
 
 _QDC_ONLY_ACTIVE_PATHS = 0x00000002
@@ -29,6 +30,9 @@ _DISPLAYCONFIG_SCANLINE_ORDERING_PROGRESSIVE = 1
 _ENUM_CURRENT_SETTINGS = 0xFFFFFFFF
 _DM_INTERLACED = 0x00000002
 _MONITORINFOF_PRIMARY = 0x00000001
+
+FRACTIONAL_60_REFRESH_HZ = 60.02
+FRACTIONAL_60_MODE_TOLERANCE_HZ = 0.001
 
 _UINT32 = ctypes.c_uint32
 _UINT64 = ctypes.c_uint64
@@ -319,6 +323,7 @@ class WindowsRefreshRecommendation:
     pixel_width: int
     pixel_height: int
     higher_rates_hz: tuple[int, ...]
+    current_hz: float = 60.0
 
     @property
     def highest_hz(self) -> int:
@@ -346,6 +351,22 @@ class WindowsDisplayMode:
     @property
     def fraction_text(self) -> str:
         return f"{self.numerator}/{self.denominator}"
+
+
+def windows_60_hz_refresh_label(
+    nominal_hz: float, signal_refresh_hz: float | None,
+) -> float | None:
+    """Classify native 60 and 60.02 modes for Windows display selection."""
+
+    # Windows can report exact nominal 60/1 for a progressive signal whose
+    # programmed pixel clock and raster totals identify the 60.02 Hz mode.
+    reported_hz = signal_refresh_hz if nominal_hz == 60.0 else nominal_hz
+    if reported_hz is not None and isclose(
+        reported_hz, FRACTIONAL_60_REFRESH_HZ, rel_tol=0.0,
+        abs_tol=FRACTIONAL_60_MODE_TOLERANCE_HZ,
+    ):
+        return FRACTIONAL_60_REFRESH_HZ
+    return 60.0 if nominal_hz == 60.0 else None
 
 
 @dataclass(frozen=True)
@@ -663,7 +684,8 @@ def query_windows_refresh_recommendation(
 ) -> WindowsRefreshRecommendation | None:
     """Find higher progressive modes at the selected display's active resolution."""
     mode = query_windows_display_mode(display_device_name)
-    if mode.dynamic_refresh_enabled or mode.numerator != 60 * mode.denominator:
+    current_hz = windows_60_hz_refresh_label(mode.hz, mode.signal_refresh_hz)
+    if mode.dynamic_refresh_enabled or current_hz is None:
         return None
 
     user32 = _load_user32()
@@ -706,6 +728,13 @@ def query_windows_refresh_recommendation(
         final.dmPelsWidth, final.dmPelsHeight, final.dmBitsPerPel, final.dmDisplayFrequency,
     ) != (*resolution, current.dmBitsPerPel, 60):
         return None
-    if rates:
-        return WindowsRefreshRecommendation(*resolution, tuple(sorted(rates)))
-    return None
+    if not rates:
+        return None
+    # DEVMODE exposes both 60 Hz modes as integer 60. Recheck the exact mode
+    # on that same output before reporting a fractional rate to the operator.
+    final_mode = query_windows_display_mode(mode.display_device_name)
+    if final_mode.dynamic_refresh_enabled or windows_60_hz_refresh_label(
+        final_mode.hz, final_mode.signal_refresh_hz,
+    ) != current_hz:
+        return None
+    return WindowsRefreshRecommendation(*resolution, tuple(sorted(rates)), current_hz)

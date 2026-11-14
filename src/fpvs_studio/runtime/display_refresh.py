@@ -10,6 +10,9 @@ from math import isclose, isfinite
 
 from fpvs_studio.core.validation import (
     APPROVED_MONITOR_REFRESH_RATES_HZ,
+    approved_monitor_refresh_rate,
+    approved_monitor_refresh_rates_text,
+    measured_refresh_matches_configured,
     nearest_approved_monitor_refresh_rate,
 )
 from fpvs_studio.engines.base import PresentationEngine
@@ -18,6 +21,11 @@ from fpvs_studio.runtime.display_mode import (
     NativeDisplayMode,
     query_native_display_mode,
     query_primary_native_display_mode,
+)
+from fpvs_studio.runtime.windows_display import (
+    FRACTIONAL_60_MODE_TOLERANCE_HZ,
+    FRACTIONAL_60_REFRESH_HZ,
+    windows_60_hz_refresh_label,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -39,10 +47,37 @@ class DisplayRefreshVerification:
     psychopy_measured_hz: float
     approved_hz: float
 
+    def compatible_with(self, configured_hz: float) -> bool:
+        """Check a compiled rate, retaining the Windows nominal 60 mode label."""
 
-def _approved_refresh_for_native_mode(display_mode: NativeDisplayMode) -> float | None:
+        configured_rate = approved_monitor_refresh_rate(configured_hz)
+        return configured_rate == self.approved_hz or (
+            configured_rate == 60.0
+            and self.approved_hz == FRACTIONAL_60_REFRESH_HZ
+            and self.display_mode.platform_name == "Windows"
+            and self.display_mode.exact_refresh
+            and self.display_mode.hz == 60.0
+            and windows_60_hz_refresh_label(60.0, self.display_mode.signal_refresh_hz)
+            == FRACTIONAL_60_REFRESH_HZ
+        )
+
+
+def approved_refresh_for_native_mode(display_mode: NativeDisplayMode) -> float | None:
+    """Classify the native refresh metadata independently of the playback probe."""
+
     if not display_mode.exact_refresh:
-        return nearest_approved_monitor_refresh_rate(display_mode.hz)
+        nearest = nearest_approved_monitor_refresh_rate(display_mode.hz)
+        if nearest == FRACTIONAL_60_REFRESH_HZ and not isclose(
+            display_mode.hz, FRACTIONAL_60_REFRESH_HZ, rel_tol=0.0,
+            abs_tol=FRACTIONAL_60_MODE_TOLERANCE_HZ,
+        ):
+            # Keep the existing tolerance for rounded 60 Hz native metadata.
+            return 60.0 if measured_refresh_matches_configured(60.0, display_mode.hz) else None
+        return nearest
+    if display_mode.platform_name == "Windows":
+        windows_label = windows_60_hz_refresh_label(display_mode.hz, display_mode.signal_refresh_hz)
+        if windows_label is not None:
+            return windows_label
     matching_rates = [
         approved_hz
         for approved_hz in APPROVED_MONITOR_REFRESH_RATES_HZ
@@ -145,12 +180,12 @@ def _verify_primary_display_refresh_in_process(
             f"must be disabled for FPVS timing.{platform_guidance}"
         )
 
-    approved_hz = _approved_refresh_for_native_mode(display_mode)
+    approved_hz = approved_refresh_for_native_mode(display_mode)
     if approved_hz is None:
         raise DisplayRefreshVerificationError(
             f"{display_mode.platform_name} reports display mode {display_mode.mode_text}, "
-            "which does not match an approved FPVS "
-            "refresh rate (59.94, 60, 120, 144, or 240 Hz)."
+            "which does not match an approved FPVS refresh rate "
+            f"({approved_monitor_refresh_rates_text()})."
         )
 
     try:

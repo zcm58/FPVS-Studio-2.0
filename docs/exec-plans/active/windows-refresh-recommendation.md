@@ -3,10 +3,10 @@
 Status: Active
 
 Show the highest fixed rate Windows offers at the current resolution when the
-presentation display is configured at 60 Hz. Run the read-only query in a worker
+presentation display is configured at 60 or 60.02 Hz. Run the read-only query in a worker
 before the Display refresh check, Run preflight, and Home or Run launch. The
 operator needs to identify the display and choose a rate supported by Studio timing
-checks. Let users continue at 60 Hz or open Advanced display settings and retry.
+checks. Let users continue at the detected rate or open Advanced display settings and retry.
 
 Use a modal with a 520 × 280 minimum and a 560 × 300 default. Verify supported,
 mixed, and unsupported-only rates, selected display context, the keyboard default,

@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import DisplaySettings
-from fpvs_studio.core.validation import nearest_approved_monitor_refresh_rate
+from fpvs_studio.core.validation import approved_monitor_refresh_rates_text
 from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
@@ -22,6 +22,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
 )
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
+from fpvs_studio.runtime.display_refresh import approved_refresh_for_native_mode
 
 if TYPE_CHECKING:
     from fpvs_studio.gui.document import ProjectDocument
@@ -79,10 +80,10 @@ class LocalTestDisplayDialog(QDialog):
         self.resolution_mismatch = (
             display.screen_width_px, display.screen_height_px,
         ) != (mode.pixel_width, mode.pixel_height)
-        refresh_hz = nearest_approved_monitor_refresh_rate(mode.hz)
+        refresh_hz = approved_refresh_for_native_mode(mode)
         if refresh_hz is None or not mode.pixel_width or not mode.pixel_height:
             raise ValueError(
-                "Select a fixed supported display rate (59.94, 60, 120, 144 or 240 Hz) "
+                f"Select a fixed supported display rate ({approved_monitor_refresh_rates_text()}) "
                 "in macOS System Settings > Displays, then retry."
             )
         self.refresh_hz = refresh_hz

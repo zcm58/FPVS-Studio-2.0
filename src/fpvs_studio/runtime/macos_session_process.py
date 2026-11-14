@@ -27,7 +27,7 @@ from fpvs_studio.runtime.display_refresh import (
     PSYCHOPY_STABILITY_RELATIVE_TOLERANCE,
     DisplayRefreshVerification,
     DisplayRefreshVerificationError,
-    _approved_refresh_for_native_mode,
+    approved_refresh_for_native_mode,
 )
 from fpvs_studio.runtime.launcher import (
     LaunchSettings,
@@ -256,7 +256,7 @@ def verify_macos_primary_display_refresh(
     result = response.verification
     if (result is None or response.summary is not None
             or not isfinite(result.psychopy_measured_hz) or result.psychopy_measured_hz <= 0
-            or result.approved_hz != _approved_refresh_for_native_mode(result.display_mode)
+            or result.approved_hz != approved_refresh_for_native_mode(result.display_mode)
             or result.display_mode.variable_refresh_enabled
             or not isclose(result.display_mode.hz, result.psychopy_measured_hz,
                            rel_tol=PSYCHOPY_STABILITY_RELATIVE_TOLERANCE, abs_tol=0.0)):

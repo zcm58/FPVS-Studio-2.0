@@ -103,10 +103,13 @@ def test_explicit_duration_request_validates_even_when_its_value_is_unchanged(du
     assert draft.model_dump(mode="json") == before
 
 
-def test_duration_error_exposes_full_precision_usable_neighbors_at_5994(duration_project):
+@pytest.mark.parametrize("refresh_hz", [59.94, 60.02])
+def test_duration_error_exposes_full_precision_usable_neighbors(duration_project, refresh_hz):
     condition_id = duration_project.conditions[0].condition_id
     with pytest.raises(ConditionDurationError) as caught:
-        propose_condition_timing(duration_project, durations={condition_id: 120}, refresh_hz=59.94)
+        propose_condition_timing(
+            duration_project, durations={condition_id: 120}, refresh_hz=refresh_hz,
+        )
     error = caught.value
     assert error.condition_id == condition_id
     assert error.requested_seconds == 120
@@ -114,9 +117,9 @@ def test_duration_error_exposes_full_precision_usable_neighbors_at_5994(duration
     for candidate in error.valid_durations:
         for value in (candidate, round(candidate, 9)):
             draft = propose_condition_timing(
-                duration_project, durations={condition_id: value}, refresh_hz=59.94,
+                duration_project, durations={condition_id: value}, refresh_hz=refresh_hz,
             )
-            resolved = resolve_condition_stream_timing(draft, draft.conditions[0], 59.94)
+            resolved = resolve_condition_stream_timing(draft, draft.conditions[0], refresh_hz)
             assert resolved.duration_seconds == pytest.approx(candidate, abs=1e-9)
             assert resolved.total_frames % 50 == 0
 
@@ -149,7 +152,7 @@ def test_finite_seconds_overflow_is_actionable_and_does_not_escape_validation(du
 @pytest.mark.parametrize("mode", [
     DutyCycleMode.CONTINUOUS, DutyCycleMode.BLANK_50, DutyCycleMode.SINUSOIDAL,
 ])
-@pytest.mark.parametrize("refresh_hz", [59.94, 60, 120, 144, 240])
+@pytest.mark.parametrize("refresh_hz", [59.94, 60, 60.02, 120, 144, 240])
 def test_seconds_compile_as_complete_cycles_across_supported_image_modes_and_refreshes(
     duration_project, sample_project_root, mode, refresh_hz,
 ):

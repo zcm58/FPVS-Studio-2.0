@@ -116,6 +116,8 @@ def _patch_native_windows_mode(
     monkeypatch: pytest.MonkeyPatch,
     numerator: int,
     denominator: int = 1,
+    *,
+    signal_refresh_hz: float | None = None,
 ) -> None:
     monkeypatch.setattr(
         "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
@@ -126,6 +128,7 @@ def _patch_native_windows_mode(
             source_name="QueryDisplayConfig",
             exact_refresh=True,
             mode_reference=f"{numerator}/{denominator}",
+            signal_refresh_hz=signal_refresh_hz,
         ),
     )
 
@@ -576,6 +579,56 @@ def test_preflight_distinguishes_windows_5994_mode_from_compiled_60_hz(
             sample_project_root,
             run_spec,
             engine=_PreflightEngine(59.998),
+            runtime_options={"verify_refresh_rate": True},
+        )
+
+
+@pytest.mark.parametrize("compiled_rate", [60.0, 60.02])
+def test_preflight_accepts_nominal_and_fractional_rate_for_windows_dual_label_mode(
+    sample_project, sample_project_root, monkeypatch, caplog, compiled_rate,
+) -> None:
+    _patch_native_windows_mode(monkeypatch, 60, signal_refresh_hz=60.020425)
+    run_spec = compile_run_spec(
+        sample_project, refresh_hz=compiled_rate, project_root=sample_project_root,
+        run_id="faces-run",
+    )
+    engine = _PreflightEngine(60.0185)
+
+    with caplog.at_level("INFO", logger="fpvs_studio.runtime.preflight"):
+        preflight_run_spec(
+            sample_project_root, run_spec, engine=engine,
+            runtime_options={"verify_refresh_rate": True},
+        )
+
+    assert run_spec.display.refresh_hz == compiled_rate
+    assert run_spec.display.frames_per_stimulus == 10
+    assert engine.refresh_measurement_count == 1
+    assert ("Using the compiled 60 Hz schedule" in caplog.text) == (compiled_rate == 60.0)
+
+
+@pytest.mark.parametrize(
+    ("nominal_numerator", "nominal_denominator", "compiled_rate"),
+    [(60, 1, 60.02), (3001, 50, 60.0)],
+)
+def test_preflight_distinguishes_windows_60_and_6002_modes_without_dual_label(
+    sample_project, sample_project_root, monkeypatch,
+    nominal_numerator, nominal_denominator, compiled_rate,
+) -> None:
+    _patch_native_windows_mode(monkeypatch, nominal_numerator, nominal_denominator)
+    run_spec = compile_run_spec(
+        sample_project, refresh_hz=compiled_rate, project_root=sample_project_root,
+        run_id="faces-run",
+    )
+
+    approved_rate = nominal_numerator / nominal_denominator
+    with pytest.raises(
+        PreflightError,
+        match=(rf"approved FPVS rate {approved_rate:g} Hz.*"
+               rf"compiled session expects {compiled_rate:g} Hz"),
+    ):
+        preflight_run_spec(
+            sample_project_root, run_spec,
+            engine=_PreflightEngine(nominal_numerator / nominal_denominator),
             runtime_options={"verify_refresh_rate": True},
         )
 

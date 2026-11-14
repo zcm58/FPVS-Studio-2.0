@@ -50,6 +50,7 @@ from fpvs_studio.core.template_library import default_template
 APPROVED_MONITOR_REFRESH_RATES_HZ: tuple[float, ...] = (
     59.94,
     60.0,
+    60.02,
     120.0,
     144.0,
     240.0,
