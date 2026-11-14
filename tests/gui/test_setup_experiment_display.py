@@ -405,7 +405,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     monkeypatch,
 ) -> None:
     measured_refresh = {"value": 143.92}
-    windows_mode = {"numerator": 144, "denominator": 1}
+    windows_mode = {"numerator": 144, "denominator": 1, "signal": None}
 
     class _FakeEngine:
         def measure_refresh_hz(self, *, runtime_options=None) -> float:
@@ -431,6 +431,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
             mode_reference=(
                 f"{windows_mode['numerator']}/{windows_mode['denominator']}"
             ),
+            signal_refresh_hz=windows_mode["signal"],
         ),
     )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Configurable FPVS Timing")
@@ -442,7 +443,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     editor.oddball_every_n_spin.setValue(6)
     assert [
         editor.refresh_hz_combo.itemData(index) for index in range(editor.refresh_hz_combo.count())
-    ] == [59.94, 60.0, 120.0, 144.0, 240.0]
+    ] == [59.94, 60.0, 60.02, 120.0, 144.0, 240.0]
     assert editor.refresh_is_verified() is False
     assert not editor.timing_status_label.isVisible()
     assert editor.timing_is_compatible()
@@ -516,28 +517,53 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
     assert "dropped or late frames" in editor.timing_status_label.toolTip()
     assert guide.setup_wizard_next_button.isEnabled()
 
-    window.resize(1120, 820)
+    windows_mode.update({"numerator": 60, "denominator": 1, "signal": 60.020425})
+    measured_refresh["value"] = 60.018
+    editor.detect_refresh_button.click()
     QApplication.processEvents()
-    assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
-    assert guide.display_settings_card.width() <= guide.display_settings_card.maximumWidth()
-    assert editor.detect_refresh_button.width() >= editor.detect_refresh_button.sizeHint().width()
-    assert editor.refresh_hz_combo.width() >= (
-        editor.refresh_hz_combo.fontMetrics().horizontalAdvance(
-            editor.refresh_hz_combo.currentText(),
-        ) + 32
-    )
-    qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
-    _assert_visible_children_within_parent(editor)
-    for label in (
-        editor.refresh_verification_notice,
-        editor.timing_status_label,
-    ):
-        required = label.fontMetrics().boundingRect(
-            QRect(0, 0, max(1, label.contentsRect().width()), 1000),
-            Qt.TextFlag.TextWordWrap,
-            label.text(),
+    assert editor.refresh_is_verified()
+    assert editor.current_refresh_hz() == 60.02
+    assert editor.refresh_hz_combo.currentText() == "60.02 Hz"
+    assert window.document.project.settings.display.preferred_refresh_hz == 60.02
+    assert guide.timing_refresh_hz_combo.currentData() == 60.02
+    assert window.run_page.refresh_hz_combo.currentData() == 60.02
+    assert "Display verified at 60.02 Hz" in editor.timing_status_label.text()
+    assert "Toolbox uses a 60 Hz FFT basis" in editor.timing_status_label.text()
+    assert editor.timing_status_label.property("statusState") == "warning"
+    assert "Windows mode 60.000 Hz (60/1)" in editor.timing_status_label.toolTip()
+    assert "Display signal 60.020 Hz" in editor.timing_status_label.toolTip()
+    assert "PsychoPy observed 60.018 Hz" in editor.timing_status_label.toolTip()
+    assert "36–38 ms in Studio timing tests" in editor.timing_status_label.toolTip()
+    assert "6.002 Hz stream" in editor.timing_status_label.toolTip()
+    assert editor.timing_report().realized_base_hz == pytest.approx(6.002)
+    assert "condition 145.951 s" in editor.refresh_hz_combo.toolTip()
+    assert guide.setup_wizard_next_button.isEnabled()
+
+    for width, height in ((1120, 820), (1180, 860)):
+        window.resize(width, height)
+        QApplication.processEvents()
+        assert guide.shell.page_container.scroll_area.verticalScrollBar().maximum() == 0
+        assert guide.display_settings_card.width() <= guide.display_settings_card.maximumWidth()
+        detect_button = editor.detect_refresh_button
+        assert detect_button.width() >= detect_button.sizeHint().width()
+        assert editor.refresh_hz_combo.width() >= (
+            editor.refresh_hz_combo.fontMetrics().horizontalAdvance(
+                editor.refresh_hz_combo.currentText(),
+            ) + 32
         )
-        assert label.contentsRect().height() >= required.height(), label.objectName()
+        qtbot.waitUntil(lambda: editor.height() >= editor.heightForWidth(editor.width()))
+        _assert_visible_children_within_parent(editor)
+        for label in (editor.refresh_verification_notice, editor.timing_status_label):
+            required = label.fontMetrics().boundingRect(
+                QRect(0, 0, max(1, label.contentsRect().width()), 1000),
+                Qt.TextFlag.TextWordWrap,
+                label.text(),
+            )
+            assert label.contentsRect().height() >= required.height(), label.objectName()
+
+    editor.refresh_hz_combo.setCurrentIndex(editor.refresh_hz_combo.findData(60.0))
+    assert window.document.project.settings.display.preferred_refresh_hz == 60.0
+    assert not editor.refresh_is_verified()
 
 
 

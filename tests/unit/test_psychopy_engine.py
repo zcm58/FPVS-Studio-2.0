@@ -2464,6 +2464,8 @@ def test_psychopy_engine_terminal_offset_closes_continuous_and_blank_final_frame
     window = captures["window"]
     assert isinstance(window, _FakeWindow)
     assert window._flip_index == 3
+    assert window.recordFrameIntervals is False
+    assert window.frameIntervals == []
     assert summary.completed_frames == 2
     assert [record.frame_index for record in summary.frame_intervals] == [0, 1]
     assert [record.interval_s for record in summary.frame_intervals] == pytest.approx(
@@ -2475,6 +2477,7 @@ def test_psychopy_engine_terminal_offset_closes_continuous_and_blank_final_frame
     assert _image_stims(captures)[0].draw_count == expected_image_draw_count
     assert [record["frame_index"] for record in trigger_backend.records] == [0]
     assert summary.runtime_metadata is not None
+    assert summary.runtime_metadata.frame_interval_recording is True
     assert summary.runtime_metadata.condition_cache_gpu_synchronized is True
     assert summary.runtime_metadata.condition_cache_cleanup_succeeded is True
     assert summary.runtime_metadata.condition_cache_unique_variant_count == 1

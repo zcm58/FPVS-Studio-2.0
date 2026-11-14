@@ -17,17 +17,24 @@ from fpvs_studio.gui.components import (
     apply_dialog_theme,
     mark_error_text,
     mark_primary_action,
+    mark_text_role,
 )
 from fpvs_studio.gui.monitor_selection_dialog import windows_display_label
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.workers import BackgroundTask
 from fpvs_studio.runtime.windows_display import (
+    FRACTIONAL_60_REFRESH_HZ,
     WindowsRefreshRecommendation,
     query_windows_refresh_recommendation,
 )
 
 LOGGER = logging.getLogger(__name__)
 _PENDING_PROPERTY = "windowsRefreshRecommendationPending"
+FRACTIONAL_60_TOOLBOX_NOTICE = (
+    "For a nominal 60 Hz design, 60.02 Hz shifts the stimulus frequencies relative to "
+    "Toolbox’s FFT bins. With the same frame count, a nominal 120 s stream ends about "
+    "40 ms early (36–38 ms in Studio timing tests)."
+)
 
 
 class RefreshRecommendationDialog(QDialog):
@@ -39,13 +46,17 @@ class RefreshRecommendationDialog(QDialog):
         display_device_name: str | None = None,
     ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Higher refresh rate available")
-        self.setMinimumSize(520, 280)
-        self.resize(560, 300)
+        current_hz = recommendation.current_hz
+        highest = recommendation.highest_hz
+        fractional = current_hz == FRACTIONAL_60_REFRESH_HZ
+        self.setWindowTitle(
+            "Higher refresh rate available" if highest is not None else "60.02 Hz timing advisory"
+        )
+        self.setMinimumSize(520, 360 if fractional else 280)
+        self.resize(560, 380 if fractional else 300)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
-        highest = recommendation.highest_hz
         recommended_hz = max(
             (
                 rate for rate in recommendation.higher_rates_hz
@@ -53,14 +64,19 @@ class RefreshRecommendationDialog(QDialog):
             ),
             default=None,
         )
-        guidance = (
-            f"Choose {recommended_hz} Hz in Windows for Studio timing checks."
-            if recommended_hz is not None
-            else "60 Hz is the highest Studio-supported rate Windows reported at this resolution."
-        )
-        layout.addWidget(DialogHeader(
-            f"60 Hz in use · {highest} Hz available", guidance, parent=self,
-        ))
+        if recommended_hz is not None:
+            guidance = f"Choose {recommended_hz} Hz in Windows for Studio timing checks."
+        elif highest is None:
+            guidance = "Use a verified 60 Hz mode if one is available."
+        else:
+            guidance = (
+                f"{current_hz:g} Hz is the highest Studio-supported rate "
+                "Windows reported at this resolution."
+            )
+        heading = f"{current_hz:g} Hz in use"
+        if highest is not None:
+            heading += f" · {highest} Hz available"
+        layout.addWidget(DialogHeader(heading, guidance, parent=self))
         display = windows_display_label(display_device_name) if display_device_name else None
         resolution = f"{recommendation.pixel_width} × {recommendation.pixel_height}"
         self.details_label = QLabel(
@@ -68,6 +84,11 @@ class RefreshRecommendationDialog(QDialog):
         )
         self.details_label.setWordWrap(True)
         layout.addWidget(self.details_label)
+        if fractional:
+            notice = QLabel(FRACTIONAL_60_TOOLBOX_NOTICE, self)
+            mark_text_role(notice, "supporting")
+            notice.setWordWrap(True)
+            layout.addWidget(notice)
         self.settings_hint = QLabel(
             "Select the experiment display in Windows. After changing its rate, "
             "use Check refresh rate on the same display."
@@ -93,7 +114,7 @@ class RefreshRecommendationDialog(QDialog):
             "Open Advanced display settings", QDialogButtonBox.ButtonRole.ActionRole,
         )
         self.continue_button = buttons.addButton(
-            "Continue at 60 Hz", QDialogButtonBox.ButtonRole.AcceptRole,
+            f"Continue at {current_hz:g} Hz", QDialogButtonBox.ButtonRole.AcceptRole,
         )
         primary_button = (
             self.settings_button if recommended_hz is not None else self.continue_button

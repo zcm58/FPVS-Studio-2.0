@@ -108,8 +108,14 @@ machine-local font installation.
 Default launch settings require connected-display refresh verification. Preflight first
 asks a runtime-owned platform adapter for the selected display's configured
 native mode, then asks the engine for one fullscreen observation per session. Windows
-continues to use `QueryDisplayConfig`; its exact fraction is authoritative for approved-
-rate selection, so `60000/1001` maps to `59.94 Hz` while `60/1` maps to `60 Hz`.
+uses `QueryDisplayConfig`. The native fraction `60000/1001` maps to `59.94 Hz`.
+An exact fixed mode near 60.02 Hz is supported. For a progressive, unscaled Windows
+signal with complete mode data, a desktop mode of `60/1` also maps to 60.02 Hz when
+the configured pixel clock divided by total pixels per frame is within 0.001 Hz of
+60.02 Hz. The same dual-reported mode remains compatible with compiled 60 Hz projects.
+Refresh verification logs the nominal rate, configured signal rate when available,
+and PsychoPy probe result. Use the exported playback cadence to evaluate observed
+timing over the full condition.
 KDE Linux uses `kscreen-doctor --json` to select the enabled priority output, resolve
 its current mode, and read its VRR policy. Linux X11 uses the active primary XRandR
 mode. Floating Linux mode metadata maps to the nearest approved FPVS rate only within
@@ -1703,6 +1709,10 @@ observed values unavailable. Full export keeps the object in `run_summary.json`.
 The same fields appear with a `playback_cadence_` prefix in full-session
 `conditions.csv` and in `logs/session_condition_history.csv` for both export modes.
 Historical runs and engines without the summary leave the added fields blank.
+
+For example, the expected duration for 7,200 frames at an authored 60.02 Hz is
+approximately 119.960013 seconds. Comparing that result to a 120-second external
+target is a separate calculation from the exported difference against the compiled duration.
 
 Single-frame timing QC still flags long intervals. Cadence can show a persistent
 rate difference across a complete run even when no single frame misses its threshold.

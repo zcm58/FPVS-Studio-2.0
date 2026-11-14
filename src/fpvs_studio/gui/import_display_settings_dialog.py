@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 
 from PySide6.QtCore import Qt
@@ -30,15 +31,23 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.components import (
     create_resolution_spin_box as _display_resolution_spin_box,
 )
+from fpvs_studio.runtime.display_mode import (
+    DisplayModeError,
+    NativeDisplayMode,
+    query_primary_native_display_mode,
+)
+from fpvs_studio.runtime.display_refresh import approved_refresh_for_native_mode
 
 
 @dataclass(frozen=True)
 class DetectedDisplaySettings:
-    """Best-effort refresh rate and pixel dimensions of Qt's primary screen."""
+    """Best-effort refresh information and physical pixels of the primary screen."""
 
     refresh_hz: float | None = None
     screen_width_px: int | None = None
     screen_height_px: int | None = None
+    native_mode: NativeDisplayMode | None = None
+    native_refresh_unavailable: bool = False
 
 
 class ImportDisplaySettingsDialog(QDialog):
@@ -155,7 +164,11 @@ class ImportDisplaySettingsDialog(QDialog):
 
         self.detect_button = QPushButton("Detect Primary Display", self)
         self.detect_button.setObjectName("import_display_detect_button")
-        self.detect_button.setToolTip("Detect the primary display's refresh rate and resolution.")
+        self.detect_button.setToolTip(
+            "Detect the primary display's native Windows refresh rate and resolution."
+            if sys.platform == "win32"
+            else "Detect the primary display's refresh rate and resolution."
+        )
         self.detect_button.clicked.connect(self.apply_detected_primary_display)
         mark_secondary_action(self.detect_button)
 
@@ -247,16 +260,23 @@ class ImportDisplaySettingsDialog(QDialog):
         }
 
     def apply_detected_primary_display(self) -> None:
-        """Fill refresh rate and pixel dimensions from Qt's primary screen metadata."""
+        """Fill supported refresh and pixel values from the primary display."""
 
         detected = detect_primary_display_settings()
-        refresh_supported = True
-        if detected.refresh_hz is not None:
-            approved_refresh_hz = nearest_approved_monitor_refresh_rate(
-                detected.refresh_hz
+        mode = detected.native_mode
+        approved_refresh_hz = None
+        if detected.refresh_hz is None:
+            self.detected_refresh_label.setText("Unavailable")
+        elif mode is not None and mode.variable_refresh_enabled:
+            self.detected_refresh_label.setText(
+                f"{detected.refresh_hz:.2f} Hz (variable refresh enabled)"
+            )
+        else:
+            approved_refresh_hz = (
+                approved_refresh_for_native_mode(mode) if mode is not None
+                else nearest_approved_monitor_refresh_rate(detected.refresh_hz)
             )
             if approved_refresh_hz is None:
-                refresh_supported = False
                 self.detected_refresh_label.setText(
                     f"{detected.refresh_hz:.2f} Hz (not an approved FPVS rate)"
                 )
@@ -265,8 +285,6 @@ class ImportDisplaySettingsDialog(QDialog):
                 self.detected_refresh_label.setText(
                     f"{detected.refresh_hz:.2f} Hz (use {approved_refresh_hz:g} Hz)"
                 )
-        else:
-            self.detected_refresh_label.setText("Unavailable")
         if detected.screen_width_px is not None:
             self.screen_width_px_spin.setValue(detected.screen_width_px)
         if detected.screen_height_px is not None:
@@ -277,25 +295,39 @@ class ImportDisplaySettingsDialog(QDialog):
             )
         else:
             self.detected_resolution_label.setText("Unavailable")
-        if refresh_supported:
-            self.detected_badge.set_state("ready", "Detected")
-        else:
+        if detected.native_refresh_unavailable or (
+            detected.refresh_hz is not None and approved_refresh_hz is None
+        ):
             self.detected_badge.set_state("warning", "Review refresh")
+        else:
+            self.detected_badge.set_state("ready", "Detected")
 
 
 def detect_primary_display_settings() -> DetectedDisplaySettings:
-    """Read the current refresh rate and pixel dimensions without importing PsychoPy."""
+    """Read native Windows cadence and primary-screen physical pixels."""
 
     screen = QApplication.primaryScreen()
     if screen is None:
-        return DetectedDisplaySettings()
+        return DetectedDisplaySettings(native_refresh_unavailable=sys.platform == "win32")
 
     geometry = screen.geometry()
     pixel_ratio = screen.devicePixelRatio()
 
-    refresh_hz = screen.refreshRate()
+    native_mode = None
+    refresh_hz = None
+    if sys.platform == "win32":
+        try:
+            native_mode = query_primary_native_display_mode()
+        except DisplayModeError:
+            pass
+        else:
+            refresh_hz = native_mode.signal_refresh_hz or native_mode.hz
+    else:
+        refresh_hz = screen.refreshRate()
     return DetectedDisplaySettings(
-        refresh_hz=refresh_hz if refresh_hz > 0 else None,
+        refresh_hz=refresh_hz if refresh_hz is not None and refresh_hz > 0 else None,
         screen_width_px=max(1, round(geometry.width() * pixel_ratio)),
         screen_height_px=max(1, round(geometry.height() * pixel_ratio)),
+        native_mode=native_mode,
+        native_refresh_unavailable=sys.platform == "win32" and native_mode is None,
     )

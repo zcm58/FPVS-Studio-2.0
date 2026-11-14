@@ -10,6 +10,7 @@ from pydantic import ValidationError
 from tests.unit.studio_handoff_fixtures import build_handoff_fixtures, legacy_config_payload
 
 from fpvs_studio import __version__
+from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.project_config import (
     ProjectConfigError,
     ProjectConfigFile,
@@ -18,6 +19,7 @@ from fpvs_studio.core.project_config import (
     read_project_config,
     write_project_config,
 )
+from fpvs_studio.core.serialization import load_project_file
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "studio_handoff"
 
@@ -39,6 +41,47 @@ def test_real_producer_matches_portable_consumer_fixtures(tmp_path):
         assert actual["format_version"] == 2
         assert "schema_version" not in actual
         assert read_project_config(path) == config
+
+
+def test_completed_6002hz_handoff_preserves_requested_protocol_and_frame_schedule(tmp_path):
+    config = read_project_config(FIXTURES / "v2-completed-unicorn-60-02.fpvsconfig")
+    assert config.display.preferred_refresh_hz == 60.02
+    assert (config.protocol.base_hz, config.protocol.oddball_every_n) == (6.0, 5)
+    completed = config.completed_session
+    assert completed is not None
+    assert completed.refresh_hz == 60.02
+    completed_run, = completed.ordered_runs
+    start, *oddballs = completed_run.trigger_events
+    assert (start.frame_index, start.code, start.label) == (0, 1, "condition_start")
+    assert [event.frame_index for event in oddballs] == list(range(40, 7200, 50))
+    assert {(event.code, event.label) for event in oddballs} == {(55, "oddball_onset")}
+
+    evidence = completed.acquisition_evidence
+    assert evidence is not None
+    acquisition_run, = evidence.runs
+    assert acquisition_run.completed_frames == 7200
+    assert acquisition_run.planned_event_count == len(acquisition_run.attempted_events) == 145
+    assert [event.time_s for event in acquisition_run.attempted_events[1:]] == pytest.approx(
+        [frame / 60.02 for frame in range(40, 7200, 50)], rel=0, abs=1e-12,
+    )
+
+    scaffold = create_project_from_config(tmp_path, config)
+    restored = load_project_file(scaffold.project_root / "project.json")
+    restored_refresh = restored.settings.display.preferred_refresh_hz
+    assert restored_refresh == 60.02
+    assert restored.settings.protocol.base_hz == 6.0
+    assert restored.settings.protocol.oddball_hz == 1.2
+    plan = compile_session_plan(
+        restored, project_root=scaffold.project_root, refresh_hz=restored_refresh,
+    )
+    entry, = plan.ordered_entries()
+    assert plan.refresh_hz == 60.02
+    assert entry.run_spec.display.total_frames == 7200
+    assert entry.run_spec.display.frames_per_stimulus == 10
+    assert entry.run_spec.condition.oddball_hz == 1.2
+    assert [(trigger.frame_index, trigger.code) for trigger in entry.run_spec.trigger_events] == [
+        (trigger.frame_index, trigger.code) for trigger in completed_run.trigger_events
+    ]
 
 
 @pytest.mark.parametrize("version", [f"1.{minor}.0" for minor in range(16)])

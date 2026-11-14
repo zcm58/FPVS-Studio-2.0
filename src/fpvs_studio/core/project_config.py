@@ -1292,6 +1292,9 @@ def _completed_session_config(
 ) -> ProjectConfigCompletedSession:
     if project_root is None:
         raise ProjectConfigError("Completed session export requires a project root.")
+    entries = session_plan.ordered_entries()
+    if any(entry.run_spec.display.refresh_hz != session_plan.refresh_hz for entry in entries):
+        raise ProjectConfigError("Completed handoff runs must share the session refresh rate.")
     source_run_dir = completed_session_dir.resolve().relative_to(project_root.resolve()).as_posix()
     return ProjectConfigCompletedSession(
         session_id=session_plan.session_id,
@@ -1323,7 +1326,7 @@ def _completed_session_config(
                     for trigger in entry.run_spec.trigger_events
                 ],
             )
-            for entry in session_plan.ordered_entries()
+            for entry in entries
         ],
     )
 

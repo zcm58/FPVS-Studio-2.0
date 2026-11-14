@@ -30,37 +30,49 @@ def _assert_dialog_fit(dialog, size):
 
 
 @pytest.mark.parametrize("size", [(520, 280), (560, 300)])
+@pytest.mark.parametrize("current_hz", [60.0, 60.02])
 @pytest.mark.parametrize(
-    ("rates", "has_supported_upgrade", "guidance"),
+    ("rates", "has_supported_upgrade", "guidance_template"),
     [
+        ((), False, "Use a verified 60 Hz mode if one is available."),
         ((120,), True, "Choose 120 Hz in Windows for Studio timing checks."),
         ((144, 360), True, "Choose 144 Hz in Windows for Studio timing checks."),
         (
             (360,), False,
-            "60 Hz is the highest Studio-supported rate Windows reported at this resolution.",
+            "{current:g} Hz is the highest Studio-supported rate Windows reported "
+            "at this resolution.",
         ),
     ],
 )
 def test_recommendation_copy_actions_and_fit(
-    qtbot, monkeypatch, size, rates, has_supported_upgrade, guidance,
+    qtbot, monkeypatch, size, current_hz, rates, has_supported_upgrade, guidance_template,
 ):
+    if not rates and current_hz == 60.0:
+        pytest.skip("A fixed 60 Hz mode without alternatives has no advisory.")
     parent = QWidget()
     qtbot.addWidget(parent)
     parent.show()
     dialog = advisory.RefreshRecommendationDialog(
-        WindowsRefreshRecommendation(7680, 4320, rates), parent,
+        WindowsRefreshRecommendation(7680, 4320, rates, current_hz=current_hz), parent,
         display_device_name=r"\\.\DISPLAY12",
     )
     qtbot.addWidget(dialog)
     open_settings = Mock(side_effect=[False, True])
     monkeypatch.setattr(advisory.QDesktopServices, "openUrl", open_settings)
+    if current_hz == 60.02:
+        size = (size[0], size[1] + 80)
     dialog.resize(*size)
     dialog.open()
     qtbot.waitUntil(dialog.isVisible)
 
     visible_text = [label.text() for label in dialog.findChildren(QLabel) if label.isVisible()]
-    assert f"60 Hz in use · {max(rates)} Hz available" in visible_text
-    assert guidance in visible_text
+    heading = f"{current_hz:g} Hz in use"
+    if rates:
+        heading += f" · {max(rates)} Hz available"
+    assert heading in visible_text
+    assert guidance_template.format(current=current_hz) in visible_text
+    assert (advisory.FRACTIONAL_60_TOOLBOX_NOTICE in visible_text) == (current_hz == 60.02)
+    assert dialog.continue_button.text() == f"Continue at {current_hz:g} Hz"
     assert dialog.details_label.text() == "Display 12 · 7680 × 4320"
     assert dialog.settings_hint.isVisible() == has_supported_upgrade
     if has_supported_upgrade:
@@ -131,13 +143,14 @@ def test_selected_display_reaches_advisory_and_pending_selector_blocks_overlap(q
     proceed.assert_called_once_with()
 
 
-@pytest.mark.parametrize("choice", ["continue", "dismiss", "no_higher_rate"])
+@pytest.mark.parametrize("choice", ["continue", "dismiss", "no_higher_rate", "fractional_only"])
 def test_gate_resumes_only_when_allowed(qtbot, monkeypatch, choice):
     set_module_platform(monkeypatch, advisory, "win32")
     monkeypatch.setattr(advisory, "BackgroundTask", _ImmediateTask)
-    probe = Mock(return_value=(
-        None if choice == "no_higher_rate" else WindowsRefreshRecommendation(1920, 1080, (120,))
-    ))
+    recommendation = WindowsRefreshRecommendation(1920, 1080, (120,))
+    if choice == "fractional_only":
+        recommendation = WindowsRefreshRecommendation(1920, 1080, (), 60.02)
+    probe = Mock(return_value=None if choice == "no_higher_rate" else recommendation)
     monkeypatch.setattr(advisory, "query_windows_refresh_recommendation", probe)
     parent = QWidget()
     qtbot.addWidget(parent)
@@ -153,7 +166,7 @@ def test_gate_resumes_only_when_allowed(qtbot, monkeypatch, choice):
     advisory.check_windows_refresh(parent, proceed)
     probe.assert_called_once_with()
     proceed.assert_not_called()
-    if choice == "continue":
+    if choice in {"continue", "fractional_only"}:
         dialog.continue_button.click()
         proceed.assert_called_once_with()
     else:

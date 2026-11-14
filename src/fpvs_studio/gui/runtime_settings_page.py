@@ -76,7 +76,10 @@ from fpvs_studio.gui.presentation_settings_dialog import (
     PresentationSettingsDialog,
     presentation_defaults_summary,
 )
-from fpvs_studio.gui.refresh_recommendation_dialog import check_windows_refresh
+from fpvs_studio.gui.refresh_recommendation_dialog import (
+    FRACTIONAL_60_TOOLBOX_NOTICE,
+    check_windows_refresh,
+)
 from fpvs_studio.gui.window_helpers import (
     _RUNTIME_BACKGROUND_COLOR_PRESETS,
     _canonical_runtime_background_hex,
@@ -89,6 +92,7 @@ from fpvs_studio.runtime.display_refresh import (
     DisplayRefreshVerification,
     verify_primary_display_refresh,
 )
+from fpvs_studio.runtime.windows_display import FRACTIONAL_60_REFRESH_HZ
 from fpvs_studio.support.error_explanations import describe_error
 
 LOGGER = logging.getLogger(__name__)
@@ -412,9 +416,7 @@ class DisplaySettingsEditor(QWidget):
 
         if self._refresh_verification is None:
             return False
-        return approved_monitor_refresh_rate(
-            self.current_refresh_hz()
-        ) == approved_monitor_refresh_rate(self._refresh_verification.approved_hz)
+        return self._refresh_verification.compatible_with(self.current_refresh_hz())
 
     def timing_blocker(self) -> str:
         report = self.timing_report()
@@ -562,6 +564,22 @@ class DisplaySettingsEditor(QWidget):
             )
             self.timing_status_label.setToolTip(self._refresh_measurement_error)
             self.timing_status_label.setVisible(True)
+        elif report.refresh_hz == FRACTIONAL_60_REFRESH_HZ and not ab:
+            self.timing_status_label.setProperty("statusState", "warning")
+            prefix = verification_prefix or "60.02 Hz selected. "
+            self.timing_status_label.setText(
+                f"{prefix}Toolbox uses a 60 Hz FFT basis. Expect a bin offset and "
+                "about 40 ms of timing difference over 120 s."
+            )
+            detail = self.timing_status_label.toolTip()
+            notes = [detail, FRACTIONAL_60_TOOLBOX_NOTICE]
+            if report.realized_base_hz is not None and report.realized_oddball_hz is not None:
+                notes.append(
+                    f"Planned rates: {report.realized_base_hz:.6g} Hz stream and "
+                    f"{report.realized_oddball_hz:.6g} Hz {cadence}."
+                )
+            self.timing_status_label.setToolTip("\n".join(filter(None, notes)))
+            self.timing_status_label.setVisible(True)
         elif report.warnings:
             self.timing_status_label.setProperty("statusState", "warning")
             realized_base = report.realized_base_hz or report.base_hz
@@ -587,10 +605,16 @@ class DisplaySettingsEditor(QWidget):
             return ""
         verification = self._refresh_verification
         display_mode = verification.display_mode
+        signal = (
+            f"Display signal {display_mode.signal_refresh_hz:.3f} Hz; "
+            if display_mode.signal_refresh_hz is not None
+            and display_mode.signal_refresh_hz != display_mode.hz else ""
+        )
         self.timing_status_label.setToolTip(
             f"{display_mode.platform_name} mode {display_mode.status_text}; "
+            f"{signal}"
             f"PsychoPy observed {verification.psychopy_measured_hz:.3f} Hz; "
-            f"applied {verification.approved_hz:g} Hz. "
+            f"project target {self.current_refresh_hz():g} Hz. "
             "Runtime QC reports dropped or late frames separately."
         )
         return f"Display verified at {verification.approved_hz:g} Hz. "
@@ -648,9 +672,11 @@ class DisplaySettingsEditor(QWidget):
             ]
         minimum = min(durations)
         maximum = max(durations)
+        # Preserve visible duration differences on fractional refresh modes.
+        precision = 3 if refresh_hz % 1 else 1
         if abs(maximum - minimum) < 1e-9:
-            return f"condition {minimum:.1f} s"
-        return f"conditions {minimum:.1f}-{maximum:.1f} s"
+            return f"condition {minimum:.{precision}f} s"
+        return f"conditions {minimum:.{precision}f}-{maximum:.{precision}f} s"
 
     def _normalized_background_color(self) -> str:
         background_color = self._document.project.settings.display.background_color

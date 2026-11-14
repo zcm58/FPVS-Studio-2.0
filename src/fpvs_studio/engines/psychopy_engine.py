@@ -235,7 +235,8 @@ class PsychoPyEngine(PresentationEngine):
             if presentation is not None:
                 activate_presentation()
             self._graphics_lifetime = GraphicsLifetime(self._window)
-            self._window.recordFrameIntervals = True
+            # Studio records the returned flip times and evaluates timing after playback.
+            self._window.recordFrameIntervals = False
             self._keyboard = (
                 mac_keyboard if mac_keyboard is not None else keyboard_module.Keyboard()
             )
@@ -568,9 +569,6 @@ class PsychoPyEngine(PresentationEngine):
 
             keyboard.clock.reset()
             keyboard.clearEvents()
-            window.recordFrameIntervals = True
-            if hasattr(window, "frameIntervals"):
-                window.frameIntervals = []
 
             warmup_clock = core.Clock()
             warmup_last_flip_time: float | None = None

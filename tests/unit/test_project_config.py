@@ -426,6 +426,22 @@ def test_completed_config_exports_session_order_run_seeds_and_manifest_provenanc
     assert derivative.deterministic_policy == "fft-amplitude-preserved-noise-phase-v1"
 
 
+def test_completed_config_rejects_different_run_and_session_refresh(
+    sample_project, sample_project_root,
+) -> None:
+    session_plan = compile_session_plan(
+        sample_project, refresh_hz=60.02, project_root=sample_project_root, random_seed=77,
+    )
+    session_plan.ordered_entries()[0].run_spec.display.refresh_hz = 60.0
+    completed_dir = sample_project_root / "runs" / session_plan.session_id
+    write_json_file(completed_dir / "session_plan.json", session_plan)
+
+    with pytest.raises(ProjectConfigError, match="runs must share the session refresh rate"):
+        export_project_config(
+            sample_project, sample_project_root, completed_session_dir=completed_dir,
+        )
+
+
 def test_config_import_creates_new_project_shell_without_copying_stimuli(
     tmp_path,
     sample_project,

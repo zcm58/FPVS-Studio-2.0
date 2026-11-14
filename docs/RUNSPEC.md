@@ -85,10 +85,11 @@ single-run/subset compilation from a mixed-rate project. Uniform image rates and
 word-only projects retain the approximation policy above. Incompatible mixed image
 rates are rejected with condition-specific guidance, without adjusting authored rates.
 
-Authored monitor refresh rates are limited to the core-owned approved list: 59.94, 60,
-120, 144, and 240 Hz. Connected-display measurement is machine-specific runtime state
-and is not persisted in `RunSpec`; runtime preflight compares an engine measurement to
-the compiled refresh target before playback.
+The approved authored monitor rates are 59.94, 60, 60.02, 120, 144, and 240 Hz.
+At 60.02 Hz, a requested 6 Hz base with an oddball every fifth image compiles to
+10 frames per image and 50 per oddball. Those counts imply 6.002 Hz and 1.2004 Hz,
+and 144 oddball cycles span approximately 119.960013 seconds. Connected-display
+measurement is machine-specific runtime state. See [refresh verification](RUNTIME_EXECUTION.md#session-flow).
 
 Runtime and engines must consume these compiled frame counts directly. They do
 not recompute protocol logic from `ProjectFile`.

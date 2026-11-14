@@ -39,7 +39,7 @@ from fpvs_studio.core.run_spec import StimulusEvent, TriggerEvent
 from fpvs_studio.preprocessing.importer import materialize_project_assets
 
 
-@pytest.mark.parametrize("refresh_hz", [59.94, 60, 120, 144, 240])
+@pytest.mark.parametrize("refresh_hz", [59.94, 60, 60.02, 120, 144, 240])
 def test_fixation_window_compiles_within_requested_seconds_at_each_refresh(
     sample_project, sample_project_root, refresh_hz,
 ) -> None:
@@ -100,6 +100,30 @@ def test_runspec_creation_at_60hz_continuous_mode(sample_project, sample_project
     assert run_spec.fixation.target_duration_frames == 15
     assert len(run_spec.fixation_events) == 2
     assert run_spec.trigger_events[0].frame_index == 0
+
+
+def test_6002hz_compiles_whole_frame_oddball_and_trigger_schedule(
+    sample_project, sample_project_root,
+) -> None:
+    condition = sample_project.conditions[0]
+    condition.sequence_count = 1
+    condition.oddball_cycle_repeats_per_sequence = 144
+    condition.trigger_code = 1
+
+    run_spec = compile_run_spec(sample_project, refresh_hz=60.02, project_root=sample_project_root)
+
+    assert run_spec.condition.base_hz == 6.0
+    assert run_spec.condition.oddball_hz == 1.2
+    assert run_spec.display.refresh_hz == 60.02
+    assert run_spec.display.frames_per_stimulus == 10
+    assert run_spec.display.total_frames == 7200
+    assert run_spec.display.total_frames / run_spec.display.refresh_hz == pytest.approx(
+        119.960013329, abs=1e-9,
+    )
+    condition_start, *oddballs = run_spec.trigger_events
+    assert (condition_start.frame_index, condition_start.code) == (0, 1)
+    assert [event.frame_index for event in oddballs] == list(range(40, 7200, 50))
+    assert {event.code for event in oddballs} == {55}
 
 
 def test_compiler_carries_configured_image_display_geometry(

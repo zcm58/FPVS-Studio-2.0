@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, QRect, Qt, Signal
@@ -14,6 +15,7 @@ from tests.gui.helpers import (
     open_created_project,
     prepare_compile_ready_project,
 )
+from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.models import DisplaySettings
 from fpvs_studio.core.project_bundle import (
@@ -29,6 +31,7 @@ from fpvs_studio.core.project_config import (
     write_project_config,
 )
 from fpvs_studio.core.project_service import create_project
+from fpvs_studio.gui import import_display_settings_dialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportProgressDialog,
@@ -47,6 +50,7 @@ from fpvs_studio.gui.processing_page import (
     BundleExportResultPage,
     BundleImportProcessingPage,
 )
+from fpvs_studio.runtime.display_mode import DisplayModeError, NativeDisplayMode
 
 
 class _ImmediateBackgroundTask(QObject):
@@ -1061,6 +1065,58 @@ def test_import_display_settings_dialog_keeps_approved_value_for_unsupported_ref
         assert dialog.detected_refresh_label.height() >= required_height
 
 
+@pytest.mark.parametrize("native_signal_hz", [60.020425, None])
+def test_import_display_detects_native_windows_signal_when_qt_rounds_refresh(
+    qtbot, monkeypatch, native_signal_hz,
+) -> None:
+    set_module_platform(monkeypatch, import_display_settings_dialog, "win32")
+    screen = SimpleNamespace(
+        geometry=lambda: QRect(0, 0, 1536, 864),
+        devicePixelRatio=lambda: 1.25,
+        refreshRate=lambda: 60.0,
+    )
+    monkeypatch.setattr(QApplication, "primaryScreen", lambda: screen)
+
+    def get_native_mode():
+        if native_signal_hz is None:
+            raise DisplayModeError("Native timing unavailable")
+        return NativeDisplayMode(
+            platform_name="Windows", display_name=r"\\.\DISPLAY1", refresh_hz=60.0,
+            source_name="QueryDisplayConfig", exact_refresh=True, mode_reference="60/1",
+            signal_refresh_hz=native_signal_hz,
+        )
+
+    monkeypatch.setattr(
+        import_display_settings_dialog, "query_primary_native_display_mode", get_native_mode,
+    )
+    dialog = ImportDisplaySettingsDialog(DisplaySettings(preferred_refresh_hz=60.0))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.detect_button.click()
+
+    assert "native Windows refresh rate" in dialog.detect_button.toolTip()
+    if native_signal_hz is None:
+        assert dialog.display_updates()["preferred_refresh_hz"] == 60.0
+        assert dialog.detected_refresh_label.text() == "Unavailable"
+        assert dialog.detected_badge.text() == "Review refresh"
+    else:
+        assert dialog.display_updates()["preferred_refresh_hz"] == 60.02
+        assert dialog.detected_refresh_label.text() == "60.02 Hz (use 60.02 Hz)"
+        assert dialog.detected_badge.text() == "Detected"
+    assert dialog.detected_resolution_label.text() == "1920 × 1080 px"
+    for width, height in ((720, 640), (780, 660)):
+        dialog.resize(width, height)
+        QApplication.processEvents()
+        assert_visible_children_within_parent(dialog)
+        label = dialog.detected_refresh_label
+        required = label.fontMetrics().boundingRect(
+            QRect(0, 0, label.contentsRect().width(), 1000),
+            Qt.TextFlag.TextWordWrap,
+            label.text(),
+        )
+        assert label.contentsRect().height() >= required.height()
+
+
 def test_import_display_settings_dialog_actions_are_explicit(qtbot) -> None:
     unresolved_dialog = ImportDisplaySettingsDialog(DisplaySettings())
     qtbot.addWidget(unresolved_dialog)
@@ -1092,10 +1148,9 @@ def test_import_display_settings_dialog_actions_are_explicit(qtbot) -> None:
     (1.5, (2560, 1440)), (2.0, (1920, 1080)),
 ])
 def test_import_display_detection_uses_physical_pixels(monkeypatch, ratio, logical):
-    from types import SimpleNamespace
-
     from fpvs_studio.gui.runtime_settings_page import _primary_screen_width_px
 
+    set_module_platform(monkeypatch, import_display_settings_dialog, "test")
     screen = SimpleNamespace(
         geometry=lambda: QRect(0, 0, *logical), devicePixelRatio=lambda: ratio,
         refreshRate=lambda: 60.0,
