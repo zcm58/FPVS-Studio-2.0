@@ -7,19 +7,35 @@ this layer.
 
 from __future__ import annotations
 
+import ctypes
+import logging
 import re
 import sys
 from collections.abc import Callable
+from ctypes import wintypes
 from html import escape
+from importlib import import_module
 from math import isfinite
 from typing import Any, Literal
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QSize, Qt, QTimer, Signal
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QSize,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    Signal,
+)
 from PySide6.QtGui import (
     QBrush,
     QColor,
+    QHideEvent,
     QIcon,
     QPainter,
+    QPaintEvent,
     QPalette,
     QPen,
     QPixmap,
@@ -42,6 +58,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSpinBox,
+    QStyle,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -379,6 +396,23 @@ class LaunchSurfaceFrame(QWidget):
         self.content_layout.addStretch(1)
 
 
+def _setup_motion_enabled() -> bool:
+    if sys.platform == "win32":
+        enabled = wintypes.BOOL()
+        spi_get_client_area_animation = 0x1042
+        system_parameters_info = ctypes.WinDLL("user32", use_last_error=True).SystemParametersInfoW
+        if not system_parameters_info(spi_get_client_area_animation, 0, ctypes.byref(enabled), 0):
+            logging.getLogger(__name__).warning(
+                "setup_animation_preference_read_failed", extra={"error": ctypes.get_last_error()}
+            )
+            return False
+        return bool(enabled.value)
+    if sys.platform == "darwin":
+        workspace = import_module("AppKit").NSWorkspace.sharedWorkspace()
+        return not workspace.accessibilityDisplayShouldReduceMotion()
+    return True
+
+
 class SetupProgressStepper(QWidget):
     """Connected horizontal progress indicator for Setup Wizard steps."""
 
@@ -391,6 +425,7 @@ class SetupProgressStepper(QWidget):
     _LABEL_HEIGHT = 22
     _STEPPER_HEIGHT = 58
     _SLOT_LABEL_MARGIN = 2
+    _TRANSITION_MS = 150
 
     def __init__(
         self,
@@ -406,9 +441,13 @@ class SetupProgressStepper(QWidget):
         self.step_items: list[QWidget] = []
         self.step_circles: list[QLabel] = []
         self.step_labels: list[QLabel] = []
-        self.connectors: list[QFrame] = []
         self._navigation_enabled = False
         self._label_refresh_scheduled = False
+        self._active_index = 0
+        self._connector_progress = 0.0
+        self._connector_animation = QVariantAnimation(self)
+        self._connector_animation.setEasingCurve(QEasingCurve.Type.OutExpo)
+        self._connector_animation.valueChanged.connect(self._set_connector_progress)
 
         self.setMinimumHeight(self._STEPPER_HEIGHT)
         self.setMaximumHeight(self._STEPPER_HEIGHT)
@@ -440,18 +479,6 @@ class SetupProgressStepper(QWidget):
             self.step_circles.append(circle)
             self.step_labels.append(label)
 
-            if index < len(self._steps) - 1:
-                connector = QFrame(self)
-                connector.setObjectName(f"setup_wizard_step_connector_{index + 1}")
-                connector.setFrameShape(QFrame.Shape.HLine)
-                connector.setProperty("setupProgressConnector", "true")
-                connector.setSizePolicy(
-                    QSizePolicy.Policy.Expanding,
-                    QSizePolicy.Policy.Fixed,
-                )
-                connector.lower()
-                self.connectors.append(connector)
-
         self.set_active_index(0)
         self._position_step_widgets()
 
@@ -469,6 +496,29 @@ class SetupProgressStepper(QWidget):
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
         self._schedule_elided_label_refresh()
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self._connector_animation.stop()
+        self._set_connector_progress(float(self._active_index))
+        super().hideEvent(event)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        theme = resolve_studio_theme(self.palette())
+        track, completed = QColor(theme.border_soft), QColor(theme.primary)
+        radius = self._CIRCLE_SIZE // 2
+        inset = radius + self._CONNECTOR_GAP
+        y = self._CIRCLE_TOP + radius
+        width = self.width()
+        step_count = len(self._steps)
+        with QPainter(self) as painter:
+            for index in range(step_count - 1):
+                left = round(width * (index + 0.5) / step_count) + inset
+                right = round(width * (index + 1.5) / step_count) - inset
+                length = max(0, right - left)
+                fraction = max(0.0, min(1.0, self._connector_progress - index))
+                painter.fillRect(left, y, length, 1, track)
+                painter.fillRect(left, y, round(length * fraction), 2, completed)
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if (
@@ -509,11 +559,26 @@ class SetupProgressStepper(QWidget):
             item.setAccessibleName(f"{index + 1}. {self._steps[index]}: {state}")
             item.setToolTip(f"Step {index + 1}: {self._steps[index]} ({state})")
 
-        for index, connector in enumerate(self.connectors):
-            state = "complete" if index < active_index else "upcoming"
-            connector.setProperty("setupProgressState", state)
-            refresh_widget_style(connector)
         self._refresh_elided_labels()
+        if active_index != self._active_index:
+            self._active_index = active_index
+            self._animate_connectors()
+
+    def _animate_connectors(self) -> None:
+        start, target = self._connector_progress, float(self._active_index)
+        self._connector_animation.stop()
+        duration = self.style().styleHint(QStyle.StyleHint.SH_Widget_Animation_Duration, None, self)
+        if start == target or not self.isVisible() or duration <= 0 or not _setup_motion_enabled():
+            self._set_connector_progress(target)
+            return
+        self._connector_animation.setDuration(min(duration, self._TRANSITION_MS))
+        self._connector_animation.setStartValue(start)
+        self._connector_animation.setEndValue(target)
+        self._connector_animation.start()
+
+    def _set_connector_progress(self, progress: float) -> None:
+        self._connector_progress = progress
+        self.update(0, self._CIRCLE_TOP + self._CIRCLE_SIZE // 2, self.width(), 2)
 
     def _step_index_for_watched_widget(self, watched: object) -> int | None:
         for index, widgets in enumerate(
@@ -562,21 +627,6 @@ class SetupProgressStepper(QWidget):
                 max(0, slot_width - (self._SLOT_LABEL_MARGIN * 2)),
                 self._LABEL_HEIGHT,
             )
-
-        circle_radius = self._CIRCLE_SIZE // 2
-        connector_y = self._CIRCLE_TOP + circle_radius
-        for index, connector in enumerate(self.connectors):
-            left_center = round(width * (index + 0.5) / step_count)
-            right_center = round(width * (index + 1.5) / step_count)
-            connector_left = left_center + circle_radius + self._CONNECTOR_GAP
-            connector_right = right_center - circle_radius - self._CONNECTOR_GAP
-            connector.setGeometry(
-                connector_left,
-                connector_y,
-                max(0, connector_right - connector_left),
-                2,
-            )
-            connector.lower()
 
     def _refresh_elided_labels(self) -> None:
         for title, label in zip(self._steps, self.step_labels, strict=True):
@@ -1933,15 +1983,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QLabel[setupProgressLabel="true"][setupProgressState="complete"] {{
         color: {color_text_primary};
-    }}
-    QFrame[setupProgressConnector="true"] {{
-        border: none;
-        border-top: 1px solid {color_border_soft};
-        max-height: 1px;
-    }}
-    QFrame[setupProgressConnector="true"][setupProgressState="complete"] {{
-        border-top: 2px solid {color_primary};
-        max-height: 2px;
     }}
     QFrame[setupSourceCard="true"] {{
         border: 1px solid {color_border_soft};

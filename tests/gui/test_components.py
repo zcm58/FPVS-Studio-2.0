@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
+import pytest
+from PySide6.QtCore import QAbstractAnimation, Qt
+from PySide6.QtGui import QColor, QImage, QPalette
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 from tests.gui.helpers import assert_visible_children_within_parent
 
+from fpvs_studio.gui import components
 from fpvs_studio.gui.components import (
     SectionCard,
     SetupMetricStrip,
@@ -281,13 +283,17 @@ def test_shared_fields_keep_keyboard_editing_and_selection(qtbot) -> None:
     assert_visible_children_within_parent(dialog)
 
 
-def test_nine_setup_steps_expose_complete_labels_at_compact_width(qtbot) -> None:
+@pytest.mark.parametrize("dark", [False, True])
+def test_nine_setup_steps_expose_complete_labels_at_compact_width(qtbot, dark: bool) -> None:
     titles = [
         "Project", "Demographics", "Conditions", "Timing", "Display & Session", "Image Size",
         "Fixation", "Response", "Review",
     ]
     stepper = SetupProgressStepper(titles)
     qtbot.addWidget(stepper)
+    stepper.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
+    stepper.setStyleSheet(studio_theme_stylesheet(stepper.palette()))
+    stepper.set_active_index(4)
     stepper.resize(1040, stepper.minimumHeight())
     stepper.show()
     QApplication.processEvents()
@@ -296,6 +302,49 @@ def test_nine_setup_steps_expose_complete_labels_at_compact_width(qtbot) -> None
     for title, label in zip(titles, stepper.step_labels, strict=True):
         assert label.text() == title or label.toolTip() == title
         assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
+
+
+def test_stepper_animates_the_connector_and_can_reverse_without_moving_controls(
+    qtbot, monkeypatch,
+) -> None:
+    monkeypatch.setattr(components, "_setup_motion_enabled", lambda: True)
+    stepper = SetupProgressStepper(["Project", "Conditions", "Review"])
+    qtbot.addWidget(stepper)
+    stepper.resize(1040, stepper.minimumHeight())
+    stepper.setStyleSheet("* { widget-animation-duration: 150; }")
+    stepper.show()
+    QApplication.processEvents()
+
+    circles = [circle.mapTo(stepper, circle.rect().center()) for circle in stepper.step_circles]
+    left, right = circles[:2]
+    quarter, three_quarters = (round(left.x() + (right.x() - left.x()) * t) for t in (0.25, 0.75))
+    theme = resolve_studio_theme(stepper.palette())
+
+    def connector_colors() -> tuple[QColor, ...]:
+        image = QImage(stepper.size(), QImage.Format.Format_RGB32)
+        stepper.render(image)
+        return tuple(image.pixelColor(x, left.y() + 1) for x in (quarter, three_quarters))
+
+    assert connector_colors() == (QColor(theme.border_soft),) * 2
+    stepper.set_active_index(1)
+    assert stepper.step_circles[1].property("setupProgressState") == "current"
+    animation = stepper._connector_animation
+    animation.pause()
+    animation.setCurrentTime(animation.duration() // 8)
+    assert connector_colors() == (QColor(theme.primary), QColor(theme.border_soft))
+
+    stepper.set_active_index(0)
+    assert connector_colors() == (QColor(theme.primary), QColor(theme.border_soft))
+    animation.setCurrentTime(animation.duration())
+    assert connector_colors() == (QColor(theme.border_soft),) * 2
+    assert [
+        circle.mapTo(stepper, circle.rect().center()) for circle in stepper.step_circles
+    ] == circles
+
+    monkeypatch.setattr(components, "_setup_motion_enabled", lambda: False)
+    stepper.set_active_index(1)
+    assert animation.state() == QAbstractAnimation.State.Stopped
+    assert connector_colors() == (QColor(theme.primary),) * 2
 
 
 def test_source_details_exposes_and_copies_full_long_path(qtbot) -> None:

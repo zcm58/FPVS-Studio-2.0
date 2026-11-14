@@ -929,7 +929,10 @@ def test_edit_setup_stepper_can_jump_to_any_step(
     )
     assert guide.step_stack.currentWidget() is guide.response_step_surface
 
-    qtbot.mouseClick(guide.progress_steps.step_circles[1], Qt.MouseButton.LeftButton)
+    qtbot.mouseClick(
+        guide.progress_steps.step_circles[guide._step_index_for_key("conditions")],
+        Qt.MouseButton.LeftButton,
+    )
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
 

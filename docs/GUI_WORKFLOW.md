@@ -165,6 +165,10 @@ controls at the top inside the frame; do not distribute spare height between fie
 Frameless wrappers add no vertical padding above the first visible card. Fixation's
 feasibility and adjustment guidance follows its aligned card row.
 
+When the active Setup step changes, the progress connectors fill or retract in up
+to 150 ms. The form and active step label update immediately. Connectors update
+instantly when Windows Animation effects are off or macOS Reduce motion is on.
+
 Project has two sibling **Project details** and **Experiment setup** cards inside a
 frameless workspace. Their top/bottom edges and title baselines align, with 16 px
 internal padding and a 24 px gutter. Bold card titles sit above the field labels;
@@ -2086,8 +2090,10 @@ then repeat at the normal expanded size and available 125/150% scaling. Include 
 condition names and source paths, image and word conditions, missing-field recovery,
 verification busy/failure/verified states, and unequal condition durations. Inspect
 default and one-character names, both image-folder pickers, import failure/retry,
-and instruction Save/Cancel/clear at both dialog sizes. Confirm saved AB settings are
-unchanged through all nine steps. Inspect
+and instruction Save/Cancel/clear at both dialog sizes. Use Next and Back, then jump
+between steps in Edit Setup. Check that the connectors settle at the selected step
+after rapid reversals and update instantly with the OS animation preference off.
+Confirm saved AB settings are unchanged through all nine steps. Inspect
 Presentation and FPVS Condition Modifiers at their documented sizes; check keyboard
 focus and popup controls. Save/reopen to verify persistence, and confirm Cancel leaves
 staged dialogs unchanged. The implementation's registered Qt coverage is separate from
