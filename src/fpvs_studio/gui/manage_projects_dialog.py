@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.gui.components import (
+    ActionFeedbackButton,
     PathValueLabel,
     StatusBadgeLabel,
     apply_dialog_theme,
@@ -163,7 +164,7 @@ class ManageProjectsDialog(QDialog):
         self.rename_button.clicked.connect(self._request_rename)
         action_row.addWidget(self.rename_button)
 
-        self.copy_path_button = QPushButton("Copy Path", self)
+        self.copy_path_button = ActionFeedbackButton("Copy Path", "Copied", self)
         self.copy_path_button.setObjectName("manage_projects_copy_path_button")
         mark_secondary_action(self.copy_path_button)
         self.copy_path_button.clicked.connect(self._copy_selected_path)
@@ -263,6 +264,7 @@ class ManageProjectsDialog(QDialog):
     def _sync_selection(self, _row: int) -> None:
         entry = self._selected_entry()
         has_entry = entry is not None
+        self.copy_path_button.reset_confirmation()
         self.filter_edit.setEnabled(not self._loading and not self._load_error)
         self.project_list.setEnabled(not self._loading and not self._load_error)
         self.retry_button.setVisible(bool(self._load_error))
@@ -327,3 +329,4 @@ class ManageProjectsDialog(QDialog):
         entry = self._selected_entry()
         if entry is not None:
             QApplication.clipboard().setText(str(entry.root))
+            self.copy_path_button.confirm()

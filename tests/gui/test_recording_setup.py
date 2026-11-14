@@ -1486,6 +1486,16 @@ def test_inline_recording_controls_and_save_actions_fit_settings(
             scroll.viewport(), button.rect().center(),
         ))
         _assert_labels_fit(dialog)
+    button = dialog.save_default_recording_button
+    scroll.ensureWidgetVisible(button)
+    QApplication.processEvents()
+    initial_geometry = button.geometry()
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert button.text() == "Saved"
+    assert button.geometry() == initial_geometry
+    assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    _assert_labels_fit(dialog)
     assert dialog.size().toTuple() == size
 
 

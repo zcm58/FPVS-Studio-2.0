@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio import __version__
 from fpvs_studio.gui.components import (
+    ActionFeedbackButton,
     DialogHeader,
     PathValueLabel,
     apply_dialog_theme,
@@ -463,7 +464,9 @@ class AppSettingsDialog(QDialog):
         mark_primary_action(self.apply_recording_button)
         self.apply_recording_button.setVisible(on_recording_configuration_changed is not None)
         self.apply_recording_button.clicked.connect(self._apply_recording_setup)
-        self.save_default_recording_button = QPushButton("Save Default Settings", recording)
+        self.save_default_recording_button = ActionFeedbackButton(
+            "Save Default Settings", "Saved", recording,
+        )
         self.save_default_recording_button.setObjectName("settings_save_default_recording")
         self.save_default_recording_button.setAutoDefault(False)
         mark_secondary_action(self.save_default_recording_button)
@@ -475,6 +478,9 @@ class AppSettingsDialog(QDialog):
             "keep their settings. The BioSemi serial port remains project-specific."
         )
         self.save_default_recording_button.clicked.connect(self._save_default_recording_setup)
+        self.recording_editor.draft_changed.connect(
+            self.save_default_recording_button.reset_confirmation,
+        )
         save_recording_row = QHBoxLayout()
         save_recording_row.addWidget(self.apply_recording_button)
         save_recording_row.addWidget(self.save_default_recording_button)
@@ -689,12 +695,16 @@ class AppSettingsDialog(QDialog):
         )
 
     def _reload_recording_editor(self) -> None:
+        self.save_default_recording_button.reset_confirmation()
         previous = self.recording_editor
         previous.cancel()
         self._recording_editor_layout.removeWidget(previous)
         previous.hide()
         previous.deleteLater()
         self.recording_editor = self._create_recording_editor()
+        self.recording_editor.draft_changed.connect(
+            self.save_default_recording_button.reset_confirmation,
+        )
         self._recording_editor_layout.addWidget(self.recording_editor)
         self._category_focus_controls[1] = self.recording_editor.backend_combo
         if self.navigation.currentRow() == 1:
@@ -749,6 +759,7 @@ class AppSettingsDialog(QDialog):
         )
 
     def _save_default_recording_setup(self) -> None:
+        self.save_default_recording_button.reset_confirmation()
         if self._on_default_recording_configuration_changed is None:
             return
         try:
@@ -767,6 +778,7 @@ class AppSettingsDialog(QDialog):
             self._recording_configuration = dict(configuration)
         self.recording_editor.retain_reviewed_selection()
         self._refresh_recording_summaries()
+        self.save_default_recording_button.confirm()
 
     def _use_default_recording_setup(self) -> None:
         if self._on_use_default_recording_configuration is None:

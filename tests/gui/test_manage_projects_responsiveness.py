@@ -1,17 +1,18 @@
 """Project discovery keeps the manager usable without touching widgets from workers."""
 
 from threading import Event
+from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton
 from shiboken6 import delete
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui import controller as controller_module
-from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog
+from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog, ProjectManagementEntry
 from fpvs_studio.gui.update_lifecycle import UpdateTaskResult
 
 
@@ -228,3 +229,61 @@ def test_manage_projects_loading_and_retry_fit_minimum(qtbot, qapp, dark, state)
         assert label.height() >= label.heightForWidth(label.width())
     finally:
         qapp.setPalette(original)
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_copy_path_confirms_selected_project_at_minimum_size(
+    qtbot, qapp, tmp_path, monkeypatch, background,
+):
+    copied_paths: list[str] = []
+    clipboard = SimpleNamespace(setText=copied_paths.append)
+    monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
+    first_root = tmp_path / "Research projects with descriptive directory names" / "First study"
+    second_root = first_root.with_name("Second study")
+    entries = [
+        ProjectManagementEntry(
+            name="First visual search and shape discrimination experiment",
+            root=first_root,
+            status_text="Ready",
+            status_state="success",
+            can_open=True,
+            can_delete=True,
+        ),
+        ProjectManagementEntry(
+            name="Second visual search and shape discrimination experiment",
+            root=second_root,
+            status_text="Ready",
+            status_state="success",
+            can_open=True,
+            can_delete=True,
+        ),
+    ]
+    dialog = ManageProjectsDialog(entries=entries)
+    qtbot.addWidget(dialog)
+    palette = QPalette(dialog.palette())
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.show()
+    qapp.processEvents()
+
+    button = dialog.copy_path_button
+    assert dialog.size().toTuple() == (860, 520)
+    assert button.text() == "Copy Path"
+    initial_geometry = button.geometry()
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    qapp.processEvents()
+    assert copied_paths == [str(first_root)]
+    assert button.text() == "Copied"
+    assert button.geometry() == initial_geometry
+    assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    assert_visible_children_within_parent(dialog)
+
+    dialog.project_list.setCurrentRow(1)
+    assert button.text() == "Copy Path"
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    assert copied_paths == [str(first_root), str(second_root)]
+    assert button.text() == "Copied"
+
+    dialog.set_loading()
+    assert not button.isEnabled()
+    assert button.text() == "Copy Path"

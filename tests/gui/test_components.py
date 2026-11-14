@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
     QFrame,
+    QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
@@ -23,6 +24,7 @@ from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui import components
 from fpvs_studio.gui.components import (
+    ActionFeedbackButton,
     SectionCard,
     SetupMetricStrip,
     SetupProgressStepper,
@@ -88,6 +90,77 @@ def test_action_role_helpers_mark_expected_properties(qtbot) -> None:
     assert launch_button.property("primaryActionRole") == "true"
     assert launch_button.property("homeActionRole") == "primary"
     assert welcome_button.property("welcomeRole") == "primary"
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_action_confirmation_paints_then_settles_without_moving_buttons(
+    qtbot, monkeypatch, background,
+) -> None:
+    monkeypatch.setattr(components, "widget_animation_duration", lambda _button, limit: limit)
+    dialog = QDialog()
+    qtbot.addWidget(dialog)
+    dialog.setPalette(_palette_with_window_color(background))
+    apply_dialog_theme(dialog)
+    layout = QHBoxLayout(dialog)
+    copy = ActionFeedbackButton("Copy Folder Path", "Copied", dialog)
+    sibling = QPushButton("Open Folder", dialog)
+    layout.addWidget(sibling)
+    layout.addWidget(copy)
+    dialog.show()
+    dialog.activateWindow()
+    copy.setFocus(Qt.FocusReason.TabFocusReason)
+    QApplication.processEvents()
+    initial_geometry = [button.geometry() for button in (sibling, copy)]
+    assert copy.hasFocus()
+
+    def accent_pixel() -> QColor:
+        image = QImage(copy.size(), QImage.Format.Format_RGB32)
+        copy.render(image)
+        return image.pixelColor(copy.width() // 2, copy._ACCENT_INSET)
+
+    normal = accent_pixel()
+    copy.confirm()
+    animation = copy._accent_animation
+    animation.pause()
+    QApplication.processEvents()
+    assert copy.text() == "Copied"
+    assert accent_pixel() != normal
+    assert 0 < animation.duration() <= 120
+    assert copy.hasFocus()
+    assert [button.geometry() for button in (sibling, copy)] == initial_geometry
+
+    animation.setCurrentTime(animation.duration())
+    assert accent_pixel() == normal
+    assert copy.text() == "Copied"
+    copy._confirmation_timer.setInterval(1)
+    qtbot.waitUntil(lambda: copy.text() == "Copy Folder Path")
+    assert [button.geometry() for button in (sibling, copy)] == initial_geometry
+
+
+def test_action_confirmation_reduced_motion_clears_when_disabled_or_hidden(
+    qtbot, monkeypatch,
+) -> None:
+    monkeypatch.setattr(components, "widget_animation_duration", lambda _button, _limit: 0)
+    button = ActionFeedbackButton("Save Default Settings", "Saved")
+    qtbot.addWidget(button)
+    button.show()
+    QApplication.processEvents()
+    original_size = button.sizeHint()
+    button.confirm()
+    assert button.text() == "Saved"
+    assert button.sizeHint() == original_size
+    assert button._accent_animation.state() == QAbstractAnimation.State.Stopped
+    assert button._accent_opacity == 0.0
+    button.setEnabled(False)
+    assert button.text() == "Save Default Settings"
+    assert not button._confirmation_timer.isActive()
+
+    button.setEnabled(True)
+    button.confirm()
+    assert button.text() == "Saved"
+    button.hide()
+    assert button.text() == "Save Default Settings"
+    assert not button._confirmation_timer.isActive()
 
 
 def test_error_text_helper_marks_and_styles_label(qtbot) -> None:

@@ -23,6 +23,7 @@ from PySide6.QtCore import (
     QEvent,
     QObject,
     QPoint,
+    QRectF,
     QSize,
     Qt,
     QTimer,
@@ -84,6 +85,7 @@ PageContainer: Any
 SectionCard: Any
 
 __all__ = [
+    "ActionFeedbackButton",
     "ColorPickerButton",
     "DialogHeader",
     "LaunchSurfaceFrame",
@@ -418,6 +420,90 @@ def widget_animation_duration(widget: QWidget, maximum_ms: int) -> int:
     """Limit motion to the Qt style duration and the OS accessibility preference."""
     duration = widget.style().styleHint(QStyle.StyleHint.SH_Widget_Animation_Duration, None, widget)
     return min(duration, maximum_ms) if duration > 0 and _system_motion_enabled() else 0
+
+
+class ActionFeedbackButton(QPushButton):
+    """Confirm a completed action in place while retaining the button's layout size."""
+
+    _ACCENT_MS = 120
+    _CONFIRMATION_MS = 1200
+    _ACCENT_INSET = 3
+
+    def __init__(
+        self, text: str, confirmation_text: str, parent: QWidget | None = None,
+    ) -> None:
+        super().__init__(text, parent)
+        self.setProperty("actionFeedbackButton", "true")
+        self._action_text = text
+        self._confirmation_text = confirmation_text
+        self._action_size = QSize()
+        self._accent_opacity = 0.0
+
+        self._accent_animation = QVariantAnimation(self)
+        self._accent_animation.setStartValue(1.0)
+        self._accent_animation.setEndValue(0.0)
+        self._accent_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._accent_animation.valueChanged.connect(self._set_accent_opacity)
+        self._confirmation_timer = QTimer(self)
+        self._confirmation_timer.setSingleShot(True)
+        self._confirmation_timer.setInterval(self._CONFIRMATION_MS)
+        self._confirmation_timer.timeout.connect(self.reset_confirmation)
+
+    def sizeHint(self) -> QSize:  # noqa: N802
+        return super().sizeHint().expandedTo(self._action_size)
+
+    def confirm(self) -> None:
+        """Show feedback after the caller successfully completes the action."""
+        if not self.isVisible() or not self.isEnabled():
+            return
+        if not self._action_size.isValid():
+            self._action_size = self.sizeHint()
+        self.setText(self._confirmation_text)
+        self._confirmation_timer.start()
+
+        self._accent_animation.stop()
+        duration = widget_animation_duration(self, self._ACCENT_MS)
+        self._set_accent_opacity(1.0 if duration else 0.0)
+        if duration:
+            self._accent_animation.setDuration(duration)
+            self._accent_animation.start()
+
+    def reset_confirmation(self) -> None:
+        if not self._action_size.isValid():
+            return
+        self._confirmation_timer.stop()
+        self._accent_animation.stop()
+        self._action_size = QSize()
+        self.setText(self._action_text)
+        self._set_accent_opacity(0.0)
+
+    def _set_accent_opacity(self, opacity: float) -> None:
+        self._accent_opacity = opacity
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if self._accent_opacity <= 0.0:
+            return
+        theme = resolve_studio_theme(self.window().palette())
+        accent = QColor(theme.success_text)
+        accent.setAlphaF(self._accent_opacity)
+        inset = self._ACCENT_INSET
+        radius = CARD_CORNER_RADIUS - inset
+        bounds = QRectF(self.rect()).adjusted(inset, inset, -inset, -inset)
+        with QPainter(self) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(accent, 1.5))
+            painter.drawRoundedRect(bounds, radius, radius)
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self.reset_confirmation()
+        super().hideEvent(event)
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.EnabledChange and not self.isEnabled():
+            self.reset_confirmation()
 
 
 class SetupProgressStepper(QWidget):
@@ -1859,6 +1945,9 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QPushButton:focus {{
         border: 2px solid {theme.focus_ring};
+    }}
+    QPushButton[actionFeedbackButton="true"]:focus {{
+        padding: 5px 11px;
     }}
     QPushButton[launchActionRole="primary"]:focus,
     QPushButton[primaryActionRole="true"]:focus {{

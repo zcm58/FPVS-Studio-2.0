@@ -561,6 +561,26 @@ items inside Import and Export. In a visible session, open the menus at Home's
 `760x520` minimum and `1120x720` default in both themes. Check that every label fits
 and neighboring items have one divider. Repeat for Export with Library publishing enabled.
 
+### Copy and save confirmation
+
+Manage Projects, Image Resizer and Run show **Copied** on the path button after
+writing to the clipboard. In Settings > Recording, **Save Default Settings** shows
+**Saved** after the computer preference is written. The button keeps its size and
+focus. The label returns after 1.2 seconds or when its selection, output or draft
+changes.
+
+`gui/components.py::ActionFeedbackButton` owns the feedback duration, easing and
+accent for all four actions. Its inset border fades out within 120 ms and follows
+the shared system motion preference. With motion disabled, the same confirmation
+label appears immediately.
+
+For visible acceptance, copy a selected project path and a completed image batch
+path at their minimum sizes in both themes. Check the clipboard and select another
+project or change the output folder while **Copied** is showing. On Run, use a
+summary with a detailed output folder. In Recording, save the default with a fake
+service callback, edit a field, and retry with a failed save. Verify stable button
+geometry, readable confirmation and immediate text feedback with motion disabled.
+
 ### Condition Figure
 
 Open **Tools > Condition Figure** and select an FPVS condition with a configured

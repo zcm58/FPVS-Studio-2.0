@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -219,16 +220,25 @@ def test_image_resizer_disabled_state_explains_unavailable_optimization(
     assert "different from the source folder" in page.result_label.text().lower()
 
 
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(960, 640), (1120, 720)], ids=["minimum", "default"])
 def test_image_resizer_optimizes_folder_and_updates_results(
     qtbot,
-    controller: StudioController,
     tmp_path: Path,
     monkeypatch,
+    background,
+    size,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Image Resizer Run")
-    page = window.image_resizer_page
-    source_dir = tmp_path / "raw-images"
-    output_dir = tmp_path / "optimized"
+    copied_paths: list[str] = []
+    clipboard = SimpleNamespace(setText=copied_paths.append)
+    monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
+    page = ImageResizerPage()
+    qtbot.addWidget(page)
+    page.setPalette(QPalette(QColor(background)))
+    page.resize(*size)
+    page.show()
+    source_dir = tmp_path / "Participant calibration images" / "Original stimulus images"
+    output_dir = tmp_path / "Prepared experimental stimuli" / "Resized stimulus images"
     opened_paths: list[Path] = []
     source_dir.mkdir(parents=True)
     Image.new("RGB", (96, 96), color=(20, 40, 60)).save(source_dir / "stimulus-01.png")
@@ -244,16 +254,26 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     page._set_source_dir(source_dir)
     page._set_output_dir(output_dir, user_selected=True)
     qtbot.mouseClick(page.optimize_button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
 
+    assert page.size().toTuple() == size
     assert page.result_label.text() == "Resized 1 image to 512 × 512 px."
-    assert page.copy_output_button.text() == "Copy Folder Path"
+    button = page.copy_output_button
+    assert button.text() == "Copy Folder Path"
     assert not page.open_output_button.isHidden()
-    assert not page.copy_output_button.isHidden()
+    assert not button.isHidden()
     assert page.open_output_button.isEnabled()
-    assert page.copy_output_button.isEnabled()
-    qtbot.mouseClick(page.copy_output_button, Qt.MouseButton.LeftButton)
+    assert button.isEnabled()
+    initial_geometry = button.geometry()
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+    assert copied_paths == [str(output_dir)]
+    assert button.text() == "Copied"
+    assert button.geometry() == initial_geometry
+    assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    _assert_visible_children_within_parent(page)
+
     qtbot.mouseClick(page.open_output_button, Qt.MouseButton.LeftButton)
-    assert QApplication.clipboard().text() == str(output_dir)
     assert opened_paths == [output_dir]
     output_paths = sorted(output_dir.iterdir())
     assert len(output_paths) == 1
@@ -261,7 +281,8 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     page._set_output_dir(tmp_path / "Another output folder", user_selected=True)
     assert page.result_label.text() == "No batch results yet."
     assert page.open_output_button.isHidden()
-    assert page.copy_output_button.isHidden()
+    assert button.isHidden()
+    assert button.text() == "Copy Folder Path"
 
 
 @pytest.mark.parametrize("size", [(960, 640), (1120, 720)], ids=["minimum", "default"])

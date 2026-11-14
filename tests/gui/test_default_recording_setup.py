@@ -345,12 +345,19 @@ def test_inline_default_save_updates_inheritance_without_writing_project(
         editor.port_edit.setText("5432")
         dialog.save_default_recording_button.click()
         assert dialog.isVisible()
-        assert dialog._default_recording_configuration == replacement
-        assert dialog._recording_configuration == (
-            replacement if uses_default else previous_recording
-        )
+        saved_default = ProjectRecordingSettings.model_validate(
+            dialog._default_recording_configuration,
+        ).model_dump(mode="json")
+        project_recording = ProjectRecordingSettings.model_validate(
+            dialog._recording_configuration,
+        ).model_dump(mode="json")
+        assert saved_default == replacement
+        assert project_recording == (replacement if uses_default else previous_recording)
         assert dialog._recording_uses_default == uses_default
         assert ("Unicorn" if uses_default else "ActiveThree") in dialog.recording_summary.text()
+        assert dialog.save_default_recording_button.text() == "Saved"
+        editor.port_edit.setText("6543")
+        assert dialog.save_default_recording_button.text() == "Save Default Settings"
         dialog.reject()
         return int(QDialog.DialogCode.Rejected)
 
@@ -514,7 +521,10 @@ def test_settings_cancel_and_failed_save_retain_computer_default(
         popup.assert_not_called()
         assert saves == []
     else:
+        select_settings_category(dialog, "Recording")
+        dialog.show()
         dialog.save_default_recording_button.click()
+        assert dialog.save_default_recording_button.text() == "Save Default Settings"
         assert len(saves) == 1
         assert ProjectRecordingSettings.model_validate(saves[0]).model_dump(mode="json") == (
             _configuration("unicorn_udp")

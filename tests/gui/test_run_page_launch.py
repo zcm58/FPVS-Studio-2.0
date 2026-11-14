@@ -29,6 +29,7 @@ from tests.gui.helpers import (
     _list_widget_text,
     _open_created_project,
     _prepare_compile_ready_project,
+    build_successful_session_summary,
 )
 from tests.platform_adapters import set_module_platform
 
@@ -443,7 +444,7 @@ def test_run_page_readiness_and_launch_feedback_is_updated_on_launch(
 @pytest.mark.parametrize("size", [(960, 640), (1120, 720)])
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 def test_run_controls_and_session_details_fit(
-    qtbot, controller, tmp_path, size, background,
+    qtbot, controller, tmp_path, monkeypatch, size, background,
 ) -> None:
     document, window = _open_created_project(controller, qtbot, tmp_path, "Run Layout")
     page = run_page.RunPage(document)
@@ -496,6 +497,37 @@ def test_run_controls_and_session_details_fit(
     page.compile_button.click()
     assert "Session ID:" in page.summary_text.toPlainText()
     assert "Block 1:" in page.summary_text.toPlainText()
+
+    copied_paths: list[str] = []
+    clipboard = SimpleNamespace(setText=copied_paths.append)
+    monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
+    monkeypatch.setattr(QMessageBox, "information", lambda *_args: QMessageBox.StandardButton.Ok)
+    plan = document.compile_session(refresh_hz=60.0)
+    output_dir = "runs/Detailed participant session results"
+    summary = build_successful_session_summary(
+        plan, participant_number="0007", output_dir=output_dir,
+    )
+    page._apply_launch_summary(plan, "0007", summary)
+    QApplication.processEvents()
+
+    button = page.copy_run_folder_button
+    assert button.isVisible()
+    assert button.text() == "Copy Folder Path"
+    initial_geometry = button.geometry()
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    QApplication.processEvents()
+
+    assert copied_paths == [output_dir]
+    assert button.text() == "Copied"
+    assert button.geometry() == initial_geometry
+    assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    _assert_visible_children_within_parent(page, allow_scroll_content=True)
+
+    next_output = "runs/Another participant session"
+    page._apply_launch_summary(plan, "0007", summary.model_copy(update={"output_dir": next_output}))
+    assert button.text() == "Copy Folder Path"
+    qtbot.mouseClick(button, Qt.MouseButton.LeftButton)
+    assert copied_paths == [output_dir, next_output]
 
 
 def test_run_page_launch_uses_fixed_current_runtime_defaults(

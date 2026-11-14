@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
+    ActionFeedbackButton,
     NonHomePageShell,
     PathValueLabel,
     apply_image_resizer_theme,
@@ -172,7 +173,7 @@ class ImageResizerPage(QWidget):
         self.open_output_button.setObjectName("image_resizer_open_output_button")
         self.open_output_button.clicked.connect(self._open_output_folder)
         mark_secondary_action(self.open_output_button)
-        self.copy_output_button = QPushButton("Copy Folder Path", results_panel)
+        self.copy_output_button = ActionFeedbackButton("Copy Folder Path", "Copied", results_panel)
         self.copy_output_button.setObjectName("image_resizer_copy_output_button")
         self.copy_output_button.clicked.connect(self._copy_output_folder)
         mark_secondary_action(self.copy_output_button)
@@ -289,6 +290,7 @@ class ImageResizerPage(QWidget):
 
     def _refresh_output_actions(self) -> None:
         has_output = self._successful_output_dir is not None
+        self.copy_output_button.reset_confirmation()
         self.open_output_button.setEnabled(has_output)
         self.copy_output_button.setEnabled(has_output)
         self.open_output_button.setVisible(has_output)
@@ -353,6 +355,7 @@ class ImageResizerPage(QWidget):
     def _copy_output_folder(self) -> None:
         if self._successful_output_dir is not None:
             QApplication.clipboard().setText(str(self._successful_output_dir))
+            self.copy_output_button.confirm()
 
 
 def _field_label(text: str, parent: QWidget) -> QLabel:

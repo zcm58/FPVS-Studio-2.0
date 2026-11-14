@@ -38,6 +38,7 @@ from fpvs_studio.core.models import DisplaySettings, normalize_manual_removed_el
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
+    ActionFeedbackButton,
     DialogHeader,
     NonHomePageShell,
     SectionCard,
@@ -776,7 +777,9 @@ class RunPage(QWidget):
         self.open_run_folder_button.setObjectName("run_open_folder_button")
         self.open_run_folder_button.clicked.connect(self._open_run_folder)
         mark_secondary_action(self.open_run_folder_button)
-        self.copy_run_folder_button = QPushButton("Copy Folder Path", summary_card)
+        self.copy_run_folder_button = ActionFeedbackButton(
+            "Copy Folder Path", "Copied", summary_card,
+        )
         self.copy_run_folder_button.setObjectName("run_copy_folder_button")
         self.copy_run_folder_button.clicked.connect(self._copy_run_folder)
         mark_secondary_action(self.copy_run_folder_button)
@@ -1273,6 +1276,7 @@ class RunPage(QWidget):
         self._refresh_readiness_panel()
 
     def _refresh_run_output_actions(self) -> None:
+        self.copy_run_folder_button.reset_confirmation()
         has_output = bool(self._last_run_output_dir)
         self.open_run_folder_button.setEnabled(has_output)
         self.copy_run_folder_button.setEnabled(has_output)
@@ -1286,3 +1290,4 @@ class RunPage(QWidget):
     def _copy_run_folder(self) -> None:
         if self._last_run_output_dir:
             QApplication.clipboard().setText(self._last_run_output_dir)
+            self.copy_run_folder_button.confirm()

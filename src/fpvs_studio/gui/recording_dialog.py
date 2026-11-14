@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QHideEvent, QIntValidator, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
@@ -143,6 +143,8 @@ def recording_preference_summary(configuration: dict[str, object]) -> str:
 
 class RecordingSetupEditor(QWidget):
     """Edit a recording draft without choosing where or when it is saved."""
+
+    draft_changed = Signal()
 
     def __init__(
         self, configuration: dict[str, object], parent: QWidget | None = None,
@@ -795,6 +797,7 @@ class RecordingSetupEditor(QWidget):
             self._valid_amplifier = validated.brainproducts_amplifier
             self._valid_sampling_rate = validated.brainproducts_sampling_rate_hz
         self._maybe_detect_ports()
+        self.draft_changed.emit()
 
     def _validate_draft(
         self, draft: dict[str, object], *, computer_default: bool | None = None,
