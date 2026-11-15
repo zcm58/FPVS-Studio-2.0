@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -55,6 +56,26 @@ def _section_title(text: str, parent: QWidget) -> QLabel:
     title = QLabel(text, parent)
     title.setProperty("settingsSectionTitle", "true")
     return title
+
+
+def _account_action_row(
+    parent: QWidget, title: str, description: str, action: QPushButton,
+) -> QWidget:
+    row = QWidget(parent)
+    copy = QVBoxLayout()
+    copy.setSpacing(4)
+    copy.addWidget(_section_title(title, row))
+    detail = QLabel(description, row)
+    detail.setWordWrap(True)
+    mark_text_role(detail, "supporting")
+    copy.addWidget(detail)
+
+    layout = QHBoxLayout(row)
+    layout.setContentsMargins(0, 0, 0, 0)
+    layout.setSpacing(24)
+    layout.addLayout(copy, 1)
+    layout.addWidget(action, alignment=Qt.AlignmentFlag.AlignVCenter)
+    return row
 
 
 class _SettingsNavigation(QListWidget):
@@ -168,7 +189,7 @@ class AppSettingsDialog(QDialog):
         developer_mode_requested: bool = False,
         on_developer_mode_changed: Callable[[bool, str], bool] | None = None,
         automatic_crash_reports_enabled: bool = True,
-        automatic_crash_reports_status: str = "Automatic crash reporting is on by default.",
+        automatic_crash_reports_status: str = "",
         on_automatic_crash_reports_changed: Callable[[bool], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
@@ -556,8 +577,7 @@ class AppSettingsDialog(QDialog):
         diagnostics.setObjectName("settings_diagnostics_page")
         diagnostics_layout = QVBoxLayout(diagnostics)
         diagnostics_layout.setContentsMargins(0, 0, 0, 0)
-        diagnostics_layout.setSpacing(12)
-        diagnostics_layout.addWidget(_section_title("Crash reporting", diagnostics))
+        diagnostics_layout.setSpacing(10)
         self.crash_reports_checkbox = QCheckBox("Automatically send crash reports", diagnostics)
         self.crash_reports_checkbox.setObjectName("automatic_crash_reports_checkbox")
         self.crash_reports_checkbox.setChecked(automatic_crash_reports_enabled)
@@ -565,61 +585,99 @@ class AppSettingsDialog(QDialog):
         self.crash_reports_checkbox.toggled.connect(self._configure_crash_reports)
         diagnostics_layout.addWidget(self.crash_reports_checkbox)
         crash_help = QLabel(
-            "Studio sends a report on the next launch after a crash. "
-            "Reports contain the Studio and OS versions, failure category, and sanitized "
-            "stack locations. They exclude error messages, full logs, projects, stimuli "
-            "and participant records. The reporting service notifies the Studio maintainer.",
-            diagnostics,
+            "Studio sends a report on the next launch after a crash.", diagnostics,
         )
         crash_help.setWordWrap(True)
-        crash_help.setProperty("dialogHelp", "true")
+        mark_text_role(crash_help, "supporting")
         diagnostics_layout.addWidget(crash_help)
-        consent_help = QLabel(
-            "This setting applies to this computer. Turning it off discards queued reports "
-            "and revokes access when connected. Reports already sent or in transit "
-            "cannot be recalled. Use File to send a manual bug report.", diagnostics,
-        )
-        consent_help.setWordWrap(True)
-        consent_help.setProperty("dialogHelp", "true")
-        diagnostics_layout.addWidget(consent_help)
         self.crash_reports_status = QLabel(automatic_crash_reports_status, diagnostics)
         self.crash_reports_status.setObjectName("automatic_crash_reports_status")
         self.crash_reports_status.setWordWrap(True)
+        mark_text_role(self.crash_reports_status, "supporting")
+        self.crash_reports_status.setVisible(bool(automatic_crash_reports_status))
         diagnostics_layout.addWidget(self.crash_reports_status)
+
+        self.crash_report_details_button = QToolButton(diagnostics)
+        self.crash_report_details_button.setObjectName("settings_crash_report_details")
+        self.crash_report_details_button.setText("Report contents and privacy")
+        self.crash_report_details_button.setToolButtonStyle(
+            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        self.crash_report_details_button.setArrowType(Qt.ArrowType.RightArrow)
+        self.crash_report_details_button.setCheckable(True)
+        self.crash_report_details_button.setAutoRaise(True)
+        self.crash_report_details_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        details = QLabel(
+            "The Studio maintainer receives the app and OS versions, failure category, and "
+            "sanitized stack locations. Reports exclude error messages, full logs, projects, "
+            "stimuli, and participant records.\n\n"
+            "Turning this off discards queued reports for this installation and revokes "
+            "reporting access when connected. Reports already sent or in transit "
+            "cannot be recalled.",
+            diagnostics,
+        )
+        details.setObjectName("settings_crash_report_privacy")
+        details.setWordWrap(True)
+        mark_text_role(details, "supporting")
+        details.hide()
+        self.crash_report_details_button.toggled.connect(details.setVisible)
+        self.crash_report_details_button.toggled.connect(
+            lambda expanded: self.crash_report_details_button.setArrowType(
+                Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
+            )
+        )
+        diagnostics_layout.addWidget(
+            self.crash_report_details_button, alignment=Qt.AlignmentFlag.AlignLeft
+        )
+        diagnostics_layout.addWidget(details)
         diagnostics_layout.addStretch(1)
         self._refresh_developer_status()
 
         account = QWidget(self)
         account_layout = QVBoxLayout(account)
         account_layout.setContentsMargins(0, 0, 0, 0)
-        account_layout.setSpacing(8)
-        account_layout.addWidget(_section_title("OpenFPVS account", account))
-        account_help = QLabel(
-            "Sign in on OpenFPVS to manage your profile, password, labs, and experiments.", account,
-        )
-        account_help.setWordWrap(True)
-        mark_text_role(account_help, "supporting")
-        account_layout.addWidget(account_help)
+        account_layout.setSpacing(16)
         self.manage_account_button = QPushButton("Manage Account", account)
         self.manage_account_button.setObjectName("settings_manage_account")
         self.manage_account_button.setAutoDefault(False)
         mark_primary_action(self.manage_account_button)
         self.manage_account_button.clicked.connect(self._open_account)
-        account_actions = QHBoxLayout()
-        account_actions.addWidget(self.manage_account_button)
-        self.account_connection_button = QPushButton("Manage Studio connection…", account)
-        self.account_connection_button.setObjectName("settings_account_connection")
-        self.account_connection_button.setAutoDefault(False)
-        self.account_connection_button.setVisible(on_show_library is not None)
-        self.account_connection_button.clicked.connect(self._show_library)
-        account_actions.addWidget(self.account_connection_button)
-        account_actions.addStretch(1)
-        account_layout.addLayout(account_actions)
+        account_layout.addWidget(_account_action_row(
+            account,
+            "OpenFPVS account",
+            "Manage your profile, password, labs, and experiments in your browser.",
+            self.manage_account_button,
+        ))
         self.account_status = QLabel(account)
         self.account_status.setWordWrap(True)
+        self.account_status.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        self.account_status.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         mark_error_text(self.account_status)
         self.account_status.hide()
         account_layout.addWidget(self.account_status)
+
+        connection_divider = QFrame(account)
+        connection_divider.setObjectName("settings_account_divider")
+        connection_divider.setFixedHeight(1)
+        connection_divider.setVisible(on_show_library is not None)
+        account_layout.addWidget(connection_divider)
+        self.account_connection_button = QPushButton("Manage Studio connection…", account)
+        self.account_connection_button.setObjectName("settings_account_connection")
+        self.account_connection_button.setAutoDefault(False)
+        mark_secondary_action(self.account_connection_button)
+        self.account_connection_button.clicked.connect(self._show_library)
+        connection_row = _account_action_row(
+            account,
+            "Experiment Library",
+            "Connect to download your labs’ experiments. Local projects work offline.",
+            self.account_connection_button,
+        )
+        connection_row.setObjectName("settings_account_library")
+        connection_row.setVisible(on_show_library is not None)
+        account_layout.addWidget(connection_row)
         account_layout.addStretch(1)
 
         self._category_focus_controls = [
@@ -690,7 +748,13 @@ class AppSettingsDialog(QDialog):
             return
         self.pages.setCurrentIndex(index)
         self.page_title.setText(self.navigation.item(index).text())
-        QWidget.setTabOrder(self.navigation, self._category_focus_controls[index])
+        first_control = self._category_focus_controls[index]
+        QWidget.setTabOrder(self.navigation, first_control)
+        if first_control is self.manage_account_button:
+            QWidget.setTabOrder(self.manage_account_button, self.account_status)
+            QWidget.setTabOrder(self.account_status, self.account_connection_button)
+        elif first_control is self.crash_reports_checkbox:
+            QWidget.setTabOrder(self.crash_reports_checkbox, self.crash_report_details_button)
 
     def _set_theme_mode(self, mode: str) -> None:
         if mode == self._theme_mode:
@@ -726,6 +790,7 @@ class AppSettingsDialog(QDialog):
             self._on_automatic_crash_reports_changed is not None,
         )
         self.crash_reports_status.setText(status)
+        self.crash_reports_status.setVisible(bool(status))
 
     def _create_recording_editor(self) -> RecordingSetupEditor:
         project_open = self._on_recording_configuration_changed is not None

@@ -1,11 +1,13 @@
 # GUI Workflow
 
 Settings > Diagnostics exposes default-on automatic crash reporting at the shared
-`860x560` minimum and `1000x680` default sizes. The Diagnostics page fits these sizes with
-wrapped preference, registration, enabled and error states. The switch stays usable
-while connecting; closing Settings preserves the choice and does not interrupt
-background registration. Network and storage run through the application-owned
-crash controller. Existing saved opt-outs remain off. See
+`860x560` minimum and `1000x680` default sizes. The checkbox shows the preference.
+Inline notices report loading, connection, pending revocation, and failures.
+**Report contents and privacy** expands the data and opt-out details. In a visible
+smoke test, tab from Diagnostics to the checkbox and disclosure, then open and close
+the disclosure in both themes at both sizes. During a simulated delivery failure,
+check that the retry notice fits and the checkbox still works. Network and storage
+run through the application-owned crash controller. See
 [Bug reporting](BUG_REPORTING.md) for preferences, wire contracts and activation status.
 
 ## OpenFPVS Library access on startup
@@ -524,13 +526,15 @@ the active root folder and offers root-folder setup, condition templates and eli
 Experiment Library access. The root path remains available in full through its tooltip
 and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
-Account is available from Welcome and an open project. **Manage Account** opens
-`https://openfpvs.com/account` in the default browser. Sign-in happens on the website.
-**Manage Studio connection…** opens the Studio Library dialog. During a visible
-smoke test, check both actions at `860x560` and `1000x680`, follow the computer-code
-prompt, then try **Continue offline** from the startup dialog.
-Advanced contains `Developer tools`,
-and Diagnostics contains `Crash reporting`. Existing control identities, eligibility,
+Account is available from Welcome and an open project. In **OpenFPVS account**,
+**Manage Account** opens `https://openfpvs.com/account` in the default browser.
+If the browser fails to open, the page shows a selectable address. The separate
+**Experiment Library** row explains offline access and opens the Studio Library
+dialog through **Manage Studio connection…** when available. In a visible smoke
+test, check both rows and their Tab order at `860x560` and `1000x680` in light and
+dark themes. Follow the computer-code prompt, then try **Continue offline** from
+the startup dialog.
+Advanced contains `Developer tools`. Existing control identities, eligibility,
 callbacks and immediate-save behavior carry through category changes. Page selection
 preserves entered values and inline error or status information.
 

@@ -1480,6 +1480,23 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 600;
     }}
+    QFrame#settings_account_divider {{
+        background-color: {theme.border};
+    }}
+    QToolButton#settings_crash_report_details {{
+        color: {theme.text_primary};
+        background-color: transparent;
+        border: 1px solid transparent;
+        border-radius: 4px;
+        padding: 3px 5px;
+    }}
+    QToolButton#settings_crash_report_details:hover,
+    QToolButton#settings_crash_report_details:checked {{
+        background-color: {theme.surface_alt};
+    }}
+    QToolButton#settings_crash_report_details:focus {{
+        border-color: {theme.focus_ring};
+    }}
     QPushButton[settingsThemeOption="true"] {{
         color: {theme.text_secondary};
         background-color: {theme.surface_alt};

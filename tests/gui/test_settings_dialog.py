@@ -48,7 +48,11 @@ def _assert_category_indicator_aligned(dialog: AppSettingsDialog) -> None:
     assert QRectF(navigation.visualItemRect(navigation.currentItem())).contains(indicator)
 
 
-def test_account_opens_openfpvs_and_shows_browser_failure_inline(qtbot, tmp_path, monkeypatch):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
+def test_account_opens_openfpvs_and_shows_browser_failure_inline(
+    qtbot, tmp_path, monkeypatch, background, size,
+):
     targets = []
 
     def open_url(url):
@@ -58,20 +62,33 @@ def test_account_opens_openfpvs_and_shows_browser_failure_inline(qtbot, tmp_path
     monkeypatch.setattr(QDesktopServices, "openUrl", open_url)
     dialog = AppSettingsDialog(fpvs_root_dir=tmp_path, initial_category="Account")
     qtbot.addWidget(dialog)
-    dialog.resize(860, 560)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
-    qtbot.mouseClick(dialog.manage_account_button, Qt.MouseButton.LeftButton)
-    assert targets == ["https://openfpvs.com/account"]
-    assert dialog.account_status.isVisible()
+    assert not dialog.findChild(QWidget, "settings_account_library").isVisible()
     _assert_visible_settings_text_fits(dialog)
     qtbot.mouseClick(dialog.manage_account_button, Qt.MouseButton.LeftButton)
-    assert targets == ["https://openfpvs.com/account"] * 2
+    account_url = "https://openfpvs.com/account"
+    assert targets == [account_url]
+    assert dialog.account_status.isVisible()
+    dialog.manage_account_button.setFocus()
+    qtbot.keyClick(dialog.manage_account_button, Qt.Key.Key_Tab)
+    assert dialog.focusWidget() is dialog.account_status
+    address_start = dialog.account_status.text().index(account_url)
+    dialog.account_status.setSelection(address_start, len(account_url))
+    assert dialog.account_status.selectedText() == account_url
+    _assert_visible_settings_text_fits(dialog)
+    qtbot.mouseClick(dialog.manage_account_button, Qt.MouseButton.LeftButton)
+    assert targets == [account_url] * 2
     assert not dialog.account_status.isVisible()
 
 
-@pytest.mark.parametrize("size", [(860, 560), (1000, 680)])
-def test_account_opens_the_studio_connection_dialog(qtbot, tmp_path, size):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
+def test_account_opens_the_studio_connection_dialog(qtbot, tmp_path, background, size):
     opened = []
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
@@ -79,11 +96,26 @@ def test_account_opens_the_studio_connection_dialog(qtbot, tmp_path, size):
         on_show_library=lambda: opened.append(True),
     )
     qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
     _assert_visible_settings_text_fits(dialog)
-    qtbot.mouseClick(dialog.account_connection_button, Qt.MouseButton.LeftButton)
+    browser, connection = dialog.manage_account_button, dialog.account_connection_button
+    assert browser.mapTo(dialog, browser.rect().topRight()).x() == (
+        connection.mapTo(dialog, connection.rect().topRight()).x()
+    )
+    assert browser.mapTo(dialog, browser.rect().bottomLeft()).y() < (
+        connection.mapTo(dialog, connection.rect().topLeft()).y()
+    )
+    dialog.navigation.setFocus()
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Tab)
+    assert dialog.focusWidget() is browser
+    qtbot.keyClick(browser, Qt.Key.Key_Tab)
+    assert dialog.focusWidget() is connection
+    qtbot.keyClick(connection, Qt.Key.Key_Space)
     assert opened == [True]
     assert not dialog.isVisible()
 
@@ -212,7 +244,10 @@ def test_settings_categories_fit_minimum_and_default_sizes(
             assert dialog.root_folder_value.isVisible()
             assert dialog.library_button.isVisible() is library
             assert dialog.library_button.text() == "Manage Library Access…"
-        if category != "Recording":
+        if category == "Diagnostics":
+            assert not titles
+            assert dialog.crash_reports_checkbox.isVisible()
+        elif category != "Recording":
             assert titles, category
         title_left_edges = {label.mapTo(page, label.rect().topLeft()).x() for label in titles}
         assert len(title_left_edges) <= 1, category

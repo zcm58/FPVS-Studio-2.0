@@ -305,6 +305,7 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
     pages = []
     scrolling = []
     original_status = settings.crash_reports_status.text()
+    crash_reporting_enabled = settings.crash_reports_checkbox.isChecked()
     original_palette = app.palette()
     try:
         for theme, dark in (("light", False), ("dark", True)):
@@ -333,10 +334,11 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
 
             settings.resize(860, 560)
             settings.navigation.setCurrentRow(categories.index("Diagnostics"))
-            settings.crash_reports_status.setText("\n".join(
+            overflow_status = "\n".join(
                 f"Attempt {index}: The report is waiting for a connection and will be retried."
                 for index in range(1, 31)
-            ))
+            )
+            settings.set_crash_reporting_state(crash_reporting_enabled, overflow_status, False)
             app.processEvents()
             page = settings.pages.currentWidget()
             viewport = page.viewport()
@@ -385,7 +387,7 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
             saved = settings.grab().save(str(screenshot))
             scrolling.append({"theme": theme, "checks": checks, "screenshot": str(screenshot),
                               "ok": saved and all(checks.values())})
-            settings.crash_reports_status.setText(original_status)
+            settings.set_crash_reporting_state(crash_reporting_enabled, original_status, False)
             app.processEvents()
     finally:
         app.setPalette(original_palette)

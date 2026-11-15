@@ -7,8 +7,8 @@ import logging
 from threading import Event
 
 import pytest
-from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtGui import QColor, QDesktopServices, QPalette
 from PySide6.QtWidgets import QApplication, QLabel
 from tests.gui.helpers import assert_visible_children_within_parent, select_settings_category
 
@@ -59,8 +59,23 @@ class FakeLifecycle(QObject):
 
 
 @pytest.mark.parametrize("size", [(860, 560), (1000, 680)])
-@pytest.mark.parametrize("state", ["off", "registering", "enabled", "error"])
-def test_settings_diagnostics_fit_and_bind(qtbot, tmp_path, size, state):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize(
+    ("enabled", "message", "busy"),
+    [
+        (True, "", False),
+        (False, "", False),
+        (True, "Connecting to the reporting service…", True),
+        (True, "Delivery is unavailable. Queued reports stay on this computer and will be retried.",
+         False),
+        (False, "Access revocation will retry when connected.", False),
+        (False, "Could not read or save the setting. No reports will be sent this launch.", False),
+    ],
+    ids=["enabled", "off", "registering", "delivery-error", "revocation", "preference-error"],
+)
+def test_settings_diagnostics_fit_and_bind(
+    qtbot, tmp_path, size, background, enabled, message, busy,
+):
     changes = []
     dialog = AppSettingsDialog(
         fpvs_root_dir=tmp_path,
@@ -68,25 +83,44 @@ def test_settings_diagnostics_fit_and_bind(qtbot, tmp_path, size, state):
     )
     qtbot.addWidget(dialog)
     assert dialog.crash_reports_checkbox.isChecked()
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
     dialog.resize(*size)
     select_settings_category(dialog, "Diagnostics")
-    messages = {
-        "off": "Automatic reporting is off. Access revocation will be retried when connected.",
-        "registering": "Automatic crash reporting is on by default. Connecting in the background…",
-        "enabled": "On. Sanitized crash reports are sent at the next startup. "
-        "You can turn this off here at any time.",
-        "error": "Automatic reporting is enabled. Delivery is unavailable; reports remain "
-        "on this computer and will be retried later.",
-    }
-    dialog.set_crash_reporting_state(state != "off", messages[state], state == "registering")
+    dialog.set_crash_reporting_state(enabled, message, busy)
     dialog.show()
-    qtbot.wait(25)
+    QApplication.processEvents()
+    assert dialog.size().toTuple() == size
+    assert dialog.crash_reports_status.isVisible() == bool(message)
+    assert dialog.crash_reports_status.text() == message
+    assert dialog.crash_reports_checkbox.isChecked() == enabled
+    assert dialog.crash_reports_checkbox.isEnabled()  # Opt-out never waits for HTTP.
+    assert not changes
+
+    details = dialog.findChild(QLabel, "settings_crash_report_privacy")
+    assert not details.isVisible()
+    dialog.navigation.setFocus()
+    qtbot.keyClick(dialog.navigation, Qt.Key.Key_Tab)
+    assert dialog.focusWidget() is dialog.crash_reports_checkbox
+    qtbot.keyClick(dialog.crash_reports_checkbox, Qt.Key.Key_Tab)
+    assert dialog.focusWidget() is dialog.crash_report_details_button
+    qtbot.keyClick(dialog.crash_report_details_button, Qt.Key.Key_Space)
+    assert details.isVisible()
+    assert dialog.crash_report_details_button.width() >= (
+        dialog.crash_report_details_button.sizeHint().width()
+    )
+    assert "participant records" in details.text()
+    assert "discards queued reports" in details.text()
     assert_visible_children_within_parent(dialog)
     for label in dialog.pages.currentWidget().findChildren(QLabel):
-        assert label.height() >= label.heightForWidth(label.width())
-    assert dialog.crash_reports_checkbox.isEnabled()  # Opt-out never waits for HTTP.
+        if label.isVisible():
+            assert label.height() >= label.heightForWidth(label.width())
+    assert dialog.pages.currentWidget().verticalScrollBar().maximum() == 0
+    qtbot.keyClick(dialog.crash_report_details_button, Qt.Key.Key_Space)
+    assert not details.isVisible()
     dialog.crash_reports_checkbox.click()
-    assert changes == [state == "off"]
+    assert changes == [not enabled]
 
 
 def controller(tmp_path, monkeypatch, transport):
@@ -119,9 +153,11 @@ def test_default_startup_registers_once_in_background_without_browser(tmp_path, 
     value.start()
     lifecycle.jobs[-1][0].complete()  # Local preference.
     assert value.enabled and value.busy
+    assert value.status == "Connecting to the reporting service…"
     assert requests == []
     lifecycle.jobs[-1][0].complete()  # Background registration, empty outbox.
     assert value.enabled and not value.busy
+    assert not value.status
     assert CrashStore(tmp_path).consent().registered
     assert len(requests) == 1
     value.start()
@@ -139,6 +175,7 @@ def test_saved_opt_out_has_no_http_on_startup(tmp_path, monkeypatch):
     value.start()
     lifecycle.jobs[-1][0].complete()
     assert not value.enabled and not value.busy
+    assert not value.status
     assert len(lifecycle.jobs) == 1
     assert not CrashStore(tmp_path).consent().enabled
     value.deleteLater()
@@ -210,7 +247,7 @@ def test_lost_registration_response_keeps_default_on_and_retries_same_identity(
     value._upload()
     lifecycle.jobs[-1][0].complete()
     assert calls[0] == calls[1]
-    assert value.store().consent().registered and "On." in value.status
+    assert value.store().consent().registered and not value.status
     value.deleteLater()
 
 
@@ -312,7 +349,7 @@ def test_bad_local_preference_disables_delivery_without_http(tmp_path, monkeypat
     value, lifecycle = controller(tmp_path, monkeypatch, lambda *args: pytest.fail("HTTP"))
     value.start()
     lifecycle.jobs[-1][0].complete()
-    assert not value.enabled and "No further reports" in value.status
+    assert not value.enabled and "No reports will be sent" in value.status
     assert len(lifecycle.jobs) == 1 and not value._retry.isActive()
     value.deleteLater()
 
@@ -363,7 +400,7 @@ def test_expired_grant_is_registered_again_without_browser_or_losing_reports(tmp
         SERVICE_ORIGIN + "/v1/crash-installations",
     ]
     assert value.store().consent().installation_id == consent.installation_id
-    assert len(value.store().pending()) == 1 and "On." in value.status
+    assert len(value.store().pending()) == 1 and not value.status
     value.deleteLater()
 
 

@@ -44,7 +44,7 @@ class CrashReportController(QObject):
         except ValueError:
             self.client = ReportClient()
         self.enabled = True
-        self.status = "Automatic crash reporting is on by default. Loading your preference…"
+        self.status = "Loading reporting preference…"
         self.busy = False
         self._consent: CrashConsent | None = None
         self._job: UpdateJob | None = None
@@ -90,7 +90,12 @@ class CrashReportController(QObject):
             finish_on_shutdown=saving,
         )
         self._job.finished.connect(self._done)
-        self._notify(self.status)
+        self._notify(
+            "Connecting to the reporting service…"
+            if stage == "sync" and self.enabled
+            and self._consent is not None and not self._consent.registered
+            else self.status
+        )
 
     @Slot(bool)
     def configure(self, enabled: bool) -> None:
@@ -101,7 +106,7 @@ class CrashReportController(QObject):
             self._retry.stop()
         if self._job is not None:
             self._job.cancel()
-        self._notify("Saving your crash reporting preference…")
+        self._notify("Saving preference…")
         if self._preference_job is not None:
             self._requested = enabled
             return
@@ -138,8 +143,7 @@ class CrashReportController(QObject):
         self._consent = None
         self._retry.stop()
         self._notify(
-            "Crash reporting could not save or read your preference. "
-            "No further reports will be sent during this launch."
+            "Could not read or save the setting. No reports will be sent this launch."
         )
 
     def _sync(self, cancel: Event) -> _SyncResult:
@@ -202,10 +206,9 @@ class CrashReportController(QObject):
                 return
             self._retry.start()
             self._delivery_notice = (
-                "Automatic reporting is enabled. Delivery is unavailable; reports remain "
-                "on this computer and will be retried later."
+                "Delivery is unavailable. Queued reports stay on this computer and will be retried."
                 if self.enabled
-                else "Automatic reporting is off. Access revocation will be retried when connected."
+                else "Access revocation will retry when connected."
             )
             self._notify(self._delivery_notice)
             return
@@ -227,15 +230,12 @@ class CrashReportController(QObject):
             self._retry.start()
         else:
             self._retry.stop()
-        self._notify(
-            "Automatic crash reporting is off."
-            if not self.enabled
-            else "Automatic reporting is paused because this launch disabled the reporting service."
-            if not self.client.enabled
-            else self._delivery_notice
-            or "On. Sanitized crash reports are sent at the next startup. "
-            "You can turn this off here at any time."
-        )
+        status = self._delivery_notice
+        if pending_revocation and not self.enabled:
+            status = "Access revocation will retry when connected."
+        elif self.enabled and not self.client.enabled:
+            status = "Report delivery is paused for this launch."
+        self._notify(status)
 
     @Slot()
     def _shutdown(self) -> None:
