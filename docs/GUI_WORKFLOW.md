@@ -505,7 +505,7 @@ pull changes from the remote repository and rerun the source setup helper.
 ## Settings appearance and layout
 
 Settings uses a left navigation column with General, Recording, Appearance, Workspace,
-Advanced and Diagnostics selections. A native `QListWidget` supports mouse and keyboard
+Account, Advanced and Diagnostics selections. A native `QListWidget` supports mouse and keyboard
 selection, and the current category heading appears above its controls on the right.
 The sidebar's Settings heading and the selected category title establish the hierarchy.
 Plain section widgets use the shared dialog styles and theme tokens.
@@ -520,6 +520,9 @@ the active root folder and offers root-folder setup, condition templates and eli
 Experiment Library access. The root path remains available in full through its tooltip
 and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
+Account is available from Welcome and an open project. **Manage Account** opens
+`https://openfpvs.com/account` in the default browser. Sign-in happens on the website.
+In a visible session, open **Settings > Account** and verify the browser opens the page.
 Advanced contains `Developer tools`,
 and Diagnostics contains `Crash reporting`. Existing control identities, eligibility,
 callbacks and immediate-save behavior carry through category changes. Page selection

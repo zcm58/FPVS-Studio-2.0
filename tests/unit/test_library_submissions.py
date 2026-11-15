@@ -30,7 +30,12 @@ from fpvs_studio.developer.library_publisher import (
 )
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
-from fpvs_studio.library.submissions import list_submissions, submit_condition, submit_project
+from fpvs_studio.library.submissions import (
+    create_submission_account_code,
+    list_submissions,
+    submit_condition,
+    submit_project,
+)
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 
 
@@ -393,6 +398,30 @@ def test_project_history_never_uses_library_enrollment(submission, monkeypatch):
     assert not list_submissions(client, project_uploads=True, upload_store=store).submissions
     assert calls[0][1] == "/submissions/v1"
     assert calls[0][2]["token"] == store.value.token
+
+
+def test_linking_code_uses_only_the_upload_identity_and_rejects_invalid_response(
+    submission, monkeypatch,
+):
+    client, _, _, calls = submission
+    store = MemoryStore(connected=False)
+    submission_id = uuid4()
+    response = {"code": "A" * 43, "expires_at": 1000}
+
+    def create_code(method, path, **kwargs):
+        calls.append((method, path, kwargs))
+        return response
+
+    monkeypatch.setattr(client, "_json_request", create_code)
+    monkeypatch.setattr(client, "_credential", lambda: pytest.fail("No Library enrollment"))
+    assert create_submission_account_code(client, submission_id, upload_store=store) == "A" * 43
+    method, path, kwargs = calls[0]
+    assert (method, path) == ("POST", f"/submissions/v1/{submission_id}/account-code")
+    assert kwargs["token"] == store.value.token
+    assert kwargs["credential_owner"] == "project_upload"
+    response["code"] = "not-a-valid-code"
+    with pytest.raises(LibraryError, match="invalid linking code"):
+        create_submission_account_code(client, submission_id, upload_store=store)
 
 
 def test_default_upload_store_has_an_independent_origin_namespace(submission, monkeypatch):

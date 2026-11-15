@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QCloseEvent
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QFormLayout,
     QHBoxLayout,
@@ -11,6 +12,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -108,6 +110,23 @@ class LibrarySubmissionDialog(QDialog):
         refresh.clicked.connect(lambda: self.action_requested.emit("refresh"))
         self.buttons["refresh"] = refresh
         history_layout.addWidget(refresh)
+        linking = QHBoxLayout()
+        self.link_upload = QComboBox(history)
+        self.link_upload.setObjectName("submission_link_upload")
+        self.link_upload.setAccessibleName("Upload to link to your OpenFPVS account")
+        self.link_upload.setPlaceholderText("Select an upload to link")
+        self.link_upload.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.link_upload.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.link_upload.currentIndexChanged.connect(self._sync_link_action)
+        linking.addWidget(self.link_upload, 1)
+        link = QPushButton("Copy Linking Code", history)
+        link.setToolTip("Paste the code in My experiments on your OpenFPVS account page.")
+        link.clicked.connect(lambda: self.action_requested.emit("link"))
+        self.buttons["link"] = link
+        linking.addWidget(link)
+        history_layout.addLayout(linking)
         self.tabs.addTab(history, "My Uploads")
         details = QWidget(self)
         details_layout = QVBoxLayout(details)
@@ -151,6 +170,23 @@ class LibrarySubmissionDialog(QDialog):
         self.buttons["new"].setEnabled(not busy and prepared)
         self.buttons["refresh"].setEnabled(not busy)
         self.buttons["cancel"].setEnabled(busy)
+        self._sync_link_action()
+
+    def set_linkable_uploads(self, uploads: list[tuple[str, str]]) -> None:
+        selected = self.link_upload.currentData()
+        self.link_upload.clear()
+        for submission_id, title in uploads:
+            self.link_upload.addItem(title, submission_id)
+            self.link_upload.setItemData(
+                self.link_upload.count() - 1, title, Qt.ItemDataRole.ToolTipRole,
+            )
+        self.link_upload.setCurrentIndex(self.link_upload.findData(selected) if selected else -1)
+        self._sync_link_action()
+
+    def _sync_link_action(self) -> None:
+        self.link_upload.setToolTip(self.link_upload.currentText())
+        self.link_upload.setEnabled(not self._busy and self.link_upload.count() > 0)
+        self.buttons["link"].setEnabled(not self._busy and self.link_upload.currentIndex() >= 0)
 
     def closeEvent(self, event: QCloseEvent) -> None:
         self.closing.emit()

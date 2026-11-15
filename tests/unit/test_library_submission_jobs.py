@@ -66,9 +66,13 @@ class Dialog:
         self.review, self.history, self.status = Text(), Text(), Text()
         self.rights = Rights()
         self.states = []
+        self.linkable_uploads = []
 
     def set_state(self, *state):
         self.states.append(state)
+
+    def set_linkable_uploads(self, uploads):
+        self.linkable_uploads = uploads
 
     def show(self):
         pass
@@ -154,6 +158,7 @@ def test_one_click_prepares_all_conditions_then_uploads_without_reenabling_contr
     assert c._job is state.lifecycle.jobs[1]
     assert c.dialog.states[-1] == (True, True, True, False)
     state.lifecycle.jobs[1].run()
+    assert c.dialog.linkable_uploads == [("request", "Whole project (request)")]
     assert state.calls[1][2] is state.prepared
     assert c.dialog.states[-1] == (False, True, True, True)
     assert "awaiting review" in c.dialog.status.text()

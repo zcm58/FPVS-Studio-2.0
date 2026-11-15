@@ -77,7 +77,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Trigger Tester | `gui/trigger_tester.py`, `triggers/manual.py`, `triggers/unicorn_udp_backend.py`, port discovery |
 | Interrupted occurrence recovery | `runtime/condition_recovery.py` |
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
-| Settings category navigation and preferences | `gui/settings_dialog.py`, `gui/controller.py`; [layout and persistence](docs/GUI_WORKFLOW.md#settings-appearance-and-layout) |
+| Settings preferences and account entry | `gui/settings_dialog.py`, `gui/controller.py`; [Settings workflow](docs/GUI_WORKFLOW.md#settings-appearance-and-layout) |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
 | Mac repair/reporting/display/input adapters | `scripts/macos-source.sh`, `Repair Mac.py`, `scripts/macos_pycharm.py`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
 

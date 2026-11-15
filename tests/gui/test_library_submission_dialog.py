@@ -30,6 +30,8 @@ def test_submission_states_fit_at_minimum(qtbot, busy, prepared, attempted, comp
     dialog = LibrarySubmissionDialog()
     qtbot.addWidget(dialog)
     dialog.title_edit.setText("Long experiment title " * 7)
+    long_upload = "Long experiment title " * 7
+    dialog.set_linkable_uploads([(str(uuid4()), long_upload)])
     dialog.review.setPlainText("C:/Research/a-long-project-folder/stimuli/" * 8)
     dialog.status.setText(
         "Upload was not confirmed. Refresh my requests before retrying the same prepared bundle. "
@@ -58,6 +60,16 @@ def test_submission_states_fit_at_minimum(qtbot, busy, prepared, attempted, comp
         dialog.tabs.setCurrentIndex(tab)
         qtbot.wait(25)
         assert_visible_children_within_parent(dialog)
+        if tab == 1:
+            assert not dialog.buttons["link"].isEnabled()
+            dialog.link_upload.setCurrentIndex(0)
+            assert dialog.link_upload.toolTip() == long_upload
+            assert dialog.buttons["link"].isEnabled() == (not busy)
+            if not busy:
+                with qtbot.waitSignal(
+                    dialog.action_requested, check_params_cb=lambda v: v == "link",
+                ):
+                    qtbot.mouseClick(dialog.buttons["link"], Qt.MouseButton.LeftButton)
 
 
 def test_sharing_requires_explicit_confirmation_and_close_requests_cancellation(qtbot):

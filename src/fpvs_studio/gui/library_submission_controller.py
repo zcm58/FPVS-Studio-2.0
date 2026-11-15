@@ -6,7 +6,7 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Event
 from typing import cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from PySide6.QtCore import QObject
 from PySide6.QtWidgets import QApplication
@@ -25,6 +25,7 @@ from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.submissions import (
     SubmissionList,
     SubmissionStatus,
+    create_submission_account_code,
     list_submissions,
     submit_project,
 )
@@ -192,6 +193,17 @@ class LibrarySubmissionController(QObject):
                 self._history,
                 "Checking review decisions…",
             )
+        elif action == "link":
+            selected = self.dialog.link_upload.currentData()
+            if isinstance(selected, str):
+                submission_id = UUID(selected)
+                self._start(
+                    lambda cancel: create_submission_account_code(
+                        self.client, submission_id, cancel,
+                    ),
+                    self._copy_link_code,
+                    "Creating a linking code…",
+                )
         elif action == "new" and self._prepared is not None:
             prepared = self._prepared
             if self._attempted:
@@ -231,9 +243,23 @@ class LibrarySubmissionController(QObject):
             f"{result.title}\nRequest: {result.submission_id}\n"
             f"Status: {result.status}\n{result.review_notes}"
         )
+        self._show_linkable_uploads([result])
+
+    def _copy_link_code(self, value: object) -> None:
+        QApplication.clipboard().setText(cast(str, value))
+        self._status(
+            "Linking code copied. Paste it in My experiments on OpenFPVS within 15 minutes."
+        )
+
+    def _show_linkable_uploads(self, submissions: list[SubmissionStatus]) -> None:
+        self.dialog.set_linkable_uploads([
+            (str(item.submission_id), f"{item.title} ({str(item.submission_id)[:8]})")
+            for item in submissions if item.status != "uploading"
+        ])
 
     def _history(self, value: object) -> None:
         history = cast(SubmissionList, value)
+        self._show_linkable_uploads(history.submissions)
         if self._prepared is not None:
             current = next(
                 (

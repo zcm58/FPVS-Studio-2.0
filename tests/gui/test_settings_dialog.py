@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 from PySide6.QtCore import QAbstractAnimation, QPoint, QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QPalette, QWheelEvent
+from PySide6.QtGui import QColor, QDesktopServices, QImage, QPalette, QWheelEvent
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -46,6 +46,28 @@ def _assert_category_indicator_aligned(dialog: AppSettingsDialog) -> None:
     assert not indicator.isEmpty()
     assert QRectF(navigation.viewport().rect()).contains(indicator)
     assert QRectF(navigation.visualItemRect(navigation.currentItem())).contains(indicator)
+
+
+def test_account_opens_openfpvs_and_shows_browser_failure_inline(qtbot, tmp_path, monkeypatch):
+    targets = []
+
+    def open_url(url):
+        targets.append(url.toString())
+        return len(targets) > 1
+
+    monkeypatch.setattr(QDesktopServices, "openUrl", open_url)
+    dialog = AppSettingsDialog(fpvs_root_dir=tmp_path, initial_category="Account")
+    qtbot.addWidget(dialog)
+    dialog.resize(860, 560)
+    dialog.show()
+    QApplication.processEvents()
+    qtbot.mouseClick(dialog.manage_account_button, Qt.MouseButton.LeftButton)
+    assert targets == ["https://openfpvs.com/account"]
+    assert dialog.account_status.isVisible()
+    _assert_visible_settings_text_fits(dialog)
+    qtbot.mouseClick(dialog.manage_account_button, Qt.MouseButton.LeftButton)
+    assert targets == ["https://openfpvs.com/account"] * 2
+    assert not dialog.account_status.isVisible()
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
@@ -123,7 +145,7 @@ def test_settings_categories_fit_minimum_and_default_sizes(
     QApplication.processEvents()
 
     assert [dialog.navigation.item(index).text() for index in range(dialog.navigation.count())] == [
-        "General", "Recording", "Appearance", "Workspace", "Advanced", "Diagnostics",
+        "General", "Recording", "Appearance", "Workspace", "Account", "Advanced", "Diagnostics",
     ]
     assert dialog.navigation.currentRow() == dialog.pages.currentIndex() == 0
     assert dialog.page_title.text() == "General"

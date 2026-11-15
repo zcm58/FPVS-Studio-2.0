@@ -7,8 +7,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QRectF, Qt, QVariantAnimation
-from PySide6.QtGui import QColor, QHideEvent, QPainter, QPaintEvent
+from PySide6.QtCore import QEasingCurve, QRectF, Qt, QUrl, QVariantAnimation
+from PySide6.QtGui import QColor, QDesktopServices, QHideEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio import __version__
+from fpvs_studio.core.library_origin import MANAGED_LIBRARY_SERVICE_URL
 from fpvs_studio.gui.components import (
     ActionFeedbackButton,
     DialogHeader,
@@ -36,6 +37,7 @@ from fpvs_studio.gui.components import (
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
     widget_animation_duration,
 )
 from fpvs_studio.gui.design_system import resolve_studio_theme
@@ -587,11 +589,36 @@ class AppSettingsDialog(QDialog):
         diagnostics_layout.addStretch(1)
         self._refresh_developer_status()
 
+        account = QWidget(self)
+        account_layout = QVBoxLayout(account)
+        account_layout.setContentsMargins(0, 0, 0, 0)
+        account_layout.setSpacing(8)
+        account_layout.addWidget(_section_title("OpenFPVS account", account))
+        account_help = QLabel(
+            "Sign in on OpenFPVS to manage your profile, password, labs, and experiments.", account,
+        )
+        account_help.setWordWrap(True)
+        mark_text_role(account_help, "supporting")
+        account_layout.addWidget(account_help)
+        self.manage_account_button = QPushButton("Manage Account", account)
+        self.manage_account_button.setObjectName("settings_manage_account")
+        self.manage_account_button.setAutoDefault(False)
+        mark_primary_action(self.manage_account_button)
+        self.manage_account_button.clicked.connect(self._open_account)
+        account_layout.addWidget(self.manage_account_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        self.account_status = QLabel(account)
+        self.account_status.setWordWrap(True)
+        mark_error_text(self.account_status)
+        self.account_status.hide()
+        account_layout.addWidget(self.account_status)
+        account_layout.addStretch(1)
+
         self._category_focus_controls = [
             self.detailed_run_exports_checkbox,
             self.recording_editor.backend_combo,
             self.theme_buttons["light"],
             self.root_folder_setup_button,
+            self.manage_account_button,
             self.developer_mode_checkbox,
             self.crash_reports_checkbox,
         ]
@@ -600,6 +627,7 @@ class AppSettingsDialog(QDialog):
             ("Recording", recording),
             ("Appearance", appearance),
             ("Workspace", workspace),
+            ("Account", account),
             ("Advanced", advanced),
             ("Diagnostics", diagnostics),
         ):
@@ -673,6 +701,13 @@ class AppSettingsDialog(QDialog):
     def _configure_crash_reports(self, enabled: bool) -> None:
         if self._on_automatic_crash_reports_changed is not None:
             self._on_automatic_crash_reports_changed(enabled)
+
+    def _open_account(self) -> None:
+        account_url = f"{MANAGED_LIBRARY_SERVICE_URL}/account"
+        opened = QDesktopServices.openUrl(QUrl(account_url))
+        if not opened:
+            self.account_status.setText(f"Could not open your browser. Visit {account_url}.")
+        self.account_status.setVisible(not opened)
 
     def set_crash_reporting_state(self, enabled: bool, status: str, busy: bool) -> None:
         self.crash_reports_checkbox.blockSignals(True)

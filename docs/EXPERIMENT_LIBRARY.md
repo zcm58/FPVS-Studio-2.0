@@ -21,6 +21,10 @@ title and description come from the current project. Enter your name/contact,
 confirm sharing permission and choose **Upload for Review**. That one action saves,
 prepares and uploads the whole project. The dialog is minimum `760x600`, default
 `820x660`. **Files** holds the optional inventory; **My Uploads** refreshes decisions.
+To see a completed upload on the website, select it in **My Uploads** and choose
+**Copy Linking Code**. In **My account > My experiments**, open **Link a Studio
+submission** and paste the code within 15 minutes. This links one upload to the
+signed-in account. The upload's contact email does not set ownership.
 
 Preparation copies all conditions, required stimulus pools/variants, bound tasks,
 and modifier dependencies into an ordinary runnable experiment
@@ -76,7 +80,8 @@ with Studio 2.3.0; see the [release record](exec-plans/completed/release-2.3.0.m
 and [implementation history](exec-plans/completed/condition-library-review.md).
 
 Visible manual smoke: at minimum size, select a long-named condition, prepare it,
-review dependencies, cancel/retry a submission, and check **My requests**; confirm
+review dependencies, cancel/retry a submission, and check **My Uploads**. Select
+a completed upload and verify that the copied code links it in My experiments. Confirm
 normal developer publishing and ordinary local exports still work. Run the
 registered `tests/gui/test_library_submission_dialog.py` only in an approved
 visible environment. Website synthetic checks use 1280px and 360px.
@@ -175,6 +180,11 @@ independently of email state; signed-in users see account/sign-out controls inst
 of individual login. The verified **OpenFPVS Administrator** also sees the
 administration workspace. Email sign-out leaves the lab-code browser
 connection independent.
+
+Individual accounts sign in with an email address and password. Email links
+verify new accounts, help existing users set their first password, or recover
+access. **My account** manages the profile, password, labs, saved versions and
+linked Studio uploads. For the desktop entry point, see [Settings](GUI_WORKFLOW.md#settings-appearance-and-layout).
 
 The dedicated **Administrator Login** is at `/admin`, with `/admin/sign-in` as an
 entry alias. After provider configuration, the sole OpenFPVS Administrator uses
@@ -337,7 +347,7 @@ automatic offers, notices and explicit import handoff. The dialog minimum/defaul
 
 ### Account portal
 
-The private `zcm58/FPVS-Studio-Library` repository owns the website and account portal
+The private `zcm58/OpenFPVS-Website` repository owns the website and account portal
 at `https://openfpvs.com`, with protected `/admin` content and management APIs restricted
 to the OpenFPVS Administrator. Registration/sign-in remains available at `/sign-in`; lab-code
 browsing uses `/` or `/library` and does not require an email session.

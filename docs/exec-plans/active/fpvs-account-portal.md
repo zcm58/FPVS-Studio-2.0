@@ -4,6 +4,30 @@ Status: Active
 
 Date: 2026-10-06
 
+## Account management from Studio (2026-11-15)
+
+Settings > Account opens the canonical OpenFPVS account page in the default browser.
+OpenFPVS handles sign-in, profile and photo editing, password changes, named lab
+access, saved Library experiments and submission status. Reuse its Firebase
+password and existing lab membership flows. Email links are for verification,
+first password setup and recovery. Lab codes still connect Studio independently.
+
+Link each upload by proving possession of its existing Studio upload credential
+with a short-lived, single-use code. A contact email is not proof of ownership.
+Saved experiments and linked submissions remain private to the signed-in account
+and confer no Library, download, publishing or reporting permissions. Local
+implementation, synthetic verification and a production rollout are separate steps.
+The private `zcm58/OpenFPVS-Website` branch `codex/account-management` owns the
+website code and additive migration `0027_account_management.sql`. Apply that
+migration before publishing the Worker. Production activation is pending.
+
+Studio verification passed the GUI, Library and docs focused routes, repo precommit
+(6,344 tests, 17 platform skips), and 23 registered Qt cases on the 1920×1080
+Windows display at 100% scaling. Settings fits `860x560` and `1000x680` in both themes;
+My Uploads fits `760x600` and `820x660` with a long title. The website passed 489
+Node tests, a Worker dry build and synthetic Chrome checks at 360px and 1280px.
+Production email, password and submission flows remain unverified.
+
 ## Standalone website maintenance checkout (2026-10-06)
 
 The private OpenFPVS website/service checkout now lives in the sibling

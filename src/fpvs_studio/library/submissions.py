@@ -51,6 +51,12 @@ class SubmissionReceipt(BaseModel):
     submission: SubmissionStatus
 
 
+class SubmissionAccountCode(BaseModel):
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    code: str = Field(pattern=r"^[A-Za-z0-9_-]{43}$", repr=False)
+    expires_at: int = Field(gt=0)
+
+
 class _UploadReader:
     def __init__(self, source: BinaryIO, cancel: Event | None) -> None:
         self.source = source
@@ -104,6 +110,22 @@ def list_submissions(
             return SubmissionList.model_validate(raw)
         except ValidationError:
             raise LibraryError("OpenFPVS returned invalid submission statuses.") from None
+
+
+def create_submission_account_code(
+    client: LibraryClient, submission_id: UUID, cancel_event: Event | None = None,
+    *, upload_store: CredentialStore | None = None,
+) -> str:
+    with client._operation(cancel_event):
+        raw = client._json_request(
+            "POST", f"/submissions/v1/{submission_id}/account-code",
+            token=_upload_token(client, upload_store), payload={}, cancel_event=cancel_event,
+            credential_owner="project_upload", limit=1024,
+        )
+        try:
+            return SubmissionAccountCode.model_validate(raw).code
+        except ValidationError:
+            raise LibraryError("OpenFPVS returned an invalid linking code.") from None
 
 
 def submit_condition(
