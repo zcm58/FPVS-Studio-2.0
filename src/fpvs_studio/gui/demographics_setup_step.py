@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QListWidgetItem,
     QPushButton,
     QScrollArea,
@@ -36,7 +35,12 @@ from fpvs_studio.core.demographics import (
     DemographicsQuestionKind,
     default_demographics_questions,
 )
-from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
+from fpvs_studio.gui.components import (
+    MoveFeedbackList,
+    mark_error_text,
+    mark_primary_action,
+    mark_secondary_action,
+)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.run_page import ParticipantNumberDialog
 from fpvs_studio.gui.window_layout import SectionCard
@@ -84,12 +88,14 @@ class _QuestionDraft:
         )
 
 
-class _QuestionOutline(QListWidget):
-    order_changed = Signal()
+class _QuestionOutline(MoveFeedbackList):
+    order_changed = Signal(object)
 
     def dropEvent(self, event: QDropEvent) -> None:  # noqa: N802
+        selected = self.selectedItems()
+        moved_id = selected[0].data(Qt.ItemDataRole.UserRole) if selected else None
         super().dropEvent(event)
-        QTimer.singleShot(0, self.order_changed.emit)
+        QTimer.singleShot(0, self, lambda: self.order_changed.emit(moved_id))
 
 
 class _QuestionEditor(SectionCard):
@@ -467,6 +473,7 @@ class DemographicsSetupStep(QWidget):
         self._update_draft_actions()
 
     def _rebuild_outline(self, row: int) -> None:
+        self.question_list.reset_move_feedback()
         with QSignalBlocker(self.question_list):
             self.question_list.clear()
             for index, draft in enumerate(self._draft):
@@ -540,19 +547,27 @@ class DemographicsSetupStep(QWidget):
     def _move(self, offset: int) -> None:
         row = self.question_list.currentRow()
         target = row + offset
-        if row >= 0 and 0 <= target < len(self._draft):
+        if row >= 0 and 0 <= target < len(self._draft) and target != row:
             self._draft[target], self._draft[row] = self._draft[row], self._draft[target]
             self._rebuild_outline(target)
             self._update_draft_actions()
+            self.question_list.confirm_move()
 
-    def _sync_outline_order(self) -> None:
+    def _sync_outline_order(self, moved_id: str | None) -> None:
         drafts = {question.id: question for question in self._draft}
         ids = [self.question_list.item(index).data(Qt.ItemDataRole.UserRole)
                for index in range(self.question_list.count())]
+        row = self.question_list.currentRow()
+        moved = False
         if len(ids) == len(drafts) and set(ids) == drafts.keys():
+            moved = ids != list(drafts) and moved_id in drafts
+            if moved:
+                row = ids.index(moved_id)
             self._draft = [drafts[question_id] for question_id in ids]
-        self._rebuild_outline(self.question_list.currentRow())
+        self._rebuild_outline(row)
         self._update_draft_actions()
+        if moved:
+            self.question_list.confirm_move()
 
     def _validated_questions(self) -> list[DemographicsQuestion] | None:
         questions: list[DemographicsQuestion] = []

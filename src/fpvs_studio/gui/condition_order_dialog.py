@@ -13,7 +13,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QHBoxLayout,
     QLabel,
-    QListWidget,
     QListWidgetItem,
     QPushButton,
     QVBoxLayout,
@@ -27,7 +26,12 @@ from fpvs_studio.core.session_ordering import (
     preview_condition_order,
     validate_saved_condition_order,
 )
-from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
+from fpvs_studio.gui.components import (
+    MoveFeedbackList,
+    mark_error_text,
+    mark_primary_action,
+    mark_secondary_action,
+)
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.support.error_explanations import describe_error
 
@@ -38,7 +42,7 @@ _STALE_SETUP_MESSAGE = (
 _BLOCK_ROLE = int(Qt.ItemDataRole.UserRole) + 1
 
 
-class _ConditionOrderList(QListWidget):
+class _ConditionOrderList(MoveFeedbackList):
     """Move an existing presentation through the editor's guarded draft callback."""
 
     def __init__(
@@ -237,6 +241,7 @@ class ConditionOrderDialog(QDialog):
         names = {condition.condition_id: condition.name for condition in self._snapshot.conditions}
         occurrences: Counter[str] = Counter()
         condition_rows: list[int] = []
+        self.order_list.reset_move_feedback()
         self.order_list._revision += 1
         with QSignalBlocker(self.order_list):
             self.order_list.clear()
@@ -324,6 +329,7 @@ class ConditionOrderDialog(QDialog):
             return False
         self._order = candidate
         self._render(target)
+        self.order_list.confirm_move()
         return True
 
     def _update_buttons(self) -> None:

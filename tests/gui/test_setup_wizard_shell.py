@@ -1085,6 +1085,12 @@ def test_demographics_builder_edits_previews_reorders_and_restores(
     assert wizard.step_count_label.text() == "Step 2 of 9"
     step = wizard.demographics_setup_step
     editor = step.editor
+    confirmed_moves: list[tuple[int, str]] = []
+
+    def record_move() -> None:
+        confirmed_moves.append((step.question_list.currentRow(), editor.prompt_edit.text()))
+
+    monkeypatch.setattr(step.question_list, "confirm_move", record_move)
     outline = step.question_list.parentWidget()
     assert outline is not None and outline.property("sectionCard") != "true"
     assert editor.property("sectionCard") != "true"
@@ -1099,6 +1105,8 @@ def test_demographics_builder_edits_previews_reorders_and_restores(
     step.question_list.setCurrentRow(0)
     assert not step.restore_defaults_button.isEnabled()
     assert not step.move_up_button.isEnabled()
+    qtbot.mouseClick(step.move_up_button, click)
+    assert confirmed_moves == []
 
     long_prompt = ("Which languages do you use at home, at school, or at work? " * 4).strip()
     qtbot.mouseClick(step.add_button, click)
@@ -1129,19 +1137,31 @@ def test_demographics_builder_edits_previews_reorders_and_restores(
     assert [edit.text() for edit in editor._option_edits] == ["English", "Spanish", "French"]
     assert editor.other_button.text() == "Remove Other"
     assert not editor.required_checkbox.isChecked()
+    assert confirmed_moves == []
     editor.prompt_edit.setText("Which languages do you read?")
     qtbot.mouseClick(step.move_up_button, click)
     assert step.question_list.currentRow() == len(defaults)
     qtbot.mouseClick(step.move_down_button, click)
     assert step.question_list.currentRow() == len(defaults) + 1
+    assert confirmed_moves == [
+        (len(defaults), "Which languages do you read?"),
+        (len(defaults) + 1, "Which languages do you read?"),
+    ]
 
     # Deliver the list order produced by dropping the duplicate before the defaults.
     item = step.question_list.takeItem(step.question_list.currentRow())
+    moved_id = item.data(Qt.ItemDataRole.UserRole)
     step.question_list.insertItem(0, item)
-    step.question_list.setCurrentItem(item)
-    step.question_list.order_changed.emit()
+    step.question_list.setCurrentRow(1)
+    step.question_list.order_changed.emit(moved_id)
     assert step.question_list.currentRow() == 0
     assert editor.prompt_edit.text() == "Which languages do you read?"
+    assert len(confirmed_moves) == 3
+    assert confirmed_moves[-1] == (0, "Which languages do you read?")
+    step.question_list.order_changed.emit(moved_id)
+    assert len(confirmed_moves) == 3
+    QApplication.processEvents()
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
 
     previews = []
 

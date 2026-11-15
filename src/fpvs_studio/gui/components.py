@@ -56,6 +56,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QPushButton,
     QSizePolicy,
     QSpinBox,
@@ -90,6 +91,7 @@ __all__ = [
     "DialogHeader",
     "LaunchSurfaceFrame",
     "FiniteDoubleSpinBox",
+    "MoveFeedbackList",
     "NonHomePageShell",
     "PAGE_SECTION_GAP",
     "PageContainer",
@@ -504,6 +506,70 @@ class ActionFeedbackButton(QPushButton):
         super().changeEvent(event)
         if event.type() == QEvent.Type.EnabledChange and not self.isEnabled():
             self.reset_confirmation()
+
+
+class MoveFeedbackList(QListWidget):
+    """Briefly outline the destination row after the editor accepts a move."""
+
+    _ACCENT_MS = 150
+    _ACCENT_INSET = 2
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._accent_opacity = 0.0
+        self._accent_animation = QVariantAnimation(self)
+        self._accent_animation.setStartValue(1.0)
+        self._accent_animation.setEndValue(0.0)
+        self._accent_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._accent_animation.valueChanged.connect(self._set_accent_opacity)
+        self.currentItemChanged.connect(self.reset_move_feedback)
+        self.itemSelectionChanged.connect(self.reset_move_feedback)
+
+    def confirm_move(self) -> None:
+        """Highlight the current row after its order and selection are updated."""
+        self.reset_move_feedback()
+        item = self.currentItem()
+        if item is None or not item.isSelected() or not self.isVisible() or not self.isEnabled():
+            return
+        duration = widget_animation_duration(self, self._ACCENT_MS)
+        if duration > 0:
+            self._set_accent_opacity(1.0)
+            self._accent_animation.setDuration(duration)
+            self._accent_animation.start()
+
+    def reset_move_feedback(self) -> None:
+        self._accent_animation.stop()
+        if self._accent_opacity > 0.0:
+            self._set_accent_opacity(0.0)
+
+    def _set_accent_opacity(self, opacity: float) -> None:
+        self._accent_opacity = opacity
+        self.viewport().update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        item = self.currentItem()
+        if self._accent_opacity <= 0.0 or item is None or not item.isSelected():
+            return
+        inset = self._ACCENT_INSET
+        bounds = QRectF(self.visualItemRect(item)).adjusted(inset, inset, -inset, -inset)
+        if not bounds.intersects(QRectF(self.viewport().rect())):
+            return
+        accent = QColor(resolve_studio_theme(self.window().palette()).focus_ring)
+        accent.setAlphaF(self._accent_opacity)
+        with QPainter(self.viewport()) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QPen(accent, 1.5))
+            painter.drawRoundedRect(bounds, 3, 3)
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self.reset_move_feedback()
+        super().hideEvent(event)
+
+    def changeEvent(self, event: QEvent) -> None:  # noqa: N802
+        super().changeEvent(event)
+        if event.type() == QEvent.Type.EnabledChange and not self.isEnabled():
+            self.reset_move_feedback()
 
 
 class SetupProgressStepper(QWidget):

@@ -249,6 +249,8 @@ the four Studio defaults start required.
 
 Duplicate or delete the selected question. Drag questions in the outline or use
 **Move up** and **Move down** to set their order in Participant Information.
+The moved question stays selected in its new position and uses the shared
+[row reorder feedback](#choose-and-save-condition-order).
 **Preview** opens the same questionnaire controls used at launch. It checks answers
 without recording them. Use **Discard draft** to recover from unfinished edits.
 An empty questionnaire leaves participant number and electrode review. **Restore
@@ -2261,6 +2263,14 @@ scrolling. Registered Qt coverage remains opt-in.
 them; Alt+Up/Down provides keyboard moves. Block headers are fixed and cannot be selected
 or moved. **Generate new order** creates another candidate; **Save order** uses the
 exact displayed block arrangement for every participant.
+
+An accepted manual move selects the destination immediately. A brief inset outline
+fades within 150 ms to help track the moved row. Both this editor and Demographics
+use `gui/components.py::MoveFeedbackList`, which follows the system motion preference.
+With motion disabled, the destination keeps its normal selection highlight. Verify
+rapid moves, a rejected cross-block move, and a new selection in both themes at the
+minimum and default sizes.
+
 Repeated occurrences show chronological presentation numbers; long names remain
 available by tooltip. Each block contains each condition with presentations remaining
 once, and later blocks are labeled partial when totals differ. Cross-block/external

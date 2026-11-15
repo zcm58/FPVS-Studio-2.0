@@ -25,6 +25,7 @@ from tests.gui.helpers import assert_visible_children_within_parent
 from fpvs_studio.gui import components
 from fpvs_studio.gui.components import (
     ActionFeedbackButton,
+    MoveFeedbackList,
     SectionCard,
     SetupMetricStrip,
     SetupProgressStepper,
@@ -161,6 +162,68 @@ def test_action_confirmation_reduced_motion_clears_when_disabled_or_hidden(
     button.hide()
     assert button.text() == "Save Default Settings"
     assert not button._confirmation_timer.isActive()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_move_feedback_outlines_only_the_destination_row(qtbot, monkeypatch, background) -> None:
+    monkeypatch.setattr(components, "widget_animation_duration", lambda _list, limit: limit)
+    outline = MoveFeedbackList()
+    qtbot.addWidget(outline)
+    outline.setPalette(_palette_with_window_color(background))
+    outline.addItems(["First presentation", "Moved presentation", "Next presentation"])
+    outline.resize(360, 140)
+    outline.show()
+    outline.setCurrentRow(1)
+    QApplication.processEvents()
+    rows = [outline.visualItemRect(outline.item(index)) for index in range(outline.count())]
+    viewport = outline.viewport()
+
+    def row_pixels() -> list[QColor]:
+        image = QImage(viewport.size(), QImage.Format.Format_RGB32)
+        viewport.render(image)
+        return [
+            image.pixelColor(row.center().x(), row.top() + outline._ACCENT_INSET)
+            for row in rows
+        ]
+
+    normal = row_pixels()
+    outline.confirm_move()
+    animation = outline._accent_animation
+    animation.pause()
+    assert 0 < animation.duration() <= 150
+    first, destination, last = row_pixels()
+    assert (first, last) == (normal[0], normal[2])
+    assert destination != normal[1]
+    assert [outline.visualItemRect(outline.item(index)) for index in range(outline.count())] == rows
+    assert outline.currentRow() == 1
+
+    animation.setCurrentTime(animation.duration())
+    assert row_pixels() == normal
+    outline.confirm_move()
+    outline.setCurrentRow(2)
+    assert animation.state() == QAbstractAnimation.State.Stopped
+    assert outline._accent_opacity == 0.0
+
+    outline.confirm_move()
+    outline.hide()
+    assert animation.state() == QAbstractAnimation.State.Stopped
+    assert outline._accent_opacity == 0.0
+
+
+def test_move_feedback_leaves_the_selected_row_visible_with_reduced_motion(
+    qtbot, monkeypatch,
+) -> None:
+    monkeypatch.setattr(components, "widget_animation_duration", lambda _list, _limit: 0)
+    outline = MoveFeedbackList()
+    qtbot.addWidget(outline)
+    outline.addItems(["First question", "Moved question"])
+    outline.show()
+    outline.setCurrentRow(1)
+    outline.confirm_move()
+    assert outline.currentItem().text() == "Moved question"
+    assert outline.currentItem().isSelected()
+    assert outline._accent_animation.state() == QAbstractAnimation.State.Stopped
+    assert outline._accent_opacity == 0.0
 
 
 def test_error_text_helper_marks_and_styles_label(qtbot) -> None:

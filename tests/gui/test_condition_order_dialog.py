@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections import Counter
 from threading import Event
+from unittest.mock import Mock
 
 import pytest
 from PySide6.QtCore import QObject, QPointF, Qt, Signal
@@ -162,6 +163,8 @@ def test_preview_needs_no_assets_or_display_and_save_persists_exact_pending_coun
     qtbot.addWidget(table)
     table.presentation_count_spins[first].setValue(3)
     dialog, _table = _open_dialog(qtbot, document, table=table)
+    confirm_move = Mock()
+    monkeypatch.setattr(dialog.order_list, "confirm_move", confirm_move)
     assert document.project == original
     assert not dialog.save_button.isEnabled()
     preview_jobs[-1].complete()
@@ -173,6 +176,7 @@ def test_preview_needs_no_assets_or_display_and_save_persists_exact_pending_coun
     )
     dialog.generate_button.click()
     preview_jobs[-1].complete()
+    confirm_move.assert_not_called()
     assert dialog._seeds.stimulus_seed == roots.stimulus_seed
     assert dialog._seeds.fixation_seed == roots.fixation_seed
     dialog.save_button.click()
@@ -193,7 +197,11 @@ def test_preview_needs_no_assets_or_display_and_save_persists_exact_pending_coun
     assert not table.has_pending_edits()
 
 
-def test_manual_move_saves_chosen_list_and_renumbers_occurrences(qtbot, tmp_path, preview_jobs):
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(700, 520), (780, 620)], ids=["minimum", "default"])
+def test_manual_move_saves_chosen_list_and_renumbers_occurrences(
+    qtbot, tmp_path, monkeypatch, preview_jobs, background, size,
+):
     document, first, second = _document(tmp_path)
     third = document.create_condition(name="Third condition")
     source_order = [first, second, third, first, second, third]
@@ -202,11 +210,25 @@ def test_manual_move_saves_chosen_list_and_renumbers_occurrences(qtbot, tmp_path
         order_seeds=configured_randomization_seeds(document.project),
     )
     dialog, _table = _open_dialog(qtbot, document)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.resize(*size)
+    QApplication.processEvents()
     assert not preview_jobs
+    confirmed_rows = []
+    monkeypatch.setattr(
+        dialog.order_list, "confirm_move",
+        lambda: confirmed_rows.append(dialog.order_list.currentRow()),
+    )
     _select_condition(dialog, 5)
     qtbot.keyClick(dialog.order_list, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
     expected = [first, second, third, first, third, second]
     assert dialog._order == expected
+    assert confirmed_rows == [_condition_rows(dialog)[4]]
+    assert dialog.order_list.currentItem().data(Qt.ItemDataRole.UserRole) == third
+    assert dialog.size().toTuple() == size
+    assert_visible_children_within_parent(dialog)
     assert "presentation 2" in dialog.order_list.item(_condition_rows(dialog)[4]).text()
     assert "presentation 2" in dialog.order_list.item(_condition_rows(dialog)[5]).text()
     dialog.save_button.click()
@@ -254,7 +276,9 @@ def test_order_editor_renders_real_non_draggable_block_headers(
     assert document.project == before
 
 
-def test_keyboard_moves_cannot_cross_block_boundaries(qtbot, tmp_path, preview_jobs):
+def test_keyboard_moves_cannot_cross_block_boundaries(
+    qtbot, tmp_path, monkeypatch, preview_jobs,
+):
     document, first, second = _document(tmp_path)
     third = document.create_condition(name="Third condition")
     source_order = [first, second, third, first, second, third]
@@ -263,17 +287,21 @@ def test_keyboard_moves_cannot_cross_block_boundaries(qtbot, tmp_path, preview_j
         order_seeds=configured_randomization_seeds(document.project),
     )
     dialog, _table = _open_dialog(qtbot, document)
+    confirm_move = Mock()
+    monkeypatch.setattr(dialog.order_list, "confirm_move", confirm_move)
     for selected, key in ((0, Qt.Key.Key_Up), (2, Qt.Key.Key_Down),
                           (3, Qt.Key.Key_Up), (5, Qt.Key.Key_Down)):
         _select_condition(dialog, selected)
         qtbot.keyClick(dialog.order_list, key, Qt.KeyboardModifier.AltModifier)
         assert dialog._order == source_order
         assert dialog.save_button.isEnabled()
+    confirm_move.assert_not_called()
     _select_condition(dialog, 1)
     qtbot.keyClick(dialog.order_list, Qt.Key.Key_Up, Qt.KeyboardModifier.AltModifier)
     assert dialog._order == [second, first, third, first, second, third]
     assert Counter(dialog._order) == Counter(source_order)
     assert dialog.save_button.isEnabled()
+    confirm_move.assert_called_once_with()
 
 
 
@@ -288,11 +316,18 @@ def test_drag_reorders_only_the_condition_inside_its_own_block_and_saves(
     )
     before = document.project.model_copy(deep=True)
     dialog, _table = _open_dialog(qtbot, document)
+    confirmed_rows = []
+    monkeypatch.setattr(
+        dialog.order_list, "confirm_move",
+        lambda: confirmed_rows.append(dialog.order_list.currentRow()),
+    )
     event = _drop_condition(dialog, monkeypatch, 1, _condition_rows(dialog)[0])
     assert event.accepted
     assert event.action == Qt.DropAction.MoveAction
     expected = [second, first, third, first, second, third]
     assert dialog._order == expected
+    assert confirmed_rows == [_condition_rows(dialog)[0]]
+    assert dialog.order_list.currentItem().data(Qt.ItemDataRole.UserRole) == second
     assert Counter(dialog._order) == Counter(order)
     assert document.project == before
     assert dialog.save_button.isEnabled()
@@ -318,6 +353,8 @@ def test_drag_rejects_cross_block_headers_external_and_stale_payloads(
     )
     dialog, _table = _open_dialog(qtbot, document)
     listing = dialog.order_list
+    confirm_move = Mock()
+    monkeypatch.setattr(listing, "confirm_move", confirm_move)
     rows = _condition_rows(dialog)
     listing._drag_source_row = 0 if reason == "header" else rows[1]
     listing._drag_revision = listing._revision - (reason == "revision")
@@ -329,6 +366,7 @@ def test_drag_rejects_cross_block_headers_external_and_stale_payloads(
     assert not event.accepted
     assert dialog._order == order
     assert Counter(dialog._order) == Counter(order)
+    confirm_move.assert_not_called()
 
 
 @pytest.mark.parametrize("state", ["busy", "stale", "dismissed"])

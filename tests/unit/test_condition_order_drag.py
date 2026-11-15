@@ -131,6 +131,7 @@ def draft():
         order_list=SimpleNamespace(
             item=lambda row: items[row] if 0 <= row < len(items) else None,
             count=lambda: len(items),
+            confirm_move=Mock(),
         ),
     )
     for name in ("_reorder_enabled", "_move_positions", "_reorder_condition"):
@@ -145,6 +146,7 @@ def test_same_block_drop_updates_only_draft_and_preserves_occurrence_counts(draf
     assert dialog._order == ["b", "a", "c", "a", "b", "c"]
     assert Counter(dialog._order) == before
     dialog._render.assert_called_once_with(0)
+    dialog.order_list.confirm_move.assert_called_once_with()
 
 
 @pytest.mark.parametrize("source,insertion", [(0, 2), (4, 6), (3, 5), (5, 3),
@@ -157,6 +159,7 @@ def test_semantic_reorder_rejects_headers_cross_block_noop_and_missing_rows(
     assert not dialog._reorder_condition(source, insertion)
     assert dialog._order == before
     dialog._render.assert_not_called()
+    dialog.order_list.confirm_move.assert_not_called()
 
 
 @pytest.mark.parametrize("state", ["busy", "stale", "dismissed"])
@@ -172,6 +175,7 @@ def test_semantic_reorder_is_disabled_for_non_editable_dialog(draft, state):
     assert not dialog._reorder_condition(2, 1)
     assert dialog._order == before
     dialog._render.assert_not_called()
+    dialog.order_list.confirm_move.assert_not_called()
 
 
 def test_partial_block_reorders_without_pulling_another_block_occurrence(draft):
