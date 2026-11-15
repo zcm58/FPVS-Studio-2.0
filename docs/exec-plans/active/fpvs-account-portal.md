@@ -4,6 +4,25 @@ Status: Active
 
 Date: 2026-10-06
 
+## Personal accounts and lab Library access (2026-11-15)
+
+Studio offers browser sign-in and a one-time computer code in the Library, including
+through Settings > Account. Offline use and existing local projects remain available.
+Existing computer credentials keep their lab and permission. New connections use
+personal accounts, with Library access derived from live memberships.
+Members can view and download their labs' experiments. PIs manage standard members
+of their own labs. The OpenFPVS administrator can add members, assign PI roles and
+set experiment ownership. Existing uploaded experiments move to NERD Lab in
+website migration 0028. The website owns the database and cutover runbook.
+
+- [x] Personal sign-in handoff and scoped membership enforcement in both repositories.
+- [ ] Apply 0028, deploy the matching Worker, and qualify an authenticated live account.
+
+Studio precommit passed 6,344 tests with 17 skips. The 117 registered Library,
+startup and Settings Qt checks passed on the approved 1920×1080 display. The
+website passed 493 Node tests and a Worker dry build. Migration 0028 applied in
+a disposable local D1 database.
+
 ## Account management from Studio (2026-11-15)
 
 Settings > Account opens the canonical OpenFPVS account page in the default browser.
@@ -18,8 +37,9 @@ Saved experiments and linked submissions remain private to the signed-in account
 and confer no Library, download, publishing or reporting permissions. Local
 implementation, synthetic verification and a production rollout are separate steps.
 The private `zcm58/OpenFPVS-Website` branch `codex/account-management` owns the
-website code and additive migration `0027_account_management.sql`. Apply that
-migration before publishing the Worker. Production activation is pending.
+website code and additive migration `0027_account_management.sql`. Migration 0027
+was applied before deploying Worker version `8152ac6c-79ce-46ac-ba66-87e90ea33f48`.
+Live asset hashes, anonymous denials and password configuration were verified.
 
 Studio verification passed the GUI, Library and docs focused routes, repo precommit
 (6,344 tests, 17 platform skips), and 23 registered Qt cases on the 1920×1080

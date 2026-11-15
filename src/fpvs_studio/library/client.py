@@ -82,7 +82,7 @@ def _origin(value: str) -> str:
 def _status_error(status: int) -> LibraryError:
     if status in (401, 403):
         return LibraryAuthorizationError(
-            "Library access was rejected. Check the lab code or reconnect this device."
+            "Library access was rejected. Check the connection code or reconnect this device."
         )
     if status in (404, 410):
         return LibraryError("This Library item is no longer available. Refresh the catalog.")
@@ -90,7 +90,7 @@ def _status_error(status: int) -> LibraryError:
         return LibraryError("Too many Library requests. Wait a minute and try again.")
     if status == 426:
         return LibraryError(
-            "Update FPVS Studio, then reconnect with your lab code to use the Experiment Library."
+            "Update FPVS Studio, then reconnect to use the Experiment Library."
         )
     if 300 <= status < 400:
         return LibraryError("The Library service attempted an unsupported redirect.")
@@ -293,7 +293,7 @@ class LibraryClient:
         code, device_name = code.strip(), device_name.strip()
         if not code or len(code) > 128 or not device_name or len(device_name) > 100:
             raise LibraryError(
-                "Enter a lab code and a computer name of up to 100 characters."
+                "Enter a connection code and a computer name of up to 100 characters."
             )
         with self._operation(cancel_event):
             existing = self._load_current_credential()
@@ -336,7 +336,7 @@ class LibraryClient:
         credential = self._load_current_credential()
         if credential is None or credential.connection is None:
             raise LibraryAuthorizationError(
-                "Connect to the Experiment Library with your PI's lab code."
+                "Connect this computer to access the Experiment Library."
             )
         return credential
 

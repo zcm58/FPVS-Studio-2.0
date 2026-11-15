@@ -70,6 +70,24 @@ def test_account_opens_openfpvs_and_shows_browser_failure_inline(qtbot, tmp_path
     assert not dialog.account_status.isVisible()
 
 
+@pytest.mark.parametrize("size", [(860, 560), (1000, 680)])
+def test_account_opens_the_studio_connection_dialog(qtbot, tmp_path, size):
+    opened = []
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path,
+        initial_category="Account",
+        on_show_library=lambda: opened.append(True),
+    )
+    qtbot.addWidget(dialog)
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+    _assert_visible_settings_text_fits(dialog)
+    qtbot.mouseClick(dialog.account_connection_button, Qt.MouseButton.LeftButton)
+    assert opened == [True]
+    assert not dialog.isVisible()
+
+
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 @pytest.mark.parametrize("size", [(860, 560), (1000, 680)], ids=["minimum", "default"])
 def test_settings_can_open_directly_to_recording(qtbot, tmp_path, background, size) -> None:

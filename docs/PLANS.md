@@ -20,7 +20,7 @@ historical release draft does not authorize publishing an old version.
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
 | [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Manual service implemented; retained native/packaged acceptance and automatic-crash follow-up have separate evidence |
 | [Error reporting and 2.2.5 proposal](exec-plans/active/error-reporting-and-release-2.2.5.md) | Implemented source with an unfinished historical release request; preserve its evidence without republishing the already released version |
-| [OpenFPVS account portal](exec-plans/active/fpvs-account-portal.md) | Live portal recorded; another-machine enrollment/download/revocation qualification remains pending |
+| [OpenFPVS account portal](exec-plans/active/fpvs-account-portal.md) | Personal Studio connection and lab-scoped Library cutover with migration 0028; live account rollout tracked separately |
 | [Private Experiment Library](exec-plans/active/private-experiment-library.md) | Whole projects/current-project updates implemented; wider installed/Linux/keyring/hardware acceptance remains separate; individual-condition Phase 2 deferred |
 | [Independent 2.2.7 release draft](exec-plans/active/release-2.2.7.md) | Built unpublished draft explicitly retained by later releases; its visible/release gates are unfinished |
 | [Results reporting](exec-plans/active/remote-experiment-results-reporting.md) | Deployed integration and synthetic acceptance recorded; real two-machine presentation/metrics and shutdown cancellation remain operational checks |

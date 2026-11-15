@@ -799,7 +799,7 @@ def test_enrolled_credential_requires_current_enrollment(environment, state):
     else:
         store.value = store.value.model_copy(update={"library_api_version": 1})
     saved = store.value
-    with pytest.raises(LibraryAuthorizationError, match="lab code"):
+    with pytest.raises(LibraryAuthorizationError, match="Connect this computer"):
         client.enrolled_credential()
     assert store.value is (None if state == "previous-protocol" else saved)
     assert not requests
@@ -852,7 +852,7 @@ def test_previous_access_is_removed_under_lock_before_catalog_request(environmen
         store.value = None
 
     monkeypatch.setattr(store, "delete", delete)
-    with pytest.raises(LibraryAuthorizationError, match="lab code"):
+    with pytest.raises(LibraryAuthorizationError, match="Connect this computer"):
         client.catalog()
     assert store.value is None
     assert requests == []
@@ -875,7 +875,7 @@ def test_previous_access_removal_failure_does_not_start_enrollment(environment, 
 def test_service_upgrade_requirement_is_actionable_and_keeps_current_access(environment):
     client, store, _, replies = environment
     replies.append(HTTPError(ORIGIN, 426, "upgrade required", {}, None))
-    with pytest.raises(LibraryError, match="Update FPVS Studio, then reconnect with your lab code"):
+    with pytest.raises(LibraryError, match="Update FPVS Studio, then reconnect"):
         client.catalog()
     assert store.value is not None
 

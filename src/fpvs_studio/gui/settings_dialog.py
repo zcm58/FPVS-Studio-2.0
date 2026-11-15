@@ -304,7 +304,7 @@ class AppSettingsDialog(QDialog):
         self.library_button = QPushButton("Manage Library Access…", workspace)
         self.library_button.setObjectName("settings_experiment_library")
         self.library_button.setToolTip(
-            "Connect with a lab access code or disconnect this computer."
+            "Connect or disconnect this computer's Experiment Library access."
         )
         mark_secondary_action(self.library_button)
         self.library_button.setVisible(on_show_library is not None)
@@ -605,7 +605,16 @@ class AppSettingsDialog(QDialog):
         self.manage_account_button.setAutoDefault(False)
         mark_primary_action(self.manage_account_button)
         self.manage_account_button.clicked.connect(self._open_account)
-        account_layout.addWidget(self.manage_account_button, alignment=Qt.AlignmentFlag.AlignLeft)
+        account_actions = QHBoxLayout()
+        account_actions.addWidget(self.manage_account_button)
+        self.account_connection_button = QPushButton("Manage Studio connection…", account)
+        self.account_connection_button.setObjectName("settings_account_connection")
+        self.account_connection_button.setAutoDefault(False)
+        self.account_connection_button.setVisible(on_show_library is not None)
+        self.account_connection_button.clicked.connect(self._show_library)
+        account_actions.addWidget(self.account_connection_button)
+        account_actions.addStretch(1)
+        account_layout.addLayout(account_actions)
         self.account_status = QLabel(account)
         self.account_status.setWordWrap(True)
         mark_error_text(self.account_status)

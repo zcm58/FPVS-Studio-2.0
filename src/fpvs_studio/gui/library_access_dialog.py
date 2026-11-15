@@ -8,7 +8,8 @@ from collections.abc import Callable
 from threading import Event
 from typing import cast
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -21,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from fpvs_studio.core.library_origin import MANAGED_LIBRARY_SERVICE_URL
 from fpvs_studio.gui.components import DialogHeader, apply_dialog_theme, mark_primary_action
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.library.client import LibraryClient
@@ -29,18 +31,19 @@ from fpvs_studio.library.models import LibraryConnection
 from fpvs_studio.support.error_explanations import describe_error
 
 _LOGGER = logging.getLogger(__name__)
+STUDIO_ACCOUNT_URL = f"{MANAGED_LIBRARY_SERVICE_URL}/account#connect-studio"
 
 
 class LibraryAccessDialog(QDialog):
-    """Lab setup at 640x420 minimum / 700x460 default; offline always remains available."""
+    """Optional setup at 640x420 minimum / 700x460 default."""
 
     connect_requested = Signal(str, str)
     dismissed = Signal()
 
-    def __init__(self) -> None:
+    def __init__(self, *, openfpvs: bool = True) -> None:
         super().__init__()
         self.setObjectName("library_startup_access_dialog")
-        self.setWindowTitle("Connect to your lab's Experiment Library")
+        self.setWindowTitle("Connect to the Experiment Library")
         self.setMinimumSize(640, 420)
         self.resize(700, 460)
         self.setModal(True)
@@ -49,17 +52,21 @@ class LibraryAccessDialog(QDialog):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(14)
         layout.addWidget(DialogHeader(
-            "Connect to your lab's Library",
-            "Enter the lab access code supplied by your PI or lab manager.",
+            "Connect to the Experiment Library",
+            "Sign in to OpenFPVS and paste a one-time computer code here."
+            if openfpvs else "Enter the enrollment code for your Library service.",
             parent=self,
         ))
         explanation = QLabel(
-            "No account or email registration is needed. Your lab code can connect "
-            "each PC in the lab. You can also continue offline and set this up later "
-            "from View > Experiment Library.", self,
+            "You can set this up later from View > Experiment Library.", self,
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
+        self.sign_in_button = QPushButton("Sign in to OpenFPVS", self)
+        self.sign_in_button.setAutoDefault(False)
+        self.sign_in_button.clicked.connect(self._open_sign_in)
+        self.sign_in_button.setVisible(openfpvs)
+        layout.addWidget(self.sign_in_button, alignment=Qt.AlignmentFlag.AlignLeft)
         self.fields = QWidget(self)
         form = QFormLayout(self.fields)
         form.setContentsMargins(0, 0, 0, 0)
@@ -67,11 +74,12 @@ class LibraryAccessDialog(QDialog):
         self.code_edit.setObjectName("startup_lab_access_code")
         self.code_edit.setEchoMode(QLineEdit.EchoMode.Password)
         self.code_edit.setMaxLength(128)
-        self.code_edit.setPlaceholderText("Lab access code")
+        code_label = "Computer code" if openfpvs else "Enrollment code"
+        self.code_edit.setPlaceholderText(code_label)
         self.device_edit = QLineEdit(socket.gethostname()[:100], self.fields)
         self.device_edit.setObjectName("startup_library_computer_name")
         self.device_edit.setMaxLength(100)
-        form.addRow("Lab access code", self.code_edit)
+        form.addRow(code_label, self.code_edit)
         form.addRow("Computer name", self.device_edit)
         layout.addWidget(self.fields)
         self.status_label = QLabel(
@@ -94,18 +102,23 @@ class LibraryAccessDialog(QDialog):
         mark_primary_action(self.connect_button)
         apply_dialog_theme(self)
 
+    def _open_sign_in(self) -> None:
+        if not QDesktopServices.openUrl(QUrl(STUDIO_ACCOUNT_URL)):
+            self.status_label.setText(f"Could not open your browser. Visit {STUDIO_ACCOUNT_URL}.")
+
     def _connect(self) -> None:
         if self._connected:
             self.accept()
             return
         code, name = self.code_edit.text().strip(), self.device_edit.text().strip()
         if not code or not name:
-            self.status_label.setText("Enter your lab access code and a name for this PC.")
+            self.status_label.setText("Enter a connection code and a name for this PC.")
             return
         self.connect_requested.emit(code, name)
 
     def set_busy(self, busy: bool, message: str) -> None:
         self.fields.setEnabled(not busy)
+        self.sign_in_button.setEnabled(not busy)
         self.connect_button.setEnabled(not busy)
         self.connect_button.setText("Connecting…" if busy else "Connect this PC")
         self.status_label.setText(message)
@@ -115,6 +128,7 @@ class LibraryAccessDialog(QDialog):
         self._connected = True
         self.code_edit.clear()
         self.fields.hide()
+        self.sign_in_button.hide()
         permission = "View and download" if connection.access_level == "download" else "View only"
         self.status_label.setText(
             f"Connected to {connection.lab_name or connection.library_name}. {permission} access. "
@@ -199,7 +213,9 @@ class LibraryAccessController(QObject):
 
     def _show(self) -> None:
         if self.dialog is None:
-            self.dialog = LibraryAccessDialog()
+            self.dialog = LibraryAccessDialog(openfpvs=(
+                self._client is None or self._client.service_url == MANAGED_LIBRARY_SERVICE_URL
+            ))
             self.dialog.connect_requested.connect(self._connect)
             self.dialog.dismissed.connect(self._dismiss)
         self.dialog.show()

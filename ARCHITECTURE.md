@@ -44,10 +44,9 @@ engine dependencies. `packaging/` owns Windows builds, release assets, reconcili
 and patches. `scripts/` owns the [build PATH and DLL checks](docs/PACKAGING.md#direct-patch-releases).
 `tests/` covers unit, integration and registered Qt checks.
 
-External ownership: private sibling `../OpenFPVS` owns the OpenFPVS website, Library
-service and Results backend. Private `zcm58/FPVS-Studio-Feedback` owns report intake
-and maintainer email. `services/results/` is an undeployed reference, not the live
-backend. Consult each repository's own guidance for service changes.
+`zcm58/OpenFPVS-Website` owns OpenFPVS accounts, the Library and Results.
+`zcm58/FPVS-Studio-Feedback` owns report intake and maintainer email.
+`services/results/` is an undeployed reference.
 
 ## Contract Flow
 

@@ -8,12 +8,14 @@ background registration. Network and storage run through the application-owned
 crash controller. Existing saved opt-outs remain off. See
 [Bug reporting](BUG_REPORTING.md) for preferences, wire contracts and activation status.
 
-## Lab Library access on startup
+## OpenFPVS Library access on startup
 
 After root-folder setup and Welcome, Studio reads local protected Library access
 in an app-owned worker. If enrollment is missing (including a pending retry), it
-shows lab setup at minimum `640x420`, default `700x460`. Enter the PI-distributed
-lab code and PC name, then Connect; no researcher account/email is needed.
+shows optional setup at minimum `640x420`, default `700x460`. Select **Sign in to
+OpenFPVS** in Studio, generate a computer code in the browser, then paste it into
+the Studio dialog and select **Connect this PC**. Join a lab under **My labs** on
+OpenFPVS to see its experiments.
 Successful enrollment is retained in the existing OS credential store. The code
 is cleared when setup finishes or is dismissed. Existing configured access skips
 this prompt without a network request. No project settings are changed.
@@ -340,8 +342,10 @@ project actions. Open Project remains the default action.
 ### Experiment Library
 
 **View > Experiment Library...** and **Create Project > Download from library** open
-the same whole-project browser. **Settings > Workspace > Manage Library Access…** exposes its
-lab-code enrollment and device-disconnect controls. Search/select an experiment, then
+the same whole-project browser. **Settings > Account > Manage Studio connection…**
+and **Settings > Workspace > Manage Library Access…** open its connection controls.
+To move an existing lab-code connection to a personal account, disconnect it and
+select **Sign in to OpenFPVS**. Search/select an experiment, then
 **Download and set up experiment** verifies its archive and reuses the normal
 destination review, new-folder import and display-settings flow. Imported projects are
 independent editable copies; Setup and production preflight remain required. Individual
@@ -522,7 +526,9 @@ and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
 Account is available from Welcome and an open project. **Manage Account** opens
 `https://openfpvs.com/account` in the default browser. Sign-in happens on the website.
-In a visible session, open **Settings > Account** and verify the browser opens the page.
+**Manage Studio connection…** opens the Studio Library dialog. During a visible
+smoke test, check both actions at `860x560` and `1000x680`, follow the computer-code
+prompt, then try **Continue offline** from the startup dialog.
 Advanced contains `Developer tools`,
 and Diagnostics contains `Crash reporting`. Existing control identities, eligibility,
 callbacks and immediate-save behavior carry through category changes. Page selection

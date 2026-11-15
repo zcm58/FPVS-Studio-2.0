@@ -20,6 +20,7 @@ from fpvs_studio.core.library_installations import scan_library_projects
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundleError
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui import library_controller as library_module
+from fpvs_studio.gui import library_dialog as library_ui
 from fpvs_studio.gui.bundle_import_dialog import BundleImportProgressDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.library_controller import LibraryController
@@ -57,6 +58,25 @@ def _connection(**updates) -> LibraryConnection:
     )
     values.update(updates)
     return LibraryConnection(**values)
+
+
+def test_library_sign_in_is_available_for_openfpvs_disconnected_state(qtbot, monkeypatch):
+    opened = []
+    monkeypatch.setattr(library_ui, "QDesktopServices", SimpleNamespace(
+        openUrl=lambda url: opened.append(url.toString()) or True,
+    ))
+    dialog = LibraryDialog()
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert dialog.sign_in_button.isVisible()
+    qtbot.mouseClick(dialog.sign_in_button, Qt.MouseButton.LeftButton)
+    assert opened == ["https://openfpvs.com/account#connect-studio"]
+    dialog.set_connection(_connection())
+    assert dialog.sign_in_button.isHidden()
+    custom = LibraryDialog(openfpvs=False)
+    qtbot.addWidget(custom)
+    assert custom.sign_in_button.isHidden()
+    assert custom.code_edit.placeholderText() == "Enrollment code"
 
 
 @pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
@@ -109,7 +129,7 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     elif state == "authorization_error":
         dialog.set_connection(None)
         dialog.set_busy(
-            False, "Library access was rejected. Reconnect with your lab's access code.",
+            False, "Library access was rejected. Reconnect through OpenFPVS.",
         )
     elif state == "empty":
         dialog.set_catalog(LibraryCatalog(schema_version="1.0", library_name="Research", items=[]))
@@ -155,9 +175,8 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
         assert dialog.refresh_button.isEnabled()
         assert dialog.search_edit.isEnabled()
     elif state == "disconnected":
-        assert dialog.connection_label.text() == "Enter your lab code to connect."
-        assert "reusable lab code" in dialog.code_edit.toolTip()
-        assert "No account or email" in dialog.code_edit.toolTip()
+        assert "one-time computer code" in dialog.connection_label.text()
+        assert "one-time computer code from your OpenFPVS account" in dialog.code_edit.toolTip()
         assert dialog.code_edit.accessibleDescription() == dialog.code_edit.toolTip()
     if state in {"installed", "update", "review"}:
         installed = dialog.selected_installation()

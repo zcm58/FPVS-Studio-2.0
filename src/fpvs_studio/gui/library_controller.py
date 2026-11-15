@@ -16,7 +16,11 @@ from fpvs_studio.core.library_installations import (
     LibraryInstallStatus,
     scan_library_projects,
 )
-from fpvs_studio.core.library_origin import LibraryOriginError, LibraryProjectOrigin
+from fpvs_studio.core.library_origin import (
+    MANAGED_LIBRARY_SERVICE_URL,
+    LibraryOriginError,
+    LibraryProjectOrigin,
+)
 from fpvs_studio.core.project_bundle import (
     ProjectBundleError,
     ProjectBundleManifest,
@@ -71,7 +75,9 @@ class LibraryController(QObject):
         if self._lifecycle.is_shutting_down or self._importing:
             return
         if self.dialog is None:
-            self.dialog = LibraryDialog()
+            self.dialog = LibraryDialog(
+                openfpvs=self.client.service_url == MANAGED_LIBRARY_SERVICE_URL,
+            )
             self.dialog.action_requested.connect(self._action)
             self.dialog.closing.connect(self._close)
         self._closing = False

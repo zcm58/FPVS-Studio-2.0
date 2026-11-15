@@ -73,7 +73,9 @@ def setup(qapp, monkeypatch):
         client.connection = _connection(access_level="view", lab_name="NERD Lab")
         return client.connection
 
-    client = SimpleNamespace(connection=None, connection_info=read, enroll=enroll)
+    client = SimpleNamespace(
+        service_url="https://openfpvs.com", connection=None, connection_info=read, enroll=enroll,
+    )
     controller = module.LibraryAccessController(qapp, client=client)
     yield controller, lifecycle, client, reads, enrollments
     controller._dismiss()
@@ -87,6 +89,23 @@ def test_saved_enrollment_skips_prompt_without_network(setup):
     controller.check()
     assert controller.dialog is None
     assert len(reads) == 1 and not enrollments
+
+
+def test_openfpvs_sign_in_opens_the_computer_link(setup, qtbot, monkeypatch):
+    controller, lifecycle, _client, _reads, enrollments = setup
+    opened = []
+    monkeypatch.setattr(module, "QDesktopServices", SimpleNamespace(
+        openUrl=lambda url: opened.append(url.toString()) or False,
+    ))
+    controller.check()
+    lifecycle.jobs[-1].finish()
+    dialog = controller.dialog
+    qtbot.addWidget(dialog)
+    qtbot.mouseClick(dialog.sign_in_button, Qt.MouseButton.LeftButton)
+    assert opened == ["https://openfpvs.com/account#connect-studio"]
+    assert "Could not open your browser" in dialog.status_label.text()
+    assert not enrollments
+    assert dialog.offline_button.isEnabled()
 
 
 @pytest.mark.parametrize("connected", [True, False])

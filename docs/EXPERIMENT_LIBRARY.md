@@ -102,12 +102,11 @@ identity to find authorized studies by name. It keeps separate Results permissio
 and approval while removing repeated lab-code and project-ID entry. No reusable
 code is persisted. See [Data sharing](DATA_SHARING.md) for the connection workflow.
 
-Startup offers lab setup when this OS user has no saved Library enrollment.
-Ask your PI or lab manager for the reusable lab code; no researcher account or
-email registration is required. **Continue offline** leaves local experiments
-available and prompts again on the next launch until access is configured.
-Saved enrollment skips startup setup without contacting the service. View-only
-permission allows browsing; download permission also enables experiment downloads.
+Startup offers an optional OpenFPVS connection when this OS user has no saved
+Library enrollment. Select **Sign in to OpenFPVS**, generate a one-time computer
+code in the browser and paste it into Studio. **Continue offline** leaves local
+experiments available. Saved enrollment skips startup setup without contacting
+the service. Existing code-connected computers keep their lab and access level.
 
 Enrollment is stored for the current OS user on that computer. Other user profiles
 enroll separately. The code itself is not retained as the device credential. Search
@@ -167,19 +166,11 @@ idempotent retry, and ordinary network failures preserve existing enrollment.
 
 ## Website browsing and downloads
 
-The **OpenFPVS Experiment Library** is available at
-[openfpvs.com](https://openfpvs.com). Enter the lab code supplied by
-your PI or lab manager to browse descriptions and publication links. Search
-supports discovery; each experiment has separate reference pages for its exact published
-versions. View permission allows browsing; download permission also enables bundle
-downloads. Researchers need no email or GitHub account for this route.
-
-The top header keeps Library visible. **Account** offers **Login with a Lab Code**
-and optional **Individual Account Login**. The lab-code entry remains available
-independently of email state; signed-in users see account/sign-out controls instead
-of individual login. The verified **OpenFPVS Administrator** also sees the
-administration workspace. Email sign-out leaves the lab-code browser
-connection independent.
+The [OpenFPVS Experiment Library](https://openfpvs.com/library) uses your personal
+account. Enter the lab code from your PI in **My account > My labs**. Members can
+browse and download their labs' experiments, with separate reference pages for each
+published version. PIs manage standard members in their own labs. The OpenFPVS
+Administrator can manage roles and experiment ownership across labs.
 
 Individual accounts sign in with an email address and password. Email links
 verify new accounts, help existing users set their first password, or recover

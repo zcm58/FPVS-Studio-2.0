@@ -29,7 +29,7 @@ owners and targeted tests.
 
 Publishing also requires `src/fpvs_studio/developer/AGENTS.md`. For backend changes,
 follow the owning sibling repository's guidance instead of loading desktop contracts.
-For Settings > Account, use `gui`; for linking a Studio upload, also use `library`.
+For Settings > Account, use `gui`; for Studio connection and upload linking, also use `library`.
 The [account portal plan](../exec-plans/active/fpvs-account-portal.md) links the website
 workflow to its separate owner.
 
