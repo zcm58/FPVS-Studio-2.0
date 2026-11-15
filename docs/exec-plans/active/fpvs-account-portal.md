@@ -16,12 +16,19 @@ set experiment ownership. Existing uploaded experiments move to NERD Lab in
 website migration 0028. The website owns the database and cutover runbook.
 
 - [x] Personal sign-in handoff and scoped membership enforcement in both repositories.
-- [ ] Apply 0028, deploy the matching Worker, and qualify an authenticated live account.
+- [x] Apply 0028 and deploy the matching Worker.
+- [ ] Verify personal sign-in and joining NERD Lab with the owner's live account.
 
 Studio precommit passed 6,344 tests with 17 skips. The 117 registered Library,
 startup and Settings Qt checks passed on the approved 1920×1080 display. The
 website passed 493 Node tests and a Worker dry build. Migration 0028 applied in
 a disposable local D1 database.
+
+Studio source commit `6d747b9531768f0451cd6da326d2e4c279bcfbfa` is pushed to
+`master`. On 2026-11-15 OpenFPVS applied migration 0028, verified all 15 existing
+experiments belong to NERD Lab, and deployed Worker version
+`2e65a89e-2dd4-42d8-b7dc-eae8bb65468d`. Live public and signed-out protection
+checks passed, including the retained native origins.
 
 ## Account management from Studio (2026-11-15)
 
