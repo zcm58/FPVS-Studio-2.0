@@ -446,9 +446,12 @@ saves only name/update-time metadata. Folder names, experiment IDs, stimuli and 
 records stay in place. The currently open project's title updates immediately, while
 other unsaved edits remain unsaved. Empty names are rejected; Cancel and failed writes
 preserve the original file. Renaming retains the selected project and clears the search
-filter so the new name remains visible. The dialog includes a
-compact project filter and can copy the selected project folder path. The currently
-open project is shown but cannot be deleted from its own open window. When a discovered
+filter so the new name remains visible. Search matches project names and folder paths,
+keeps the selected project while it matches, and selects the first visible project
+when it is filtered out. The search field has a clear button. An unmatched search
+offers guidance to try another name or folder. Copy Path copies the selected project
+folder path. The currently open project is shown but cannot be deleted from its own
+open window. When a discovered
 folder contains an unreadable or incompatible `project.json`, the dialog keeps Open and
 Delete and Rename disabled and asks the user to verify the configured FPVS Studio Root Folder and
 the project's FPVS Studio version.
@@ -665,8 +668,10 @@ Run GUI focused and repo precommit checks without Qt. In an approved visible ses
    summaries and readiness. Check all nine Setup steps at `1120x820`.
 2. Verify saved AB settings survive guided Setup without opening its retained editor.
    Separate AB-editor tests cover rate/SOA drafts, character pools, errors and preview.
-3. Open Manage Projects at `860x520` in both themes with many projects. Check loading,
-   Close/reopen, selection after Rename, Recycle Bin rescan and failed-read retry. A
+3. Open Manage Projects at `860x520` in both themes with many projects. Check that
+   typing preserves a matching selection, an unmatched search disables project
+   actions, and clearing it restores the list. Check loading, Close/reopen,
+   selection after Rename, Recycle Bin rescan and failed-read retry. A
    controlled delayed reader in the registered test checks event-loop responsiveness.
 4. Close Find Action, change project/action availability, then reopen with Ctrl+F;
    confirm current labels, shortcuts and disabled actions, and keyboard dispatch.
@@ -1216,9 +1221,14 @@ The authoring window is organized around two user-facing modes:
   - suggests a sibling output folder named `<source-folder>-fpvs-optimized`
   - explains why optimization is unavailable when required folders are missing or
     invalid
-  - after a successful batch, exposes `Open Folder` and `Copy Folder Path`. Changing
-    either folder clears those actions. A failed batch keeps the error status visible
-    until the operator changes a folder or retries
+  - after a successful batch, exposes `Open Folder` and `Copy Folder Path`. A short
+    underline marks **Results** after progress closes when the batch wrote images.
+    It fades within 150 ms and follows the system motion preference. Changing either
+    folder clears the result actions and cue. A failed batch keeps the error status
+    visible until the operator changes a folder or retries
+  - at `960x640` and `1120x720`, verify the result and actions after a new batch,
+    an all-skipped batch and a failure in both themes. Confirm immediate result
+    feedback with motion disabled
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 

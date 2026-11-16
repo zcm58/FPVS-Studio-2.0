@@ -96,6 +96,7 @@ __all__ = [
     "PAGE_SECTION_GAP",
     "PageContainer",
     "PathValueLabel",
+    "ResultFeedbackLabel",
     "SectionCard",
     "SetupMetricStrip",
     "SetupProgressStepper",
@@ -424,6 +425,17 @@ def widget_animation_duration(widget: QWidget, maximum_ms: int) -> int:
     return min(duration, maximum_ms) if duration > 0 and _system_motion_enabled() else 0
 
 
+def _create_accent_animation(
+    widget: QWidget, set_opacity: Callable[[float], None],
+) -> QVariantAnimation:
+    animation = QVariantAnimation(widget)
+    animation.setStartValue(1.0)
+    animation.setEndValue(0.0)
+    animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+    animation.valueChanged.connect(set_opacity)
+    return animation
+
+
 class ActionFeedbackButton(QPushButton):
     """Confirm a completed action in place while retaining the button's layout size."""
 
@@ -441,11 +453,7 @@ class ActionFeedbackButton(QPushButton):
         self._action_size = QSize()
         self._accent_opacity = 0.0
 
-        self._accent_animation = QVariantAnimation(self)
-        self._accent_animation.setStartValue(1.0)
-        self._accent_animation.setEndValue(0.0)
-        self._accent_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._accent_animation.valueChanged.connect(self._set_accent_opacity)
+        self._accent_animation = _create_accent_animation(self, self._set_accent_opacity)
         self._confirmation_timer = QTimer(self)
         self._confirmation_timer.setSingleShot(True)
         self._confirmation_timer.setInterval(self._CONFIRMATION_MS)
@@ -508,6 +516,56 @@ class ActionFeedbackButton(QPushButton):
             self.reset_confirmation()
 
 
+class ResultFeedbackLabel(QLabel):
+    """Draw attention to a result heading with a brief, fading underline."""
+
+    _ACCENT_MS = 150
+    _ACCENT_HEIGHT = 2
+
+    def __init__(self, text: str, parent: QWidget | None = None) -> None:
+        super().__init__(text, parent)
+        self.setContentsMargins(0, 0, 0, 2 * self._ACCENT_HEIGHT)
+        self._accent_opacity = 0.0
+        self._accent_animation = _create_accent_animation(self, self._set_accent_opacity)
+
+    def show_feedback(self) -> None:
+        self.reset_feedback()
+        if not self.isVisible():
+            return
+        duration = widget_animation_duration(self, self._ACCENT_MS)
+        if duration > 0:
+            self._set_accent_opacity(1.0)
+            self._accent_animation.setDuration(duration)
+            self._accent_animation.start()
+
+    def reset_feedback(self) -> None:
+        self._accent_animation.stop()
+        if self._accent_opacity > 0.0:
+            self._set_accent_opacity(0.0)
+
+    def _set_accent_opacity(self, opacity: float) -> None:
+        self._accent_opacity = opacity
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        if self._accent_opacity <= 0.0:
+            return
+        contents = self.contentsRect()
+        width = min(contents.width(), self.fontMetrics().horizontalAdvance(self.text()))
+        accent = QColor(resolve_studio_theme(self.window().palette()).focus_ring)
+        accent.setAlphaF(self._accent_opacity)
+        with QPainter(self) as painter:
+            painter.fillRect(
+                contents.left(), contents.bottom() + self._ACCENT_HEIGHT,
+                width, self._ACCENT_HEIGHT, accent,
+            )
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self.reset_feedback()
+        super().hideEvent(event)
+
+
 class MoveFeedbackList(QListWidget):
     """Briefly outline the destination row after the editor accepts a move."""
 
@@ -517,11 +575,7 @@ class MoveFeedbackList(QListWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._accent_opacity = 0.0
-        self._accent_animation = QVariantAnimation(self)
-        self._accent_animation.setStartValue(1.0)
-        self._accent_animation.setEndValue(0.0)
-        self._accent_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self._accent_animation.valueChanged.connect(self._set_accent_opacity)
+        self._accent_animation = _create_accent_animation(self, self._set_accent_opacity)
         self.currentItemChanged.connect(self.reset_move_feedback)
         self.itemSelectionChanged.connect(self.reset_move_feedback)
 
@@ -2025,6 +2079,9 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton[destructiveActionRole="true"] {{
         color: {theme.destructive_text};
         font-weight: 600;
+    }}
+    QPushButton[destructiveActionRole="true"]:disabled {{
+        color: {theme.disabled_text};
     }}
     QPushButton:focus {{
         border: 2px solid {theme.focus_ring};

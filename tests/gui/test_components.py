@@ -26,6 +26,7 @@ from fpvs_studio.gui import components
 from fpvs_studio.gui.components import (
     ActionFeedbackButton,
     MoveFeedbackList,
+    ResultFeedbackLabel,
     SectionCard,
     SetupMetricStrip,
     SetupProgressStepper,
@@ -112,7 +113,7 @@ def test_action_confirmation_paints_then_settles_without_moving_buttons(
     copy.setFocus(Qt.FocusReason.TabFocusReason)
     QApplication.processEvents()
     initial_geometry = [button.geometry() for button in (sibling, copy)]
-    assert copy.hasFocus()
+    assert dialog.focusWidget() is copy
 
     def accent_pixel() -> QColor:
         image = QImage(copy.size(), QImage.Format.Format_RGB32)
@@ -127,7 +128,7 @@ def test_action_confirmation_paints_then_settles_without_moving_buttons(
     assert copy.text() == "Copied"
     assert accent_pixel() != normal
     assert 0 < animation.duration() <= 120
-    assert copy.hasFocus()
+    assert dialog.focusWidget() is copy
     assert [button.geometry() for button in (sibling, copy)] == initial_geometry
 
     animation.setCurrentTime(animation.duration())
@@ -162,6 +163,51 @@ def test_action_confirmation_reduced_motion_clears_when_disabled_or_hidden(
     button.hide()
     assert button.text() == "Save Default Settings"
     assert not button._confirmation_timer.isActive()
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_result_heading_accent_preserves_geometry_and_respects_motion(
+    qtbot, monkeypatch, background,
+) -> None:
+    monkeypatch.setattr(components, "widget_animation_duration", lambda _label, limit: limit)
+    heading = ResultFeedbackLabel("Results")
+    qtbot.addWidget(heading)
+    heading.setPalette(_palette_with_window_color(background))
+    heading.resize(240, 32)
+    heading.show()
+    QApplication.processEvents()
+    geometry = heading.geometry()
+    text_right = heading.fontMetrics().horizontalAdvance(heading.text())
+    line_y = heading.contentsRect().bottom() + heading._ACCENT_HEIGHT
+
+    def accent_pixels() -> tuple[QColor, QColor]:
+        target = QImage(heading.size(), QImage.Format.Format_RGB32)
+        heading.render(target)
+        return target.pixelColor(1, line_y), target.pixelColor(text_right + 8, line_y)
+
+    ordinary = accent_pixels()
+    heading.show_feedback()
+    animation = heading._accent_animation
+    animation.pause()
+    accent, untouched = accent_pixels()
+    assert accent != ordinary[0]
+    assert untouched == ordinary[1]
+    assert 0 < animation.duration() <= 150
+    assert heading.text() == "Results"
+    assert heading.geometry() == geometry
+
+    animation.setCurrentTime(animation.duration())
+    assert accent_pixels() == ordinary
+    heading.show_feedback()
+    heading.hide()
+    assert animation.state() == QAbstractAnimation.State.Stopped
+    assert heading._accent_opacity == 0
+
+    heading.show()
+    monkeypatch.setattr(components, "widget_animation_duration", lambda _label, _limit: 0)
+    heading.show_feedback()
+    assert animation.state() == QAbstractAnimation.State.Stopped
+    assert accent_pixels() == ordinary
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])

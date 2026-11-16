@@ -25,6 +25,7 @@ from fpvs_studio.gui.components import (
     ActionFeedbackButton,
     NonHomePageShell,
     PathValueLabel,
+    ResultFeedbackLabel,
     apply_image_resizer_theme,
     mark_primary_action,
     mark_secondary_action,
@@ -55,6 +56,7 @@ class ImageResizerPage(QWidget):
         self._output_was_user_selected = False
         self._successful_output_dir: Path | None = None
         self._active_task: ProgressTask | None = None
+        self._result_feedback_pending = False
 
         self.shell = NonHomePageShell(
             title="Image Resizer",
@@ -160,9 +162,9 @@ class ImageResizerPage(QWidget):
         results_layout = QVBoxLayout(results_panel)
         results_layout.setContentsMargins(0, 0, 0, 0)
         results_layout.setSpacing(12)
-        results_heading = QLabel("Results", results_panel)
-        results_heading.setObjectName("image_resizer_results_heading")
-        results_layout.addWidget(results_heading)
+        self.results_heading = ResultFeedbackLabel("Results", results_panel)
+        self.results_heading.setObjectName("image_resizer_results_heading")
+        results_layout.addWidget(self.results_heading)
 
         self.result_label = QLabel(results_panel)
         self.result_label.setObjectName("image_resizer_result_label")
@@ -290,6 +292,8 @@ class ImageResizerPage(QWidget):
 
     def _refresh_output_actions(self) -> None:
         has_output = self._successful_output_dir is not None
+        self._result_feedback_pending = False
+        self.results_heading.reset_feedback()
         self.copy_output_button.reset_confirmation()
         self.open_output_button.setEnabled(has_output)
         self.copy_output_button.setEnabled(has_output)
@@ -333,6 +337,7 @@ class ImageResizerPage(QWidget):
         self._successful_output_dir = result.output_dir
         self.result_label.setText(_format_result(result))
         self._refresh_output_actions()
+        self._result_feedback_pending = result.processed_count > 0
 
     @Slot(object)
     def _on_optimization_failed(self, error: object) -> None:
@@ -345,6 +350,9 @@ class ImageResizerPage(QWidget):
     def _on_optimization_finished(self) -> None:
         self._active_task = None
         self.optimize_button.setEnabled(self._disabled_reason() is None)
+        if self._result_feedback_pending:
+            self._result_feedback_pending = False
+            self.results_heading.show_feedback()
 
     @Slot()
     def _open_output_folder(self) -> None:

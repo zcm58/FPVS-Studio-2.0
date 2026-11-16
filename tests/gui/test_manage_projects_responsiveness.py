@@ -7,7 +7,7 @@ import pytest
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QPushButton
-from shiboken6 import delete
+from shiboken6 import delete, isValid
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.project_service import create_project
@@ -127,12 +127,13 @@ def test_closing_or_destroying_manager_cancels_scan_and_ignores_late_result(
     entries = controller.load_manageable_project_entries()
     controller.show_manage_projects_dialog()
     old = controller._manage_projects_dialog
-    qtbot.addWidget(old)
     old_job = pending_jobs[-1]
+    # Both paths explicitly destroy this dialog before pytest-qt teardown.
     if dispose:
         delete(old)
     else:
         old.close_button.click()
+    qtbot.waitUntil(lambda: not isValid(old))
     assert old_job.cancel_event.is_set()
     assert controller._manage_projects_dialog is None
     controller.show_manage_projects_dialog()
@@ -229,6 +230,86 @@ def test_manage_projects_loading_and_retry_fit_minimum(qtbot, qapp, dark, state)
         assert label.height() >= label.heightForWidth(label.width())
     finally:
         qapp.setPalette(original)
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+def test_manage_projects_search_preserves_selection_and_recovers_at_minimum_size(
+    qtbot, qapp, tmp_path, background,
+):
+    studies = tmp_path / "Perception and Cognition Lab" / "Visual recognition projects"
+    first_root = studies / "Baseline sessions" / "First visual search experiment"
+    second_root = studies / "Follow-up sessions" / "Second visual search experiment"
+    entries = [
+        ProjectManagementEntry(
+            name=f"{position} visual search and shape discrimination across eccentricities",
+            root=root,
+            status_text="Ready",
+            status_state="success",
+            can_open=True,
+            can_delete=True,
+            can_rename=True,
+        )
+        for position, root in (("First", first_root), ("Second", second_root))
+    ]
+    dialog = ManageProjectsDialog(entries=entries)
+    qtbot.addWidget(dialog)
+    palette = QPalette(dialog.palette())
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    dialog.setPalette(palette)
+    dialog.show()
+    qapp.processEvents()
+
+    search = dialog.filter_edit
+    assert search.accessibleName() == "Search projects"
+    assert search.isClearButtonEnabled()
+    dialog.project_list.setCurrentRow(1)
+    selected_item = dialog.project_list.currentItem()
+    search.setFocus()
+    qtbot.keyClicks(search, "visual search")
+    qapp.processEvents()
+    assert dialog.project_list.count() == 2
+    assert dialog.project_list.currentItem() is selected_item
+    assert dialog.name_label.text() == entries[1].name
+    assert dialog.name_label.height() >= dialog.name_label.heightForWidth(dialog.name_label.width())
+    assert dialog.path_label.toolTip() == str(second_root)
+    assert dialog.open_button.isEnabled()
+    assert_visible_children_within_parent(dialog)
+
+    qtbot.keyClicks(search, " unavailable cohort")
+    qapp.processEvents()
+    assert dialog.project_list.count() == 0
+    empty_label = dialog.empty_label
+    assert empty_label.isVisible()
+    assert empty_label.text() == "No matching projects. Try another name or folder."
+    assert empty_label.height() >= empty_label.heightForWidth(empty_label.width())
+    assert search.isEnabled() and dialog.close_button.isEnabled()
+    assert not dialog.retry_button.isVisible()
+    for button in (
+        dialog.open_button, dialog.rename_button, dialog.copy_path_button, dialog.delete_button,
+    ):
+        assert not button.isEnabled()
+    assert_visible_children_within_parent(dialog)
+
+    search.selectAll()
+    qtbot.keyClick(search, Qt.Key.Key_Backspace)
+    assert search.text() == ""
+    assert dialog.project_list.count() == 2
+    assert dialog.project_list.currentRow() == 0
+    assert not dialog.empty_label.isVisible()
+    assert dialog.open_button.isEnabled()
+
+    dialog.project_list.setCurrentRow(1)
+    qtbot.keyClicks(search, "baseline sessions")
+    assert dialog.project_list.count() == 1
+    assert dialog.path_label.toolTip() == str(first_root)
+    with qtbot.waitSignal(dialog.open_requested) as open_signal:
+        qtbot.mouseClick(dialog.open_button, Qt.MouseButton.LeftButton)
+    assert open_signal.args == [str(first_root)]
+    assert dialog.size().toTuple() == (860, 520)
+
+    dialog.set_project_entries([])
+    assert dialog.empty_label.isVisible()
+    assert dialog.empty_label.text() == "No projects are available to manage."
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])

@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import QPoint, Qt
+from PySide6.QtCore import QAbstractAnimation, QPoint, Qt
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QWidget
 from tests.gui.helpers import (
@@ -242,22 +242,58 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     opened_paths: list[Path] = []
     source_dir.mkdir(parents=True)
     Image.new("RGB", (96, 96), color=(20, 40, 60)).save(source_dir / "stimulus-01.png")
+
+    class HeldFinishTask(_ImmediateProgressTask):
+        def start(self) -> None:
+            self.succeeded.emit(self._callback())
+
     monkeypatch.setattr(
         "fpvs_studio.gui.image_resizer_page.ProgressTask",
-        _ImmediateProgressTask,
+        HeldFinishTask,
     )
     monkeypatch.setattr(
         "fpvs_studio.gui.folder_actions.open_folder",
         lambda path: opened_paths.append(Path(path)) or True,
     )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.components.widget_animation_duration", lambda _widget, limit: limit,
+    )
+
+    heading = page.results_heading
+    feedback_states = []
+    show_feedback = heading.show_feedback
+
+    def record_feedback():
+        feedback_states.append((
+            page.result_label.text(), page.open_output_button.isVisible(),
+            page.copy_output_button.isVisible(),
+        ))
+        show_feedback()
+        heading._accent_animation.pause()
+
+    monkeypatch.setattr(heading, "show_feedback", record_feedback)
 
     page._set_source_dir(source_dir)
     page._set_output_dir(output_dir, user_selected=True)
+    QApplication.processEvents()
+    heading_size = heading.sizeHint()
     qtbot.mouseClick(page.optimize_button, Qt.MouseButton.LeftButton)
+    task = page._active_task
+    assert isinstance(task, HeldFinishTask)
+    assert page.result_label.text() == "Resized 1 image to 512 × 512 px."
+    assert not feedback_states
+    assert not page.optimize_button.isEnabled()
+    task.finished.emit()
     QApplication.processEvents()
 
     assert page.size().toTuple() == size
-    assert page.result_label.text() == "Resized 1 image to 512 × 512 px."
+    assert feedback_states == [(page.result_label.text(), True, True)]
+    assert heading._accent_animation.state() == QAbstractAnimation.State.Paused
+    assert 0 < heading._accent_animation.duration() <= 150
+    assert heading._accent_opacity > 0
+    assert heading.text() == "Results"
+    assert heading.sizeHint() == heading_size
+    assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
     button = page.copy_output_button
     assert button.text() == "Copy Folder Path"
     assert not page.open_output_button.isHidden()
@@ -283,6 +319,17 @@ def test_image_resizer_optimizes_folder_and_updates_results(
     assert page.open_output_button.isHidden()
     assert button.isHidden()
     assert button.text() == "Copy Folder Path"
+    assert heading._accent_animation.state() == QAbstractAnimation.State.Stopped
+    assert heading._accent_opacity == 0.0
+
+    page._set_output_dir(output_dir, user_selected=True)
+    qtbot.mouseClick(page.optimize_button, Qt.MouseButton.LeftButton)
+    task = page._active_task
+    assert isinstance(task, HeldFinishTask)
+    assert page.result_label.text() == "Resized 0 images to 512 × 512 px.\nFiles skipped: 1"
+    task.finished.emit()
+    assert len(feedback_states) == 1
+    assert heading._accent_animation.state() == QAbstractAnimation.State.Stopped
 
 
 @pytest.mark.parametrize("size", [(960, 640), (1120, 720)], ids=["minimum", "default"])
@@ -294,6 +341,8 @@ def test_image_resizer_retains_failure_until_inputs_change(qtbot, tmp_path, monk
     page.resize(*size)
     page.show()
     errors = []
+    feedback = []
+    monkeypatch.setattr(page.results_heading, "show_feedback", lambda: feedback.append(True))
 
     def fail_batch(**_kwargs):
         assert page.result_label.text() == "Resizing images…"
@@ -318,6 +367,7 @@ def test_image_resizer_retains_failure_until_inputs_change(qtbot, tmp_path, monk
     assert page.size().toTuple() == size
     assert page.result_label.text() == "Batch failed."
     assert [str(error) for error in errors] == ["Output folder cannot be opened."]
+    assert not feedback
     assert page.optimize_button.isEnabled()
     assert page.open_output_button.isHidden()
     assert page.copy_output_button.isHidden()

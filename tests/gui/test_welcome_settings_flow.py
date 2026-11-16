@@ -604,7 +604,11 @@ def test_opening_project_records_recent_project_root(
 def test_manage_projects_dialog_lists_projects_from_saved_root(
     qtbot,
     controller: StudioController,
+    monkeypatch,
 ) -> None:
+    copied_paths: list[str] = []
+    clipboard = SimpleNamespace(setText=copied_paths.append)
+    monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
     root_dir = controller.load_fpvs_root_dir()
     assert root_dir is not None
     scaffold = create_project(root_dir, "Managed Root Project")
@@ -623,7 +627,7 @@ def test_manage_projects_dialog_lists_projects_from_saved_root(
     assert open_button is not None
     assert copy_button is not None
     assert delete_button is not None
-    assert filter_edit.placeholderText() == "Search projects.."
+    assert filter_edit.placeholderText() == "Search projects…"
     assert project_list.count() == 1
     assert project_list.item(0).text() == "Managed Root Project"
     assert project_list.item(0).toolTip() == str(scaffold.project_root)
@@ -631,7 +635,7 @@ def test_manage_projects_dialog_lists_projects_from_saved_root(
     assert copy_button.isEnabled()
     assert delete_button.isEnabled()
     qtbot.mouseClick(copy_button, Qt.MouseButton.LeftButton)
-    assert QApplication.clipboard().text() == str(scaffold.project_root)
+    assert copied_paths == [str(scaffold.project_root)]
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])

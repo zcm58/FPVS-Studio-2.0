@@ -90,6 +90,8 @@ class ManageProjectsDialog(QDialog):
         self.filter_edit = QLineEdit(list_panel)
         self.filter_edit.setObjectName("manage_projects_filter_edit")
         self.filter_edit.setPlaceholderText("Search projects…")
+        self.filter_edit.setAccessibleName("Search projects")
+        self.filter_edit.setClearButtonEnabled(True)
         self.filter_edit.textChanged.connect(self._apply_filter)
         list_layout.addWidget(self.filter_edit)
 
@@ -227,17 +229,20 @@ class ManageProjectsDialog(QDialog):
         self._sync_selection(-1)
 
     def _apply_filter(self, _filter_text: str = "") -> None:
+        selected_root = self._selected_root_key()
         with QSignalBlocker(self.project_list):
             while self.project_list.count():
                 self.project_list.takeItem(0)
             filter_text = self.filter_edit.text().casefold().strip()
-            for entry in self._filtered_entries(filter_text):
+            selected_row = 0
+            for row, entry in enumerate(self._filtered_entries(filter_text)):
                 root_key = str(entry.root)
                 self.project_list.addItem(self._items_by_root[root_key])
+                if root_key == selected_root:
+                    selected_row = row
 
-            selected_row = 0 if self.project_list.count() > 0 else -1
-            self.project_list.setCurrentRow(selected_row)
-        self._sync_selection(selected_row)
+            self.project_list.setCurrentRow(selected_row if self.project_list.count() else -1)
+        self._sync_selection(self.project_list.currentRow())
 
     def _filtered_entries(self, filter_text: str) -> list[ProjectManagementEntry]:
         if not filter_text:
@@ -274,6 +279,10 @@ class ManageProjectsDialog(QDialog):
         self.empty_label.setText(
             "Loading projects…" if self._loading else
             "Could not load projects. Check the root folder and try again." if self._load_error else
+            "No matching projects. Try another name or folder." if (
+                self._entries and self.project_list.count() == 0
+                and self.filter_edit.text().strip()
+            ) else
             "No projects are available to manage."
         )
         self.empty_label.setToolTip(self._load_error)
@@ -281,7 +290,7 @@ class ManageProjectsDialog(QDialog):
         guidance_text = entry.guidance_text if entry is not None else ""
         self.guidance_label.setText(guidance_text)
         self.guidance_label.setVisible(bool(guidance_text))
-        QTimer.singleShot(0, self._sync_guidance_label_height)
+        QTimer.singleShot(0, self, self._sync_guidance_label_height)
         self.open_button.setEnabled(has_entry and entry.can_open if entry else False)
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)
         self.copy_path_button.setEnabled(has_entry)
@@ -296,7 +305,7 @@ class ManageProjectsDialog(QDialog):
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
-        QTimer.singleShot(0, self._sync_guidance_label_height)
+        QTimer.singleShot(0, self, self._sync_guidance_label_height)
 
     def _sync_guidance_label_height(self) -> None:
         if not self.guidance_label.isVisible() or not self.guidance_label.text():
