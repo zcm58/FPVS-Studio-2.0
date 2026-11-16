@@ -12,7 +12,16 @@ from threading import Event
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QByteArray, QCoreApplication, QEvent, QPoint, Qt, QThread, QTimer
+from PySide6.QtCore import (
+    QAbstractAnimation,
+    QByteArray,
+    QCoreApplication,
+    QEvent,
+    QPoint,
+    Qt,
+    QThread,
+    QTimer,
+)
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget
 from shiboken6 import isValid
@@ -877,12 +886,47 @@ def test_large_download_byte_counts_are_scaled_without_qt_integer_overflow(
     job.progress_changed.emit(3 * 1024**3, total)
     assert dialog.progress_bar.maximum() == 1000
     assert dialog.progress_bar.value() == 750
+    assert dialog.progress_bar.isTextVisible()
+    assert dialog.progress_bar.text() == "75%"
     job.progress_changed.emit(total + 1, total)
     assert dialog.progress_bar.value() == 1000
     job.progress_changed.emit(total, None)
     assert dialog.progress_bar.maximum() == 0
     job.finish(replace(_downloaded_fixture(tmp_path), size_bytes=total))
     assert dialog.progress_bar.maximum() == dialog.progress_bar.value() == 1000
+
+
+@pytest.mark.parametrize("motion_enabled", [True, False])
+def test_download_motion_respects_preference_and_stops_when_hidden_or_complete(
+    qtbot, deferred_updates, monkeypatch, motion_enabled,
+) -> None:
+    monkeypatch.setattr(
+        dialog_module, "widget_animation_duration",
+        lambda _widget, limit: limit if motion_enabled else 0,
+    )
+    lifecycle, jobs, _ = deferred_updates
+    dialog = UpdateDialog(auto_check=False, initial_result=_available_update(), lifecycle=lifecycle)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.start_download()
+    assert dialog.status_label.text() == "Downloading the update..."
+    qtbot.waitUntil(lambda: jobs[-1].is_running)
+    job = jobs[-1]
+    bar = dialog.progress_bar
+    assert bar.accessibleName() == "Update progress"
+    assert bar.isVisible()
+    state = QAbstractAnimation.State
+    active_state = state.Running if motion_enabled else state.Stopped
+    job.progress_changed.emit(25, 100)
+    assert bar.text() == "25%"
+    assert bar._animation.state() == active_state
+    bar.hide()
+    assert bar._animation.state() == state.Stopped
+    bar.show()
+    assert bar._animation.state() == active_state
+    job.progress_changed.emit(100, 100)
+    assert bar.text() == "100%"
+    assert bar._animation.state() == state.Stopped
 
 
 @pytest.mark.parametrize("source", ["dialog", "startup"])
@@ -1199,6 +1243,9 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         qtbot.waitUntil(lambda: jobs[-1].is_running)
         if state == "canceling":
             dialog.reject()
+        else:
+            jobs[-1].progress_changed.emit(37, 100)
+            assert dialog.progress_bar.text() == "37%"
     elif state == "error":
         dialog._handle_task_error(RuntimeError(full_notes), "install")
     qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
@@ -1355,7 +1402,10 @@ def test_standalone_handoff_does_not_claim_to_be_studio(qtbot, deferred_updates,
 
 
 @pytest.mark.parametrize("size", [(480, 140), (560, 160)])
-def test_apply_progress_is_minimal_and_preserves_target_version(qtbot, deferred_updates, size):
+def test_apply_progress_is_minimal_and_preserves_target_version(
+    qtbot, deferred_updates, monkeypatch, size,
+):
+    monkeypatch.setattr(dialog_module, "widget_animation_duration", lambda _widget, limit: limit)
     lifecycle, jobs, _ = deferred_updates
     window = ApplyUpdateDialog(lambda _progress, _cancel: None, lifecycle=lifecycle)
     qtbot.addWidget(window)
@@ -1364,16 +1414,20 @@ def test_apply_progress_is_minimal_and_preserves_target_version(qtbot, deferred_
     qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
     version = "2026.12.123rc10"
     window._progress(UpdatePhase("Preparing", target_version=version), None)
+    assert window.title_label.isVisible()
+    assert window.title_label.text() == "Preparing installation"
+    assert window.status_label.text() == f"Version {version}"
+    assert window.progress_bar.accessibleName() == "Installation progress"
     window._progress(UpdatePhase("Installing; keep this window open", install_committed=True), None)
-    assert window.status_label.text() == (
-        f"Updating FPVS Studio to version {version}... Please wait..."
-    )
+    assert window.title_label.text() == f"Installing version {version}"
+    assert not window.status_label.text()
     assert not window.details_label.isVisible()
     assert not window.repair_button.isVisible()
     assert not window.close_button.isVisible()
     assert window.progress_bar.isVisible()
     assert window.progress_bar.minimum() == window.progress_bar.maximum() == 0
     assert not window.progress_bar.isTextVisible()
+    assert window.progress_bar._animation.state() == QAbstractAnimation.State.Running
     if sys.platform == "win32":
         native = wintypes.MSG()
         native.message = window.INSTALL_PROGRESS_MESSAGE
@@ -1390,12 +1444,21 @@ def test_apply_progress_is_minimal_and_preserves_target_version(qtbot, deferred_
             assert window.progress_bar.value() == expected
             assert window.progress_bar.isTextVisible()
             assert window.progress_bar.text() == f"{expected}%"
+            assert window.progress_bar._animation.state() == QAbstractAnimation.State.Stopped
     qtbot.wait(1)
+    assert (window.width(), window.height()) == size
+    assert window.title_label.width() >= window.title_label.fontMetrics().horizontalAdvance(
+        window.title_label.text()
+    )
+    assert window.title_label.height() >= window.title_label.heightForWidth(
+        window.title_label.width()
+    )
     assert window.status_label.height() >= window.status_label.heightForWidth(
         window.status_label.width()
     )
     assert_visible_children_within_parent(window)
     jobs[-1].finish()
+    assert window.title_label.text() == "Update complete"
     assert window.progress_bar.value() == window.progress_bar.maximum() == 100
     assert window.progress_bar.text() == "100%"
     if sys.platform == "win32":
@@ -1417,6 +1480,7 @@ def test_apply_progress_failure_keeps_repair_and_complete_error_accessible(
     qtbot.waitUntil(lambda: bool(jobs) and jobs[-1]._started)
     error = "Target verification failed. " + "FPVS-Studio-long-file-name.dll " * 60
     jobs[-1].finish(error=UpdateError(error))
+    assert window.title_label.text() == "Update failed"
     assert window.details_label.toPlainText() == error
     assert not window.details_label.isVisible()
     assert window.details_button.isVisible()

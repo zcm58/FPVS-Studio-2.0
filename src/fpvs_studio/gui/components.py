@@ -1878,6 +1878,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QMainWindow#studio_main_window,
     QStackedWidget#main_stack,
     QDialog#update_dialog,
+    QDialog#standalone_updater,
+    QDialog#updater_install_progress,
     QDialog#bundle_export_options_dialog,
     QDialog#bundle_import_review_dialog,
     QDialog#bundle_import_progress_dialog,
@@ -2007,17 +2009,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_primary};
         font-size: {FONT_SIZE_CONTROL}px;
         font-weight: 700;
-    }}
-    QDialog#update_dialog QProgressBar {{
-        border: 1px solid {color_border_soft};
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {color_surface_elevated};
-        min-height: 14px;
-        text-align: center;
-    }}
-    QDialog#update_dialog QProgressBar::chunk {{
-        border-radius: {CARD_CORNER_RADIUS}px;
-        background-color: {color_primary};
     }}
     QPushButton {{
         border: 1px solid {color_border};

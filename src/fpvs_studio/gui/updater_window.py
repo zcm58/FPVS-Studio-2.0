@@ -17,7 +17,6 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPlainTextEdit,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
 )
@@ -26,8 +25,13 @@ from fpvs_studio.gui.components import (
     apply_studio_theme,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
 )
-from fpvs_studio.gui.update_dialog import SOURCE_UPDATE_INSTRUCTIONS, UpdateDialog
+from fpvs_studio.gui.update_dialog import (
+    SOURCE_UPDATE_INSTRUCTIONS,
+    UpdateDialog,
+    UpdateProgressBar,
+)
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateCallback,
@@ -175,17 +179,32 @@ class ApplyUpdateDialog(QDialog):
         self._callback = callback
         self._lifecycle = lifecycle or update_lifecycle()
         self._job: UpdateJob | None = None
+        self._target_version: str | None = None
         self._committed = Event()
         self._dismissed = False
         self._repair_window: UpdaterWindow | None = None
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(14)
-        self.status_label = QLabel("Updating FPVS Studio... Please wait...", self)
+        heading = QVBoxLayout()
+        heading.setSpacing(4)
+        self.title_label = QLabel("Preparing installation", self)
+        self.title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.title_label.setWordWrap(True)
+        mark_text_role(self.title_label, "dialogTitle")
+        heading.addWidget(self.title_label)
+        self.status_label = QLabel(self)
+        mark_text_role(self.status_label, "supporting")
         self.status_label.setTextFormat(Qt.TextFormat.PlainText)
         self.status_label.setWordWrap(True)
+        heading.addWidget(self.status_label)
         layout.addStretch(1)
-        layout.addWidget(self.status_label)
+        layout.addLayout(heading)
+        self.progress_bar = UpdateProgressBar(self)
+        self.progress_bar.setAccessibleName("Installation progress")
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setTextVisible(False)
+        layout.addWidget(self.progress_bar)
         self.details_label = QPlainTextEdit(self)
         self.details_label.setReadOnly(True)
         self.details_label.setVisible(False)
@@ -196,11 +215,6 @@ class ApplyUpdateDialog(QDialog):
         self.details_button.setVisible(False)
         self.details_button.clicked.connect(self._toggle_error_details)
         layout.addWidget(self.details_button)
-        self.progress_bar = QProgressBar(self)
-        self.progress_bar.setRange(0, 0)
-        self.progress_bar.setTextVisible(False)
-        self.progress_bar.setFormat("%p%")
-        layout.addWidget(self.progress_bar)
         layout.addStretch(1)
         self.repair_button = QPushButton("Open Update && Repair", self)
         mark_primary_action(self.repair_button)
@@ -239,10 +253,14 @@ class ApplyUpdateDialog(QDialog):
     def _progress(self, phase: object, _total: object) -> None:
         if isinstance(phase, UpdatePhase):
             if phase.target_version is not None:
-                self.status_label.setText(
-                    f"Updating FPVS Studio to version {phase.target_version}... Please wait..."
-                )
+                self._target_version = phase.target_version
+                self.status_label.setText(f"Version {phase.target_version}")
             if phase.install_committed:
+                self.title_label.setText(
+                    f"Installing version {self._target_version}"
+                    if self._target_version is not None else "Installing"
+                )
+                self.status_label.clear()
                 self.close_button.setEnabled(False)
 
     def nativeEvent(  # noqa: N802
@@ -271,7 +289,8 @@ class ApplyUpdateDialog(QDialog):
             and outcome.error is None
             and not outcome.cancelled
         ):
-            self.status_label.setText("FPVS Studio was updated and restarted successfully.")
+            self.title_label.setText("Update complete")
+            self.status_label.setText("FPVS Studio restarted successfully.")
             self.progress_bar.setRange(0, 100)
             self.progress_bar.setValue(100)
             self.progress_bar.setTextVisible(True)
@@ -283,9 +302,11 @@ class ApplyUpdateDialog(QDialog):
             and (outcome.error is None or isinstance(outcome.error, UpdateCancelled))
             and not self._committed.is_set()
         ):
+            self.title_label.hide()
             self.status_label.setText("The update was canceled before installation.")
             self.close_button.setVisible(True)
         else:
+            self.title_label.setText("Update failed")
             error = outcome.error if isinstance(outcome, UpdateTaskResult) else None
             self.status_label.setText(
                 describe_error("Install Studio Update", error)

@@ -1759,16 +1759,18 @@ separate process, at a `680x660` minimum and `760x680` default. Its full-install
 action supports the currently installed version and requires all Studio windows to close
 before installation. The repair check remains separate; the selected installer uses
 the same Download and Install action. It works independently of Studio's authoring/runtime dependencies.
-The managed install-progress dialog has a `480x140` minimum and `560x160` default. Its
-normal surface contains only "Updating FPVS Studio to version X... Please wait..." and
-an installation progress bar with a visible percentage. The target version comes from
-the installation handoff, not the running helper's version. Preparation stays animated;
-both patch and full setup report actual Inno installation progress to the window. The
+The download bar shows the percentage from received bytes and animates a highlight
+within the filled portion. Work without a percentage shows a moving segment. With
+system animations disabled, the highlight is hidden and the activity segment stays still.
+
+The managed install-progress dialog has a `480x140` minimum and `560x160` default.
+It shows **Preparing installation** until setup takes over, then **Installing version X**.
+The target version comes from the installation handoff. Both
+patch and full setup report actual Inno installation progress with a solid fill. The
 percentage stops at 99% until setup exits successfully, registration is verified and
 Studio restarts; 100% means the managed update succeeded. Older setup builds without
-progress reporting remain animated. No elapsed-time percentage or ETA is invented.
-Error details and
-action buttons remain hidden during installation. Failure expands the dialog to a
+progress reporting use the activity segment. Error details and action buttons remain
+hidden during installation. Failure expands the dialog to a
 `480x300` minimum and `560x340` default, with a plain-language cause/recovery message.
 **Show Details** reveals the read-only scrolling diagnostics and expands the height
 to at least 440 pixels; **Hide Details** hides technical text again.
@@ -2038,7 +2040,9 @@ Updater visible/manual smoke (run only in an approved visible Windows session):
 2. Using controlled offline callbacks (as in `tests/gui/test_update_dialog.py`), exercise
    current, newer/trusted, newer/missing-digest, busy, canceled, and failed states. A
    missing digest must disable Download and Install while preserving the newer-version copy.
-   Verify progress beyond 2 GiB with synthetic byte counts, not a large real download.
+   Use synthetic byte counts beyond 2 GiB to check the percentage and moving highlight
+   in both themes. Disable Windows animation effects and confirm the percentage still
+   updates and work without a percentage shows a stationary segment.
 3. Hold fake metadata/download/verification work open, then use Close, X, and Escape.
    Check that cancellation is visible, controls stay responsive, and the dialog closes
    only after worker completion. Repeat with application quit, last-window closure,
@@ -2054,8 +2058,11 @@ Updater visible/manual smoke (run only in an approved visible Windows session):
    Check the separate repair lookup and combined Download and Install action, same-version
    full repair, unavailable metadata, package progress, and all button
    labels without clipping. Close before deferred startup and while work is pending.
-6. Exercise the independent apply dialog at `620x340` and `700x380` with fake callbacks.
-   Check long failure details, waiting/cancellation, success, and the repair transition.
+6. Exercise the independent apply dialog at `480x140` and `560x160` with fake callbacks.
+   Check the preparation heading, the change to **Installing version X** at commitment,
+   and the solid installation bar. Simulate 99% and confirm 100% appears
+   only on success. At `480x300` and `560x340`, check long failure details and the repair
+   transition. Check cancellation before commitment.
    Simulate setup commitment before the GUI receives its phase signal, then cancel and
    return a failed setup result: it must show failure/repair and never claim cancellation
    before installation. Do not execute a real installer for this GUI check.
