@@ -20,6 +20,7 @@ from fpvs_studio.core.library_origin import (
     MANAGED_LIBRARY_SERVICE_URL,
     LibraryOriginError,
     LibraryProjectOrigin,
+    LibraryScope,
 )
 from fpvs_studio.core.project_bundle import (
     ProjectBundleError,
@@ -65,8 +66,9 @@ class LibraryController(QObject):
         self._review_project = review_project
         self.dialog: LibraryDialog | None = None
         self._job: UpdateJob | None = None
+        self._catalog_jobs: dict[LibraryScope, UpdateJob] = {}
         self._importing = False
-        self._install_item: LibraryItem | None = None
+        self._install_item: tuple[LibraryItem, LibraryScope] | None = None
         self._closing = False
         self._lifecycle = update_lifecycle(app)
         self._lifecycle.shutdown_started.connect(self._shutdown)
@@ -74,6 +76,7 @@ class LibraryController(QObject):
     def show(self) -> None:
         if self._lifecycle.is_shutting_down or self._importing:
             return
+        was_visible = self.dialog is not None and self.dialog.isVisible()
         if self.dialog is None:
             self.dialog = LibraryDialog(
                 openfpvs=self.client.service_url == MANAGED_LIBRARY_SERVICE_URL,
@@ -84,11 +87,12 @@ class LibraryController(QObject):
         self.dialog.show()
         self.dialog.raise_()
         self.dialog.activateWindow()
-        if self._job is None:
-            self._start(
-                lambda _progress, _cancel: self.client.connection_info(),
+        if self._job is None and not was_visible:
+            if self.client.service_url == MANAGED_LIBRARY_SERVICE_URL:
+                self._refresh("public")
+            self._start_catalog(
+                "lab", lambda _progress, _cancel: self.client.connection_info(),
                 self._connection_ready,
-                "Reading this computer's library connection…",
             )
 
     def _view(self) -> LibraryDialog:
@@ -103,6 +107,7 @@ class LibraryController(QObject):
         *,
         downloading: bool = False,
         holds_download: bool = False,
+        scope: LibraryScope = "lab",
     ) -> None:
         if self._job is not None or self._lifecycle.is_shutting_down:
             return
@@ -119,7 +124,9 @@ class LibraryController(QObject):
             if outcome.error is not None or canceled:
                 if holds_download:
                     self.client.release_download()
-                if isinstance(outcome.error, LibraryAuthorizationError):
+                if downloading or holds_download:
+                    self._install_item = None
+                if scope == "lab" and isinstance(outcome.error, LibraryAuthorizationError):
                     self._view().set_connection(None)
                 message = "Operation canceled." if canceled else self._error(outcome.error)
                 self._view().set_busy(False, message)
@@ -134,6 +141,7 @@ class LibraryController(QObject):
                 # start an import after Close; keep successfully stored enrollment.
                 if downloading or holds_download:
                     self.client.release_download()
+                    self._install_item = None
                 self._view().set_busy(False, "Operation canceled.")
             else:
                 self._view().set_busy(False)
@@ -143,37 +151,62 @@ class LibraryController(QObject):
 
         job.finished.connect(finished)
 
+    def _start_catalog(
+        self, scope: LibraryScope, callback: UpdateCallback, completed: Callable[[object], None],
+    ) -> None:
+        if scope in self._catalog_jobs or self._lifecycle.is_shutting_down:
+            return
+        view = self._view()
+        view.set_catalog_state(scope, loading=True)
+        job = self._lifecycle.start_task(callback)
+        self._catalog_jobs[scope] = job
+
+        def finished(result: object) -> None:
+            if self._catalog_jobs.get(scope) is not job:
+                return
+            del self._catalog_jobs[scope]
+            outcome = cast(UpdateTaskResult, result)
+            view.set_catalog_state(scope)
+            if outcome.cancelled or self._closing or self._lifecycle.is_shutting_down:
+                return
+            if outcome.error is not None:
+                if scope == "public":
+                    view.set_public_catalog(None)
+                else:
+                    if isinstance(outcome.error, LibraryAuthorizationError):
+                        view.set_connection(None)
+                    view.set_catalog(None)
+                view.set_catalog_state(scope, error=self._error(outcome.error))
+                return
+            completed(outcome.value)
+
+        job.finished.connect(finished)
+
     def _connection_ready(self, value: object) -> None:
         connection = cast(LibraryConnection | None, value)
         self._view().set_connection(connection)
         if connection is not None:
-            self._refresh()
+            self._refresh("lab")
 
-    def _refresh(self) -> None:
-        self._view().set_catalog(None)
-        self._view().set_installations(None, self.client.service_url)
+    def _refresh(self, scope: LibraryScope) -> None:
         root = self._studio_root()
 
         def refresh(
             _progress: ProgressReporter, cancel: Event,
         ) -> tuple[LibraryCatalog, tuple[InstalledLibraryProject, ...]]:
-            catalog = self.client.catalog(cancel_event=cancel)
+            load = self.client.public_catalog if scope == "public" else self.client.catalog
+            catalog = load(cancel_event=cancel)
             return catalog, scan_library_projects(root, cancel_event=cancel)
 
-        self._start(
-            refresh,
-            self._catalog_ready,
-            "Loading available experiments…",
-        )
+        self._start_catalog(scope, refresh, lambda value: self._catalog_ready(scope, value))
 
-    def _catalog_ready(self, value: object) -> None:
+    def _catalog_ready(self, scope: LibraryScope, value: object) -> None:
         catalog, projects = cast(tuple[LibraryCatalog, tuple[InstalledLibraryProject, ...]], value)
         self._view().set_installations(projects, self.client.service_url)
-        self._view().set_catalog(catalog)
-        self._view().status_label.setText(
-            "" if catalog.items
-            else "Your lab has not published any experiments yet."
-        )
+        if scope == "public":
+            self._view().set_public_catalog(catalog)
+        else:
+            self._view().set_catalog(catalog)
 
     def _action(self, action: str) -> None:
         if action == "cancel":
@@ -184,6 +217,8 @@ class LibraryController(QObject):
             return
         if self._job is not None or self._importing:
             return
+        if action in {"connect", "disconnect", "install"} and "lab" in self._catalog_jobs:
+            return
         if action == "connect":
             code = self._view().code_edit.text().strip()
             name = self._view().device_edit.text().strip()
@@ -193,7 +228,9 @@ class LibraryController(QObject):
                 "Connecting this computer…",
             )
         elif action == "refresh":
-            self._refresh()
+            self._refresh("lab")
+        elif action == "refresh-public" and self.client.service_url == MANAGED_LIBRARY_SERVICE_URL:
+            self._refresh("public")
         elif action == "disconnect":
             self._start(
                 lambda _progress, cancel: self.client.disconnect(cancel_event=cancel),
@@ -204,35 +241,46 @@ class LibraryController(QObject):
             item = self._view().selected_item()
             if item is None or not item.compatible or not self._view().can_download:
                 return
-            self._install_item = item
+            scope = self._view().selected_scope()
+            self._install_item = (item, scope)
             root = self._studio_root()
             self._start(
                 lambda progress, cancel: download_library_install(
                     self.client, item, root,
+                    scope=scope,
                     cancel_event=cancel,
                     progress_callback=progress,
                 ),
                 self._downloaded,
                 "Checking installed projects before downloading…",
                 downloading=True,
+                scope=scope,
             )
 
     def _disconnected(self, _value: object) -> None:
         self._view().set_connection(None)
-        self._view().status_label.setText(
-            "Disconnected. Experiments already installed remain available offline."
+        self._view().set_catalog_state(
+            "lab", error="Disconnected. Experiments already installed remain available offline.",
         )
+        target = self._view().connect_toggle
+        if target.isVisible():
+            target.setFocus()
+        else:
+            self._view().code_edit.setFocus()
 
     def _downloaded(self, value: object) -> None:
         if isinstance(value, LibraryInstallStatus):
+            assert self._install_item is not None
+            _item, scope = self._install_item
             self._install_item = None
             if value.state == "installed":
-                self._refresh()
+                self._refresh(scope)
             elif value.project is not None:
                 self._view().hide()
                 self._review_project(value.project.root)
             return
         path = cast(Path, value)
+        assert self._install_item is not None
         # Archive-directory and manifest parsing can be substantial. Keep this work
         # off the GUI thread and retain the payload lease until review/import ends.
         self._start(
@@ -240,6 +288,7 @@ class LibraryController(QObject):
             lambda manifest: self._review_ready(path, cast(ProjectBundleManifest, manifest)),
             "Reading experiment details for review…",
             holds_download=True,
+            scope=self._install_item[1],
         )
 
     def _review_ready(self, path: Path, manifest: ProjectBundleManifest) -> None:
@@ -248,11 +297,12 @@ class LibraryController(QObject):
         self._view().hide()
         try:
             assert self._install_item is not None
-            item = self._install_item
+            item, scope = self._install_item
             origin = LibraryProjectOrigin(
                 service_url=self.client.service_url, item_id=item.item_id,
                 installed_version=item.version, bundle_sha256=item.sha256,
                 local_project_id=manifest.project.project_id,
+                scope=scope,
             )
             self._import_bundle(path, manifest, origin, self._import_finished)
         except Exception as error:
@@ -285,11 +335,13 @@ class LibraryController(QObject):
 
     def _close(self) -> None:
         self._closing = True
+        for job in self._catalog_jobs.values():
+            job.cancel()
+        self._catalog_jobs.clear()
         self._action("cancel")
 
     def _shutdown(self) -> None:
-        self._closing = True
-        self._action("cancel")
+        self._close()
 
     @staticmethod
     def _error(error: Exception | None) -> str:

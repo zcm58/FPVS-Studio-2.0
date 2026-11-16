@@ -12,7 +12,11 @@ import pytest
 from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryCatalog, LibraryItem
-from fpvs_studio.library.project_updates import check_project_update, select_project_update
+from fpvs_studio.library.project_updates import (
+    check_project_update,
+    project_link_choices,
+    select_project_update,
+)
 
 
 @pytest.fixture
@@ -34,7 +38,8 @@ def discovery():
 
     checked = namedtuple(
         "Checked",
-        "result catalog can_download_separately reporting_error reporting_notice error_details",
+        "result link_choices can_download_separately reporting_error reporting_notice "
+        "error_details",
         defaults=[None, True, "", "", ""],
     )
     # Inject a fake under the source's imported application symbol. No Qt import
@@ -216,6 +221,7 @@ def catalog(*items):
 
 class Client:
     service_url = "https://library.example.test"
+    supports_public = False
 
     def __init__(self, result=None, *, connected=True):
         self.result = result or catalog(item("1.1.0"))
@@ -231,6 +237,66 @@ class Client:
         if isinstance(self.result, Exception):
             raise self.result
         return self.result
+
+
+class PublicClient(Client):
+    service_url = "https://openfpvs.com"
+    supports_public = True
+
+    def __init__(self, public_result, **kwargs):
+        super().__init__(**kwargs)
+        self.public_result = public_result
+
+    def public_catalog(self, *, cancel_event=None):
+        self.calls.append("public catalog")
+        if isinstance(self.public_result, Exception):
+            raise self.public_result
+        return self.public_result
+
+
+def test_public_receipt_checks_versions_without_reading_lab_enrollment():
+    client = PublicClient(catalog(item("1.1.0")), connected=False)
+    receipt = origin(service_url=client.service_url, scope="public")
+    result = check_project_update(client, receipt)
+    assert result.status == "update_available"
+    assert result.origin == receipt
+    assert result.can_install
+    assert client.calls == ["public catalog"]
+
+
+def test_removed_public_release_does_not_fall_back_to_lab_catalog():
+    client = PublicClient(catalog())
+    result = check_project_update(client, origin(service_url=client.service_url, scope="public"))
+    assert result.status == "unavailable"
+    assert not result.can_install
+    assert client.calls == ["public catalog"]
+
+
+def test_link_choices_preserve_public_when_lab_credential_fails():
+    release = item("1.1.0")
+    client = PublicClient(catalog(release), result=LibraryAuthorizationError("Access revoked."))
+    choices = project_link_choices(client)
+    assert choices.items == (release,)
+    assert choices.scope_for(release) == "public"
+    assert choices.errors == ("Lab projects: Access revoked.",)
+
+
+def test_link_choices_preserve_lab_when_public_catalog_fails():
+    release = item("1.1.0")
+    client = PublicClient(LibraryError("Offline."), result=catalog(release))
+    choices = project_link_choices(client)
+    assert choices.items == (release,)
+    assert choices.scope_for(release) == "lab"
+    assert choices.errors == ("Public projects: Offline.",)
+
+
+def test_link_choices_show_dual_listed_releases_once():
+    release, old_release = item("1.1.0"), item("1.0.0")
+    client = PublicClient(catalog(release), result=catalog(release, old_release))
+    choices = project_link_choices(client)
+    assert choices.items == (release, old_release)
+    assert choices.scope_for(release) == "public"
+    assert choices.scope_for(old_release) == "lab"
 
 
 def test_selects_newest_semantic_version_when_installed_version_was_withdrawn():

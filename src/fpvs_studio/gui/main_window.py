@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QProgressDialog,
+    QPushButton,
     QStackedWidget,
     QStatusBar,
     QWidget,
@@ -35,7 +36,6 @@ from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleExportStage,
-    BundleImportStage,
     ProjectBundleManifest,
     project_bundle_filename,
 )
@@ -47,7 +47,7 @@ from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.action_palette import ActionEntry, ActionPaletteDialog
 from fpvs_studio.gui.attentional_blink_data_dialog import AttentionalBlinkDataDialog
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
-from fpvs_studio.gui.components import StatusBadgeLabel, apply_studio_theme
+from fpvs_studio.gui.components import StatusBadgeLabel, apply_studio_theme, mark_secondary_action
 from fpvs_studio.gui.condition_figure_dialog import ConditionFigureDialog
 from fpvs_studio.gui.condition_recovery_dialog import ConditionRecoveryController
 from fpvs_studio.gui.document import ProjectDocument
@@ -64,6 +64,7 @@ from fpvs_studio.gui.processing_page import (
     BundleExportProcessingPage,
     BundleExportResultPage,
     BundleImportProcessingPage,
+    ImportProcessingStage,
 )
 from fpvs_studio.gui.recording_dialog import configure_brainproducts_for_launch
 from fpvs_studio.gui.refresh_recommendation_dialog import check_windows_refresh
@@ -210,6 +211,7 @@ class StudioMainWindow(QMainWindow):
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
         self._bundle_export_result_page: BundleExportResultPage | None = None
         self._bundle_import_processing_page: BundleImportProcessingPage | None = None
+        self._bundle_import_error_close: QPushButton | None = None
         self._fixation_cross_data_dialog: FixationCrossDataDialog | None = None
         self._attentional_blink_data_dialog: AttentionalBlinkDataDialog | None = None
         self._action_palette: ActionPaletteDialog | None = None
@@ -372,6 +374,15 @@ class StudioMainWindow(QMainWindow):
     def bundle_import_processing_page(self) -> BundleImportProcessingPage:
         if self._bundle_import_processing_page is None:
             page = BundleImportProcessingPage(parent=self)
+            close_button = QPushButton("Close", page)
+            close_button.setObjectName("bundle_import_error_close")
+            mark_secondary_action(close_button)
+            close_button.hide()
+            close_button.clicked.connect(
+                lambda: self.finish_bundle_import_processing(restore_previous=True)
+            )
+            page.footer_layout.addWidget(close_button)
+            self._bundle_import_error_close = close_button
             self._bundle_import_processing_page = page
             self.main_stack.addWidget(page)
         return self._bundle_import_processing_page
@@ -1657,29 +1668,39 @@ class StudioMainWindow(QMainWindow):
         self._bundle_import_processing_active = True
         self._bundle_import_updating_current = updating_current
         self._condition_recovery.close_dialog()
-        self.bundle_import_processing_page.reset_steps()
-        self.bundle_import_processing_page.set_transfer_context(
+        page = self.bundle_import_processing_page
+        page.set_update_mode(updating_current)
+        page.reset_steps()
+        page.set_transfer_context(
             title=f"Updating {project_name}" if updating_current else f"Importing {project_name}",
-            source_label="Source",
+            source_label="Experiment file",
             source_path=bundle_path,
             destination_label="Current project" if updating_current else "Destination root",
             destination_path=root_dir,
         )
-        self.bundle_import_processing_page.set_stage("verify")
-        self.bundle_import_processing_page.start()
+        if not updating_current:
+            page.set_stage("verify")
+        page.start()
         self._set_home_chrome_visible(True, status_visible=True)
-        self.main_stack.setCurrentWidget(self.bundle_import_processing_page)
-        self.statusBar().showMessage(
-            "Updating current project..." if updating_current else
-            "Importing FPVS Studio project bundle..."
-        )
+        self.main_stack.setCurrentWidget(page)
+        self.statusBar().clearMessage()
         self._set_bundle_processing_busy(True)
 
-    def set_bundle_import_stage(self, stage: BundleImportStage) -> None:
+    def set_bundle_import_stage(self, stage: ImportProcessingStage) -> None:
         self.bundle_import_processing_page.set_stage(stage)
+
+    def show_bundle_import_error(
+        self, message: str, show_details: Callable[[QWidget], None],
+    ) -> None:
+        self.bundle_import_processing_page.set_error(message, show_details)
+        assert self._bundle_import_error_close is not None
+        self._bundle_import_error_close.show()
+        self._bundle_import_error_close.setFocus()
 
     def finish_bundle_import_processing(self, *, restore_previous: bool) -> None:
         self.bundle_import_processing_page.stop()
+        if self._bundle_import_error_close is not None:
+            self._bundle_import_error_close.hide()
         self._bundle_import_processing_active = False
         self._bundle_import_updating_current = False
         self._set_bundle_processing_busy(False)
@@ -1996,19 +2017,22 @@ class StudioMainWindow(QMainWindow):
             event.ignore()
             return
         if self._bundle_import_processing_active:
-            QMessageBox.information(
-                self,
-                "Project Update In Progress" if self._bundle_import_updating_current else
-                "Import In Progress",
-                (
-                    "Wait for the current project update to finish before closing."
-                    if self._bundle_import_updating_current else
-                    "FPVS Studio is still setting up the imported project. "
-                    "Please wait for the import to finish before closing."
-                ),
-            )
-            event.ignore()
-            return
+            close_button = self._bundle_import_error_close
+            if close_button is not None and close_button.isVisible():
+                self.finish_bundle_import_processing(restore_previous=True)
+            else:
+                QMessageBox.information(
+                    self,
+                    "Project Update In Progress" if self._bundle_import_updating_current else
+                    "Import In Progress",
+                    (
+                        "Wait for the current project update to finish before closing."
+                        if self._bundle_import_updating_current else
+                        "Wait for the project import to finish before closing."
+                    ),
+                )
+                event.ignore()
+                return
         if not self._allow_project_handoff_during_fixation_load():
             event.ignore()
             return

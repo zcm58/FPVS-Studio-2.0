@@ -11,6 +11,7 @@ from packaging.version import Version
 from fpvs_studio import __version__
 from fpvs_studio.core.library_origin import (
     LibraryProjectOrigin,
+    LibraryScope,
     canonical_library_service_url,
 )
 from fpvs_studio.library.cache import check_cancel
@@ -36,6 +37,49 @@ class ProjectUpdateResult:
         return self.latest_item is not None and self.status in {
             "update_available", "version_unknown",
         }
+
+
+@dataclass(frozen=True)
+class ProjectLinkChoices:
+    public: tuple[LibraryItem, ...] = ()
+    lab: tuple[LibraryItem, ...] = ()
+    errors: tuple[str, ...] = ()
+
+    @property
+    def items(self) -> tuple[LibraryItem, ...]:
+        public_releases = {(item.item_id, item.version) for item in self.public}
+        return self.public + tuple(
+            item for item in self.lab if (item.item_id, item.version) not in public_releases
+        )
+
+    def scope_for(self, item: LibraryItem) -> LibraryScope:
+        return "public" if item in self.public else "lab"
+
+
+def project_link_choices(
+    client: LibraryClient, *, cancel_event: Event | None = None,
+) -> ProjectLinkChoices:
+    """Make explicit links available in either scope, even if the other fails."""
+    public: tuple[LibraryItem, ...] = ()
+    lab: tuple[LibraryItem, ...] = ()
+    errors = []
+    if client.supports_public:
+        try:
+            public = tuple(client.public_catalog(cancel_event=cancel_event).items)
+        except LibraryCancelled:
+            raise
+        except LibraryError as error:
+            errors.append(f"Public projects: {error}")
+    check_cancel(cancel_event)
+    try:
+        if client.connection_info() is not None:
+            lab = tuple(client.catalog(cancel_event=cancel_event).items)
+    except LibraryCancelled:
+        raise
+    except LibraryError as error:
+        errors.append(f"Lab projects: {error}")
+    check_cancel(cancel_event)
+    return ProjectLinkChoices(public, lab, tuple(errors))
 
 
 def select_project_update(
@@ -109,11 +153,15 @@ def check_project_update(
             "unavailable", origin, message="This project belongs to a different Library service.",
         )
     try:
-        if client.connection_info() is None:
-            return ProjectUpdateResult(
-                "not_connected", origin, message="Connect this computer to check Library versions.",
-            )
-        catalog = client.catalog(cancel_event=cancel_event)
+        if origin.scope == "public":
+            catalog = client.public_catalog(cancel_event=cancel_event)
+        else:
+            if client.connection_info() is None:
+                return ProjectUpdateResult(
+                    "not_connected", origin,
+                    message="Connect this computer to check Library versions.",
+                )
+            catalog = client.catalog(cancel_event=cancel_event)
         check_cancel(cancel_event)
         return select_project_update(origin, catalog)
     except LibraryCancelled:

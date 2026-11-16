@@ -4,11 +4,20 @@ from __future__ import annotations
 
 import stat
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from urllib.parse import urlsplit
 
 from packaging.version import InvalidVersion, Version
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    ValidationError,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from fpvs_studio.core.paths import filesystem_path, validate_project_id
 from fpvs_studio.core.serialization import atomic_text_write
@@ -17,6 +26,7 @@ ORIGIN_DIRECTORY = ".fpvs-library"
 ORIGIN_FILENAME = "project-origin.json"
 MAX_ORIGIN_BYTES = 16 * 1024
 MANAGED_LIBRARY_SERVICE_URL = "https://openfpvs.com"
+LibraryScope = Literal["lab", "public"]
 _PREVIOUS_MANAGED_LIBRARY_SERVICE_URLS = frozenset({
     "https://fpvs-studio-library.fpvs-studio-zcm58.workers.dev",
     "https://fpvs.zack-murphy.com",
@@ -49,6 +59,7 @@ class LibraryProjectOrigin(BaseModel):
         min_length=1, max_length=255, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$",
     )
     auto_check: bool = True
+    scope: LibraryScope = "lab"
 
     @field_validator("service_url")
     @classmethod
@@ -81,6 +92,23 @@ class LibraryProjectOrigin(BaseModel):
     def validate_local_id(cls, value: str) -> str:
         validate_project_id(value)
         return value
+
+    @model_validator(mode="after")
+    def validate_public_service(self) -> LibraryProjectOrigin:
+        if (
+            self.scope == "public"
+            and canonical_library_service_url(self.service_url) != MANAGED_LIBRARY_SERVICE_URL
+        ):
+            raise ValueError("Public Library project origins must point to OpenFPVS.")
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_scope(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Preserve the existing lab receipt and update journal shape."""
+        payload: dict[str, Any] = handler(self)
+        if self.scope == "lab":
+            payload.pop("scope", None)
+        return payload
 
 
 def _origin_path(project_root: Path) -> Path:

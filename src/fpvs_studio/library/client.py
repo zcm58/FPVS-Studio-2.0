@@ -1,4 +1,4 @@
-"""Cancelable fixed-origin private Library transport and enrollment orchestration."""
+"""Cancelable fixed-origin Library transport and lab enrollment orchestration."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from pydantic import ValidationError
 from fpvs_studio import __version__
 from fpvs_studio.core.library_origin import (
     MANAGED_LIBRARY_SERVICE_URL,
+    LibraryScope,
     canonical_library_service_url,
 )
 from fpvs_studio.library.cache import CHUNK_BYTES, DownloadCache, check_cancel, default_cache_root
@@ -46,6 +47,7 @@ DEFAULT_LIBRARY_SERVICE_URL = MANAGED_LIBRARY_SERVICE_URL
 NETWORK_TIMEOUT_SECONDS = 10
 METADATA_TOTAL_SECONDS = 30
 DOWNLOAD_TOTAL_SECONDS = 30 * 60
+_PUBLIC_API = "/public-library/v1"
 _VIEW_ONLY_MESSAGE = "Your lab has view-only Library access. Downloads are not permitted."
 ProgressCallback = Callable[[int, int], None]
 CredentialOwner = Literal["library", "project_upload"]
@@ -79,8 +81,10 @@ def _origin(value: str) -> str:
     return value.rstrip("/")
 
 
-def _status_error(status: int) -> LibraryError:
+def _status_error(status: int, *, public: bool = False) -> LibraryError:
     if status in (401, 403):
+        if public:
+            return LibraryError("The Public Experiment Library could not complete the request.")
         return LibraryAuthorizationError(
             "Library access was rejected. Check the connection code or reconnect this device."
         )
@@ -89,6 +93,8 @@ def _status_error(status: int) -> LibraryError:
     if status == 429:
         return LibraryError("Too many Library requests. Wait a minute and try again.")
     if status == 426:
+        if public:
+            return LibraryError("Update FPVS Studio to use the Public Experiment Library.")
         return LibraryError(
             "Update FPVS Studio, then reconnect to use the Experiment Library."
         )
@@ -116,6 +122,14 @@ class LibraryClient:
         return True
 
     @property
+    def supports_public(self) -> bool:
+        return self.service_url == MANAGED_LIBRARY_SERVICE_URL
+
+    def _require_public_service(self) -> None:
+        if not self.supports_public:
+            raise LibraryError("The Public Experiment Library is available only on OpenFPVS.")
+
+    @property
     def store(self) -> CredentialStore:
         if self._store is None:
             self._store = credential_store(self.service_url)
@@ -141,6 +155,7 @@ class LibraryClient:
         credential_owner: CredentialOwner = "library",
     ) -> Iterator[Any]:
         url = self.service_url + path
+        public = path.startswith(_PUBLIC_API + "/")
         headers = {
             "Accept": "application/octet-stream"
             if path.endswith("/download")
@@ -182,7 +197,7 @@ class LibraryClient:
                 # A revoked token cannot enroll again. Keep failed invitation tokens
                 # pending, but remove rejected device access so reconnect starts fresh.
                 self.store.delete()
-            raise _status_error(status) from None
+            raise _status_error(status, public=public) from None
         except (URLError, TimeoutError, OSError):
             raise LibraryError(
                 "Could not reach the Experiment Library. Check your connection and retry."
@@ -191,7 +206,7 @@ class LibraryClient:
             if response.geturl() != url:
                 raise LibraryError("The Library service returned an unexpected location.")
             if not 200 <= response.status < 300:
-                raise _status_error(response.status)
+                raise _status_error(response.status, public=public)
             if response.headers.get("Content-Encoding", "identity") != "identity":
                 raise LibraryError("The Library service returned unsupported compressed transport.")
             yield response
@@ -344,13 +359,19 @@ class LibraryClient:
         with self._operation(cancel_event):
             return self._read_catalog(self._credential(), cancel_event)
 
+    def public_catalog(self, *, cancel_event: Event | None = None) -> LibraryCatalog:
+        """List public experiments without inspecting storage or device credentials."""
+        self._require_public_service()
+        return self._read_catalog(None, cancel_event)
+
     def _read_catalog(
-        self, credential: DeviceCredential, cancel_event: Event | None,
+        self, credential: DeviceCredential | None, cancel_event: Event | None,
     ) -> LibraryCatalog:
+        api = _PUBLIC_API if credential is None else "/v2"
         raw = self._json_request(
             "GET",
-            "/v2/catalog?kind=experiment",
-            token=credential.token,
+            f"{api}/catalog?kind=experiment",
+            token=credential.token if credential is not None else "",
             cancel_event=cancel_event,
         )
         try:
@@ -359,6 +380,12 @@ class LibraryClient:
             raise LibraryError(
                 "The Library catalog uses invalid or unsupported metadata."
             ) from None
+        if credential is None:
+            if catalog.access_level != "download" or catalog.lab_name is not None:
+                raise LibraryError(
+                    "The Public Experiment Library returned invalid access metadata."
+                )
+            return catalog
         assert credential.connection is not None
         connection = credential.connection.model_copy(update={
             "library_name": catalog.library_name,
@@ -373,6 +400,7 @@ class LibraryClient:
         self,
         item: LibraryItem,
         *,
+        scope: LibraryScope = "lab",
         cancel_event: Event | None = None,
         progress_callback: ProgressCallback | None = None,
     ) -> Path:
@@ -386,12 +414,19 @@ class LibraryClient:
             ) from None
         if not item.compatible:
             raise LibraryError(item.compatibility_message)
+        public = scope == "public"
+        if public:
+            self._require_public_service()
         require_pinned_origin(self.service_url)
         self._cache.acquire()
         try:
-            credential = self._credential()
-            if credential.connection is not None and credential.connection.access_level == "view":
+            credential = None if public else self._credential()
+            connection = credential.connection if credential is not None else None
+            if connection is not None and connection.access_level == "view":
                 raise LibraryError(_VIEW_ONLY_MESSAGE)
+            token = credential.token if credential is not None else ""
+            api = _PUBLIC_API if public else "/v2"
+            item_path = f"{api}/items/{item.item_id}/versions/{item.version}"
             retained = self._cache.verified(item, cancel_event)
             if retained is not None:
                 # Confirm current authorization/withdrawal before reusing retained content.
@@ -403,8 +438,8 @@ class LibraryClient:
                         "This Library item changed or was withdrawn. Refresh the catalog."
                     )
                 evidence = self._json_request(
-                    "GET", f"/v2/items/{item.item_id}/versions/{item.version}/provenance",
-                    token=credential.token, cancel_event=cancel_event, limit=8192,
+                    "GET", f"{item_path}/provenance",
+                    token=token, cancel_event=cancel_event, limit=8192,
                 )
                 if not isinstance(evidence, dict) or set(evidence) != {
                     "schema_version", "key_id", "proof",
@@ -418,10 +453,9 @@ class LibraryClient:
                 return retained
             self._cache.clear()
             deadline = time.monotonic() + DOWNLOAD_TOTAL_SECONDS
-            path = f"/v2/items/{item.item_id}/versions/{item.version}/download"
             digest, received = hashlib.sha256(), 0
             with self._response(
-                "GET", path, token=credential.token, cancel_event=cancel_event,
+                "GET", f"{item_path}/download", token=token, cancel_event=cancel_event,
             ) as response:
                 declared = response.headers.get("Content-Length")
                 if declared is not None and declared != str(item.size_bytes):

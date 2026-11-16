@@ -337,6 +337,7 @@ def update_project_bundle(
             canonical_library_service_url(previous.service_url)
             != canonical_library_service_url(library_origin.service_url)
             or previous.item_id != library_origin.item_id
+            or previous.scope != library_origin.scope
             or library_origin.installed_version is None
             or library_origin.bundle_sha256 is None
             or Version(library_origin.installed_version)

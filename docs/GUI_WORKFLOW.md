@@ -1613,11 +1613,17 @@ the review imports a
 `.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
 verifies archive paths and hashes in an app-owned staging folder, resolves
 project-folder collisions, and shows staged verify/base-stimuli/oddball-stimuli/project
-setup progress. Imports started from an open project use the embedded processing page;
-imports started from Welcome use the same page inside a modal progress dialog. The
-progress surface uses a single frame with source/destination and activity sections so
-paths, status copy, and all four stage labels remain visible. Export progress follows the
-same layout. The export result shows the file, contents and path actions in one frame. The
+setup progress. Local imports from an open project use the embedded processing page.
+Welcome and Library imports use the page inside a modal progress dialog. The import
+page shows one row per worker stage. The first row reads **Verifying experiment files…**
+while active and **Experiment files validated** when complete. **File locations** reveals
+the original file and destination with access to the full paths. Marker transitions
+follow worker events and the motion preference. **Cancel setup** in a Library import
+disables the action while the worker stops. Import failures keep the failed stage and
+  recovery guidance visible until **Close**. **Error details** opens the diagnostic
+  and bug reporting action on demand. Success hands off to display confirmation.
+In-place updates show the verification and commit events they receive. The export
+result shows the file, contents and path actions in one frame. The
 configured Studio root is persisted and loaded as an absolute path; import destinations
 never fall back to the application working directory. Bundle reads, collision checks
 and destination creation use the core Windows path adapter, including long source and
@@ -1625,6 +1631,11 @@ receiving paths; the returned project location retains the ordinary configured p
 The final folder rename retries brief Windows access/sharing locks for at most
 150 ms. It remains cancellable between attempts, never replaces an existing project,
 and reports persistent access failures without committing an incomplete import.
+In an approved visible session, check the import page in Light and Dark at `940x600`
+and `1040x680`. Tab through **File locations** and the available footer action, reveal
+a long source path, and test cancellation and a damaged file. Confirm the stage rows
+and error remain readable with reduced motion and that a successful import opens
+the display review.
 Opening project/manifest JSON, root-folder selection/preferences, recent projects,
 restart discovery, template storage and image-readiness signatures reuse that adapter.
 Disk-full and permission errors identify the storage action needed to retry.

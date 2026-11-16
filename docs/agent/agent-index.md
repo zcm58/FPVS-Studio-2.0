@@ -23,7 +23,7 @@ owners and targeted tests.
 | `engine` | Rendering, task-screen fitting, response pointers, graphics lifetime and frame playback | `src/fpvs_studio/engines/AGENTS.md` | Relevant `docs/ENGINE_INTERFACE.md` section |
 | `triggers` | Hardware adapters, local UDP markers, port discovery, recovery, Windows write completion and offline Unicorn timing | `src/fpvs_studio/triggers/AGENTS.md` or `src/fpvs_studio/tools/AGENTS.md` for offline timing | [Recording](../RUNTIME_EXECUTION.md#trigger-behavior), [Trigger Tester](../GUI_WORKFLOW.md#trigger-tester) or [Unicorn timing report](../RUNTIME_EXECUTION.md#unicorn-recorder-timing-report) |
 | `updates` | Source/platform routing, updater protocol, cache, downloads and install handoff | `src/fpvs_studio/updates/AGENTS.md` | `docs/PACKAGING.md#in-app-update-flow` |
-| `library` | Catalog, enrollment, submissions and project updates | `src/fpvs_studio/library/AGENTS.md` | Relevant `docs/EXPERIMENT_LIBRARY.md` section |
+| `library` | Public and lab catalog, enrollment, verified downloads, submissions and project updates | `src/fpvs_studio/library/AGENTS.md` | Relevant `docs/EXPERIMENT_LIBRARY.md` section |
 | `data-sharing` | Consent, outbox, delivery and comparisons | `src/fpvs_studio/data_sharing/AGENTS.md` | Relevant `docs/DATA_SHARING.md` section |
 | `packaging` | Versions, builds, DLL origins, installers, patches and smoke | `packaging/AGENTS.md` | Relevant `docs/PACKAGING.md` section |
 

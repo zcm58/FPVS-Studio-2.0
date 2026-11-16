@@ -43,6 +43,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Project import progress](exec-plans/completed/import-progress-clarity.md)
+- [Public Experiment Library](exec-plans/completed/public-experiment-library.md)
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):
   added the authored rate and verified two fullscreen runs on the Lenovo's 60.020425 Hz signal.
 - [Image Equalizer](exec-plans/completed/image-equalizer.md): optional grayscale batch

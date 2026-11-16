@@ -21,7 +21,6 @@ from fpvs_studio.core.library_origin import (
     save_library_origin,
 )
 from fpvs_studio.core.project_bundle import (
-    BundleImportStage,
     ProjectBundleCancelled,
     ProjectBundleManifest,
     read_project_bundle_manifest,
@@ -35,6 +34,7 @@ from fpvs_studio.core.project_bundle_update import (
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.project_updates import inspect_project_update_reporting
 from fpvs_studio.gui.library_controller import ImportCallback
+from fpvs_studio.gui.processing_page import ImportProcessingStage
 from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
@@ -47,8 +47,12 @@ from fpvs_studio.gui.workers import ProgressSignalBridge
 from fpvs_studio.library.client import LibraryClient
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
 from fpvs_studio.library.installations import check_library_install, download_library_install
-from fpvs_studio.library.models import LibraryCatalog
-from fpvs_studio.library.project_updates import ProjectUpdateResult, check_project_update
+from fpvs_studio.library.project_updates import (
+    ProjectLinkChoices,
+    ProjectUpdateResult,
+    check_project_update,
+    project_link_choices,
+)
 from fpvs_studio.runtime.condition_recovery import ensure_project_update_recovery_ready
 from fpvs_studio.support.error_explanations import describe_error
 
@@ -61,7 +65,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class _Checked:
     result: ProjectUpdateResult
-    catalog: LibraryCatalog | None = None
+    link_choices: ProjectLinkChoices | None = None
     can_download_separately: bool = True
     reporting_error: str = ""
     reporting_notice: str = ""
@@ -99,6 +103,7 @@ class ProjectUpdateController(QObject):
         self._pending_check: tuple[StudioMainWindow, bool] | None = None
         self._result: ProjectUpdateResult | None = None
         self._checked_result: _Checked | None = None
+        self._link_options = ProjectLinkChoices()
         self._generation = 0
         self._importing = False
         self._separate_download_allowed = True
@@ -130,6 +135,7 @@ class ProjectUpdateController(QObject):
             self._last_backup = None
         self._result = None
         self._checked_result = None
+        self._link_options = ProjectLinkChoices()
         if self.dialog is not None and isValid(self.dialog):
             self.dialog.hide()
             self.dialog.deleteLater()
@@ -243,7 +249,7 @@ class ProjectUpdateController(QObject):
             else:
                 result = check_project_update(self.client, origin, automatic=automatic,
                                               cancel_event=cancel)
-            catalog = None
+            link_choices = None
             if result.can_install and result.latest_item is not None:
                 installed = check_library_install(
                     studio_root, self.client.service_url, result.latest_item, cancel_event=cancel,
@@ -254,8 +260,8 @@ class ProjectUpdateController(QObject):
                         result = ProjectUpdateResult(
                             "unavailable", origin, result.latest_item, installed.message,
                         )
-            if not automatic and origin is None and self.client.connection_info() is not None:
-                catalog = self.client.catalog(cancel_event=cancel)
+            if not automatic and origin is None:
+                link_choices = project_link_choices(self.client, cancel_event=cancel)
             if result.status == "update_available":
                 try:
                     ensure_project_update_recovery_ready(root, cancel_event=cancel)
@@ -272,7 +278,7 @@ class ProjectUpdateController(QObject):
                     reporting_error = describe_error("Project Update", error)
                     error_details.append(str(error))
             return _Checked(
-                result, catalog, separate_allowed, reporting_error, reporting_notice,
+                result, link_choices, separate_allowed, reporting_error, reporting_notice,
                 "\n".join(error_details),
             )
 
@@ -341,8 +347,9 @@ class ProjectUpdateController(QObject):
             and result.status == "current"
         ):
             message = f"Previous version backup: {self._last_backup[1]}"
+        link_errors = checked.link_choices.errors if checked.link_choices is not None else ()
         message = "\n".join(filter(None, (
-            message, checked.reporting_error, checked.reporting_notice,
+            message, checked.reporting_error, checked.reporting_notice, *link_errors,
         )))
         if self.dialog is not None:
             self.dialog.set_state(
@@ -358,8 +365,9 @@ class ProjectUpdateController(QObject):
             self.dialog.status_label.setToolTip(
                 f"{message}\n\nDetails: {checked.error_details}" if checked.error_details else "",
             )
-            if checked.catalog is not None:
-                self.dialog.set_link_items(checked.catalog.items)
+            if checked.link_choices is not None:
+                self._link_options = checked.link_choices
+                self.dialog.set_link_items(self._link_options.items)
         window = self._window
         if window is not None and self._current(window):
             window.set_project_update_notice(
@@ -393,14 +401,18 @@ class ProjectUpdateController(QObject):
                 self._save_origin(link=action == "link")
             elif action == "relink":
                 self._start(
-                    lambda _progress, cancel: self.client.catalog(cancel_event=cancel),
+                    lambda _progress, cancel: project_link_choices(
+                        self.client, cancel_event=cancel,
+                    ),
                     self._link_choices, "Loading Library experiments…",
                 )
 
     def _link_choices(self, value: object) -> None:
         if self.dialog is not None:
+            self._link_options = cast(ProjectLinkChoices, value)
             self.dialog.begin_linking()
-            self.dialog.set_link_items(cast(LibraryCatalog, value).items)
+            self.dialog.set_link_items(self._link_options.items)
+            self.dialog.set_busy(False, "\n".join(self._link_options.errors))
 
     def _save_origin(self, *, link: bool) -> None:
         window, dialog = self._window, self.dialog
@@ -416,6 +428,7 @@ class ProjectUpdateController(QObject):
                     installed_version=dialog.link_installed_version(), bundle_sha256=None,
                     local_project_id=window.document.project.meta.project_id,
                     auto_check=dialog.auto_check_enabled(),
+                    scope=self._link_options.scope_for(item),
                 )
             else:
                 if self._result is None or self._result.origin is None:
@@ -453,7 +466,7 @@ class ProjectUpdateController(QObject):
             progress: ProgressReporter, cancel: Event,
         ) -> tuple[Path, ProjectBundleManifest, LibraryProjectOrigin]:
             path = download_library_install(
-                self.client, item, root, update=True,
+                self.client, item, root, update=True, scope=previous_origin.scope,
                 cancel_event=cancel, progress_callback=progress,
             )
             if isinstance(path, LibraryInstallStatus):
@@ -463,7 +476,7 @@ class ProjectUpdateController(QObject):
                 service_url=self.client.service_url, item_id=item.item_id,
                 installed_version=item.version, bundle_sha256=item.sha256,
                 local_project_id=manifest.project.project_id,
-                auto_check=previous_origin.auto_check,
+                auto_check=previous_origin.auto_check, scope=previous_origin.scope,
             )
             return path, manifest, origin
 
@@ -489,17 +502,15 @@ class ProjectUpdateController(QObject):
             service_url=self.client.service_url, item_id=item.item_id,
             installed_version=item.version, bundle_sha256=item.sha256,
             local_project_id=window.document.project.meta.project_id,
-            auto_check=previous.auto_check,
+            auto_check=previous.auto_check, scope=previous.scope,
         )
         generation = self._generation
         bridge = ProgressSignalBridge(self)
         self._update_bridge = bridge
 
         def stage_changed(stage: str) -> None:
-            if self._current(window) and stage in {
-                "verify", "base", "oddball", "project", "complete",
-            }:
-                window.set_bundle_import_stage(cast(BundleImportStage, stage))
+            if self._current(window) and stage in {"verify", "commit"}:
+                window.set_bundle_import_stage(cast(ImportProcessingStage, stage))
 
         bridge.stage_changed.connect(stage_changed, Qt.ConnectionType.QueuedConnection)
         window.start_bundle_import_processing(
@@ -519,7 +530,9 @@ class ProjectUpdateController(QObject):
                 raise LibraryOriginError(
                     "The project's Library record changed. Check for updates again."
                 )
-            path = self.client.download(item, cancel_event=cancel, progress_callback=progress)
+            path = self.client.download(
+                item, scope=previous.scope, cancel_event=cancel, progress_callback=progress,
+            )
             def precommit() -> None:
                 nonlocal reporting
                 ensure_project_update_recovery_ready(root, cancel_event=cancel)
@@ -556,6 +569,7 @@ class ProjectUpdateController(QObject):
                     updated = completed.result
                     self._last_backup = (root, updated.backup_path)
                     if current:
+                        window.set_bundle_import_stage("complete")
                         self._apply_update(updated)
                         window.finish_bundle_import_processing(restore_previous=False)
                         window.show_home()

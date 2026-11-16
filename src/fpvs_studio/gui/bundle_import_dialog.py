@@ -172,8 +172,8 @@ class BundleImportProgressDialog(QDialog):
         self.cancel_button.setAutoDefault(False)
         mark_secondary_action(self.cancel_button)
         self.cancel_button.setVisible(on_cancel is not None)
-        self.cancel_button.clicked.connect(self._cancel)
-        layout.addWidget(self.cancel_button, 0, Qt.AlignmentFlag.AlignRight)
+        self.cancel_button.clicked.connect(self._footer_action)
+        self.page.footer_layout.addWidget(self.cancel_button)
         apply_studio_theme(self)
 
     def set_context(
@@ -185,7 +185,7 @@ class BundleImportProgressDialog(QDialog):
     ) -> None:
         self.page.set_transfer_context(
             title=f"Importing {project_name}",
-            source_label="Source",
+            source_label="Experiment file",
             source_path=bundle_path,
             destination_label="Destination root",
             destination_path=root_dir,
@@ -193,6 +193,9 @@ class BundleImportProgressDialog(QDialog):
 
     def start(self) -> None:
         self._import_active = True
+        self.cancel_button.setText("Cancel setup")
+        self.cancel_button.setEnabled(True)
+        self.cancel_button.setVisible(self._on_cancel is not None)
         self.page.reset_steps()
         self.page.set_stage("verify")
         self.page.start()
@@ -208,6 +211,16 @@ class BundleImportProgressDialog(QDialog):
         self.page.stop()
         self.close()
 
+    def set_error(
+        self, message: str, show_details: Callable[[QWidget], None] | None = None,
+    ) -> None:
+        self._import_active = False
+        self.page.set_error(message, show_details)
+        self.cancel_button.setText("Close")
+        self.cancel_button.setEnabled(True)
+        self.cancel_button.show()
+        self.cancel_button.setFocus()
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802
         if self._import_active:
             self._cancel()
@@ -221,8 +234,14 @@ class BundleImportProgressDialog(QDialog):
             return
         super().reject()
 
+    def _footer_action(self) -> None:
+        if self._import_active:
+            self._cancel()
+        else:
+            self.finish()
+
     def _cancel(self) -> None:
-        if self._on_cancel is not None and self._import_active:
-            self._on_cancel()
+        if self._on_cancel is not None and self._import_active and self.cancel_button.isEnabled():
             self.cancel_button.setEnabled(False)
-            self.cancel_button.setText("Finishing cancellation…")
+            self.page.set_canceling()
+            self._on_cancel()
