@@ -85,3 +85,18 @@ and the chosen target. No project schema, manifest or runtime changes.
   GUI-safe 180, documentation 13 and repository 88, with one Windows symlink-permission
   skip. No Image Equalizer assertion failed. All temporary GUI fixture originals and
   completed-output hashes were independently verified after the native batch run.
+
+## GUI polish, 2026-11-16
+
+- Replaced the nested page shell with a shared DialogHeader and one flat layout.
+  Folder actions sit above the table; status and footer share its margins. Preserved
+  all folder, processing, cancellation and output behavior.
+- Passed 180 GUI-focused checks, nine visible Qt cases and 13 documentation checks.
+  Layout coverage uses complete light/dark palettes, two long folder pairs, both
+  documented sizes and ready/busy/error/cancel/success states. The native Qt process
+  emitted the previously baseline-reproduced Windows `0x8001010d` diagnostic and
+  exited successfully with all assertions passing.
+- Direct visible review confirmed the light-theme populated layout at 960x640 and
+  dark-theme empty layout at 1120x720, at 100% Windows scaling. Keyboard focus remained
+  visible. No clipped controls or nested page frames remained. Processing was covered
+  by the real-worker batch/cancellation tests. Higher scaling and macOS were not checked.

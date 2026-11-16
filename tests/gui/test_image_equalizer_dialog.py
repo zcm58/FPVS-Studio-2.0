@@ -9,8 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import QApplication, QPushButton, QScrollArea
 from tests.gui.helpers import (
     ImmediateProgressTask,
     assert_visible_children_within_parent,
@@ -19,6 +18,7 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.gui import image_equalizer_dialog as gui
+from fpvs_studio.gui.packaged_smoke import _verification_palette
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 from fpvs_studio.preprocessing import equalization
@@ -115,15 +115,20 @@ def test_real_worker_batch_and_cancel_rollback(qtbot, live_dialog, tmp_path, mon
 
 @pytest.mark.parametrize("size", [(960, 640), (1120, 720)])
 @pytest.mark.parametrize("dark", [False, True])
-def test_states_fit_with_long_accessible_paths(qtbot, size, dark, monkeypatch):
+def test_states_fit_with_long_accessible_paths(qtbot, qapp, size, dark, monkeypatch, request):
+    original_palette = qapp.palette()
+    request.addfinalizer(lambda: qapp.setPalette(original_palette))
+    qapp.setPalette(_verification_palette(dark=dark))
     dialog = gui.ImageEqualizerDialog()
     qtbot.addWidget(dialog)
-    dialog.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     dialog.resize(*size)
     dialog.show()
     assert not dialog.run_button.isEnabled()
     long_path = Path("C:/Research/" + "Long experiment folder name/" * 10 + "Base")
-    dialog._pairs = [FolderPair(long_path, long_path.parent / "Equalized")]
+    dialog._pairs = [
+        FolderPair(long_path, long_path.parent / "Equalized"),
+        FolderPair(long_path.parent / "Oddball", long_path.parent / "Oddball-equalized"),
+    ]
     dialog._refresh_pairs()
     dialog.folder_table.selectRow(0)
     monkeypatch.setattr(gui, "_show_error_dialog", lambda *args: None)
@@ -145,6 +150,12 @@ def test_states_fit_with_long_accessible_paths(qtbot, size, dark, monkeypatch):
         QApplication.processEvents()
         assert dialog.size().toTuple() == size
         assert_visible_children_within_parent(dialog)
+        assert not dialog.findChildren(QScrollArea)
+        table = dialog.folder_table
+        assert table.x() == dialog.add_button.x() == dialog.status_label.x()
+        assert dialog.add_button.geometry().bottom() < table.y()
+        assert table.geometry().bottom() < dialog.status_label.y()
+        assert table.width() == dialog.width() - 48
         for button in dialog.findChildren(QPushButton):
             if button.isVisible():
                 assert button.contentsRect().width() >= button.fontMetrics().horizontalAdvance(
@@ -152,6 +163,9 @@ def test_states_fit_with_long_accessible_paths(qtbot, size, dark, monkeypatch):
                 )
         label = dialog.status_label
         assert label.height() >= label.heightForWidth(label.width())
+        assert dialog.summary_label.height() >= dialog.summary_label.heightForWidth(
+            dialog.summary_label.width(),
+        )
         assert dialog.folder_table.item(0, 0).toolTip() == str(long_path)
         assert dialog.folder_table.item(0, 0).data(Qt.ItemDataRole.AccessibleTextRole) == str(
             long_path,
