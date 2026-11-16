@@ -21,8 +21,8 @@ experiment is created and appears read-only on Project. Changing category requir
 creating a new experiment. Templates carry their own category and cannot change an
 experiment's category. Editing a template preserves that category and its cadence.
 
-The eight guided steps are Project, Conditions, Timing & Display, Session, Image Size,
-Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size
+The nine guided steps are Project, Demographics, Conditions, Timing, Display & Session,
+Image Size, Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size
 for native letter streams. Conditions handles identity, participant instructions/tasks,
 Base/Oddball image-folder selection and existing oddball word lists. Image selection
 has no previews or visual cycle editing. Edit Instructions opens a Save/Cancel text
@@ -32,6 +32,10 @@ Image intake/normalization occurs when advancing from Conditions. Word-list pres
 rates remain editable in Timing. Shared display, session, fixation and response
 surfaces retain their existing ownership. There is no guided Design section; native
 AB settings remain unchanged and its editor source is retained outside Setup.
+
+Optional Image Resizer and [Image Equalizer](product-specs/image-equalizer.md) preparation
+creates separate image copies before selecting them in Conditions. Externally prepared
+images and native word lists remain supported without that preparation step.
 
 The fixation cross is off by default. Users can enable it in Setup > Fixation;
 opening an existing project preserves its saved choice. Oddball defaults are unchanged.

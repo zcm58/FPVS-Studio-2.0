@@ -54,6 +54,7 @@ from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError, format_validation_report
 from fpvs_studio.gui.fixation_cross_data_dialog import FixationCrossDataDialog
 from fpvs_studio.gui.home_page import HomePage
+from fpvs_studio.gui.image_equalizer_dialog import ImageEqualizerDialog
 from fpvs_studio.gui.image_resizer_page import ImageResizerPage
 from fpvs_studio.gui.monitor_selection_dialog import (
     choose_experiment_display,
@@ -203,6 +204,7 @@ class StudioMainWindow(QMainWindow):
         self._project_update_reload_failed = False
         self._setup_wizard_page: SetupWizardPage | None = None
         self._image_resizer_page: ImageResizerPage | None = None
+        self._image_equalizer_dialog: ImageEqualizerDialog | None = None
         self._condition_figure_dialog: ConditionFigureDialog | None = None
         self._trigger_tester: TriggerTesterDialog | None = None
         self._bundle_export_processing_page: BundleExportProcessingPage | None = None
@@ -415,6 +417,15 @@ class StudioMainWindow(QMainWindow):
         self._set_home_chrome_visible(True)
         self._apply_utility_window_size()
         self.main_stack.setCurrentWidget(self.image_resizer_page)
+
+    def show_image_equalizer(self) -> None:
+        if not self.flush_pending_edits():
+            return
+        if self._image_equalizer_dialog is None:
+            self._image_equalizer_dialog = ImageEqualizerDialog(self)
+        self._image_equalizer_dialog.show()
+        self._image_equalizer_dialog.raise_()
+        self._image_equalizer_dialog.activateWindow()
 
     def show_condition_figure(self) -> None:
         if self.is_launch_busy() or self._launch_after_session_seed_ready:
@@ -730,6 +741,9 @@ class StudioMainWindow(QMainWindow):
         self.image_resizer_action = QAction("Image Resizer", self)
         self.image_resizer_action.setObjectName("image_resizer_action")
         self.image_resizer_action.triggered.connect(self.show_image_resizer)
+        self.image_equalizer_action = QAction("Image Equalizer", self)
+        self.image_equalizer_action.setObjectName("image_equalizer_action")
+        self.image_equalizer_action.triggered.connect(self.show_image_equalizer)
         self.trigger_tester_action = QAction("Trigger Tester", self)
         self.trigger_tester_action.setObjectName("trigger_tester_action")
         self.trigger_tester_action.triggered.connect(self.show_trigger_tester)
@@ -793,6 +807,7 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.library_action, "View", "download experiments catalog"),
             ActionEntry(self.project_update_action, "File", "library project version"),
             ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
+            ActionEntry(self.image_equalizer_action, "Tools", "grayscale brightness rms contrast"),
             ActionEntry(self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi"),
             ActionEntry(self.condition_figure_action, "Tools", "fpvs sequence image 600 dpi png"),
             ActionEntry(self.check_updates_action, "File", "software version update"),
@@ -814,6 +829,8 @@ class StudioMainWindow(QMainWindow):
             or (setup is not None and setup._condition_image_task_active())
             or (self._image_resizer_page is not None
                 and self._image_resizer_page._active_task is not None)
+            or (self._image_equalizer_dialog is not None
+                and self._image_equalizer_dialog._active_task is not None)
         )
         if busy:
             self.statusBar().show()
@@ -885,6 +902,7 @@ class StudioMainWindow(QMainWindow):
         self.view_menu.addAction(self.data_sharing_action)
         self.view_menu.addAction(self.interrupted_sessions_action)
         self.tools_menu.addAction(self.image_resizer_action)
+        self.tools_menu.addAction(self.image_equalizer_action)
         self.tools_menu.addAction(self.trigger_tester_action)
         self.tools_menu.addAction(self.condition_figure_action)
 
@@ -1711,6 +1729,7 @@ class StudioMainWindow(QMainWindow):
             self.interrupted_sessions_action,
             self.data_sharing_action,
             self.image_resizer_action,
+            self.image_equalizer_action,
             self.trigger_tester_action,
             self.condition_figure_action,
             self.launch_action,

@@ -231,6 +231,7 @@ manual_smoke = [
 [scopes.preprocessing]
 checks = []
 tests = [
+  "tests/unit/test_preprocessing_equalization.py",
   "tests/unit/test_preprocessing_import.py",
   "tests/unit/test_preprocessing_assets.py",
   "tests/unit/test_preprocessing_inspection.py",

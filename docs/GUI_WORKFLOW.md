@@ -870,7 +870,7 @@ correctness, EEG time and incomplete/aborted state. **Export Excel...** writes t
 loaded data to the chosen workbook path using the same backend summary.
 The default SOA/trigger rows are 100 ms / 1, 300 ms / 3 and 500 ms / 5. Historical
 custom codes are shown from recorded data. Other experiment categories retain
-**View > Fixation Task Accuracy...**. Tools includes Condition Figure, Image Resizer,
+**View > Fixation Task Accuracy...**. Tools includes Condition Figure, Image Resizer, Image Equalizer,
 and Trigger Tester.
 Test sessions (participant IDs `0`/`00`) record and display accuracy and are marked
 in the burst table and workbook. The SOA summary includes their completed answers.
@@ -1231,6 +1231,15 @@ The authoring window is organized around two user-facing modes:
     feedback with motion disabled
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
+- `Tools > Image Equalizer`
+  - also available from Welcome without an open project
+  - multiple input/output folder pairs, one automatic grayscale mean/RMS target
+    across the batch, parallel processing and cancellation
+  - saves verified PNG copies and a matching report in new/empty output folders;
+    preserves originals and existing output files
+  - use after resizing/cropping, then explicitly select prepared folders in Conditions
+  - numerical, file-safety and interaction details live in the
+    [Image Equalizer specification](product-specs/image-equalizer.md)
 
 Detailed Conditions remains available internally for existing document bindings, but it
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
@@ -1864,6 +1873,9 @@ preprocessing services but must not silently mutate the active project.
   metadata check should stay silent unless a newer release is available.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
+- Standalone equalization lives in `src/fpvs_studio/gui/image_equalizer_dialog.py` and
+  `src/fpvs_studio/preprocessing/equalization.py`; Welcome and MainWindow expose the
+  same project-independent dialog. No image work occurs on the GUI thread.
 - Bundle review and Welcome-hosted progress dialogs live in
   `src/fpvs_studio/gui/bundle_import_dialog.py`; shared embedded progress and persistent
   export-result pages live in `src/fpvs_studio/gui/processing_page.py`.
@@ -1924,6 +1936,8 @@ The current GUI supports:
 - reviewing Target Stimulus Repeats and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
+- using `Tools > Image Equalizer` before or after opening a project to match grayscale
+  images across multiple folders, cancel/retry safely and inspect saved matching reports
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan
 - running the supported session launch path with fullscreen PsychoPy playback

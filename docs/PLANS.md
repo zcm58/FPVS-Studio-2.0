@@ -35,7 +35,6 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 
 - [Image pool reset policy](exec-plans/planned/image-pool-reset-policy.md)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md)
-- [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md)
 - [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)
 
 ## Plan Rules and History
@@ -46,6 +45,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Completed implementation/release records](exec-plans/completed/)
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):
   added the authored rate and verified two fullscreen runs on the Lenovo's 60.020425 Hz signal.
+- [Image Equalizer](exec-plans/completed/image-equalizer.md): optional grayscale batch
+  preparation with shared targets and parallel processing; current mission/spec
+  updated. Focused and approved visible Windows checks passed; verification recorded.
 - [Desktop panel hierarchy](exec-plans/completed/desktop-panel-hierarchy.md):
   flattened redundant framing and verified the affected layouts in Light and Dark.
 - [Desktop interface polish](exec-plans/completed/desktop-interface-polish.md):

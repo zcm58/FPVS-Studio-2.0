@@ -18,7 +18,7 @@ owners and targeted tests.
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |
 | `compiler` | Compiled runs, sessions, participant reuse policies, scheduling and fixation | `src/fpvs_studio/core/AGENTS.md` | `docs/RUNSPEC.md` for runs or `docs/SESSION_PLAN.md` for sessions |
 | `project-io` | Persistence, configs, bundles, templates and paths | `src/fpvs_studio/core/AGENTS.md` | Configs: [exchange format](../PROJECT_CONFIG.md); other persistence/imports: `docs/GUI_WORKFLOW.md` |
-| `preprocessing` | Image intake, inspection, variants and manifests | `src/fpvs_studio/preprocessing/AGENTS.md` | Relevant asset/manifest test |
+| `preprocessing` | Image intake, inspection, variants, manifests and standalone equalization | `src/fpvs_studio/preprocessing/AGENTS.md` | Relevant asset/manifest test or [Image Equalizer](../product-specs/image-equalizer.md) |
 | `runtime` | Launch, preflight, session flow, scoring and participant results/exports | `src/fpvs_studio/runtime/AGENTS.md` | Relevant `docs/RUNTIME_EXECUTION.md` section; [exports](../RUNTIME_EXECUTION.md#exports) |
 | `engine` | Rendering, task-screen fitting, response pointers, graphics lifetime and frame playback | `src/fpvs_studio/engines/AGENTS.md` | Relevant `docs/ENGINE_INTERFACE.md` section |
 | `triggers` | Hardware adapters, local UDP markers, port discovery, recovery, Windows write completion and offline Unicorn timing | `src/fpvs_studio/triggers/AGENTS.md` or `src/fpvs_studio/tools/AGENTS.md` for offline timing | [Recording](../RUNTIME_EXECUTION.md#trigger-behavior), [Trigger Tester](../GUI_WORKFLOW.md#trigger-tester) or [Unicorn timing report](../RUNTIME_EXECUTION.md#unicorn-recorder-timing-report) |

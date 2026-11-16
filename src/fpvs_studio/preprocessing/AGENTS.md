@@ -15,6 +15,9 @@ assets and manifests. `models.py` owns `StimulusManifest` and related records;
   the same derivative.
 - Standalone Image Resizer may also read BMP/TIF/TIFF, writing separate PNG copies
   without mutating project sets/manifests.
+- `equalization.py` owns standalone grayscale mean/RMS matching across explicit folder
+  pairs. Keep one batch target, bounded parallelism, no-overwrite writes and measured
+  PNG verification. See `docs/product-specs/image-equalizer.md`; no runtime calibration.
 - `inspection.validate_image_files` owns bundle content checks: matching format,
   single-frame complete decode, 64 MiB encoded/decoded buffers, 8192 pixels per axis
   and 16,777,216 pixels total. Decoder overhead is additional; cancellation occurs
