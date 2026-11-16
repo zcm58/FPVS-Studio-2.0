@@ -8,6 +8,37 @@ import pytest
 from fpvs_studio.support.error_explanations import describe_error, explain_error
 
 
+@pytest.mark.parametrize("chained", [False, True])
+def test_macos_scipy_native_import_failure_offers_source_repair(chained):
+    details = (
+        "ImportError: dlopen(scipy/sparse/linalg/_propack/_spropack.cpython-310-darwin.so): "
+        "section '__DATA/__thread_bss' has a zero-fill section type, but offset field is not zero"
+    )
+    error = RuntimeError("PsychoPy could not load an engine component or dependency.")
+    if chained:
+        error.__cause__ = ImportError(details)
+    explanation = explain_error(
+        "Launch Error", str(error), error=error, details="" if chained else details,
+    )
+    assert "SciPy" in explanation.summary
+    assert "macOS" in explanation.summary
+    assert "Repair Mac 2.command" in explanation.advice
+    assert "Update & Repair" not in explanation.description
+    assert "full installer" not in explanation.description
+
+
+def test_macos_dependency_failures_offer_source_repair_not_windows_installer(monkeypatch):
+    from types import SimpleNamespace
+
+    from fpvs_studio.support import error_explanations
+
+    monkeypatch.setattr(error_explanations, "sys", SimpleNamespace(platform="darwin"))
+    explanation = explain_error("Launch Error", "ImportError: native dependency could not load")
+    assert "Python environment" in explanation.summary
+    assert "Repair Mac 2.command" in explanation.advice
+    assert "full installer" not in explanation.advice
+
+
 @pytest.mark.parametrize(
     "cause, expected",
     [

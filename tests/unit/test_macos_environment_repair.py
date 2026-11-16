@@ -559,7 +559,7 @@ def _fake_probe(
     monkeypatch.setattr(sys, "argv", ["probe", str(root)])
     installed = {
         "fpvs-studio": "2.9.0", "psychopy": "2026.2.0", "PySide6": "6.11.3",
-        "PyQt6": "6.11.0", "numpy": "1.26.4", "pytest": "9.0.3",
+        "PyQt6": "6.11.0", "numpy": "1.26.4", "pytest": "9.0.3", "scipy": "1.14.1",
     }
     installed.update(versions or {})
     monkeypatch.setattr(importlib.metadata, "version", lambda name: installed[name])

@@ -44,6 +44,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Mac repair completion reports](exec-plans/completed/macos-repair-completion-reports.md):
+  one-click source repair, SciPy selection, accurate dependency errors and deployed
+  automatic completion reports; affected-Mac acceptance remains under macOS Phase 1.
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):
   added the authored rate and verified two fullscreen runs on the Lenovo's 60.020425 Hz signal.
 - [Desktop panel hierarchy](exec-plans/completed/desktop-panel-hierarchy.md):

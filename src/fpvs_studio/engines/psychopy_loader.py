@@ -27,10 +27,16 @@ def load_psychopy_modules() -> PsychoPyModules:
         event = import_module("psychopy.event")
         keyboard = import_module("psychopy.hardware.keyboard")
         logging = import_module("psychopy.logging")
-    except ImportError as exc:  # pragma: no cover - exercised by import-boundary tests
+    except ImportError as exc:
+        if isinstance(exc, ModuleNotFoundError) and exc.name == "psychopy":
+            raise RuntimeError(
+                "PsychoPy is not installed. Install the optional 'engine' "
+                "dependencies to use this engine."
+            ) from exc
         raise RuntimeError(
-            "PsychoPy is not installed. Install the optional 'engine' "
-            "dependencies to use this engine."
+            "PsychoPy could not load an engine component or dependency. "
+            "Repair Studio's engine dependencies and retry. "
+            f"Details: {exc}"
         ) from exc
 
     return PsychoPyModules(

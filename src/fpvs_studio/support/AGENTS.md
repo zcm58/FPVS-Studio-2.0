@@ -18,4 +18,10 @@ preference generation, local opt-out before HTTP, bounded
 outbox/retries, and idempotent report identity. Never upload raw logs or exception
 messages automatically. Manual reporting retains its existing explicit actions.
 See `docs/BUG_REPORTING.md` for the client/server contract and activation instructions.
+The user-authorized workflow reporter is another explicit exception: repair completion
+uploads bounded, allowlisted system/version/check/outcome facts automatically. Keep
+`workflow_reporting.py` standard-library-only so repair works with broken dependencies.
+Its installation capability and outbox are workflow-owned; existing automatic-report
+preferences are read-only opt-out/generation signals. Never send raw logs, arbitrary
+details, research files or exception messages through this automatic protocol.
 Verify with the repo focused/precommit routes and `tests/unit/test_support_*.py`.

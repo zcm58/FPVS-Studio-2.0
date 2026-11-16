@@ -32,6 +32,7 @@ from fpvs_studio.core.models import ImageGeometrySettings, ImageResolution
 from fpvs_studio.core.run_spec import FixationEvent, RunSpec, TriggerEvent
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.engines import psychopy_engine as psychopy_engine_module
+from fpvs_studio.engines import psychopy_loader
 from fpvs_studio.engines import psychopy_macos_display as psychopy_macos_display_module
 from fpvs_studio.engines import psychopy_stimuli as psychopy_stimuli_module
 from fpvs_studio.engines import psychopy_window as psychopy_window_module
@@ -55,6 +56,47 @@ from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_bac
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
+
+
+@pytest.mark.parametrize("missing", ["psychopy", "scipy", "psychopy.visual"])
+def test_psychopy_loader_distinguishes_absent_package_from_broken_import(monkeypatch, missing):
+    cause = ModuleNotFoundError(f"No module named '{missing}'", name=missing)
+
+    def import_module(name):
+        if name == "psychopy" and missing != "psychopy":
+            return SimpleNamespace()
+        raise cause
+
+    monkeypatch.setattr(psychopy_loader, "import_module", import_module)
+    with pytest.raises(RuntimeError) as raised:
+        psychopy_loader.load_psychopy_modules()
+    assert raised.value.__cause__ is cause
+    if missing == "psychopy":
+        assert "PsychoPy is not installed" in str(raised.value)
+    else:
+        assert "not installed" not in str(raised.value)
+        assert "component or dependency" in str(raised.value)
+        assert str(cause) in str(raised.value)
+
+
+def test_psychopy_loader_preserves_native_library_failure(monkeypatch):
+    cause = ImportError(
+        "dlopen(_spropack.cpython-310-darwin.so): section '__DATA/__thread_bss' "
+        "has a zero-fill section type, but offset field is not zero"
+    )
+
+    def import_module(name):
+        if name == "psychopy":
+            return SimpleNamespace()
+        raise cause
+
+    monkeypatch.setattr(psychopy_loader, "import_module", import_module)
+    with pytest.raises(RuntimeError) as raised:
+        psychopy_loader.load_psychopy_modules()
+    assert raised.value.__cause__ is cause
+    assert "not installed" not in str(raised.value)
+    assert "component or dependency" in str(raised.value)
+    assert str(cause) in str(raised.value)
 
 
 class _FakeWindow:

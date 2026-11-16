@@ -12,6 +12,8 @@ on:
       - scripts/macos-source.sh
       - scripts/macos_pycharm.py
       - Repair Mac.py
+      - Repair Mac 2.py
+      - Repair Mac 2.command
       - '*Mac.command'
       - requirements-macos.txt
       - scripts/script_helpers.ps1
@@ -27,6 +29,8 @@ on:
       - scripts/macos-source.sh
       - scripts/macos_pycharm.py
       - Repair Mac.py
+      - Repair Mac 2.py
+      - Repair Mac 2.command
       - '*Mac.command'
       - requirements-macos.txt
       - scripts/script_helpers.ps1
@@ -123,6 +127,11 @@ jobs:
 
       - name: Import authoring source without creating an application or windows
         run: .venv3.10/bin/python -c 'import fpvs_studio.gui.application; import fpvs_studio.gui.main_window'
+
+      - name: Verify real presentation-engine imports without opening a window
+        run: >-
+          .venv3.10/bin/python -I -c
+          'from fpvs_studio.engines.psychopy_loader import load_psychopy_modules; load_psychopy_modules()'
 
       - name: Download the Windows-authored fixture
         uses: actions/download-artifact@v8

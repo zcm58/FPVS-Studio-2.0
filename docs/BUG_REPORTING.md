@@ -44,6 +44,39 @@ It sends only the helper's diagnostic capture and its associated PyCharm finishi
 job, not arbitrary IDE session logs. Per-run logs/receipts stay in the checkout's
 `.fpvs-macos/diagnostics/`; see the Mac guide for bounds and recovery actions.
 
+### Automatic workflow completion reports
+
+`Repair Mac 2.command` and `Repair Mac 2.py` select automatic completion reporting
+in the shared repair helper. Reporting waits for the final PyCharm finishing result;
+a pending restart is never reported as success. The existing manual entry point and
+its browser verification remain available.
+
+`support/workflow_reporting.py` owns the reusable standard-library-only builder,
+validator, text renderer, installation client and durable outbox. Each workflow
+supplies allowlisted facts; future workflow schemas extend the same transport and
+receipt handling. The initial `macos_repair` schema includes macOS version/build,
+native and Python CPU, Rosetta state, helper/Python/Studio/PsychoPy/SciPy/NumPy/Qt
+versions, before/after repair versions, check results, failure categories, duration
+and final outcome. It sends no raw logs, paths, credentials or research data.
+
+The service accepts `kind: workflow` at `/v1/workflow-reports` after browser-free
+registration at `/v1/workflow-installations`. Installation capability authentication,
+strict 16-KiB envelopes, per-installation/global quotas and immutable report/receipt
+identities bound delivery. The existing service queue creates the private issue and
+maintainer email. An accepted receipt means submitted, not confirmed email delivery.
+
+Private `support/automatic-workflows/` storage owns registration and a bounded
+seven-day outbox. Existing automatic-report preferences are read only: a saved off
+choice or changed generation prevents historical delivery. Workflow revocation does
+not depend on the separate crash-report backend. Offline reports retain their exact
+identity and are retried on a later invocation; disabled reporting origins remain
+disabled. The local repair also retains `completion.json` and `completion.txt`.
+
+Service source/deployment is owned by `../FPVS-Studio-Feedback`; its deployment
+record is authoritative for migration `0006_workflow_reporting.sql` and the separate
+`WORKFLOW_REPORTS_ENABLED` switch. The older automatic-crash design below does not
+establish that its endpoints exist in the current live service.
+
 ### Automatic crash reports
 
 Settings > Diagnostics offers **Automatically send crash reports**, on by default

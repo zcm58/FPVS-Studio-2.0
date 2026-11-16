@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -13,6 +14,19 @@ import pytest
 import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def test_repair_shortcut_starts_helper_without_installing_studio_first() -> None:
+    shortcut = (ROOT / "Repair Mac 2.command").read_text(encoding="utf-8")
+    assert 'bash scripts/macos-source.sh repair "$@"' in shortcut
+    assert "python" not in shortcut.lower()
+    script = (ROOT / "scripts/macos-source.sh").read_text(encoding="utf-8")
+    repair = script.split("\n  repair)\n", 1)[1].split("\n    ;;", 1)[0]
+    assert 'require_python310 "$venv_python"' in repair
+    assert "install_python" in repair
+    assert '"$repo_root/Repair Mac 2.py"' in repair
+    assert "pip install" not in repair
+    assert "-m venv" not in repair
 
 
 @pytest.mark.parametrize("command", ["run", "setup"])
@@ -84,6 +98,12 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
     installation = next(step for step in job["steps"]
                         if step.get("run") == "bash scripts/macos-source.sh setup")
     assert installation["env"]["FPVS_MANAGED_PYTHON"] == "1"
+    engine_smoke = next(
+        step for step in job["steps"]
+        if "load_psychopy_modules()" in step.get("run", "")
+    )
+    assert ".venv3.10/bin/python -I" in engine_smoke["run"]
+    assert "continue-on-error" not in engine_smoke
     assert "FPVS_MACOS_NATIVE_CHECKS" in steps
     assert "FPVS_ALLOW_QT_TESTS" not in steps
     assert "offscreen" not in steps
@@ -105,6 +125,38 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
     script = (ROOT / "scripts/macos-source.sh").read_text(encoding="utf-8")
     assert "pip install --requirement requirements-macos.txt" in script
     assert "-m pip check" in script
+
+
+@pytest.mark.parametrize("broken", [False, True])
+def test_setup_engine_probe_executes_real_loader_before_reporting_success(monkeypatch, broken):
+    import builtins
+
+    script = (ROOT / "scripts/macos-source.sh").read_text(encoding="utf-8")
+    probes = re.findall(r'"\$venv_python" -I -c \'(.*?)\'', script, re.DOTALL)
+    engine_probe = next((code for code in probes if "load_psychopy_modules()" in code), None)
+    assert engine_probe is not None, "Setup must test native engine imports in a fresh process"
+    assert "fpvs_studio.gui" not in engine_probe
+    imported = []
+
+    def load_psychopy_modules():
+        imported.append("engine")
+        if broken:
+            raise RuntimeError("Native SciPy library could not load")
+
+    original_import = builtins.__import__
+
+    def import_module(name, *args, **kwargs):
+        if name == "fpvs_studio.engines.psychopy_loader":
+            return SimpleNamespace(load_psychopy_modules=load_psychopy_modules)
+        return original_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", import_module)
+    if broken:
+        with pytest.raises(RuntimeError, match="Native SciPy"):
+            exec(engine_probe, {})
+    else:
+        exec(engine_probe, {})
+    assert imported == ["engine"]
 
 
 def test_native_adapter_imports_do_not_load_gui_psychopy_or_platform_bridges() -> None:

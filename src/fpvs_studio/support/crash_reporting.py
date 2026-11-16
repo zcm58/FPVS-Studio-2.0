@@ -67,6 +67,7 @@ class CrashConsent(BaseModel):
     enabled: bool = True
     registered: bool = False
     installation_id: UUID = Field(default_factory=uuid4)
+    workflow_generation: UUID = Field(default_factory=uuid4)
     token: str = Field(
         default_factory=lambda: secrets.token_urlsafe(32),
         repr=False,
@@ -174,6 +175,7 @@ class CrashStore:
                 consent.revoke_pending or consent.enabled or consent.enrollment is not None
             )
             consent.enabled = False
+            consent.workflow_generation = uuid4()
             self.save_consent(consent)
             self.discard_pending()
             return consent

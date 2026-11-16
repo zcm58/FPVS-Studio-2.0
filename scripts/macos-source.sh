@@ -3,8 +3,8 @@
 set -euo pipefail
 
 usage() {
-  echo "Usage: bash scripts/macos-source.sh {setup|run|pycharm|verify} [arguments]"
-  echo "setup prepares Python and dependencies; run opens Studio; pycharm opens the IDE."
+  echo "Usage: bash scripts/macos-source.sh {setup|repair|run|pycharm|verify} [arguments]"
+  echo "setup prepares dependencies; repair fixes the environment; run opens Studio; pycharm opens the IDE."
 }
 
 command_name="${1:-help}"
@@ -182,19 +182,30 @@ case "$command_name" in
     "$venv_python" -m pip install --upgrade 'pip>=25,<27'
     "$venv_python" -m pip install --requirement requirements-macos.txt
     "$venv_python" -m pip check
-    "$venv_python" -c 'from packaging.version import Version
-from fpvs_studio.gui import application
-from importlib.metadata import version
-import logging
-assert Version(version("psychopy"))
+    "$venv_python" -I -c 'from fpvs_studio.gui import application'
+    "$venv_python" -I -c 'import logging
+from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
+load_psychopy_modules()
 logging.basicConfig(level=logging.INFO, format="%(message)s")
-logging.getLogger("fpvs_studio.setup").info("Studio imports and engine installation verified.")'
+logging.getLogger("fpvs_studio.setup").info("Studio imports and presentation-engine imports verified.")'
     if [ "${FPVS_SKIP_PYCHARM_CONFIG:-0}" != 1 ]; then
       "$venv_python" scripts/macos_pycharm.py "$repo_root" "$venv_python"
     fi
     echo
     echo "Setup complete. Double-click Run Mac.command to open Studio."
     echo "Optional: quit PyCharm, then use Open in PyCharm Mac.command to open this project."
+    ;;
+  repair)
+    repair_python="$venv_python"
+    if [ ! -x "$repair_python" ] || ! require_python310 "$venv_python" >/dev/null 2>&1; then
+      if [ -L "$tools_root" ]; then echo "Setup tools directory must not be a symlink." >&2; exit 2; fi
+      mkdir -p "$tools_root"
+      trap 'if [ -n "${download_tmp:-}" ]; then rm -rf -- "$download_tmp"; fi' EXIT
+      install_python
+      require_python310 "$python_bin"
+      repair_python="$python_bin"
+    fi
+    exec "$repair_python" -I "$repo_root/Repair Mac 2.py" "$@"
     ;;
   run)
     require_environment

@@ -429,6 +429,7 @@ def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
     return _configuration_script(configuration, repo_root) in (
         (repo_root / "src/fpvs_studio/app/main.py").resolve(),
         (repo_root / "Repair Mac.py").resolve(),
+        (repo_root / "Repair Mac 2.py").resolve(),
     ) or _legacy_repair_configuration(configuration, repo_root)
 
 
