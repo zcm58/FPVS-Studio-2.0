@@ -37,6 +37,7 @@ PsychoPy presentation stays behind runtime and engine boundaries.
 
 ## GUI Acceptance
 
+- Start GUI decisions with the [shared OpenFPVS desktop guidance](docs/DESIGN.md#shared-openfpvs-desktop-experience).
 - For substantial UI work, define the task, primary action, affected states and
   observable success criteria. Follow current `docs/FRONTEND.md` contracts and
   [UI design guidance](docs/design-docs/agent-ui-design.md); routine decisions need

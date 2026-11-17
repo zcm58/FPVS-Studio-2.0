@@ -37,6 +37,7 @@ feature parity.
 
 | Area | Current contract |
 | --- | --- |
+| Desktop audience and interaction principles across Studio and Toolbox | [Shared OpenFPVS desktop guidance](../DESIGN.md#shared-openfpvs-desktop-experience) |
 | Image and word oddball FPVS, Cognitive Load FPVS, retained native attentional-blink support; Standard FPVS remains disabled | [Experiment categories](../EXPERIMENT_CATEGORIES.md) |
 | Guided Setup, Home, image intake, Tools and participant-facing controls | [GUI workflow](../GUI_WORKFLOW.md) |
 | Optional grayscale mean/RMS matching across multiple folders | [Image Equalizer](image-equalizer.md) |

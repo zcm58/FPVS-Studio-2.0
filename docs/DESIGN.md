@@ -13,6 +13,14 @@ fast returning-user launches, low-friction setup, and clear scientific/runtime s
 - Public GUI component/theme surface: `../src/fpvs_studio/gui/components.py`
 - GUI package guidance: `../src/fpvs_studio/gui/AGENTS.md`
 
+## Shared OpenFPVS desktop experience
+
+Maintainers can find the canonical desktop specification in the private OpenFPVS
+checkout at `../OpenFPVS/DESKTOP_EXPERIENCE.md`, relative to the Studio repository root.
+Studio is the visual and interaction reference for Toolbox. Design for lab members
+doing routine work, with guidance beside unfamiliar choices and advanced settings
+within reach for expert users.
+
 ## Colors
 
 The authoring interface uses cool gray workspaces in Light and charcoal workspaces

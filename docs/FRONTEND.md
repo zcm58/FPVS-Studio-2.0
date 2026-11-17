@@ -1,7 +1,8 @@
 # Frontend
 
 FPVS Studio's frontend is the Windows-focused PySide6 GUI. There is no web frontend in
-the active app.
+the active app. Use the [shared OpenFPVS desktop guidance](DESIGN.md#shared-openfpvs-desktop-experience)
+when choosing visual and interaction patterns.
 
 ## Public GUI Surface
 
