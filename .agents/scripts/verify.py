@@ -243,6 +243,8 @@ def _pytest_command(
         command.extend(["-p", "pytestqt.plugin", "--allow-qt-tests"])
     if workers > 1:
         command.extend(["-p", "xdist.plugin", "--dist=loadfile", "-n", str(workers)])
+        # Preserve the original crashed-test report instead of restarting workers.
+        command.append("--max-worker-restart=0")
     command.append(f"--durations={durations}")
     command.extend(["-q", *tests])
     return command

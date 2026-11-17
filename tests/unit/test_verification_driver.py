@@ -216,6 +216,7 @@ def test_precommit_lints_changed_python_and_runs_only_safe_unit_tests() -> None:
     assert "--allow-qt-tests" not in pytest_command
     assert plugin_name not in pytest_command
     assert "xdist.plugin" not in pytest_command
+    assert "--max-worker-restart=0" not in pytest_command
     assert "-n" not in pytest_command
     assert "--durations=20" in pytest_command
 
@@ -236,6 +237,7 @@ def test_non_qt_tiers_can_distribute_tests_by_file(tier: str) -> None:
     assert command[command.index("xdist.plugin") - 1] == "-p"
     assert command[command.index("-n") + 1] == "4"
     assert "--dist=loadfile" in command
+    assert "--max-worker-restart=0" in command
     assert "--durations=7" in command
     assert "--disable-plugin-autoload" in command
     assert "--allow-qt-tests" not in command
