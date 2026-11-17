@@ -5,14 +5,13 @@ from __future__ import annotations
 import importlib.util
 import io
 import json
-import runpy
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SPEC = importlib.util.spec_from_file_location("repair_completion_tests", ROOT / "Repair Mac.py")
+SPEC = importlib.util.spec_from_file_location("repair_completion_tests", ROOT / "Repair Mac 2.py")
 assert SPEC is not None and SPEC.loader is not None
 repair = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(repair)
@@ -66,7 +65,7 @@ def test_rebuilt_environment_is_never_reported_as_the_original(monkeypatch, tmp_
         python.touch()
     state = {"unrunnable": initial == "unrunnable", "facts": facts("3.0.1", "1.14.1")}
     fake_metadata_process(monkeypatch, state)
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
     monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
     reports = []
 
@@ -93,7 +92,7 @@ def test_failed_setup_still_snapshots_actual_final_packages(monkeypatch, tmp_pat
     python.touch()
     state = {"facts": facts()}
     fake_metadata_process(monkeypatch, state)
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
     monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
     reports = []
 
@@ -220,6 +219,7 @@ def test_preflight_distinguishes_working_compatibility_drift_from_repairs(
     monkeypatch.setattr(repair, "validate_environment", lambda root: "selected-python")
 
     def run(python, arguments, root, **kwargs):
+        nonlocal updated
         assert python == "selected-python" and root == session.root
         if arguments == ["-c", repair.ENGINE_PROBE]:
             calls.append("engine")
@@ -237,6 +237,11 @@ def test_preflight_distinguishes_working_compatibility_drift_from_repairs(
                 session.observe("Compatibility update available: Installed Studio metadata "
                                 "is from a different source version.")
                 return 2
+        elif arguments[:3] == ["-m", "pip", "install"]:
+            assert arguments[-1] == "scipy==1.14.1"
+            assert calls[:3] == ["engine", "pip check", "compatibility"]
+            calls.append("targeted scipy")
+            updated = True
         else:
             assert arguments == ["-m", "pip", "--version"]
             calls.append("pip version")
@@ -266,7 +271,7 @@ def test_preflight_distinguishes_working_compatibility_drift_from_repairs(
     )
     assert repair.repair_environment(session.root, check_only=check_only) == exit_code
     details = session.details
-    assert details["helper_version"] == "2.1"
+    assert details["helper_version"] == "2.2"
     assert details["initial_engine_import"] == ("passed" if engine_ok else "failed")
     assert details["initial_dependency_check"] == ("passed" if pip_ok else "failed")
     assert details["initial_compatibility_check"] == ("passed" if compatible else "failed")
@@ -290,6 +295,41 @@ def test_preflight_distinguishes_working_compatibility_drift_from_repairs(
         assert details["compatibility_check"] == "unknown"
     if kind == "none":
         assert "setup" not in calls
+        assert "targeted scipy" not in calls
+    if not engine_ok and not check_only:
+        assert "targeted scipy" in calls
+        assert "setup" not in calls
+
+
+@pytest.mark.parametrize("install_code", [0, 1])
+def test_targeted_scipy_failure_stops_without_rebuild(monkeypatch, session, install_code):
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", lambda root: "python")
+    checks = []
+
+    def check(*args, **kwargs):
+        checks.append(kwargs)
+        session.details["failure_code"] = "scipy_macho"
+        session.details["engine_import"] = "failed"
+        return False
+
+    def install(python, arguments, root, **kwargs):
+        assert arguments[-1] == "scipy==1.14.1"
+        return install_code
+
+    monkeypatch.setattr(repair, "_check_environment", check)
+    monkeypatch.setattr(repair, "_run", install)
+    monkeypatch.setattr(repair, "_run_setup", lambda root: pytest.fail("Unexpected setup"))
+    monkeypatch.setattr(
+        repair, "_backup_environment", lambda root: pytest.fail("Unexpected rebuild"),
+    )
+    monkeypatch.setattr(
+        repair, "_configure_pycharm", lambda *a, **k: pytest.fail("Unexpected IDE change"),
+    )
+    assert repair.repair_environment(session.root) == 1
+    assert len(checks) == (2 if install_code == 0 else 1)
+    assert session.details["package_updates"] == ("passed" if install_code == 0 else "failed")
 
 
 def test_missing_interpreter_keeps_unknown_baseline_and_reports_only_rebuild(monkeypatch, session):
@@ -377,7 +417,7 @@ def test_unconfirmed_compatibility_stops_before_changes_and_preserves_baseline(
 ):
     calls = []
     reports = []
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
     monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
     monkeypatch.setattr(repair, "_snapshot_environment", lambda *args, **kwargs: None)
     monkeypatch.setattr(repair, "_log_context", lambda *args: None)
@@ -492,7 +532,7 @@ def test_completion_persists_summary_before_network_and_reports_own_delivery(
 def test_automatic_entry_reports_failure_success_and_cancellation_without_manual_flow(
     monkeypatch, tmp_path, code,
 ):
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
     monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
     calls = []
 
@@ -510,16 +550,6 @@ def test_automatic_entry_reports_failure_success_and_cancellation_without_manual
     assert repair.main(["--automatic-report"]) == code
     assert len(calls) == 1 and calls[0][1] == code
     assert calls[0][0].stream.closed
-
-
-def test_new_entry_point_runs_shared_helper_with_automatic_reporting(monkeypatch):
-    calls = []
-    original = runpy.run_path
-    monkeypatch.setattr(runpy, "run_path", lambda *args, **kwargs: calls.append((args, kwargs)))
-    monkeypatch.setattr("sys.argv", ["Repair Mac 2.py", "--check"])
-    original(str(ROOT / "Repair Mac 2.py"), run_name="__main__")
-    assert calls[0][0] == (str(ROOT / "Repair Mac.py"),)
-    assert repair.sys.argv[1:] == ["--automatic-report", "--check"]
 
 
 def test_detached_completion_keeps_auto_mode_and_final_result(monkeypatch, tmp_path):
@@ -589,7 +619,7 @@ def test_detached_reporting_failure_keeps_repair_outcome_and_never_offers_manual
 
     dialogs = []
     monkeypatch.setattr(repair, "sys", SimpleNamespace(platform="darwin"))
-    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac.py"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
     monkeypatch.setattr(repair, "_pid_alive", lambda pid: False)
     monkeypatch.setattr(repair, "_snapshot_environment", lambda *args: None)
     monkeypatch.setattr(repair, "_complete_automatic_report", fail_reporting)

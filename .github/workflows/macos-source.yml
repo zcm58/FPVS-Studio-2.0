@@ -11,7 +11,6 @@ on:
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
       - scripts/macos_pycharm.py
-      - Repair Mac.py
       - Repair Mac 2.py
       - Repair Mac 2.command
       - '*Mac.command'
@@ -28,7 +27,6 @@ on:
       - .agents/scripts/verify.py
       - scripts/macos-source.sh
       - scripts/macos_pycharm.py
-      - Repair Mac.py
       - Repair Mac 2.py
       - Repair Mac 2.command
       - '*Mac.command'

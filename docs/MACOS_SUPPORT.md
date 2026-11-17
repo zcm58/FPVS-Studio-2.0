@@ -61,12 +61,13 @@ the environment because it can contain the environment's base interpreter. Setup
 does not change system Python or shell startup files. An existing environment with
 the wrong Python version/CPU or an incomplete interpreter is reported and preserved.
 
-`pyproject.toml` remains the only dependency version list. `requirements-macos.txt`
+`pyproject.toml` owns normal dependency requirements. `requirements-macos.txt`
 and the primary Windows `requirements.txt` both include its `dev,engine` extras.
 Setup installs with pip, runs `pip check`, checks GUI imports without opening an app,
 and loads the actual engine dependencies in a separate isolated process. The Mac
-engine extra pins SciPy 1.14.1 to avoid malformed native PROPACK sections in the
-1.15.3 arm64 wheel rejected by the reported macOS 27 loader. Python remains 3.10;
+engine extra allows SciPy 1.14.1 and newer. Repair Mac 2 preserves working SciPy
+installations and installs 1.14.1 only after observing the specific native PROPACK
+loader failure, then checks the engine again. Python remains 3.10;
 Windows dependency selection is unchanged. Successful installation does not guarantee every GUI,
 presentation or service workflow is bug-free; those acceptance gates remain above.
 
@@ -101,7 +102,7 @@ A missing/incompatible interpreter is prepared through the existing managed-Pyth
 bootstrap; the Python helper owns subsequent environment repair and diagnostics.
 OS installer/save prompts still require their normal user interaction.
 
-Helper 2.1 checks the current engine first, then checks dependency consistency and
+Helper 2.2 checks the current engine first, then checks dependency consistency and
 the source checkout's package requirements separately. Initial results are retained
 before any package/IDE changes. A missing or unusable interpreter cannot run that
 initial engine check and is reported as such. A working engine with older package
@@ -118,7 +119,8 @@ Normal console output shows progress and distinct failures; pip chatter stays in
 the detailed log. Network failures leave the completion queued for a later repair
 run. A saved automatic-report opt-out remains honored. See the
 [automatic workflow report contract](BUG_REPORTING.md#automatic-workflow-completion-reports).
-The original **Repair Mac.py** retains its explicit manual reporting flow below.
+**Repair Mac 2.py** now contains the repair implementation and automatically reports
+completion. The obsolete Repair Mac.py entry point has been removed.
 
 Test/Pilot now distinguishes a missing PsychoPy installation from a dependency
 that is installed but cannot load. Installing the separate PsychoPy application
@@ -128,7 +130,7 @@ run **Repair Mac 2.command** from the updated checkout. Expanded error details
 retain the original import cause.
 
 1. Update the complete Studio checkout, including its `scripts/` folder, and close
-   Studio. In PyCharm, run the top-level `Repair Mac.py` beside
+   Studio. In PyCharm, run the top-level `Repair Mac 2.py` beside
    `Setup Mac.command`, without parameters.
    The helper can start from the wrong project interpreter; no manual interpreter
    selection is required.
@@ -193,7 +195,7 @@ For a manual install from the checkout root, using the same interpreter as Studi
 
 ```bash
 .venv3.10/bin/python -m pip install --requirement requirements-macos.txt
-.venv3.10/bin/python "Repair Mac.py" --check
+.venv3.10/bin/python "Repair Mac 2.py" --check
 ```
 
 Substitute `.venv/bin/python` when that is the configured environment. The narrower

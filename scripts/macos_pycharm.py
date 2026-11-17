@@ -410,6 +410,7 @@ def _configuration_script(configuration: ET.Element, repo_root: Path) -> Path | 
 
 
 _LEGACY_REPAIR_SCRIPTS = (
+    "Repair Mac.py",
     "macos_repair_environment.py",
     "scripts/macos_repair_environment.py",
 )
@@ -428,7 +429,6 @@ def _studio_configuration(configuration: ET.Element, repo_root: Path) -> bool:
         return options.get("SCRIPT_NAME", "") in ("fpvs_studio.app", "fpvs_studio.app.main")
     return _configuration_script(configuration, repo_root) in (
         (repo_root / "src/fpvs_studio/app/main.py").resolve(),
-        (repo_root / "Repair Mac.py").resolve(),
         (repo_root / "Repair Mac 2.py").resolve(),
     ) or _legacy_repair_configuration(configuration, repo_root)
 
@@ -536,7 +536,7 @@ def _apply_repair_settings(repo_root: Path, python: Path, ide: RepairIDE) -> Non
         for configuration in document.iter("configuration"):
             if _studio_configuration(configuration, repo_root):
                 if _legacy_repair_configuration(configuration, repo_root):
-                    _set_option(configuration, "SCRIPT_NAME", "$PROJECT_DIR$/Repair Mac.py")
+                    _set_option(configuration, "SCRIPT_NAME", "$PROJECT_DIR$/Repair Mac 2.py")
                     touched = True
                 if not _interpreter_matches(configuration, python, sdk):
                     _set_option(configuration, "SDK_HOME", str(python.absolute()))

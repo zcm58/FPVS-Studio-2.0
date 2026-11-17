@@ -195,7 +195,7 @@ def test_mac_engine_requires_display_link_support_without_changing_other_platfor
 
 
 @pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
-def test_mac_engine_avoids_scipy_wheel_with_invalid_native_sections(platform_name) -> None:
+def test_mac_engine_allows_working_scipy_versions(platform_name) -> None:
     environment = {**default_environment(), "sys_platform": platform_name}
     requirements = [
         Requirement(value)
@@ -208,7 +208,8 @@ def test_mac_engine_avoids_scipy_wheel_with_invalid_native_sections(platform_nam
     ]
     if platform_name == "darwin":
         assert len(selected) == 1
-        assert str(selected[0].specifier) == "==1.14.1"
+        assert "1.14.1" in selected[0].specifier
+        assert "1.15.3" in selected[0].specifier
     else:
         assert selected == []
 

@@ -296,7 +296,7 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
         if config.get("name") == "Helper":
             expected_script = (
                 helper_path if helper_path.endswith("/Repair Mac 2.py")
-                else "$PROJECT_DIR$/Repair Mac.py"
+                else "$PROJECT_DIR$/Repair Mac 2.py"
             )
             assert values["SCRIPT_NAME"] == expected_script
     custom_values = pycharm._options(ET.parse(directory / "custom.xml").find("configuration"))
@@ -307,7 +307,7 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
 
 @pytest.mark.parametrize("location", ["workspace.xml", "runConfigurations/Repair.xml"])
 @pytest.mark.parametrize("old_script", [
-    "macos_repair_environment.py", "scripts/macos_repair_environment.py",
+    "Repair Mac.py", "macos_repair_environment.py", "scripts/macos_repair_environment.py",
 ])
 def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(
     repair_ide, location, old_script,
@@ -329,7 +329,7 @@ def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(
     assert target.read_bytes() == original
     assert pycharm.configure_for_repair(root, python) == "ready"
     saved = ET.parse(target).find(".//configuration[@name='Repair']")
-    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac.py"
+    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac 2.py"
     assert pycharm._options(saved)["PARAMETERS"] == "--participant keep"
 
 
