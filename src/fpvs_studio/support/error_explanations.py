@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import errno
 import re
+import sys
 from dataclasses import dataclass
 from zipfile import BadZipFile
 
@@ -298,9 +299,21 @@ def explain_error(
             "This experiment uses a format this version of FPVS Studio can't read.",
             "Check your Studio version in About, then install the latest Studio update and retry.",
         )
+    if "scipy" in text and "__thread_bss" in text and "zero-fill section" in text:
+        return ErrorExplanation(
+            "macOS couldn't load SciPy, a component needed by the presentation engine.",
+            "Update the complete Studio source checkout, close Studio, and double-click "
+            "Repair Mac 2.command. It checks the repair and reports the result automatically.",
+        )
     if any(isinstance(cause, ImportError) for cause in causes) or re.search(
         r"modulenotfounderror|importerror|dll load failed|no module named", text
     ):
+        if sys.platform == "darwin":
+            return ErrorExplanation(
+                "A component FPVS Studio needs couldn't be loaded in its Python environment.",
+                "Close Studio, update the complete source checkout, and double-click "
+                "Repair Mac 2.command to check dependencies and report the repair result.",
+            )
         return ErrorExplanation(
             "A component FPVS Studio needs couldn't be loaded.",
             "The installation may be incomplete or damaged. Close Studio and use Update & Repair, "

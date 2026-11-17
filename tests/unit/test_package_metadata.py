@@ -195,6 +195,26 @@ def test_mac_engine_requires_display_link_support_without_changing_other_platfor
 
 
 @pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
+def test_mac_engine_allows_working_scipy_versions(platform_name) -> None:
+    environment = {**default_environment(), "sys_platform": platform_name}
+    requirements = [
+        Requirement(value)
+        for value in ast.literal_eval(f"[{_extract_list_assignment('engine')}]")
+    ]
+    selected = [
+        requirement for requirement in requirements
+        if requirement.name.lower() == "scipy"
+        and (requirement.marker is None or requirement.marker.evaluate(environment))
+    ]
+    if platform_name == "darwin":
+        assert len(selected) == 1
+        assert "1.14.1" in selected[0].specifier
+        assert "1.15.3" in selected[0].specifier
+    else:
+        assert selected == []
+
+
+@pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
 def test_engine_binding_excludes_broken_pyqt6_stubs_on_mac_and_windows(platform_name) -> None:
     environment = {**default_environment(), "sys_platform": platform_name}
     requirements = [

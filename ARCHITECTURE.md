@@ -78,7 +78,8 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Participant results | `runtime/session_export.py`, `runtime/participant_results.py`; [contract](docs/RUNTIME_EXECUTION.md#exports) |
 | Settings preferences and account entry | `gui/settings_dialog.py`, `gui/controller.py`; [Settings workflow](docs/GUI_WORKFLOW.md#settings-appearance-and-layout) |
 | GUI task lifetime through native cleanup | `gui/update_lifecycle.py`, `gui/thread_completion.py` |
-| Mac repair/reporting/display/input adapters | `scripts/macos-source.sh`, `Repair Mac.py`, `scripts/macos_pycharm.py`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
+| Mac repair/reporting/display/input adapters | `scripts/macos-source.sh`, `Repair Mac 2.py`, `Repair Mac 2.command`, `scripts/macos_pycharm.py`, `runtime/macos_display.py`, `runtime/macos_session_process.py`, `engines/psychopy_macos_display.py`, `gui/local_test_display_dialog.py`, `gui/native_files.py`; [support](docs/MACOS_SUPPORT.md) |
+| Workflow reports | `support/workflow_reporting.py`: stdlib-only reports, opt-out, outbox/receipts; Feedback delivery; [contract](docs/BUG_REPORTING.md#automatic-workflow-completion-reports) |
 
 ## Dependency Rules
 

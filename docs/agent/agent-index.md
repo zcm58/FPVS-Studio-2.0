@@ -12,7 +12,7 @@ owners and targeted tests.
 | Scope | Use for | Governing guide | One focused contract |
 | --- | --- | --- | --- |
 | `repo` | Harness, shared configuration, Windows source bootstrap and PyCharm setup, cross-layer ownership | `AGENTS.md` | `ARCHITECTURE.md` or [Windows setup](../ENVIRONMENT.md#windows-source-setup) |
-| `macos` | Source bootstrap, environment/PyCharm repair and diagnostic reporting, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
+| `macos` | Source bootstrap, environment/PyCharm repair, automatic completion reports, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
 | `docs` | Guidance, contracts and plans | `AGENTS.md` | Edited document; `docs/exec-plans/README.md` for plan work |
 | `gui` | PySide6 authoring, Settings, Tools, controllers and workers | `src/fpvs_studio/gui/AGENTS.md` | `docs/GUI_WORKFLOW.md` for behavior or `docs/FRONTEND.md` for design |
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |

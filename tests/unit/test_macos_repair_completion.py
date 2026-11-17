@@ -1,0 +1,635 @@
+"""Repair completion is concise and automatic, including the detached IDE result."""
+
+from __future__ import annotations
+
+import importlib.util
+import io
+import json
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+
+ROOT = Path(__file__).resolve().parents[2]
+SPEC = importlib.util.spec_from_file_location("repair_completion_tests", ROOT / "Repair Mac 2.py")
+assert SPEC is not None and SPEC.loader is not None
+repair = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(repair)
+
+
+@pytest.fixture
+def session(tmp_path):
+    diagnostics = repair._Diagnostics(tmp_path)
+    try:
+        yield diagnostics
+    finally:
+        diagnostics.close()
+
+
+def facts(studio="2.8.1", scipy="1.15.3"):
+    return "FPVS_REPAIR_FACTS " + json.dumps({
+        "fpvs-studio": studio, "scipy": scipy, "python_version": "3.10.22",
+        "python_cpu": "arm64", "psychopy_version": "2026.2.5",
+        "numpy_version": "2.2.6", "pyside6_version": "6.11.3",
+    })
+
+
+def fake_metadata_process(monkeypatch, state):
+    monkeypatch.setattr(repair, "_log_context", lambda *args: None)
+
+    def launch(command, **kwargs):
+        assert command[1:3] == ["-I", "-c"]
+        assert "FPVS_REPAIR_FACTS" in command[3]
+        assert "load_psychopy_modules" not in command[3]
+        assert "import tomli" not in command[3]
+        if state.get("unrunnable"):
+            raise OSError("Interpreter cannot run")
+
+        class Child:
+            stdout = io.StringIO(state["facts"] + "\n")
+
+            def wait(self, timeout=None):
+                assert timeout == 15
+                return 0
+
+        return Child()
+
+    monkeypatch.setattr(repair.subprocess, "Popen", launch)
+
+
+@pytest.mark.parametrize("initial", ["missing", "unrunnable"])
+def test_rebuilt_environment_is_never_reported_as_the_original(monkeypatch, tmp_path, initial):
+    python = tmp_path / ".venv3.10/bin/python"
+    if initial == "unrunnable":
+        python.parent.mkdir(parents=True)
+        python.touch()
+    state = {"unrunnable": initial == "unrunnable", "facts": facts("3.0.1", "1.14.1")}
+    fake_metadata_process(monkeypatch, state)
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
+    monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
+    reports = []
+
+    def rebuild(*args, **kwargs):
+        python.parent.mkdir(parents=True, exist_ok=True)
+        python.touch()
+        state["unrunnable"] = False
+        repair._DIAGNOSTICS.observe(state["facts"])
+        return 0
+
+    monkeypatch.setattr(repair, "repair_environment", rebuild)
+    monkeypatch.setattr(repair, "_complete_automatic_report", lambda *args: reports.append(args))
+    assert repair.main(["--automatic-report"]) == 0
+    details = reports[0][0].details
+    assert details["initial_studio_version"] == ("missing" if initial == "missing" else "unknown")
+    assert details["initial_scipy_version"] == ("missing" if initial == "missing" else "unknown")
+    assert details["final_scipy_version"] == "1.14.1"
+
+
+@pytest.mark.parametrize("final", ["installed", "unrunnable"])
+def test_failed_setup_still_snapshots_actual_final_packages(monkeypatch, tmp_path, final):
+    python = tmp_path / ".venv3.10/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    state = {"facts": facts()}
+    fake_metadata_process(monkeypatch, state)
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
+    monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
+    reports = []
+
+    def install_then_fail(*args, **kwargs):
+        repair._DIAGNOSTICS.observe(facts())
+        state["facts"] = facts("3.0.1", "1.14.1")
+        state["unrunnable"] = final == "unrunnable"
+        return 1
+
+    monkeypatch.setattr(repair, "repair_environment", install_then_fail)
+    monkeypatch.setattr(repair, "_complete_automatic_report", lambda *args: reports.append(args))
+    assert repair.main(["--automatic-report"]) == 1
+    details = reports[0][0].details
+    assert details["initial_scipy_version"] == "1.15.3"
+    assert details["final_scipy_version"] == ("1.14.1" if final == "installed" else "unknown")
+    assert details["final_studio_version"] == ("3.0.1" if final == "installed" else "unknown")
+    assert details["python_version"] == ("3.10.22" if final == "installed" else "unknown")
+
+
+def test_versions_keep_before_after_and_native_architecture(session):
+    session.details["cpu"] = "arm64"
+    session.observe(facts())
+    session.observe(facts("3.0.1", "1.14.1"))
+    assert session.details["initial_studio_version"] == "2.8.1"
+    assert session.details["initial_scipy_version"] == "1.15.3"
+    assert session.details["final_scipy_version"] == "1.14.1"
+    assert session.details["rosetta"] == "native"
+
+
+def test_pip_chatter_stays_local_and_repeated_failure_is_shown_once(monkeypatch, session):
+    error = "ImportError: scipy __thread_bss has a zero-fill type but offset is not zero"
+    chatter = "Requirement already satisfied: package in /Users/private-name/env\n" * 4000
+
+    class Child:
+        stdout = io.StringIO(chatter + error + "\n" + error + "\n")
+
+        def wait(self, timeout=None):
+            return 1
+
+    monkeypatch.setattr(repair.subprocess, "Popen", lambda *args, **kwargs: Child())
+    console = io.StringIO()
+    session.console_handler.setStream(console)
+    session.command(["python", "-m", "pip", "install"], cwd=session.root)
+    output = console.getvalue()
+    assert "Requirement already satisfied" not in output
+    assert output.count(error) == 1
+    assert "Requirement already satisfied" in session.path.read_text(encoding="utf-8")
+    assert "private-name" not in session.path.read_text(encoding="utf-8")
+    assert session.details["failure_code"] == "scipy_macho"
+    session.failure("setup_failed")
+    assert session.details["failure_code"] == "scipy_macho"
+
+
+def test_compatibility_update_is_console_information_without_an_original_failure(session):
+    console = io.StringIO()
+    session.console_handler.setStream(console)
+    message = "Compatibility update available: scipy 1.15.3 does not satisfy scipy==1.14.1."
+    session.observe(message)
+    assert console.getvalue().strip() == message
+    assert session.details["failure_code"] == "none"
+    assert session.details["initial_failure_code"] == "none"
+
+
+@pytest.mark.parametrize("late_error, expected", [
+    ("ImportError: a native graphics library could not load", "setup_failed"),
+    ("ModuleNotFoundError: No module named 'graphics_dependency'", "missing_dependency"),
+])
+def test_new_setup_failure_does_not_reuse_or_replace_the_original_cause(
+    monkeypatch, session, late_error, expected,
+):
+    session.failure("scipy_macho")
+    session.initial_checks_complete = True
+    session.details.update(dependency_check="passed", engine_import="failed")
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+
+    def fail_after_install(*args, **kwargs):
+        session.observe(facts("3.0.1", "1.14.1"))
+        session.observe(late_error)
+        return SimpleNamespace(returncode=1)
+
+    monkeypatch.setattr(repair, "_command", fail_after_install)
+    assert not repair._run_setup(session.root)
+    assert session.details["initial_failure_code"] == "scipy_macho"
+    assert session.details["failure_code"] == expected
+    assert session.details["final_scipy_version"] == "1.14.1"
+    assert session.details["dependency_check"] == "unknown"
+    assert session.details["engine_import"] == "unknown"
+
+
+@pytest.mark.parametrize("engine_exit, expected", [(0, "none"), (1, "engine_import_failed")])
+def test_new_engine_check_uses_its_own_failure_and_preserves_the_initial_cause(
+    monkeypatch, session, engine_exit, expected,
+):
+    session.failure("scipy_macho")
+    session.initial_checks_complete = True
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    results = iter((engine_exit, 0, 0))
+    monkeypatch.setattr(repair, "_run", lambda *args, **kwargs: next(results))
+    assert repair._check_environment(session.root, "python") == (engine_exit == 0)
+    assert session.details["initial_failure_code"] == "scipy_macho"
+    assert session.details["failure_code"] == expected
+    assert session.details["dependency_check"] == "passed"
+    assert session.details["engine_import"] == ("passed" if engine_exit == 0 else "failed")
+
+
+@pytest.mark.parametrize(
+    "engine_ok,pip_ok,compatible,check_only,setup_ok,kind,initial_failure,exit_code", [
+        (True, True, False, False, True, "compatibility_update", "none", 0),
+        (False, True, False, False, True, "repair", "scipy_macho", 0),
+        (True, False, False, False, True, "repair", "missing_dependency", 0),
+        (True, True, True, False, True, "none", "none", 0),
+        (True, True, False, True, True, "none", "none", 1),
+        (True, True, False, False, False, "compatibility_update", "none", 1),
+    ],
+)
+def test_preflight_distinguishes_working_compatibility_drift_from_repairs(
+    monkeypatch, session, engine_ok, pip_ok, compatible, check_only, setup_ok,
+    kind, initial_failure, exit_code,
+):
+    calls = []
+    updated = False
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", lambda root: "selected-python")
+
+    def run(python, arguments, root, **kwargs):
+        nonlocal updated
+        assert python == "selected-python" and root == session.root
+        if arguments == ["-c", repair.ENGINE_PROBE]:
+            calls.append("engine")
+            session.observe(facts("3.0.1", "1.14.1") if updated else facts())
+            if not updated and not engine_ok:
+                session.observe("ImportError: scipy __thread_bss zero-fill offset is not zero")
+                return 1
+        elif arguments == ["-m", "pip", "check"]:
+            calls.append("pip check")
+            if not updated and not pip_ok:
+                return 1
+        elif arguments == ["-c", repair.COMPATIBILITY_PROBE, str(root)]:
+            calls.append("compatibility")
+            if not updated and not compatible:
+                session.observe("Compatibility update available: Installed Studio metadata "
+                                "is from a different source version.")
+                return 2
+        elif arguments[:3] == ["-m", "pip", "install"]:
+            assert arguments[-1] == "scipy==1.14.1"
+            assert calls[:3] == ["engine", "pip check", "compatibility"]
+            calls.append("targeted scipy")
+            updated = True
+        else:
+            assert arguments == ["-m", "pip", "--version"]
+            calls.append("pip version")
+        return 0
+
+    def setup(command, **kwargs):
+        nonlocal updated
+        assert command[0] == "/bin/bash"
+        # All independent baseline checks finish before the first setup mutation.
+        assert calls[:3] == ["engine", "pip check", "compatibility"]
+        calls.append("setup")
+        updated = True
+        session.observe(facts("3.0.1", "1.14.1"))
+        if not setup_ok:
+            session.observe("ImportError: a graphics dependency could not load")
+        return SimpleNamespace(returncode=0 if setup_ok else 1)
+
+    def configure(*args, **kwargs):
+        calls.append("ide")
+        return "ready"
+
+    monkeypatch.setattr(repair, "_run", run)
+    monkeypatch.setattr(repair, "_command", setup)
+    monkeypatch.setattr(repair, "_configure_pycharm", configure)
+    monkeypatch.setattr(
+        repair, "_backup_environment", lambda root: pytest.fail("Unexpected rebuild"),
+    )
+    assert repair.repair_environment(session.root, check_only=check_only) == exit_code
+    details = session.details
+    assert details["helper_version"] == "2.2"
+    assert details["initial_engine_import"] == ("passed" if engine_ok else "failed")
+    assert details["initial_dependency_check"] == ("passed" if pip_ok else "failed")
+    assert details["initial_compatibility_check"] == ("passed" if compatible else "failed")
+    assert details["initial_failure_code"] == initial_failure
+    assert details["change_kind"] == kind
+    assert details["environment_rebuild"] == "skipped"
+    assert details["package_updates"] == (
+        "skipped" if kind == "none" else "passed" if setup_ok else "failed"
+    )
+    if "setup" in calls:
+        assert details["initial_scipy_version"] == "1.15.3"
+        assert details["final_scipy_version"] == "1.14.1"
+    if exit_code == 0:
+        assert details["engine_import"] == details["dependency_check"] == "passed"
+        assert details["compatibility_check"] == "passed"
+        assert details["failure_code"] == "none"
+        assert calls[-1] == "ide"
+    elif not setup_ok:
+        assert details["failure_code"] == "setup_failed"
+        assert details["engine_import"] == details["dependency_check"] == "unknown"
+        assert details["compatibility_check"] == "unknown"
+    if kind == "none":
+        assert "setup" not in calls
+        assert "targeted scipy" not in calls
+    if not engine_ok and not check_only:
+        assert "targeted scipy" in calls
+        assert "setup" not in calls
+
+
+@pytest.mark.parametrize("install_code", [0, 1])
+def test_targeted_scipy_failure_stops_without_rebuild(monkeypatch, session, install_code):
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", lambda root: "python")
+    checks = []
+
+    def check(*args, **kwargs):
+        checks.append(kwargs)
+        session.details["failure_code"] = "scipy_macho"
+        session.details["engine_import"] = "failed"
+        return False
+
+    def install(python, arguments, root, **kwargs):
+        assert arguments[-1] == "scipy==1.14.1"
+        return install_code
+
+    monkeypatch.setattr(repair, "_check_environment", check)
+    monkeypatch.setattr(repair, "_run", install)
+    monkeypatch.setattr(repair, "_run_setup", lambda root: pytest.fail("Unexpected setup"))
+    monkeypatch.setattr(
+        repair, "_backup_environment", lambda root: pytest.fail("Unexpected rebuild"),
+    )
+    monkeypatch.setattr(
+        repair, "_configure_pycharm", lambda *a, **k: pytest.fail("Unexpected IDE change"),
+    )
+    assert repair.repair_environment(session.root) == 1
+    assert len(checks) == (2 if install_code == 0 else 1)
+    assert session.details["package_updates"] == ("passed" if install_code == 0 else "failed")
+
+
+def test_missing_interpreter_keeps_unknown_baseline_and_reports_only_rebuild(monkeypatch, session):
+    validations = iter((repair.EnvironmentInvalidError("missing"), "selected-python"))
+    calls = []
+
+    def validate(root):
+        result = next(validations)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", validate)
+    monkeypatch.setattr(repair, "_backup_environment", lambda root: calls.append("backup"))
+    monkeypatch.setattr(repair, "_command", lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(repair, "_run", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(repair, "_configure_pycharm", lambda *args, **kwargs: "ready")
+    assert repair.repair_environment(session.root) == 0
+    assert calls == ["backup"]
+    assert session.details["change_kind"] == "repair"
+    assert session.details["initial_failure_code"] == "python_incompatible"
+    for field in ("engine_import", "dependency_check", "compatibility_check"):
+        assert session.details[f"initial_{field}"] == "unknown"
+        assert session.details[field] == "passed"
+    assert session.details["environment_rebuild"] == "passed"
+    assert session.details["package_updates"] == "skipped"
+
+
+def test_check_only_compatibility_drift_completion_does_not_invent_an_engine_problem(
+    monkeypatch, session,
+):
+    module = repair._workflow_module(ROOT)
+    monkeypatch.setattr(repair, "_workflow_module", lambda root: module)
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "_native_dialog", lambda *args: "Close")
+    monkeypatch.setattr(module, "WorkflowReporter", lambda: SimpleNamespace(
+        queue=lambda report: False, deliver=lambda: 0, status=lambda report_id: "disabled",
+    ))
+    results = iter((0, 0, 2))
+    monkeypatch.setattr(repair, "_run", lambda *args, **kwargs: next(results))
+    session.details["check_only"] = True
+    assert not repair._check_environment(session.root, "selected-python", initial=True)
+    repair._complete_automatic_report(session, 1, "3.0.1")
+    report = json.loads(session.path.with_name("completion.json").read_text())
+    assert report["details"]["change_kind"] == "none"
+    assert report["details"]["initial_failure_code"] == "none"
+    assert report["details"]["failure_code"] == "dependency_mismatch"
+    assert report["details"]["engine_import"] == "passed"
+    summary = session.path.with_name("completion.txt").read_text(encoding="utf-8")
+    assert "no changes made" in summary
+    assert "Original problem" not in summary
+    assert "Remaining problem" not in summary
+
+
+@pytest.mark.parametrize("failed_phase", ["engine_import", "dependency_check"])
+def test_timed_out_baseline_check_does_not_prevent_other_initial_checks(
+    monkeypatch, session, failed_phase,
+):
+    phases = iter(("engine_import", "dependency_check", "compatibility_check"))
+    calls = []
+
+    def run(*args, **kwargs):
+        phase = next(phases)
+        calls.append(phase)
+        if phase == failed_phase:
+            raise repair.subprocess.TimeoutExpired("synthetic probe", 120)
+        return 0
+
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "_run", run)
+    assert not repair._check_environment(session.root, "selected-python", initial=True)
+    assert calls == ["engine_import", "dependency_check", "compatibility_check"]
+    for phase in calls:
+        assert session.details[f"initial_{phase}"] == (
+            "failed" if phase == failed_phase else "passed"
+        )
+
+
+@pytest.mark.parametrize("problem", ["unexpected_exit", "timeout", "os_error"])
+@pytest.mark.parametrize("engine_failure", ["none", "scipy_macho", "engine_import_failed"])
+def test_unconfirmed_compatibility_stops_before_changes_and_preserves_baseline(
+    monkeypatch, tmp_path, problem, engine_failure,
+):
+    calls = []
+    reports = []
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
+    monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
+    monkeypatch.setattr(repair, "_snapshot_environment", lambda *args, **kwargs: None)
+    monkeypatch.setattr(repair, "_log_context", lambda *args: None)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", lambda root: "selected-python")
+
+    def run(python, arguments, root, **kwargs):
+        if arguments == ["-c", repair.ENGINE_PROBE]:
+            calls.append("engine")
+            if engine_failure == "scipy_macho":
+                repair._DIAGNOSTICS.observe("ImportError: scipy __thread_bss offset is not zero")
+            return 0 if engine_failure == "none" else 1
+        if arguments == ["-m", "pip", "check"]:
+            calls.append("pip check")
+            return 0
+        assert arguments == ["-c", repair.COMPATIBILITY_PROBE, str(root)]
+        calls.append("compatibility")
+        if problem == "timeout":
+            raise repair.subprocess.TimeoutExpired("synthetic compatibility probe", 120)
+        if problem == "os_error":
+            raise OSError("Synthetic compatibility process could not start")
+        repair._DIAGNOSTICS.observe("ValueError: Synthetic malformed compatibility metadata")
+        return 1
+
+    def mutation(*args, **kwargs):
+        pytest.fail("An unconfirmed compatibility check must stop before changes")
+
+    monkeypatch.setattr(repair, "_run", run)
+    monkeypatch.setattr(repair, "_run_setup", mutation)
+    monkeypatch.setattr(repair, "_backup_environment", mutation)
+    monkeypatch.setattr(repair, "_configure_pycharm", mutation)
+    monkeypatch.setattr(
+        repair, "_complete_automatic_report",
+        lambda session, *args: reports.append((dict(session.details), session.path)),
+    )
+    assert repair.main(["--automatic-report"]) == 1
+    assert calls == ["engine", "pip check", "compatibility"]
+    details, log_path = reports[0]
+    assert details["initial_engine_import"] == (
+        "passed" if engine_failure == "none" else "failed"
+    )
+    assert details["initial_dependency_check"] == "passed"
+    assert details["initial_compatibility_check"] == details["compatibility_check"] == "unknown"
+    assert details["initial_failure_code"] == engine_failure
+    assert details["failure_code"] == ("unknown" if engine_failure == "none" else engine_failure)
+    assert details["change_kind"] == "none"
+    assert details["package_updates"] == details["environment_rebuild"] == "skipped"
+    log = log_path.read_text(encoding="utf-8")
+    assert "Source compatibility could not be confirmed" in log
+    assert "Compatibility update available" not in log
+    module = repair._workflow_module(ROOT)
+    summary = module.render_report(module.build_report(
+        workflow="macos_repair", outcome="failure", app_version="3.0.1",
+        os_version="26.5.2", details=details,
+    ))
+    assert "updates available" not in summary
+
+
+@pytest.mark.parametrize("status", ["submitted", "queued", "offline", "disabled", "rejected"])
+def test_completion_persists_summary_before_network_and_reports_own_delivery(
+    monkeypatch, tmp_path, status,
+):
+    module = repair._workflow_module(ROOT)
+    calls = []
+
+    class Reporter:
+        def queue(self, report):
+            assert list(tmp_path.rglob("completion.json"))
+            assert list(tmp_path.rglob("completion.txt"))
+            calls.append(("queue", report["report_id"]))
+            return status != "disabled"
+
+        def deliver(self):
+            calls.append(("deliver",))
+            if status == "offline":
+                raise module.WorkflowReportError("The reporting service is unreachable.")
+            return 1  # Could be a different queued report; never use this as our receipt.
+
+        def status(self, report_id):
+            assert report_id == calls[0][1]
+            return "queued" if status == "offline" else status
+
+    monkeypatch.setattr(module, "WorkflowReporter", Reporter)
+    monkeypatch.setattr(repair, "_workflow_module", lambda root: module)
+    monkeypatch.setattr(repair.platform, "mac_ver", lambda: ("27.0", (), "arm64"))
+    monkeypatch.setattr(repair, "_native_dialog", lambda *args: "Close")
+    diagnostics = repair._Diagnostics(tmp_path)
+    diagnostics.automatic_report = True
+    diagnostics.details["cpu"] = "arm64"
+    diagnostics.observe(facts())
+    diagnostics.observe("ImportError: scipy __thread_bss offset is not zero")
+    diagnostics.observe(facts("3.0.1", "1.14.1"))
+    diagnostics.close()
+    messages = []
+    monkeypatch.setattr(
+        repair._LOGGER, "info", lambda message, *args: messages.append(message % args),
+    )
+    repair._complete_automatic_report(diagnostics, 0, "3.0.1")
+    report = json.loads(diagnostics.path.with_name("completion.json").read_text())
+    assert report["outcome"] == "success"
+    assert report["details"]["initial_failure_code"] == "scipy_macho"
+    assert report["details"]["failure_code"] == "none"
+    summary = diagnostics.path.with_name("completion.txt").read_text(encoding="utf-8")
+    assert len(summary) < 6000 and "Requirement already" not in summary
+    repair._complete_automatic_report(diagnostics, 0, "3.0.1")
+    assert calls[0][1] == calls[2][1]  # Same completion keeps its immutable identity.
+    output = "\n".join(messages)
+    assert ("Completion report submitted" in output) == (status == "submitted")
+
+
+@pytest.mark.parametrize("code", [0, 1, 130])
+def test_automatic_entry_reports_failure_success_and_cancellation_without_manual_flow(
+    monkeypatch, tmp_path, code,
+):
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
+    monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
+    calls = []
+
+    def operation(*args, **kwargs):
+        if code == 130:
+            raise KeyboardInterrupt
+        return code
+
+    def no_manual(*args):
+        pytest.fail("Automatic completion must not request manual submission")
+
+    monkeypatch.setattr(repair, "repair_environment", operation)
+    monkeypatch.setattr(repair, "_offer_report", no_manual)
+    monkeypatch.setattr(repair, "_complete_automatic_report", lambda *args: calls.append(args))
+    assert repair.main(["--automatic-report"]) == code
+    assert len(calls) == 1 and calls[0][1] == code
+    assert calls[0][0].stream.closed
+
+
+def test_detached_completion_keeps_auto_mode_and_final_result(monkeypatch, tmp_path):
+    diagnostics = repair._Diagnostics(tmp_path)
+    log = diagnostics.path
+    diagnostics.close()
+    job = tmp_path / ".fpvs-macos/pycharm-repair" / ("c" * 32 + ".log")
+    job.parent.mkdir()
+    job.write_text("IDE finished")
+    job.with_suffix(".claim").write_text("123")
+    job.with_suffix(".result.json").write_text(json.dumps({"success": False}))
+    state = log.with_name("continuation.json")
+    state.write_text(json.dumps({
+        "log": str(log), "job_log": str(job), "app_version": "3.0.1",
+        "automatic_report": True, "details": {
+            "initial_scipy_version": "1.15.3", "initial_engine_import": "passed",
+            "initial_dependency_check": "passed", "initial_compatibility_check": "failed",
+            "change_kind": "compatibility_update", "initial_failure_code": "none",
+        },
+    }))
+    calls = []
+    monkeypatch.setattr(repair, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(repair, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(repair, "_complete_automatic_report", lambda *args: calls.append(args))
+    python = tmp_path / ".venv3.10/bin/python"
+    python.parent.mkdir(parents=True)
+    python.touch()
+    fake_metadata_process(monkeypatch, {"facts": facts("3.0.1", "1.14.1")})
+    assert repair._finish_diagnostics(tmp_path, state) == 1
+    assert calls[0][0].details["pycharm_configuration"] == "failed"
+    assert calls[0][0].details["initial_scipy_version"] == "1.15.3"
+    assert calls[0][0].details["final_scipy_version"] == "1.14.1"
+    assert calls[0][0].details["initial_failure_code"] == "none"
+    assert calls[0][0].details["failure_code"] == "ide_configuration_failed"
+    assert calls[0][0].details["initial_engine_import"] == "passed"
+    assert calls[0][0].details["change_kind"] == "compatibility_update"
+    assert calls[0][1] == 1
+
+
+@pytest.mark.parametrize("success", [True, False])
+@pytest.mark.parametrize("summary_saved", [True, False])
+def test_detached_reporting_failure_keeps_repair_outcome_and_never_offers_manual_submission(
+    monkeypatch, tmp_path, success, summary_saved,
+):
+    diagnostics = repair._Diagnostics(tmp_path)
+    log = diagnostics.path
+    diagnostics.close()
+    job = tmp_path / ".fpvs-macos/pycharm-repair" / ("d" * 32 + ".log")
+    job.parent.mkdir()
+    job.write_text("IDE finished")
+    job.with_suffix(".claim").write_text("123")
+    job.with_suffix(".result.json").write_text(json.dumps({"success": success}))
+    state = log.with_name("continuation.json")
+    state.write_text(json.dumps({
+        "log": str(log), "job_log": str(job), "app_version": "3.0.1",
+        "automatic_report": True, "details": {"change_kind": "compatibility_update"},
+    }))
+
+    def fail_reporting(session, code, version):
+        if summary_saved:
+            session.path.with_name("completion.txt").write_text("Retained completion summary")
+            raise ValueError("Invalid reporting origin")
+        raise OSError("Could not persist completion")
+
+    def no_manual(*args):
+        pytest.fail("Automatic delivery errors must not offer manual browser submission")
+
+    dialogs = []
+    monkeypatch.setattr(repair, "sys", SimpleNamespace(platform="darwin"))
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac 2.py"))
+    monkeypatch.setattr(repair, "_pid_alive", lambda pid: False)
+    monkeypatch.setattr(repair, "_snapshot_environment", lambda *args: None)
+    monkeypatch.setattr(repair, "_complete_automatic_report", fail_reporting)
+    monkeypatch.setattr(repair, "_offer_report", no_manual)
+    monkeypatch.setattr(repair, "_native_dialog", lambda *args: dialogs.append(args) or "Close")
+    assert repair.main(["--finish-diagnostics", str(state)]) == (0 if success else 1)
+    assert len(dialogs) == 1 and dialogs[0][1] == ("Close",)
+    message = dialogs[0][0]
+    assert ("Environment checks completed successfully." in message) == success
+    assert ("Environment checks did not complete." in message) != success
+    assert "Repair completed" not in message
+    assert ("could not be confirmed" in message) == summary_saved
+    assert ("could not be saved or sent" in message) != summary_saved

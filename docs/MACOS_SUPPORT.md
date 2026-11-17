@@ -61,10 +61,14 @@ the environment because it can contain the environment's base interpreter. Setup
 does not change system Python or shell startup files. An existing environment with
 the wrong Python version/CPU or an incomplete interpreter is reported and preserved.
 
-`pyproject.toml` remains the only dependency version list. `requirements-macos.txt`
+`pyproject.toml` owns normal dependency requirements. `requirements-macos.txt`
 and the primary Windows `requirements.txt` both include its `dev,engine` extras.
 Setup installs with pip, runs `pip check`, checks GUI imports without opening an app,
-and verifies engine metadata. Successful installation does not guarantee every GUI,
+and loads the actual engine dependencies in a separate isolated process. The Mac
+engine extra allows SciPy 1.14.1 and newer. Repair Mac 2 preserves working SciPy
+installations and installs 1.14.1 only after observing the specific native PROPACK
+loader failure, then checks the engine again. Python remains 3.10;
+Windows dependency selection is unchanged. Successful installation does not guarantee every GUI,
 presentation or service workflow is bug-free; those acceptance gates remain above.
 
 Intel dependencies can require compilation. Setup checks Apple's Command Line Tools,
@@ -90,14 +94,43 @@ For a nonstandard IDE install, set
 
 ### Repairing the PyCharm environment
 
-If Test/Pilot says PsychoPy is not installed, check the interpreter used by the
-Studio run configuration. Installing the separate PsychoPy application does not
-install packages into Studio's virtual environment. The same short error can also
-hide an import failure in one of PsychoPy's dependencies; the full traceback is
-needed to distinguish these cases.
+After pulling the complete source checkout, double-click **Repair Mac 2.command**
+beside **Setup Mac.command**. It runs the shared repair and automatically submits a
+concise completion report after the final environment/IDE outcome. There is no Send
+button or browser verification. **Repair Mac 2.py** provides the same flow in PyCharm.
+A missing/incompatible interpreter is prepared through the existing managed-Python
+bootstrap; the Python helper owns subsequent environment repair and diagnostics.
+OS installer/save prompts still require their normal user interaction.
+
+Helper 2.2 checks the current engine first, then checks dependency consistency and
+the source checkout's package requirements separately. Initial results are retained
+before any package/IDE changes. A missing or unusable interpreter cannot run that
+initial engine check and is reported as such. A working engine with older package
+metadata or different required versions receives **compatibility updates**; an
+observed engine/dependency/interpreter failure receives a **repair**. The report
+shows initial and final checks, package updates and full environment rebuilding
+separately. If compatibility cannot be checked, the helper stops further changes
+and reports that result as unknown. Opening the authoring GUI alone is
+not an engine-import test, and an import check does not verify presentation timing.
+
+The completion window distinguishes repair success/failure from report submission.
+`completion.txt` and `completion.json` live beside the detailed private `repair.log`.
+Normal console output shows progress and distinct failures; pip chatter stays in
+the detailed log. Network failures leave the completion queued for a later repair
+run. A saved automatic-report opt-out remains honored. See the
+[automatic workflow report contract](BUG_REPORTING.md#automatic-workflow-completion-reports).
+**Repair Mac 2.py** now contains the repair implementation and automatically reports
+completion. The obsolete Repair Mac.py entry point has been removed.
+
+Test/Pilot now distinguishes a missing PsychoPy installation from a dependency
+that is installed but cannot load. Installing the separate PsychoPy application
+does not install packages into Studio's virtual environment. For a missing
+installation, check the Studio interpreter; for a SciPy native-library failure,
+run **Repair Mac 2.command** from the updated checkout. Expanded error details
+retain the original import cause.
 
 1. Update the complete Studio checkout, including its `scripts/` folder, and close
-   Studio. In PyCharm, run the top-level `Repair Mac.py` beside
+   Studio. In PyCharm, run the top-level `Repair Mac 2.py` beside
    `Setup Mac.command`, without parameters.
    The helper can start from the wrong project interpreter; no manual interpreter
    selection is required.
@@ -132,8 +165,8 @@ IDE settings are changed only after the relevant PyCharm process has exited. The
 finishing job keeps its log and result in `.fpvs-macos/pycharm-repair/`, so the outcome
 survives the IDE restart. A pending finishing job is not a success report.
 
-The same helper contains diagnostic capture and reporting, using only Python's
-standard library so they also work when Studio cannot import. Each run saves a
+The shared helper captures diagnostics; the reusable automatic reporter uses only
+Python's standard library so both work when Studio cannot import. Each run saves a
 private `repair.log` under `.fpvs-macos/diagnostics/<run>/`. It records source version
 and file fingerprints, launching/selected interpreter details, dependency versions,
 streamed setup/check output, exit codes, durations and full chained tracebacks.
@@ -162,7 +195,7 @@ For a manual install from the checkout root, using the same interpreter as Studi
 
 ```bash
 .venv3.10/bin/python -m pip install --requirement requirements-macos.txt
-.venv3.10/bin/python "Repair Mac.py" --check
+.venv3.10/bin/python "Repair Mac 2.py" --check
 ```
 
 Substitute `.venv/bin/python` when that is the configured environment. The narrower

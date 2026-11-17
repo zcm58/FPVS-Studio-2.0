@@ -220,6 +220,25 @@ def test_repair_configures_closed_ide_and_second_check_is_read_only(repair_ide, 
     assert before == {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in files}
 
 
+@pytest.mark.parametrize("selected", ["Python.Repair Mac", "Python.Repair Mac 2", None])
+def test_repair_restores_studio_run_selection_in_healthy_environment(repair_ide, selected):
+    root, python, ide = repair_ide
+    assert pycharm.configure_for_repair(root, python) == "ready"
+    path = root / ".idea/workspace.xml"
+    tree = ET.parse(path)
+    manager = tree.find("component[@name='RunManager']")
+    if selected is None:
+        manager.attrib.pop("selected")
+    else:
+        manager.set("selected", selected)
+    tree.write(path)
+    assert not pycharm._repair_settings_ready(root, python, ide)
+    assert pycharm.configure_for_repair(root, python) == "ready"
+    assert ET.parse(path).find("component[@name='RunManager']").get("selected") == (
+        "Python.FPVS Studio (Mac)"
+    )
+
+
 def test_check_only_mismatch_does_not_create_ide_or_job_files(repair_ide):
     root, python, _ide = repair_ide
     with pytest.raises(ValueError, match="without --check"):
@@ -241,6 +260,7 @@ def _configuration(parent, name, script, *, module=False):
 
 @pytest.mark.parametrize("helper_path", [
     "$PROJECT_DIR$/Repair Mac.py",
+    "$PROJECT_DIR$/Repair Mac 2.py",
     "$PROJECT_DIR$/macos_repair_environment.py",
     "$PROJECT_DIR$/scripts/macos_repair_environment.py",
 ])
@@ -274,7 +294,11 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
         expected = "/wrong/python" if config.get("name") == "Other" else str(python)
         assert values["SDK_HOME"] == expected
         if config.get("name") == "Helper":
-            assert values["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac.py"
+            expected_script = (
+                helper_path if helper_path.endswith("/Repair Mac 2.py")
+                else "$PROJECT_DIR$/Repair Mac 2.py"
+            )
+            assert values["SCRIPT_NAME"] == expected_script
     custom_values = pycharm._options(ET.parse(directory / "custom.xml").find("configuration"))
     assert custom_values["SDK_HOME"] == str(python)
     assert custom_values["PARAMETERS"] == "--participant keep"
@@ -283,7 +307,7 @@ def test_repair_updates_only_studio_and_helper_runs_and_preserves_other_settings
 
 @pytest.mark.parametrize("location", ["workspace.xml", "runConfigurations/Repair.xml"])
 @pytest.mark.parametrize("old_script", [
-    "macos_repair_environment.py", "scripts/macos_repair_environment.py",
+    "Repair Mac.py", "macos_repair_environment.py", "scripts/macos_repair_environment.py",
 ])
 def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(
     repair_ide, location, old_script,
@@ -305,7 +329,7 @@ def test_old_helper_path_requires_repair_even_when_its_interpreter_is_correct(
     assert target.read_bytes() == original
     assert pycharm.configure_for_repair(root, python) == "ready"
     saved = ET.parse(target).find(".//configuration[@name='Repair']")
-    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac.py"
+    assert pycharm._options(saved)["SCRIPT_NAME"] == "$PROJECT_DIR$/Repair Mac 2.py"
     assert pycharm._options(saved)["PARAMETERS"] == "--participant keep"
 
 
@@ -660,6 +684,12 @@ if args[:2] == ['-m', 'venv']:
     target.chmod(0o700)
 if args[:3] == ['-m', 'pip', 'install'] and os.environ.get('FPVS_TEST_PIP_FAIL'):
     sys.exit(9)
+if (args[:1] == ['-c'] and '.venv' in sys.argv[1]
+        and os.environ.get('FPVS_TEST_INCOMPATIBLE_VENV')):
+    sys.exit(7)
+if (os.environ.get('FPVS_TEST_ENGINE_FAIL')
+        and any('load_psychopy_modules()' in arg for arg in args)):
+    sys.exit(8)
 """))
     return root, tools, log, env, executable, python
 
@@ -704,6 +734,18 @@ def test_install_failure_keeps_environment_and_never_reports_success(shell_proje
     assert "Setup complete" not in result.stdout
     assert (root / ".venv3.10/bin/python").is_file()
     assert (root / ".fpvs-macos/setup.log").is_file()
+
+
+def test_native_engine_failure_never_reports_setup_success_or_changes_ide(shell_project):
+    root, _tools, log, env, _executable, python = shell_project
+    env.update(FPVS_PYTHON=str(python), FPVS_TEST_ENGINE_FAIL="1")
+    result = _setup(root, env, "setup")
+    assert result.returncode == 8
+    assert "Setup did not finish" in result.stdout
+    assert "Setup complete" not in result.stdout
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert not any(call[0] == "scripts/macos_pycharm.py" for call in calls)
+    assert (root / ".venv3.10/bin/python").is_file()
 
 
 def test_incomplete_environment_is_preserved_with_clear_recovery(shell_project):
@@ -762,6 +804,52 @@ if sys.argv[2:4] == ['python', 'find']:
     assert ["-m", "venv", str(root / ".venv3.10")] in calls
 
 
+def test_repair_launcher_reuses_python_and_does_not_preempt_helper_diagnostics(shell_project):
+    root, _tools, log, env, _executable, python = shell_project
+    selected = root / ".venv3.10/bin/python"
+    selected.parent.mkdir(parents=True)
+    shutil.copyfile(python, selected)
+    selected.chmod(0o700)
+    result = _setup(root, env, "repair", "--check")
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert ["-I", str(root / "Repair Mac 2.py"), "--check"] in calls
+    assert not any(call[:2] == ["-m", "pip"] for call in calls)
+    assert not any(call[:2] == ["-m", "venv"] for call in calls)
+    assert not (root / ".fpvs-macos").exists()
+
+
+@pytest.mark.parametrize("existing", ["missing", "incompatible"])
+def test_repair_launcher_acquires_only_native_python_before_helper(shell_project, existing):
+    root, _tools, log, env, executable, python = shell_project
+    selected = root / ".venv3.10/bin/python"
+    if existing == "incompatible":
+        selected.parent.mkdir(parents=True)
+        shutil.copyfile(python, selected)
+        selected.chmod(0o700)
+        env["FPVS_TEST_INCOMPATIBLE_VENV"] = "1"
+    uv = root / ".fpvs-macos/uv-0.13.7/uv"
+    uv.parent.mkdir(parents=True)
+    stub = executable("managed-uv", _python_script(f"""
+import json, os, sys
+with open(os.environ['FPVS_TEST_LOG'], 'a') as log:
+    log.write(json.dumps(['uv', *sys.argv[2:]]) + '\\n')
+assert os.environ['UV_PYTHON_INSTALL_DIR'] == {str(root / '.fpvs-macos/python')!r}
+if sys.argv[2:4] == ['python', 'find']:
+    print({str(python)!r})
+"""))
+    shutil.copyfile(stub, uv)
+    uv.chmod(0o700)
+    result = _setup(root, env, "repair")
+    assert result.returncode == 0, result.stdout + result.stderr
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert ["uv", "python", "install", "--no-bin", "3.10"] in calls
+    assert ["-I", str(root / "Repair Mac 2.py")] in calls
+    assert not any(call[:2] == ["-m", "pip"] for call in calls)
+    assert not any(call[:2] == ["-m", "venv"] for call in calls)
+    assert selected.exists() is (existing == "incompatible")
+
+
 def test_running_pycharm_is_not_reconfigured_or_quit_by_the_launcher(shell_project):
     root, _tools, _log, env, executable, python = shell_project
     env["FPVS_PYTHON"] = str(python)
@@ -794,6 +882,7 @@ pathlib.Path({str(marker)!r}).touch()
 @pytest.mark.parametrize("filename,command", [
     ("Setup Mac.command", "setup"), ("Run Mac.command", "run"),
     ("Open in PyCharm Mac.command", "pycharm"),
+    ("Repair Mac 2.command", "repair"),
 ])
 def test_finder_shortcuts_find_checkout_from_another_directory(shell_project, filename, command):
     root, _tools, _log, env, _executable, _python = shell_project

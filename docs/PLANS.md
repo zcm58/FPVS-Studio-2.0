@@ -33,6 +33,7 @@ historical release draft does not authorize publishing an old version.
 Proposals are not implemented behavior. Start in `planned/` and move a plan to
 `active/` when implementation is authorized.
 
+- [Slate & Signal Teal desktop appearance](exec-plans/planned/slate-and-signal-teal-appearance.md)
 - [Image pool reset policy](exec-plans/planned/image-pool-reset-policy.md)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md)
 - [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)
@@ -43,6 +44,14 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Targeted SciPy repair](exec-plans/completed/targeted-scipy-repair.md):
+  preserve working SciPy versions and consolidate the helper into Repair Mac 2.
+- [Mac repair preflight](exec-plans/completed/macos-repair-preflight.md):
+  engine checks before changes, preserved initial health and distinct compatibility
+  update/repair reports; affected-Mac acceptance remains under macOS Phase 1.
+- [Mac repair completion reports](exec-plans/completed/macos-repair-completion-reports.md):
+  one-click source repair, SciPy selection, accurate dependency errors and deployed
+  automatic completion reports; affected-Mac acceptance remains under macOS Phase 1.
 - [Project import progress](exec-plans/completed/import-progress-clarity.md)
 - [Public Experiment Library](exec-plans/completed/public-experiment-library.md)
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):

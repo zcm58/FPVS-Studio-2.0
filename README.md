@@ -57,6 +57,11 @@ Download or clone the **entire repository**, then open its folder in Finder:
    environment and all Mac GUI/engine requirements, then checks the installation.
 2. Double-click **Run Mac.command** to open Studio. Python and PyCharm do not need
    to be installed beforehand.
+
+For an existing installation that needs repair, pull the complete source update,
+then double-click **Repair Mac 2.command**. It repairs the environment, checks the
+engine and automatically sends a concise completion report to Studio support.
+The final window states both the repair outcome and whether the report was submitted.
 3. Optional: fully quit PyCharm, then use **Open in PyCharm Mac.command** and select
    **FPVS Studio (Mac)** in its Run menu. The interpreter and `main.py` path are prepared.
 
