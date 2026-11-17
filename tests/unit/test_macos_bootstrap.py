@@ -220,6 +220,25 @@ def test_repair_configures_closed_ide_and_second_check_is_read_only(repair_ide, 
     assert before == {path: (path.read_bytes(), path.stat().st_mtime_ns) for path in files}
 
 
+@pytest.mark.parametrize("selected", ["Python.Repair Mac", "Python.Repair Mac 2", None])
+def test_repair_restores_studio_run_selection_in_healthy_environment(repair_ide, selected):
+    root, python, ide = repair_ide
+    assert pycharm.configure_for_repair(root, python) == "ready"
+    path = root / ".idea/workspace.xml"
+    tree = ET.parse(path)
+    manager = tree.find("component[@name='RunManager']")
+    if selected is None:
+        manager.attrib.pop("selected")
+    else:
+        manager.set("selected", selected)
+    tree.write(path)
+    assert not pycharm._repair_settings_ready(root, python, ide)
+    assert pycharm.configure_for_repair(root, python) == "ready"
+    assert ET.parse(path).find("component[@name='RunManager']").get("selected") == (
+        "Python.FPVS Studio (Mac)"
+    )
+
+
 def test_check_only_mismatch_does_not_create_ide_or_job_files(repair_ide):
     root, python, _ide = repair_ide
     with pytest.raises(ValueError, match="without --check"):

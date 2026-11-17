@@ -472,7 +472,13 @@ def _repair_settings_ready(repo_root: Path, python: Path, ide: RepairIDE) -> boo
             ready = ready and entry.get("jdkName") == sdk
     generated = repo_root / ".idea/runConfigurations/FPVS_Studio_Mac.xml"
     generated_found = False
+    selected = None
+    launcher_name = None
     for path, document, _before in _project_documents(repo_root):
+        if path == repo_root / ".idea/workspace.xml":
+            run_manager = document.find("component[@name='RunManager']")
+            if run_manager is not None:
+                selected = run_manager.get("selected")
         configurations = list(document.iter("configuration"))
         if path == generated:
             if len(configurations) != 1 or not _studio_configuration(configurations[0], repo_root):
@@ -480,11 +486,12 @@ def _repair_settings_ready(repo_root: Path, python: Path, ide: RepairIDE) -> boo
                     "Preserving a custom FPVS_Studio_Mac.xml that does not launch Studio."
                 )
             generated_found = True
+            launcher_name = configurations[0].get("name", "FPVS Studio (Mac)")
         for configuration in configurations:
             if _studio_configuration(configuration, repo_root):
                 ready = ready and _interpreter_matches(configuration, python, sdk or "")
                 ready = ready and not _legacy_repair_configuration(configuration, repo_root)
-    return ready and generated_found
+    return ready and generated_found and selected == f"Python.{launcher_name}"
 
 
 def _set_option(configuration: ET.Element, name: str, value: str) -> None:
