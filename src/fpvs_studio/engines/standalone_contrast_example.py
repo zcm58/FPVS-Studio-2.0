@@ -31,6 +31,7 @@ https://psychopy.org/api/visual/window.html
 
 from __future__ import annotations
 
+import importlib
 import logging
 import math
 from pathlib import Path
@@ -68,7 +69,8 @@ def main() -> None:
 
     # Load the tools for making the image, opening the window, and reading key presses.
     import numpy as np
-    from psychopy import event, visual  # type: ignore[import-untyped]
+    event = importlib.import_module("psychopy.event")
+    visual = importlib.import_module("psychopy.visual")
 
     # 4. Make a checkerboard, or find your image beside this script.
     if IMAGE_PATH is None:
