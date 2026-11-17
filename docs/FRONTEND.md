@@ -5,7 +5,7 @@ the active app.
 
 ## Public GUI Surface
 
-- Image Equalizer is a project-independent Tools dialog, also available from Welcome.
+- Image Equalizer is a project-independent dialog opened from the project Tools menu.
   Its folder table, automatic batch action and state/size contracts live in the
   [feature specification](product-specs/image-equalizer.md).
 - Start GUI work from `../src/fpvs_studio/gui/AGENTS.md`.

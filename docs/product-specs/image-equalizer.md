@@ -2,7 +2,7 @@
 
 ## Workflow
 
-Open **Tools > Image Equalizer** from Welcome or an open project. Add one or more
+Open **Tools > Image Equalizer** in an open project. Add one or more
 input folders. Each row suggests a sibling `<input-folder>-equalized` destination;
 **Change Output** selects a different empty folder. Select a row to change its output
 or remove the pair. Full paths remain available in tooltips and accessible text.
@@ -16,8 +16,9 @@ in every output folder. **Open Output** opens the selected successful destinatio
 The report describes the entire batch, including any non-image files/subfolders skipped.
 
 Use Image Resizer or external cropping/resizing first. Import the resulting images
-through Conditions when ready. The tool neither requires nor edits a project, stimulus
-set, manifest, RunSpec or SessionPlan. Native word paradigms continue to use word lists;
+through Conditions when ready. The tool operates on the selected folders independently
+of the open project's stimulus sets, manifests, RunSpec and SessionPlan.
+Native word paradigms continue to use word lists;
 rendered word images can use this tool like other images.
 
 ## Matching contract

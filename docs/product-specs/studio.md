@@ -45,9 +45,9 @@ feature parity.
 | Windows acquisition and experimental macOS source support | [Architecture](../../ARCHITECTURE.md), [macOS support](../MACOS_SUPPORT.md) |
 | Sharing whole experiments and installing reviewed updates | [Experiment Library](../EXPERIMENT_LIBRARY.md) |
 
-Optional preparation must remain usable independently of project state and must never
-silently change project stimuli or originals. Image Equalizer is also available before
-opening a project. Neither tool is a mandatory Setup step.
+Optional preparation operates independently of saved project data and must never
+silently change project stimuli or originals. Both tools are optional outside guided
+Setup.
 
 Monitor calibration, physical luminance, viewing conditions and hardware timing
 qualification remain researcher responsibilities. Equal pixel statistics and successful

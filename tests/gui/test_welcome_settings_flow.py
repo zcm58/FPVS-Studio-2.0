@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QMenuBar,
     QMessageBox,
     QPushButton,
     QWidget,
@@ -263,6 +264,7 @@ def test_welcome_primary_open_action_fits_and_stays_first(qtbot, size, backgroun
     welcome.show()
     qtbot.wait(10)
     assert welcome.size().toTuple() == size
+    assert welcome.findChild(QMenuBar) is None
     assert_visible_children_within_parent(welcome)
     assert welcome.headline_label.text() == f"FPVS Studio Version {__version__}"
     assert welcome.headline_label.geometry().bottom() < welcome.action_container.y()

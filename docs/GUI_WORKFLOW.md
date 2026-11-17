@@ -412,6 +412,10 @@ centered secondary action beneath the four existing entry actions. Its responsiv
 single-column layout uses compact controls so all five actions remain within the
 same minimum size; import-busy state disables Settings with the other actions.
 
+For a visible smoke check, open Welcome at both sizes in Light and Dark. Verify
+that the five actions fit and the window has no menu bar. Open a project and
+verify that **Tools > Image Equalizer** opens the dialog.
+
 `Change Root Folder…` reopens the guided root-folder setup and native folder picker
 without requiring a project to be open. Canceling either step leaves the configured
 root unchanged.
@@ -1232,7 +1236,6 @@ The authoring window is organized around two user-facing modes:
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
 - `Tools > Image Equalizer`
-  - also available from Welcome without an open project
   - multiple input/output folder pairs, one automatic grayscale mean/RMS target
     across the batch, parallel processing and cancellation
   - saves verified PNG copies and a matching report in new/empty output folders;
@@ -1887,8 +1890,8 @@ preprocessing services but must not silently mutate the active project.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
 - Standalone equalization lives in `src/fpvs_studio/gui/image_equalizer_dialog.py` and
-  `src/fpvs_studio/preprocessing/equalization.py`; Welcome and MainWindow expose the
-  same project-independent dialog. No image work occurs on the GUI thread.
+  `src/fpvs_studio/preprocessing/equalization.py`. MainWindow exposes the
+  project-independent dialog. No image work occurs on the GUI thread.
 - Bundle review and Welcome-hosted progress dialogs live in
   `src/fpvs_studio/gui/bundle_import_dialog.py`; shared embedded progress and persistent
   export-result pages live in `src/fpvs_studio/gui/processing_page.py`.
@@ -1949,7 +1952,7 @@ The current GUI supports:
 - reviewing Target Stimulus Repeats and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
-- using `Tools > Image Equalizer` before or after opening a project to match grayscale
+- using `Tools > Image Equalizer` in an open project to match grayscale
   images across multiple folders, cancel/retry safely and inspect saved matching reports
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan

@@ -61,7 +61,7 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   [Trigger Tester](../../../docs/GUI_WORKFLOW.md#trigger-tester) for discovery and
   reconnect behavior. Normal launch resolves saved recording settings independently.
 - `image_equalizer_dialog.py` owns optional grayscale folder-pair preparation from
-  Welcome/Tools; preprocessing owns matching and files. Use the
+  the project Tools menu. Preprocessing owns matching and files. Use the
   [Image Equalizer contract](../../../docs/product-specs/image-equalizer.md).
 
 ## Design and Acceptance

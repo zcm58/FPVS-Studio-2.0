@@ -20,7 +20,6 @@ from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.gui import image_equalizer_dialog as gui
 from fpvs_studio.gui.packaged_smoke import _verification_palette
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
-from fpvs_studio.gui.welcome_window import WelcomeWindow
 from fpvs_studio.preprocessing import equalization
 from fpvs_studio.preprocessing.equalization import FolderPair, ImageEqualizationCancelled
 
@@ -242,16 +241,9 @@ def test_busy_lifetime_cancel_and_failure_recovery(qtbot, tmp_path, monkeypatch)
     assert dialog._pairs[0].input_dir == source
 
 
-def test_tool_is_available_before_and_after_project_creation(qtbot, controller, tmp_path):
-    welcome = WelcomeWindow()
-    qtbot.addWidget(welcome)
-    welcome.show()
-    welcome.image_equalizer_action.trigger()
-    assert welcome._image_equalizer_dialog.isVisible()
-    welcome._image_equalizer_dialog.close()
-    welcome.set_import_busy(True)
-    assert not welcome.image_equalizer_action.isEnabled()
+def test_project_tools_menu_opens_image_equalizer(qtbot, controller, tmp_path):
     _, window = open_created_project(controller, qtbot, tmp_path, "Equalizer Menu")
+    assert window.image_equalizer_action in window.tools_menu.actions()
     assert window._image_equalizer_dialog is None
     window.image_equalizer_action.trigger()
     assert window._image_equalizer_dialog.isVisible()
