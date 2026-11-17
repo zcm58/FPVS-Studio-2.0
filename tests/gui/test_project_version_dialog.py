@@ -7,8 +7,8 @@ from PySide6.QtCore import QAbstractAnimation, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent
 
+from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.gui.document import ProjectDocument
-from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.main_window import StudioMainWindow
 from fpvs_studio.gui.packaged_smoke import _verification_palette
 from fpvs_studio.gui.project_version_dialog import (
@@ -344,32 +344,37 @@ def test_all_dialog_close_paths_notify_controller_once(qtbot, close_method, busy
 @pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
 @pytest.mark.parametrize("long_versions", [False, True])
 def test_home_version_notice_survives_readiness_refresh_and_fits(
-    qtbot, tmp_path: Path, size, long_versions,
+    qtbot, tmp_path: Path, monkeypatch, size, long_versions,
 ):
-    document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Masking")
-    page = HomePage(document, load_condition_template_profiles=lambda: [])
-    qtbot.addWidget(page)
-    page.resize(*size)
-    page.show()
+    window = _update_window(qtbot, tmp_path)
+    monkeypatch.setattr(window, "start_deferred_open_tasks", lambda: None)
+    window.show_home()
+    window.resize(*size)
+    window.show()
+    page = window.home_page
     assert not page.project_update_notice.isVisible()
     message = "Library version 2.0.0 is available. Review it before opening a separate project."
     if long_versions:
         installed = "1.0.0+" + "w" * 58
         latest = "2.0.0+" + "w" * 58
         message = f"Project update available: {installed} → {latest}."
-    page.set_project_update_notice(message)
+    window.set_project_update_notice(message)
     page.refresh()
     assert page.project_update_label.toolTip() == message
     assert page.project_update_label.accessibleDescription() == message
     assert page.project_update_notice.isVisible()
-    _fit(page)
-    label = page.project_update_label
-    assert label.fontMetrics().horizontalAdvance(label.text()) <= label.contentsRect().width()
-    assert message.startswith(label.text().removesuffix("…"))
-    if long_versions:
-        assert label.text() != message
-    assert (page.width(), page.height()) == size
-    page.set_project_update_notice("")
+    resize_sequence = (size, (1120, 720), size) if size[0] == 760 else (size,)
+    for target_size in resize_sequence:
+        window.resize(*target_size)
+        _fit(page)
+        assert window.main_stack.contentsRect().contains(page.geometry())
+        label = page.project_update_label
+        assert label.fontMetrics().horizontalAdvance(label.text()) <= label.contentsRect().width()
+        assert message.startswith(label.text().removesuffix("…"))
+        if long_versions:
+            assert label.text() != message
+        assert window.size().toTuple() == target_size
+    window.set_project_update_notice("")
     assert not page.project_update_notice.isVisible()
 
 
@@ -491,10 +496,15 @@ def test_committed_update_discards_old_editor_drafts_before_save(qtbot, tmp_path
     from fpvs_studio.preprocessing.manifest import create_empty_manifest
 
     window = _update_window(qtbot, tmp_path)
+    condition_id = window.document.create_condition(name="Installed Library condition")
+    updated_words = ["release", "words"]
+    window.document.set_condition_stimulus_modality(condition_id, modality=StimulusModality.WORD)
+    window.document.update_condition_words(condition_id, role="base", words=updated_words)
     old_setup = window.setup_wizard_page
-    old_setup.condition_setup_step.condition_name_edit.setText("Stale editor draft")
-    old_setup.condition_setup_step.instructions_edit.setPlainText("Stale pending instructions")
-    assert old_setup.condition_setup_step._instructions_committer.pending
+    old_step = old_setup.condition_setup_step
+    old_step.condition_name_edit.setText("Stale editor draft")
+    old_step.base_words_edit.setPlainText("stale\ndraft")
+    assert old_step._base_words_committer.pending
     project = window.document.project.model_copy(deep=True)
     project.conditions[0].name = "Updated Library condition"
     project.conditions[0].instructions = "Updated Library instructions"
@@ -503,6 +513,7 @@ def test_committed_update_discards_old_editor_drafts_before_save(qtbot, tmp_path
         bundle_path=tmp_path / "new.fpvsbundle", root_dir=window.document.project_root,
         updating_current=True)
     window.accept_library_project_update(project, manifest)
+    QApplication.processEvents()
     assert window._setup_wizard_page is None
     assert not window.document.dirty
     window.finish_bundle_import_processing(restore_previous=False)
@@ -511,6 +522,9 @@ def test_committed_update_discards_old_editor_drafts_before_save(qtbot, tmp_path
     saved = load_project_file(window.document.project_root / "project.json")
     assert saved.conditions[0].name == "Updated Library condition"
     assert saved.conditions[0].instructions == "Updated Library instructions"
+    base_set_id = saved.conditions[0].base_stimulus_set_id
+    saved_base_set = next(pool for pool in saved.stimulus_sets if pool.set_id == base_set_id)
+    assert saved_base_set.words == updated_words
     assert window.document.manifest is manifest
 
 
@@ -539,8 +553,10 @@ def test_project_update_blocks_existing_recovery_dialog_and_direct_rerun(
 
     window = _update_window(qtbot, tmp_path)
     monkeypatch.setattr(window, "start_deferred_open_tasks", lambda: None)
-    monkeypatch.setattr(window.document, "validate_recording_launch",
-                        lambda: pytest.fail("Recovery launch reached the runtime safeguards"))
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.choose_experiment_display",
+        lambda *_args: pytest.fail("Recovery launch reached display selection"),
+    )
     recovery = window._condition_recovery
     monkeypatch.setattr(recovery, "_rerun", lambda _record: pytest.fail("Recovery dispatched"))
     dialog = ConditionRecoveryDialog(ConditionRecoveryReport(), window)

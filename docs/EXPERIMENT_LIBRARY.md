@@ -904,6 +904,8 @@ refresh after an external import, and an older project with the latest version a
 installed beside it. Confirm all duplicate paths transfer no payload bytes. Exercise
 extraction cancellation, late commit, app quit and a revoked credential. Existing local
 bundle import/export remains available independently of the Library.
+With a visible Home update notice, resize Studio from 760×520 to 1120×720 and back.
+Verify **Review update...** fits and the full notice remains accessible.
 For each project update download route, verify the transfer percentage, Cancel,
 and the verification or review handoff. Check the in-place apply stage and restored
 review after cancel. Repeat a transfer with reduced motion and verify the stage and
