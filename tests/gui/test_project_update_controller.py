@@ -12,7 +12,11 @@ from PySide6.QtWidgets import QApplication, QWidget
 from tests.gui.helpers import assert_visible_children_within_parent
 from tests.unit.test_library_installations import project as installed_project
 
-from fpvs_studio.core.library_origin import LibraryOriginError, LibraryProjectOrigin
+from fpvs_studio.core.library_origin import (
+    MANAGED_LIBRARY_SERVICE_URL,
+    LibraryOriginError,
+    LibraryProjectOrigin,
+)
 from fpvs_studio.gui import project_update_controller as module
 from fpvs_studio.gui.update_lifecycle import UpdateTaskResult
 from fpvs_studio.library.errors import LibraryCancelled
@@ -133,20 +137,23 @@ def _item():
 
 
 def _origin(**updates):
-    return LibraryProjectOrigin(
-        service_url="https://library.example.test", item_id="masking",
-        installed_version="1.0.0", bundle_sha256="b" * 64, local_project_id="local-study",
+    return LibraryProjectOrigin(**{
+        "service_url": "https://library.example.test", "item_id": "masking",
+        "installed_version": "1.0.0", "bundle_sha256": "b" * 64,
+        "local_project_id": "local-study",
         **updates,
-    )
+    })
 
 
 class _Client:
     service_url = "https://library.example.test"
+    supports_public = False
 
     def __init__(self, path):
         self.path = path
         self.catalog_calls = 0
         self.download_calls = []
+        self.download_scopes = []
         self.releases = 0
 
     def connection_info(self):
@@ -158,8 +165,15 @@ class _Client:
             raise LibraryCancelled("Canceled")
         return LibraryCatalog(schema_version="1.0", library_name="Lab", items=[_item()])
 
-    def download(self, item, *, cancel_event=None, progress_callback=None):
+    def public_catalog(self, *, cancel_event=None):
+        assert self.supports_public
+        if cancel_event is not None and cancel_event.is_set():
+            raise LibraryCancelled("Canceled")
+        return LibraryCatalog(schema_version="1.0", library_name="Public", items=[_item()])
+
+    def download(self, item, *, scope="lab", cancel_event=None, progress_callback=None):
         self.download_calls.append(item)
+        self.download_scopes.append(scope)
         if cancel_event is not None and cancel_event.is_set():
             raise LibraryCancelled("Canceled")
         if progress_callback is not None:
@@ -432,8 +446,16 @@ def test_manual_review_is_blocked_during_presentation(updates):
     assert state.client.download_calls == []
 
 
-def test_install_requires_explicit_action_and_retains_download_until_import_finishes(updates):
+@pytest.mark.parametrize("scope", ["lab", "public"])
+def test_install_requires_explicit_action_and_retains_download_until_import_finishes(
+    updates, scope,
+):
     state = updates
+    if scope == "public":
+        state.client.service_url = MANAGED_LIBRARY_SERVICE_URL
+        state.client.supports_public = True
+        state.client.connection_info = lambda: pytest.fail("Public updates don't need lab access")
+        state.origins[state.root] = _origin(service_url=state.client.service_url, scope=scope)
     state.controller.opened(state.window)
     state.lifecycle.drain()
     state.controller.show(state.window)
@@ -453,6 +475,8 @@ def test_install_requires_explicit_action_and_retains_download_until_import_fini
     assert manifest.project.project_id == "masking"
     assert origin.installed_version == "1.0.1"
     assert origin.bundle_sha256 == _item().sha256
+    assert origin.scope == scope
+    assert state.client.download_scopes == [scope]
     assert state.client.releases == 0
     assert state.origins[state.root].installed_version == "1.0.0"
     assert state.window.document.project.meta.project_id == "local-study"
@@ -543,6 +567,24 @@ def test_unlinked_open_stays_quiet_and_manual_review_loads_link_choices(updates)
     assert not dialog.install_button.isEnabled()
     assert state.client.catalog_calls == 1
     assert not any(call[0] == "save" for call in state.io_calls)
+    assert state.client.download_calls == []
+
+
+def test_unconnected_explicit_link_can_save_public_scope(updates):
+    state = updates
+    state.origins.clear()
+    state.client.service_url = MANAGED_LIBRARY_SERVICE_URL
+    state.client.supports_public = True
+    state.client.connection_info = lambda: None
+    state.controller.show(state.window)
+    state.lifecycle.drain()
+    dialog = state.controller.dialog
+    assert dialog.link_combo.count() == 2
+    dialog.link_combo.setCurrentIndex(1)
+    dialog.link_button.click()
+    state.lifecycle.drain()
+    assert state.origins[state.root].scope == "public"
+    assert state.client.catalog_calls == 0
     assert state.client.download_calls == []
 
 

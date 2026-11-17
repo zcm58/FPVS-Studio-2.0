@@ -163,6 +163,81 @@ def provenance_reply(value=None):
 
 
 @pytest.fixture
+def public_environment(environment, monkeypatch, tmp_path):
+    _, _, requests, replies = environment
+    monkeypatch.setattr(provenance, "PINNED_KEYS", {MANAGED_ORIGIN: (KEY_ID, PUBLIC_KEY)})
+    monkeypatch.setattr(
+        client_module, "credential_store",
+        lambda _origin: pytest.fail("Public operations must not open the credential store"),
+    )
+    client = LibraryClient(cache_root=tmp_path / "public-cache")
+    yield client, requests, replies
+    client.release_download()
+
+
+def test_public_catalog_and_download_share_normal_metadata_and_proof(public_environment):
+    client, requests, replies = public_environment
+    replies.extend([catalog(item()), payload_reply()])
+    assert client.supports_public
+    assert client.public_catalog().items == [item()]
+    assert not client._cache.root.exists()
+    bundle = client.download(item(), scope="public")
+    assert bundle.read_bytes() == PAYLOAD
+    assert [request.full_url for request in requests] == [
+        MANAGED_ORIGIN + "/public-library/v1/catalog?kind=experiment",
+        MANAGED_ORIGIN + "/public-library/v1/items/synthetic/versions/1.0.0/download",
+    ]
+    assert all(request.get_header("Authorization") is None for request in requests)
+    client.release_download()
+    assert not bundle.exists()
+
+
+def test_public_retained_payload_still_needs_exact_live_proof(public_environment):
+    client, requests, replies = public_environment
+    replies.append(payload_reply())
+    bundle = client.download(item(), scope="public")
+    client.release_download()
+    bundle.write_bytes(PAYLOAD)
+    bad_evidence = provenance_reply()
+    bad_evidence["proof"]["sha256"] = "f" * 64
+    replies.extend([catalog(item()), bad_evidence])
+    with pytest.raises(LibraryError, match="untrusted_provenance"):
+        client.download(item(), scope="public")
+    assert not bundle.exists()
+    assert requests[-1].full_url == (
+        MANAGED_ORIGIN + "/public-library/v1/items/synthetic/versions/1.0.0/provenance"
+    )
+    assert all(request.get_header("Authorization") is None for request in requests)
+
+
+@pytest.mark.parametrize("metadata", [{"access_level": "view"}, {"lab_name": "Private lab"}])
+def test_public_does_not_accept_misrouted_lab_catalog(public_environment, metadata):
+    client, _, replies = public_environment
+    replies.append({**catalog(item()), **metadata})
+    with pytest.raises(LibraryError, match="invalid access metadata"):
+        client.public_catalog()
+
+
+def test_public_http_denial_is_not_a_lab_authorization_failure(public_environment):
+    client, requests, replies = public_environment
+    replies.append(HTTPError(MANAGED_ORIGIN, 403, "Forbidden", {}, None))
+    with pytest.raises(LibraryError, match="Public Experiment Library") as error:
+        client.download(item(), scope="public")
+    assert not isinstance(error.value, LibraryAuthorizationError)
+    assert requests[0].get_header("Authorization") is None
+
+
+def test_public_requests_are_unavailable_for_custom_services(environment):
+    client, _, requests, _ = environment
+    assert not client.supports_public
+    for operation in (client.public_catalog, lambda: client.download(item(), scope="public")):
+        with pytest.raises(LibraryError, match="available only on OpenFPVS"):
+            operation()
+    assert requests == []
+    assert not client._cache.root.exists()
+
+
+@pytest.fixture
 def managed_credentials(environment, monkeypatch):
     store = MemoryStore(connected=False)
     previous_stores = {origin: MemoryStore() for origin in LEGACY_MANAGED_ORIGINS}

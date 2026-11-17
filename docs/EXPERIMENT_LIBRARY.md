@@ -91,10 +91,15 @@ Download from library** from Welcome or Home. Create Project also offers **Creat
 manually**, followed by the existing category, template, name and folder steps. Back
 returns through those steps without discarding a manual draft. Selecting the Library
 opens the browser without creating an empty project; cancelling leaves projects intact.
-**Settings > Workspace > Manage Library Access…** opens the same connection controls.
-Enter the lab access code and a friendly computer name, then select **Connect**.
-No GitHub account, Git installation, installer, administrator rights, or application
-restart is needed to browse and download experiments.
+
+**Public projects** are available from the managed OpenFPVS service with an
+internet connection. They require no account, computer code or lab membership.
+**Lab projects** shows the connected user's authorized experiments and applies
+the lab's browse and download permissions. Expand the connection controls in
+that section to connect a new computer. **Settings > Workspace > Manage Library
+Access…** leads to those controls. One search and one project action work across
+the available sections. Public availability is independent of lab connection
+and credentials. Other configured services continue to use their lab catalog.
 
 This machine enrollment covers every experiment currently granted to the lab; no
 per-experiment access code is required. Data Sharing & Comparison reuses that saved
@@ -120,17 +125,27 @@ project ID (including bundle collision suffixes) or title show **Review existing
 project…**; this is a review candidate, never an automatically inferred Library link.
 The explicit link/version review must finish before an update can be downloaded.
 Existing duplicates are retained, including their edits and participant data.
+Public imports retain their public Library association for version checks without
+enrollment. Existing lab associations keep their original scope.
 
-The service matches catalog
-entries to uploaded assets on live, published GitHub releases using asset ID,
-filename, size and SHA-256. Deleted releases/assets, drafts and incomplete or changed
-uploads are excluded even if their catalog metadata remains. GitHub failures show
-an error; they never masquerade as an empty library. Downloads recheck availability
-in case the selected asset was deleted after browsing. Existing local copies remain
-unchanged. Available versions are not collapsed into a latest-only listing.
+The service matches lab catalog entries to live GitHub release assets using asset
+ID, filename, size and SHA-256. Public catalog entries come from explicit release
+listings with active safety evidence. Public downloads recheck the listing and
+evidence while obtaining the asset. Unlisting or safety withdrawal removes the
+public entry. Transfer failures show an error and leave local copies intact.
+The Library displays every available version.
 Experiments requiring a newer Studio version remain visible with an explanation and
 a disabled setup action. List titles may elide; a tooltip and the scrollable plain-text
 details expose their complete values.
+
+The **Color Oddball Demo** uses 12 original grayscale object silhouettes shared
+between conditions and red and green versions for the oddballs. Each condition
+repeats once in each of three blocks. One run has 48 oddball cycles and lasts 40 s
+at the nominal 6 Hz base and 1.2 Hz oddball rates. The cross changes from white to
+blue four times per run, and the participant presses Space. Use Experiment Test
+Mode to try the imported project without EEG equipment. Maintainers can prepare
+the versioned release with `scripts/create_color_oddball_demo.py` and the ordinary
+Library publication and validation workflow.
 
 **Download and set up experiment** verifies the payload, then enters the ordinary
 project-bundle review. Select the configured Studio Root Folder if necessary and confirm
@@ -880,6 +895,11 @@ refresh after an external import, and an older project with the latest version a
 installed beside it. Confirm all duplicate paths transfer no payload bytes. Exercise
 extraction cancellation, late commit, app quit and a revoked credential. Existing local
 bundle import/export remains available independently of the Library.
+On a computer with no Library connection, open Experiment Library, search for
+the Color Oddball Demo, and download and confirm its reviewed import. Connect a
+view-only lab and confirm a lab project is view-only while the public demo still
+offers its applicable download or installed action. Repeat with reduced motion
+enabled and confirm the list and status remain legible without transitions.
 Check **View > Experiment Library...**, both Create Project choices, and Back from
 details to category to source choice. Confirm a Library selection does not create a
 blank project and cancelling either path leaves existing projects unchanged.

@@ -5,6 +5,8 @@ implementation plans in `../exec-plans/`.
 
 ## Current Product Sources
 
+- [Studio mission and product specification](studio.md)
+- [Image Equalizer](image-equalizer.md): optional grayscale preparation across folders
 - Product sense hub: `../PRODUCT_SENSE.md`
 - Current package and category scope: `../../ARCHITECTURE.md` and `../EXPERIMENT_CATEGORIES.md`
 - GUI workflow behavior: `../GUI_WORKFLOW.md`

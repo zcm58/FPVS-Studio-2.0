@@ -59,8 +59,17 @@ def test_receipt_roundtrip_is_separate_and_unknown_legacy_version_is_explicit(tm
     receipt = origin(installed_version=None, bundle_sha256=None, auto_check=False)
     save_library_origin(tmp_path, receipt)
     assert load_library_origin(tmp_path) == receipt
+    assert receipt.scope == "lab"
+    assert "scope" not in receipt.model_dump()
     assert project.read_bytes() == before
     assert LibraryProjectOrigin.model_validate_json(receipt.model_dump_json()) == receipt
+
+
+def test_public_receipt_roundtrip_keeps_scope(tmp_path):
+    receipt = origin(service_url="https://openfpvs.com", scope="public")
+    save_library_origin(tmp_path, receipt)
+    assert receipt.model_dump()["scope"] == "public"
+    assert load_library_origin(tmp_path) == receipt
 
 
 @pytest.mark.parametrize("changes", [
@@ -70,6 +79,7 @@ def test_receipt_roundtrip_is_separate_and_unknown_legacy_version_is_explicit(tm
     {"service_url": "https://library.example.test/path"},
     {"item_id": "../masking"}, {"local_project_id": "../project"},
     {"bundle_sha256": "bad"}, {"auto_check": "yes"}, {"token": "not-allowed"},
+    {"scope": "other"}, {"scope": "public"},
 ])
 def test_origin_rejects_unsupported_or_untrusted_metadata(changes):
     with pytest.raises(ValidationError):

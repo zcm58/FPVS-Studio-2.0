@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
     QLabel,
+    QMenuBar,
     QPushButton,
     QStyle,
     QVBoxLayout,
@@ -28,6 +29,7 @@ from fpvs_studio.gui.components import (
     mark_welcome_action,
     refresh_widget_style,
 )
+from fpvs_studio.gui.image_equalizer_dialog import ImageEqualizerDialog
 
 
 class WelcomeWindow(QWidget):
@@ -47,6 +49,7 @@ class WelcomeWindow(QWidget):
         self.resize(1120, 720)
         self.setAcceptDrops(True)
         self._import_busy = False
+        self._image_equalizer_dialog: ImageEqualizerDialog | None = None
         self._adopt_app_icon()
 
         self.launch_surface = LaunchSurfaceFrame(
@@ -59,6 +62,11 @@ class WelcomeWindow(QWidget):
         hero_layout = self.launch_surface.hero_layout
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
+        menu_bar = QMenuBar(self)
+        self.tools_menu = menu_bar.addMenu("Tools")
+        self.image_equalizer_action = self.tools_menu.addAction("Image Equalizer")
+        self.image_equalizer_action.triggered.connect(self.show_image_equalizer)
+        layout.setMenuBar(menu_bar)
         layout.addWidget(self.launch_surface)
 
         self.headline_label = QLabel(f"FPVS Studio Version {__version__}", self.hero_container)
@@ -138,6 +146,13 @@ class WelcomeWindow(QWidget):
         self.setTabOrder(self.root_folder_setup_button, self.settings_button)
         self.manage_projects_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
+    def show_image_equalizer(self) -> None:
+        if self._image_equalizer_dialog is None:
+            self._image_equalizer_dialog = ImageEqualizerDialog(self)
+        self._image_equalizer_dialog.show()
+        self._image_equalizer_dialog.raise_()
+        self._image_equalizer_dialog.activateWindow()
+
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
         if self._import_busy:
             event.ignore()
@@ -163,6 +178,7 @@ class WelcomeWindow(QWidget):
         """Prevent conflicting Welcome actions while a bundle import is active."""
 
         self._import_busy = bool(busy)
+        self.image_equalizer_action.setEnabled(not self._import_busy)
         for button in (
             self.create_button,
             self.import_project_button,

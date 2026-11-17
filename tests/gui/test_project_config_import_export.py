@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QObject, QRect, Qt, Signal
+from PySide6.QtCore import QAbstractAnimation, QObject, QRect, Qt, QVariantAnimation, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QFrame, QLabel, QPushButton, QWidget
 from tests.gui.helpers import (
@@ -19,6 +19,7 @@ from tests.platform_adapters import set_module_platform
 
 from fpvs_studio.core.models import DisplaySettings
 from fpvs_studio.core.project_bundle import (
+    ProjectBundleError,
     ProjectBundleFileRecord,
     ProjectBundleManifest,
     ProjectBundleProject,
@@ -31,7 +32,7 @@ from fpvs_studio.core.project_config import (
     write_project_config,
 )
 from fpvs_studio.core.project_service import create_project
-from fpvs_studio.gui import import_display_settings_dialog
+from fpvs_studio.gui import import_display_settings_dialog, processing_page
 from fpvs_studio.gui.bundle_export_dialog import BundleExportOptionsDialog
 from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportProgressDialog,
@@ -521,27 +522,42 @@ def test_bundle_export_result_page_copies_path_opens_folder_and_waits_for_done(
     assert window.main_stack.currentWidget() is window.home_page
 
 
+def _assert_bundle_processing_geometry(page: QWidget) -> None:
+    assert_visible_children_within_parent(page)
+    for label in page.findChildren(QLabel):
+        if not label.isVisible() or not label.text():
+            continue
+        if label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width()), label.text()
+        else:
+            assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(
+                label.text(),
+            ), label.text()
+            assert label.contentsRect().height() >= label.fontMetrics().height(), label.text()
+    for button in page.findChildren(QPushButton):
+        if button.isVisible():
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+
+
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 @pytest.mark.parametrize("size", [(760, 465), (1120, 665)], ids=["minimum", "default"])
-def test_bundle_progress_and_result_use_one_frame_at_minimum(qtbot, tmp_path, background, size):
+def test_bundle_export_progress_and_result_use_one_frame(qtbot, tmp_path, background, size):
     bundle_path = tmp_path / ("Familiar objects and unfamiliar exemplars " * 3 + ".fpvsbundle")
     export = BundleExportProcessingPage()
-    importing = BundleImportProcessingPage()
     result = BundleExportResultPage()
-    for page, stage in ((export, "write"), (importing, "oddball")):
-        page.set_transfer_context(
-            title=None,
-            source_label="Source",
-            source_path=bundle_path,
-            destination_label="Destination",
-            destination_path=tmp_path / "Review destination",
-        )
-        page.set_stage(stage)
+    export.set_transfer_context(
+        title=None,
+        source_label="Source",
+        source_path=bundle_path,
+        destination_label="Destination",
+        destination_path=tmp_path / "Review destination",
+    )
+    export.set_stage("write")
     project_name = "Familiar objects and unfamiliar exemplars " * 3
     result.set_result(project_name=project_name.strip(), bundle_path=bundle_path,
                       packaged_file_count=8)
 
-    for page in (export, importing, result):
+    for page in (export, result):
         qtbot.addWidget(page)
         page.setPalette(QPalette(QColor(background)))
         apply_studio_theme(page)
@@ -552,25 +568,124 @@ def test_bundle_progress_and_result_use_one_frame_at_minimum(qtbot, tmp_path, ba
         frames = [frame for frame in page.findChildren(QFrame) if type(frame) is QFrame]
         assert len(frames) == 1
         assert abs(frames[0].geometry().center().x() - page.rect().center().x()) <= 1
-        assert_visible_children_within_parent(page)
-        for label in page.findChildren(QLabel):
-            if not label.isVisible() or not label.text():
-                continue
-            if label.wordWrap():
-                assert label.height() >= label.heightForWidth(label.width()), label.text()
-            else:
-                assert label.contentsRect().width() >= label.fontMetrics().horizontalAdvance(
-                    label.text(),
-                ), label.text()
-                assert label.contentsRect().height() >= label.fontMetrics().height(), label.text()
-        for button in page.findChildren(QPushButton):
-            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+        _assert_bundle_processing_geometry(page)
 
     filename = result.filename_label
     assert filename.toolTip() == filename.accessibleName() == bundle_path.name
-    for path_label in (export.source_value_label, importing.source_value_label, result.path_label):
+    for path_label in (export.source_value_label, result.path_label):
         assert path_label.text().endswith(".fpvsbundle")
         assert path_label.toolTip() == path_label.accessibleName() == str(bundle_path)
+
+
+@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
+@pytest.mark.parametrize("size", [(760, 465), (1120, 665)], ids=["minimum", "default"])
+def test_bundle_import_progress_discloses_long_paths_without_clipping(
+    qtbot, tmp_path, background, size,
+):
+    page = BundleImportProcessingPage()
+    qtbot.addWidget(page)
+    page.setPalette(QPalette(QColor(background)))
+    apply_studio_theme(page)
+    title = "Importing Familiar objects and unfamiliar exemplars across language groups"
+    bundle = tmp_path / ("Long source experiment name with spaces " * 4 + ".fpvsbundle")
+    destination = tmp_path / ("FPVS Studio project repository and teaching examples " * 3).strip()
+    page.set_transfer_context(
+        title=title,
+        source_label="Experiment file",
+        source_path=bundle,
+        destination_label="Destination root",
+        destination_path=destination,
+    )
+    page.set_stage("oddball")
+    page.resize(*size)
+    page.show()
+    QApplication.processEvents()
+
+    assert page.size().toTuple() == size
+    assert abs(page.content.geometry().center().x() - page.rect().center().x()) <= 1
+    assert page.title_label.text() == title
+    assert page.locations_button.text() == "File locations"
+    assert not page.context_card.isVisible()
+    assert page.locations_button.width() >= page.locations_button.fontMetrics().horizontalAdvance(
+        page.locations_button.text(),
+    )
+    assert page.findChild(QWidget, "processing_spinner") is None
+    assert sum(
+        label.isVisible() and label.text() == "Checking oddball stimuli…"
+        for label in page.findChildren(QLabel)
+    ) == 1
+    _assert_bundle_processing_geometry(page)
+
+    qtbot.keyClick(page.locations_button, Qt.Key.Key_Space)
+    QApplication.processEvents()
+    assert page.locations_button.isChecked()
+    assert page.context_card.isVisible()
+    assert page.source_value_label.text().endswith(".fpvsbundle")
+    for label, path in (
+        (page.source_value_label, bundle),
+        (page.destination_value_label, destination),
+    ):
+        assert label.toolTip() == label.accessibleName() == str(path)
+    _assert_bundle_processing_geometry(page)
+
+    error = "The bundle is missing an oddball image folder. Choose a complete bundle and try again."
+    page.set_error(error)
+    QApplication.processEvents()
+    assert page.outcome_label.isVisible()
+    assert page.outcome_label.text() == error
+    assert page.context_card.isVisible()
+    _assert_bundle_processing_geometry(page)
+
+    qtbot.keyClick(page.locations_button, Qt.Key.Key_Space)
+    QApplication.processEvents()
+    assert not page.context_card.isVisible()
+
+
+@pytest.mark.parametrize("reduce_motion", [False, True], ids=["motion", "reduced-motion"])
+def test_import_progress_update_uses_real_stages_and_respects_motion(
+    qtbot, monkeypatch, reduce_motion,
+):
+    monkeypatch.setattr(
+        processing_page, "widget_animation_duration",
+        lambda _widget, limit: 0 if reduce_motion else limit,
+    )
+    page = BundleImportProcessingPage()
+    qtbot.addWidget(page)
+    page.set_update_mode(True)
+    page.resize(760, 465)
+    page.show()
+    page.start()
+    page.set_stage("verify")
+    QApplication.processEvents()
+    verify = page.findChild(QWidget, "bundle_import_processing_step_1")
+    commit = page.findChild(QWidget, "bundle_import_processing_step_commit")
+    assert verify is not None and verify.isVisible()
+    assert commit is not None and commit.isVisible()
+    assert verify.property("processingStepState") == "active"
+    assert commit.property("processingStepState") == "pending"
+
+    page.set_stage("base")  # Update never reports normal import stimulus phases.
+    assert verify.property("processingStepState") == "active"
+    assert commit.property("processingStepState") == "pending"
+    page.set_stage("commit")
+    assert verify.property("processingStepState") == "complete"
+    assert commit.property("processingStepState") == "active"
+    assert all(
+        not step.isVisible() for index in (2, 3, 4)
+        if (step := page.findChild(QWidget, f"bundle_import_processing_step_{index}")) is not None
+    )
+    animations = page.findChildren(QVariantAnimation)
+    assert animations
+    assert any(
+        animation.state() == QAbstractAnimation.State.Running for animation in animations
+    ) is not reduce_motion
+
+    page.set_stage("complete")
+    assert commit.property("processingStepState") == "complete"
+    assert page.title_label.text() == "Project updated"
+    page.stop()
+    assert all(animation.state() == QAbstractAnimation.State.Stopped for animation in animations)
+    _assert_bundle_processing_geometry(page)
 
 
 def test_export_group_summary_cancel_leaves_no_file(
@@ -805,12 +920,12 @@ def test_import_project_bundle_creates_and_opens_complete_project(
     assert imported_window.document.project.meta.name == "Bundle Source"
     assert imported_window.document.project_root.parent == configured_root.resolve()
     assert imported_window.document.dirty is False
-    assert (
-        imported_window.document.project_root
-        / "stimuli"
-        / "original-images"
-        / "condition-1-base"
-    ).is_dir()
+    stimulus_sets = imported_window.document.project.stimulus_sets
+    assert len(stimulus_sets) == 2
+    for stimulus_set in stimulus_sets:
+        assert stimulus_set.source_dir is not None
+        imported_images = imported_window.document.project_root / stimulus_set.source_dir
+        assert len(list(imported_images.glob("*.png"))) == stimulus_set.image_count == 3
     display = imported_window.document.project.settings.display
     assert display.preferred_refresh_hz == 120.0
     assert display.viewing_distance_cm == 75.0
@@ -861,7 +976,7 @@ def test_import_project_bundle_does_not_open_after_display_dialog_rejection(
     assert window.main_stack.currentWidget() is window.home_page
 
 
-def test_import_project_bundle_shows_embedded_processing_screen(
+def test_import_project_bundle_shows_embedded_progress_and_retains_error(
     controller: StudioController,
     qtbot,
     tmp_path,
@@ -871,6 +986,7 @@ def test_import_project_bundle_shows_embedded_processing_screen(
     window.resize(1120, 720)
     bundle_path = tmp_path / "import.fpvsbundle"
     _DeferredBackgroundTask.instances.clear()
+    error_details = []
     monkeypatch.setattr(
         "fpvs_studio.gui.controller.QFileDialog.getOpenFileName",
         lambda *args, **kwargs: (str(bundle_path), ""),
@@ -878,6 +994,10 @@ def test_import_project_bundle_shows_embedded_processing_screen(
     monkeypatch.setattr(
         "fpvs_studio.gui.controller.BackgroundTask",
         _DeferredBackgroundTask,
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.controller._show_error",
+        lambda *args: error_details.append(args),
     )
     monkeypatch.setattr(
         controller,
@@ -893,15 +1013,18 @@ def test_import_project_bundle_shows_embedded_processing_screen(
     assert len(_DeferredBackgroundTask.instances) == 1
     assert _DeferredBackgroundTask.instances[0].started is True
     QApplication.processEvents()
-    assert window.main_stack.currentWidget() is window.bundle_import_processing_page
-    assert window.bundle_import_processing_page.title_label.text() == "Importing Bundle Import Wait"
-    assert window.bundle_import_processing_page.source_value_label.text().endswith(
-        "import.fpvsbundle"
-    )
-    assert window.bundle_import_processing_page.content.width() >= 820
-    assert not isinstance(window.bundle_import_processing_page.context_card, QFrame)
-    assert not isinstance(window.bundle_import_processing_page.activity_card, QFrame)
-    assert_visible_children_within_parent(window.bundle_import_processing_page)
+    page = window.bundle_import_processing_page
+    assert window.main_stack.currentWidget() is page
+    assert page.title_label.text() == "Importing Bundle Import Wait"
+    assert not page.context_card.isVisible()
+    assert not window.import_project_bundle_action.isEnabled()
+    assert not page.error_details_button.isVisible()
+    page.locations_button.click()
+    QApplication.processEvents()
+    assert page.source_heading_label.text() == "Experiment file"
+    assert page.source_value_label.toolTip() == str(bundle_path)
+    assert page.context_card.isVisible()
+    _assert_bundle_processing_geometry(page)
 
     first_step = window.bundle_import_processing_page.findChild(
         QWidget,
@@ -924,6 +1047,7 @@ def test_import_project_bundle_shows_embedded_processing_screen(
     assert third_step is not None
     assert fourth_step is not None
     assert first_step.property("processingStepState") == "active"
+    assert first_step.findChild(QLabel).text() == "Verifying experiment files…"
     assert second_step.property("processingStepState") == "pending"
     assert third_step.property("processingStepState") == "pending"
     assert fourth_step.property("processingStepState") == "pending"
@@ -938,6 +1062,7 @@ def test_import_project_bundle_shows_embedded_processing_screen(
 
     controller._on_import_project_bundle_stage_changed("base")
     assert first_step.property("processingStepState") == "complete"
+    assert first_step.findChild(QLabel).text() == "Experiment files validated"
     assert second_step.property("processingStepState") == "active"
     assert third_step.property("processingStepState") == "pending"
     assert fourth_step.property("processingStepState") == "pending"
@@ -952,13 +1077,31 @@ def test_import_project_bundle_shows_embedded_processing_screen(
     assert third_step.property("processingStepState") == "complete"
     assert fourth_step.property("processingStepState") == "active"
 
-    _DeferredBackgroundTask.instances[0].fail(RuntimeError("cancel test import"))
+    error = ProjectBundleError("Project bundle checksum mismatch: project.json")
+    _DeferredBackgroundTask.instances[0].fail(error)
+    QApplication.processEvents()
+    assert window.main_stack.currentWidget() is page
+    assert fourth_step.property("processingStepState") == "failed"
+    assert page.outcome_label.isVisible()
+    assert "damaged" in page.outcome_label.text().lower()
+    assert not window.import_project_bundle_action.isEnabled()
+    close_button = page.findChild(QPushButton, "bundle_import_error_close")
+    assert close_button is not None and close_button.isVisible()
+    assert close_button.text() == "Close"
+    _assert_bundle_processing_geometry(page)
+    assert error_details == []
+    assert page.error_details_button.isVisible()
+    page.error_details_button.click()
+    assert error_details == [(window, "Import Project Error", error)]
 
+    close_button.click()
+    QApplication.processEvents()
     assert window.main_stack.currentWidget() is window.home_page
     assert window.import_project_bundle_action.isEnabled() is True
 
 
-def test_bundle_import_progress_dialog_is_expanded_without_clipping(qtbot, tmp_path) -> None:
+@pytest.mark.parametrize("size", [(940, 600), (1040, 680)], ids=["minimum", "default"])
+def test_bundle_import_progress_dialog_keeps_visible_error_with_close(qtbot, tmp_path, size):
     dialog = BundleImportProgressDialog()
     qtbot.addWidget(dialog)
     dialog.set_context(
@@ -967,13 +1110,14 @@ def test_bundle_import_progress_dialog_is_expanded_without_clipping(qtbot, tmp_p
         root_dir=tmp_path / "FPVS Studio Root",
     )
 
+    dialog.resize(*size)
     dialog.start()
     QApplication.processEvents()
 
-    assert dialog.width() >= 940
-    assert dialog.height() >= 600
-    assert dialog.page.content.width() >= 820
-    assert_visible_children_within_parent(dialog)
+    assert dialog.size().toTuple() == size
+    assert not dialog.page.context_card.isVisible()
+    assert not dialog.cancel_button.isVisible()
+    _assert_bundle_processing_geometry(dialog)
     for index in range(1, 5):
         step_label = dialog.findChild(
             QLabel,
@@ -986,7 +1130,18 @@ def test_bundle_import_progress_dialog_is_expanded_without_clipping(qtbot, tmp_p
     assert dialog.close() is False
     assert dialog.isVisible() is True
 
-    dialog.finish()
+    dialog.set_stage("oddball")
+    dialog.page.locations_button.click()
+    message = "The bundle is missing an oddball image folder. Choose a complete bundle and retry."
+    dialog.set_error(message)
+    QApplication.processEvents()
+    assert dialog.page.context_card.isVisible()
+    assert dialog.page.outcome_label.text() == message
+    assert dialog.cancel_button.isVisible() and dialog.cancel_button.isEnabled()
+    assert dialog.cancel_button.text() == "Close"
+    _assert_bundle_processing_geometry(dialog)
+    dialog.cancel_button.click()
+    assert not dialog.isVisible()
 
 
 def test_import_display_settings_dialog_detect_button_keeps_edited_width(

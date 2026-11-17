@@ -112,6 +112,7 @@ __all__ = [
     "apply_home_page_theme",
     "apply_image_resizer_theme",
     "apply_image_size_preview_dialog_theme",
+    "apply_library_dialog_theme",
     "apply_non_home_shell_theme",
     "apply_section_card_theme",
     "apply_setup_wizard_theme",
@@ -1595,6 +1596,51 @@ def apply_dialog_theme(widget: QWidget) -> None:
     _apply_palette_stylesheet(widget, dialog_stylesheet)
 
 
+def _library_dialog_stylesheet(palette: QPalette) -> str:
+    theme = _resolved_theme(palette)
+    return dialog_stylesheet(theme) + f"""
+    QFrame#library_workspace {{
+        border: 1px solid {theme.border_soft};
+        border-radius: {CARD_CORNER_RADIUS}px;
+        background: {theme.surface_elevated};
+    }}
+    QWidget#library_sidebar {{
+        background: {theme.surface};
+        border-right: 1px solid {theme.border_soft};
+    }}
+    QFrame#library_group_divider {{ background: {theme.border_soft}; border: none; }}
+    QScrollArea#library_catalog_scroll, QWidget#library_catalog_groups {{
+        background: {theme.surface};
+        border: none;
+    }}
+    QTextBrowser#library_experiment_details {{
+        border: none;
+        padding: 12px;
+        background: {theme.surface_elevated};
+    }}
+    QPushButton[libraryProject="true"] {{
+        border: 1px solid transparent;
+        border-radius: 6px;
+        background: transparent;
+        text-align: left;
+        padding: 7px 10px;
+        font-weight: 600;
+    }}
+    QPushButton[libraryProject="true"]:hover {{ background: {theme.surface_alt}; }}
+    QPushButton[libraryProject="true"]:checked {{
+        background: {theme.info_bg};
+        border-color: {theme.primary};
+    }}
+    QPushButton[libraryProject="true"]:focus {{ border-color: {theme.focus_ring}; }}
+    QPushButton[libraryProject="true"]:checked:focus {{ border: 2px solid {theme.focus_ring}; }}
+    """
+
+
+def apply_library_dialog_theme(widget: QWidget) -> None:
+    widget.setProperty("studioDialog", "true")
+    _apply_palette_stylesheet(widget, _library_dialog_stylesheet)
+
+
 def action_palette_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     """Use the shared dialog and focus treatment for searchable command lists."""
 
@@ -1948,6 +1994,71 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {color_text_primary};
         font-size: {FONT_SIZE_BODY + 1}px;
         font-weight: 700;
+    }}
+    QFrame#bundle_import_processing_header {{
+        background-color: {color_page_background};
+        border: none;
+        border-bottom: 1px solid {color_border_soft};
+        border-top-left-radius: {CARD_CORNER_RADIUS}px;
+        border-top-right-radius: {CARD_CORNER_RADIUS}px;
+    }}
+    QLabel#bundle_import_processing_title_label {{
+        color: {color_text_primary};
+        font-size: {FONT_SIZE_DIALOG_TITLE + 4}px;
+        font-weight: 700;
+    }}
+    QLabel#bundle_import_processing_icon {{
+        background-color: {theme.info_bg};
+        border-radius: 8px;
+    }}
+    QFrame[importProcessingStep="true"] {{
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+    }}
+    QFrame[importProcessingStep="true"][processingStepState="active"] {{
+        background: {theme.info_bg};
+    }}
+    QFrame[importProcessingStep="true"][processingStepState="failed"] {{
+        background: {theme.error_bg};
+    }}
+    QLabel[importProcessingStepLabel="true"] {{
+        color: {theme.text_muted};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QLabel[importProcessingStepLabel="true"][processingStepState="active"] {{
+        color: {theme.info_text};
+        font-weight: 700;
+    }}
+    QLabel[importProcessingStepLabel="true"][processingStepState="complete"] {{
+        color: {color_text_primary};
+    }}
+    QLabel[importProcessingStepLabel="true"][processingStepState="failed"],
+    QLabel#bundle_import_processing_outcome[importOutcome="error"] {{
+        color: {theme.error_text};
+        font-weight: 600;
+    }}
+    QLabel#bundle_import_processing_outcome {{
+        color: {color_text_secondary};
+        font-size: {FONT_SIZE_BODY}px;
+    }}
+    QFrame#bundle_import_processing_footer {{
+        border: none;
+        border-top: 1px solid {color_border_soft};
+    }}
+    QToolButton#bundle_import_processing_locations {{
+        color: {color_text_secondary};
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 6px;
+        padding: 5px 8px;
+        min-height: 23px;
+    }}
+    QToolButton#bundle_import_processing_locations:hover {{
+        background: {theme.surface_alt};
+    }}
+    QToolButton#bundle_import_processing_locations:focus {{
+        border-color: {theme.focus_ring};
     }}
     QLabel[importDisplayRole="title"] {{
         color: {color_text_primary};

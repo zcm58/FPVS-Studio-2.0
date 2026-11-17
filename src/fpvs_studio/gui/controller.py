@@ -90,6 +90,7 @@ from fpvs_studio.runtime.export_modes import (
     EXPORT_MODE_FULL,
     VALID_EXPORT_MODES,
 )
+from fpvs_studio.support.error_explanations import describe_error
 from fpvs_studio.updates.downloader import cleanup_update_cache
 from fpvs_studio.updates.helper_client import check_app_updates, installer_updates_supported
 from fpvs_studio.updates.models import UpdateCheckResult
@@ -1609,6 +1610,7 @@ class StudioController(QObject):
 
     def _library_import_done(self, result: object) -> None:
         outcome = cast(UpdateTaskResult, result)
+        failure_dialog: BundleImportProgressDialog | None = None
         try:
             if self._update_lifecycle.is_shutting_down:
                 self._finish_project_bundle_import_processing(restore_previous=True)
@@ -1618,6 +1620,7 @@ class StudioController(QObject):
                 self._finish_project_bundle_import_processing(restore_previous=True)
             elif outcome.error is not None:
                 self._on_import_project_bundle_failed(outcome.error)
+                failure_dialog = self._import_bundle_processing_dialog
             else:
                 self._on_import_project_bundle_succeeded(outcome.value)
         finally:
@@ -1628,7 +1631,14 @@ class StudioController(QObject):
             self._library_import_result = None
             self._on_import_project_bundle_finished()
             if callback is not None:
-                callback(project_root)
+                if failure_dialog is None:
+                    callback(project_root)
+                else:
+                    # Keep the Library's import handoff behind the visible error screen.
+                    failure_dialog.finished.connect(
+                        lambda _result: callback(project_root),
+                        Qt.ConnectionType.SingleShotConnection,
+                    )
 
     @Slot(str)
     def _on_import_project_bundle_stage_changed(self, stage: str) -> None:
@@ -1680,12 +1690,27 @@ class StudioController(QObject):
     @Slot(object)
     def _on_import_project_bundle_failed(self, error: object) -> None:
         window = self._import_bundle_processing_window
-        self._finish_project_bundle_import_processing(restore_previous=True)
-        _show_error(
-            window or self.main_window or self.welcome_window,
-            "Import FPVS Studio Project Error",
-            _coerce_exception(error),
-        )
+        progress_dialog = self._import_bundle_processing_dialog
+        failure = _coerce_exception(error)
+        message = describe_error("Import project", failure)
+        if not isinstance(failure, (ValueError, FileNotFoundError)):
+            _LOGGER.error("Project import failed", exc_info=failure)
+
+        def show_details(parent: QWidget) -> None:
+            _show_error(parent, "Import Project Error", failure)
+
+        if progress_dialog is not None:
+            if window is not None:
+                window.finish_bundle_import_processing(restore_previous=True)
+            welcome = self.welcome_window
+            if welcome is not None:
+                progress_dialog.finished.connect(
+                    lambda _result: welcome.set_import_busy(False),
+                    Qt.ConnectionType.SingleShotConnection,
+                )
+            progress_dialog.set_error(message, show_details)
+        elif window is not None:
+            window.show_bundle_import_error(message, show_details)
 
     @Slot()
     def _on_import_project_bundle_finished(self) -> None:

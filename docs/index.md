@@ -18,6 +18,8 @@ below are a catalog, not a required reading list.
 ## Product And Workflows
 
 - Product direction: `PRODUCT_SENSE.md` and `product-specs/index.md`
+- Current mission and scope: [Studio specification](product-specs/studio.md)
+- Optional grayscale batch preparation: [Image Equalizer](product-specs/image-equalizer.md)
 - Design and GUI workflow: `DESIGN.md`, `FRONTEND.md`, and `GUI_WORKFLOW.md`
 - Experiment categories and legacy separation: `EXPERIMENT_CATEGORIES.md`
 - Cognitive Load FPVS and reusable backward counting: `COGNITIVE_LOAD_FPVS.md`

@@ -1,6 +1,16 @@
 # Luminance And RMS Contrast Equalization Investigation
 
-Status: Planned
+Status: Completed
+
+## Decision
+
+The user authorized a standalone Image Equalizer with grayscale mean/RMS matching,
+multiple explicit input/output pairs and parallel processing. The approved scope uses
+external output folders and a standalone report rather than project manifests. Color
+preservation, project-linked automatic processing and physical monitor calibration are
+outside this implementation. Current decisions and tests live in the
+[Image Equalizer specification](../../product-specs/image-equalizer.md); the original
+investigation below is retained as history.
 
 ## Summary
 

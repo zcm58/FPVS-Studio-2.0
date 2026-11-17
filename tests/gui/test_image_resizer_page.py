@@ -83,7 +83,7 @@ def test_tools_menu_exposes_in_window_image_resizer(
     assert [
         action.text() for action in window.tools_menu.actions() if not action.isSeparator()
     ] == [
-        "Image Resizer", "Trigger Tester", "Condition Figure",
+        "Image Resizer", "Image Equalizer", "Trigger Tester", "Condition Figure",
     ]
 
     window.image_resizer_action.trigger()

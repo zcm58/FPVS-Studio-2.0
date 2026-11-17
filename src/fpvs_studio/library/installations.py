@@ -10,6 +10,7 @@ from fpvs_studio.core.library_installations import (
     library_install_status,
     scan_library_projects,
 )
+from fpvs_studio.core.library_origin import LibraryScope
 from fpvs_studio.library.cache import check_cancel
 from fpvs_studio.library.client import LibraryClient, ProgressCallback
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
@@ -31,6 +32,7 @@ def check_library_install(
 
 def download_library_install(
     client: LibraryClient, item: LibraryItem, root: Path, *, update: bool = False,
+    scope: LibraryScope = "lab",
     cancel_event: Event | None = None, progress_callback: ProgressCallback | None = None,
 ) -> Path | LibraryInstallStatus:
     """An explicit update may add a newer copy, but never the same/newer installed release."""
@@ -38,7 +40,9 @@ def download_library_install(
     check_cancel(cancel_event)
     if status.state == "installed" or (status.state != "new" and not update):
         return status
-    path = client.download(item, cancel_event=cancel_event, progress_callback=progress_callback)
+    path = client.download(
+        item, scope=scope, cancel_event=cancel_event, progress_callback=progress_callback,
+    )
     try:
         # Another operation may have installed it while the transfer was in progress.
         status = check_library_install(root, client.service_url, item, cancel_event=cancel_event)

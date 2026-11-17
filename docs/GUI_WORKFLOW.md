@@ -870,7 +870,7 @@ correctness, EEG time and incomplete/aborted state. **Export Excel...** writes t
 loaded data to the chosen workbook path using the same backend summary.
 The default SOA/trigger rows are 100 ms / 1, 300 ms / 3 and 500 ms / 5. Historical
 custom codes are shown from recorded data. Other experiment categories retain
-**View > Fixation Task Accuracy...**. Tools includes Condition Figure, Image Resizer,
+**View > Fixation Task Accuracy...**. Tools includes Condition Figure, Image Resizer, Image Equalizer,
 and Trigger Tester.
 Test sessions (participant IDs `0`/`00`) record and display accuracy and are marked
 in the burst table and workbook. The SOA summary includes their completed answers.
@@ -1231,6 +1231,15 @@ The authoring window is organized around two user-facing modes:
     feedback with motion disabled
   - does not update project conditions, stimulus sets, manifests, compiler
     contracts, runtime contracts, or PsychoPy behavior
+- `Tools > Image Equalizer`
+  - also available from Welcome without an open project
+  - multiple input/output folder pairs, one automatic grayscale mean/RMS target
+    across the batch, parallel processing and cancellation
+  - saves verified PNG copies and a matching report in new/empty output folders;
+    preserves originals and existing output files
+  - use after resizing/cropping, then explicitly select prepared folders in Conditions
+  - numerical, file-safety and interaction details live in the
+    [Image Equalizer specification](product-specs/image-equalizer.md)
 
 Detailed Conditions remains available internally for existing document bindings, but it
 is no longer exposed as a wizard advanced step and does not expose duty-cycle editing.
@@ -1604,11 +1613,17 @@ the review imports a
 `.fpvsbundle` into a new project folder under the configured FPVS Studio Root Folder,
 verifies archive paths and hashes in an app-owned staging folder, resolves
 project-folder collisions, and shows staged verify/base-stimuli/oddball-stimuli/project
-setup progress. Imports started from an open project use the embedded processing page;
-imports started from Welcome use the same page inside a modal progress dialog. The
-progress surface uses a single frame with source/destination and activity sections so
-paths, status copy, and all four stage labels remain visible. Export progress follows the
-same layout. The export result shows the file, contents and path actions in one frame. The
+setup progress. Local imports from an open project use the embedded processing page.
+Welcome and Library imports use the page inside a modal progress dialog. The import
+page shows one row per worker stage. The first row reads **Verifying experiment files…**
+while active and **Experiment files validated** when complete. **File locations** reveals
+the original file and destination with access to the full paths. Marker transitions
+follow worker events and the motion preference. **Cancel setup** in a Library import
+disables the action while the worker stops. Import failures keep the failed stage and
+  recovery guidance visible until **Close**. **Error details** opens the diagnostic
+  and bug reporting action on demand. Success hands off to display confirmation.
+In-place updates show the verification and commit events they receive. The export
+result shows the file, contents and path actions in one frame. The
 configured Studio root is persisted and loaded as an absolute path; import destinations
 never fall back to the application working directory. Bundle reads, collision checks
 and destination creation use the core Windows path adapter, including long source and
@@ -1616,6 +1631,11 @@ receiving paths; the returned project location retains the ordinary configured p
 The final folder rename retries brief Windows access/sharing locks for at most
 150 ms. It remains cancellable between attempts, never replaces an existing project,
 and reports persistent access failures without committing an incomplete import.
+In an approved visible session, check the import page in Light and Dark at `940x600`
+and `1040x680`. Tab through **File locations** and the available footer action, reveal
+a long source path, and test cancellation and a damaged file. Confirm the stage rows
+and error remain readable with reduced motion and that a successful import opens
+the display review.
 Opening project/manifest JSON, root-folder selection/preferences, recent projects,
 restart discovery, template storage and image-readiness signatures reuse that adapter.
 Disk-full and permission errors identify the storage action needed to retry.
@@ -1866,6 +1886,9 @@ preprocessing services but must not silently mutate the active project.
   metadata check should stay silent unless a newer release is available.
 - Standalone image resizing lives in `src/fpvs_studio/gui/image_resizer_page.py`; it uses
   the shared component layer and delegates batch work to preprocessing through Qt workers.
+- Standalone equalization lives in `src/fpvs_studio/gui/image_equalizer_dialog.py` and
+  `src/fpvs_studio/preprocessing/equalization.py`; Welcome and MainWindow expose the
+  same project-independent dialog. No image work occurs on the GUI thread.
 - Bundle review and Welcome-hosted progress dialogs live in
   `src/fpvs_studio/gui/bundle_import_dialog.py`; shared embedded progress and persistent
   export-result pages live in `src/fpvs_studio/gui/processing_page.py`.
@@ -1926,6 +1949,8 @@ The current GUI supports:
 - reviewing Target Stimulus Repeats and base/oddball repeat-balance warnings
 - normalizing inconsistent condition image folders to project-local PNG copies
 - using `Tools > Image Resizer` to create standalone FPVS-ready PNG copies
+- using `Tools > Image Equalizer` before or after opening a project to match grayscale
+  images across multiple folders, cancel/retry safely and inspect saved matching reports
 - materializing original, grayscale, rot180, and phase-scrambled variants
 - validating and compiling the multi-condition session plan
 - running the supported session launch path with fullscreen PsychoPy playback

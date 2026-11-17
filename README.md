@@ -2,13 +2,21 @@
 
 ![FPVS Studio](docs/assets/fpvs-studio-readme-header.png)
 
-FPVS Studio steamlines the process to create and run Fast Periodic Visual Stimulation experiments
-without needing to write code. The workflow is designed for non-expert user, with a guided setup wizard for 
-creating your conditions, selecting base and oddball images, assigning trigger codes, and includes a unique 
-fixation cross accuracy tracking task to guage participant attention on each condition. 
+FPVS Studio helps researchers prepare stimuli, create image and word Fast Periodic
+Visual Stimulation experiments, and run repeated participant sessions without writing
+experiment code. Guided Setup covers conditions, stimuli, timing, display/session
+settings and optional fixation and response tasks. Saved projects retain those choices
+for subsequent participants.
 
-The current beta package is compatible with Windows 11 and BioSemi systems. Future updates will bring compatibilty 
-to other data formats. 
+Researchers can use externally prepared images or optionally create separate copies
+with Image Resizer and Image Equalizer. Image Equalizer automatically matches grayscale
+brightness and RMS contrast across multiple input/output folder pairs. Monitor
+calibration remains external to these image tools.
+
+Studio supports Windows acquisition and experimental macOS source playback. See the
+[current product specification](docs/product-specs/studio.md) for its mission and scope,
+and the [recording contract](docs/RUNTIME_EXECUTION.md#trigger-behavior) for recording
+options and qualification boundaries.
 
 
 ## Installation Instructions

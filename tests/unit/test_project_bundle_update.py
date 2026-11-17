@@ -144,10 +144,14 @@ def _update(case, **kwargs):
     )
 
 
+@pytest.mark.parametrize("scope", ["lab", "public"])
 def test_update_replaces_authored_files_and_preserves_local_identity_evidence_and_backup(
-    update_case,
+    update_case, scope,
 ):
     case = update_case
+    initial_origin = load_library_origin(case.root)
+    save_library_origin(case.root, initial_origin.model_copy(update={"scope": scope}))
+    case.origin = case.origin.model_copy(update={"scope": scope})
     before = _bytes(case.root)
     result = _update(case)
     project = load_project_file(case.root / "project.json")
@@ -180,6 +184,7 @@ def test_update_replaces_authored_files_and_preserves_local_identity_evidence_an
     assert receipt.bundle_sha256 == case.origin.bundle_sha256
     assert receipt.local_project_id == project.meta.project_id
     assert receipt.auto_check is False
+    assert receipt.scope == scope
     after = _bytes(case.root)
     for relative, payload in before.items():
         if not relative.startswith("stimuli/") and relative not in (
@@ -195,7 +200,9 @@ def test_update_replaces_authored_files_and_preserves_local_identity_evidence_an
         ):
             assert backup[relative] == payload
     assert "stimuli/old-user-sidecar.txt" not in after
-    assert json.loads(backup["update.json"])["status"] == "complete"
+    journal = json.loads(backup["update.json"])
+    assert journal["status"] == "complete"
+    assert journal["new_origin"].get("scope") == ("public" if scope == "public" else None)
     assert discover_project_roots(case.studio) == [case.root]
 
 
@@ -343,6 +350,7 @@ def test_change_while_download_is_prepared_is_not_overwritten(update_case):
     [
         {"item_id": "other-study"},
         {"service_url": "https://other.example.test"},
+        {"scope": "public"},
         {"installed_version": "1.0.0"},
         {"installed_version": "0.9.0"},
         {"installed_version": None},

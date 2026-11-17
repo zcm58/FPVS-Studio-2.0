@@ -4,7 +4,8 @@ The [original v1 specification](references/archive/FPVS_Studio_v1_Architecture_S
 is historical design context. It is no longer the current model, hardware or workflow
 contract. This compatibility pointer preserves existing links.
 
-For current work, use [the package map](../ARCHITECTURE.md) and select one scope in
+For the current mission and workflows, use the [Studio product specification](product-specs/studio.md).
+For current engineering work, use [the package map](../ARCHITECTURE.md) and select one scope in
 [the task index](agent/agent-index.md). Product categories live in
 [Experiment categories](EXPERIMENT_CATEGORIES.md); compiled behavior lives in
 [RunSpec](RUNSPEC.md), [SessionPlan](SESSION_PLAN.md) and

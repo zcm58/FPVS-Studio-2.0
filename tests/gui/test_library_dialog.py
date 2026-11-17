@@ -7,8 +7,9 @@ from threading import Event
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import Qt, QThread
-from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
+from PySide6.QtCore import Qt, QThread, QUrl
+from PySide6.QtGui import QColor, QImage, QPalette, QTextDocument
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
 from tests.gui.helpers import (
     assert_visible_children_within_parent,
     open_created_project,
@@ -17,6 +18,7 @@ from tests.gui.helpers import (
 from tests.unit.test_library_installations import project as installed_project
 
 from fpvs_studio.core.library_installations import scan_library_projects
+from fpvs_studio.core.library_origin import MANAGED_LIBRARY_SERVICE_URL
 from fpvs_studio.core.project_bundle import ProjectBundleCancelled, ProjectBundleError
 from fpvs_studio.core.project_service import create_project
 from fpvs_studio.gui import library_controller as library_module
@@ -50,6 +52,14 @@ def _item(**updates) -> LibraryItem:
     return LibraryItem(**data)
 
 
+def _demo() -> LibraryItem:
+    return _item(
+        item_id="color-oddball-demo", version="1.0.0", title="Color Oddball Demo",
+        experiment_category="fpvs_oddball", filename="color-oddball-demo.fpvsbundle",
+        description="The same grayscale objects, followed by red or green oddballs.",
+    )
+
+
 def _connection(**updates) -> LibraryConnection:
     values = dict(
         device_id="device-1",
@@ -60,6 +70,13 @@ def _connection(**updates) -> LibraryConnection:
     return LibraryConnection(**values)
 
 
+def _project_buttons(dialog: LibraryDialog) -> list[QPushButton]:
+    return [
+        button for button in dialog.findChildren(QPushButton)
+        if button.property("libraryProject") == "true" and not button.isHidden()
+    ]
+
+
 def test_library_sign_in_is_available_for_openfpvs_disconnected_state(qtbot, monkeypatch):
     opened = []
     monkeypatch.setattr(library_ui, "QDesktopServices", SimpleNamespace(
@@ -68,11 +85,13 @@ def test_library_sign_in_is_available_for_openfpvs_disconnected_state(qtbot, mon
     dialog = LibraryDialog()
     qtbot.addWidget(dialog)
     dialog.show()
+    assert not dialog.sign_in_button.isVisible()
+    qtbot.mouseClick(dialog.connect_toggle, Qt.MouseButton.LeftButton)
     assert dialog.sign_in_button.isVisible()
     qtbot.mouseClick(dialog.sign_in_button, Qt.MouseButton.LeftButton)
     assert opened == ["https://openfpvs.com/account#connect-studio"]
     dialog.set_connection(_connection())
-    assert dialog.sign_in_button.isHidden()
+    assert not dialog.sign_in_button.isVisible()
     custom = LibraryDialog(openfpvs=False)
     qtbot.addWidget(custom)
     assert custom.sign_in_button.isHidden()
@@ -81,14 +100,14 @@ def test_library_sign_in_is_available_for_openfpvs_disconnected_state(qtbot, mon
 
 @pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
 @pytest.mark.parametrize("state", [
-    "disconnected", "ready", "busy", "error", "authorization_error", "empty",
+    "disconnected", "connect", "ready", "busy", "error", "authorization_error", "empty",
     "installed", "update", "review", "view_only",
 ])
 def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     dialog = LibraryDialog()
     qtbot.addWidget(dialog)
     item = _item(title="Long experiment name " * 7, description="Protocol description. " * 150)
-    if state != "disconnected":
+    if state not in {"disconnected", "connect"}:
         dialog.set_connection(_connection(
             library_name="Research experiment library " * 4,
             device_name="Research computer name " * 4,
@@ -133,21 +152,26 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
         )
     elif state == "empty":
         dialog.set_catalog(LibraryCatalog(schema_version="1.0", library_name="Research", items=[]))
+    elif state == "connect":
+        dialog.connect_toggle.click()
     dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
     assert (dialog.width(), dialog.height()) == size
-    assert_visible_children_within_parent(dialog)
+    assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     assert not dialog.header.subtitle_label.isVisible()
     for button in dialog.findChildren(QPushButton):
         if button.isVisible():
-            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+            assert all(
+                button.width() >= button.fontMetrics().horizontalAdvance(line)
+                for line in button.text().splitlines()
+            )
     for label in dialog.findChildren(QLabel):
         if label.isVisible() and label.wordWrap():
             assert label.height() >= label.heightForWidth(label.width())
     if state in ("ready", "busy", "error"):
         assert item.title in dialog.details.toPlainText()
-        assert item.description in dialog.item_list.item(0).toolTip()
+        assert item.description in _project_buttons(dialog)[0].toolTip()
         assert "Project files: 3" in dialog.details.toPlainText()
         assert "Minimum FPVS Studio: 1.0.0" in dialog.details.toPlainText()
         assert "Compatible with this Studio version" not in dialog.details.toPlainText()
@@ -175,7 +199,11 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
         assert dialog.refresh_button.isEnabled()
         assert dialog.search_edit.isEnabled()
     elif state == "disconnected":
-        assert "one-time computer code" in dialog.connection_label.text()
+        assert "projects shared by your lab" in dialog.connection_label.text()
+        assert dialog.connect_toggle.isVisible()
+        assert not dialog.connection_fields.isVisible()
+    elif state == "connect":
+        assert dialog.connection_fields.isVisible()
         assert "one-time computer code from your OpenFPVS account" in dialog.code_edit.toolTip()
         assert dialog.code_edit.accessibleDescription() == dialog.code_edit.toolTip()
     if state in {"installed", "update", "review"}:
@@ -250,7 +278,69 @@ def test_library_search_and_incompatible_item(qtbot) -> None:
     assert dialog.selected_item() is None
     assert "No matching" in dialog.details.toPlainText()
     dialog.search_edit.setText("attentional")
-    assert dialog.item_list.count() == 1
+    assert len(_project_buttons(dialog)) == 1
+
+
+@pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
+@pytest.mark.parametrize("dark", [False, True])
+def test_public_demo_and_view_only_lab_share_one_browser(qtbot, monkeypatch, size, dark):
+    monkeypatch.setattr(library_ui, "widget_animation_duration", lambda *_args: 0)
+    dialog = LibraryDialog()
+    qtbot.addWidget(dialog)
+    palette = dialog.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor("#202124" if dark else "#f4f7fb"))
+    dialog.setPalette(palette)
+    dialog.set_installations((), MANAGED_LIBRARY_SERVICE_URL)
+    dialog.set_public_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Public projects", items=[_demo()],
+    ))
+    dialog.resize(*size)
+    dialog.show()
+    QApplication.processEvents()
+    assert (dialog.width(), dialog.height()) == size
+    assert_visible_children_within_parent(dialog, allow_scroll_content=True)
+    assert dialog.selected_scope() == "public"
+    assert dialog.install_button.isEnabled()
+    assert dialog.status_label.text() == "No account required"
+    assert "1.2 Hz" in dialog.details.toPlainText()
+    assert "3 runs per condition" in dialog.details.toPlainText()
+    dialog.set_catalog_state("lab", loading=True)
+    assert dialog.selected_scope() == "public"
+    assert not dialog.install_button.isEnabled()
+    assert "current Library check" in dialog.install_button.toolTip()
+    dialog.set_catalog_state("lab")
+    assert dialog.install_button.isEnabled()
+    diagram = dialog.details.document().resource(
+        QTextDocument.ResourceType.ImageResource.value, QUrl("studio:color-oddball-demo"),
+    )
+    assert isinstance(diagram, QImage) and not diagram.isNull()
+    dialog.search_edit.setFocus()
+    qtbot.keyClick(dialog.search_edit, Qt.Key.Key_Tab)
+    assert _project_buttons(dialog)[0].hasFocus()
+    qtbot.keyClick(_project_buttons(dialog)[0], Qt.Key.Key_Tab)
+    assert dialog.connect_toggle.hasFocus()
+    qtbot.keyClick(dialog.connect_toggle, Qt.Key.Key_Space)
+    assert dialog.connection_fields.isVisible()
+    assert dialog.connection_fields.graphicsEffect() is None
+    assert dialog.install_button.isEnabled()
+    dialog.set_connection(_connection(access_level="view", lab_name="Vision Lab"))
+    dialog.set_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Research", access_level="view",
+        items=[_item(), _item(item_id="reading", title="Reading Priming")],
+    ))
+    QApplication.processEvents()
+    assert_visible_children_within_parent(dialog, allow_scroll_content=True)
+    assert len(_project_buttons(dialog)) == 3
+    assert dialog.install_button.isEnabled()
+    dialog.search_edit.setText("reading")
+    assert dialog.selected_scope() == "lab"
+    assert dialog.install_button.text() == "View-only access"
+    assert not dialog.install_button.isEnabled()
+    assert "No matching public projects" in dialog.public_status.text()
+    dialog.search_edit.clear()
+    dialog.set_connection(None)
+    assert dialog.selected_scope() == "public"
+    assert dialog.install_button.isEnabled()
 
 
 class _Client:
@@ -265,6 +355,8 @@ class _Client:
         self.authorization_error = False
         self.access_level = "download"
         self.download_denied = False
+        self.public_error = False
+        self.download_scopes = []
 
     def connection_info(self):
         return self.connection
@@ -284,8 +376,14 @@ class _Client:
             access_level=self.access_level, lab_name="Shared lab",
         )
 
-    def download(self, item, *, cancel_event=None, progress_callback=None):
+    def public_catalog(self, *, cancel_event=None):
+        if self.public_error:
+            raise LibraryError("Public catalog unavailable.")
+        return LibraryCatalog(schema_version="1.0", library_name="Public projects", items=[_demo()])
+
+    def download(self, item, *, scope="lab", cancel_event=None, progress_callback=None):
         self.download_started.set()
+        self.download_scopes.append(scope)
         if self.download_denied:
             raise LibraryError(
                 "Your lab has view-only Library access. Downloads are not permitted."
@@ -304,28 +402,74 @@ class _Client:
         self.connection = None
 
 
-def _controller(qapp, qtbot, monkeypatch, tmp_path, import_bundle):
+def _controller(qapp, qtbot, monkeypatch, tmp_path, import_bundle, *, client=None):
     lifecycle = UpdateLifecycle(qapp, quit_callback=lambda: None)
     monkeypatch.setattr(library_module, "update_lifecycle", lambda app: lifecycle)
     monkeypatch.setattr(
         library_module, "read_project_bundle_manifest",
         lambda path: SimpleNamespace(project=SimpleNamespace(project_id="example")),
     )
-    client = _Client(tmp_path / "example.fpvsbundle")
+    client = client or _Client(tmp_path / "example.fpvsbundle")
     controller = LibraryController(
         qapp, import_bundle=import_bundle, client=client, studio_root=lambda: tmp_path,
         review_project=lambda root: None,
     )
     controller.show()
     qtbot.addWidget(controller.dialog)
-    qtbot.waitUntil(lambda: controller._job is None)
+    qtbot.waitUntil(lambda: not controller._catalog_jobs and controller._job is None)
     return controller, client, lifecycle
 
 
 def _enroll(controller, qtbot) -> None:
     controller.dialog.code_edit.setText("test-access")
     controller.dialog.connect_button.click()
-    qtbot.waitUntil(lambda: controller._job is None and controller.dialog.item_list.count() == 1)
+    qtbot.waitUntil(lambda: not controller._catalog_jobs and controller._job is None)
+    assert controller.dialog.selected_item() is not None
+
+
+def test_public_catalog_requires_no_connection_and_preserves_scope_on_import(
+    qapp, qtbot, monkeypatch, tmp_path,
+) -> None:
+    client = _Client(tmp_path / "demo.fpvsbundle")
+    client.service_url = MANAGED_LIBRARY_SERVICE_URL
+    handoffs = []
+    controller, _client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path, lambda *args: handoffs.append(args), client=client,
+    )
+    assert client.connection is None
+    assert controller.dialog.install_button.isEnabled()
+    controller.dialog.install_button.click()
+    qtbot.waitUntil(lambda: len(handoffs) == 1)
+    assert client.download_scopes == ["public"]
+    _path, _manifest, origin, finished = handoffs[0]
+    assert origin.scope == "public"
+    assert origin.item_id == "color-oddball-demo"
+    finished(None)
+    assert client.releases == 1
+
+
+def test_catalog_failures_do_not_clear_other_scope(qapp, qtbot, monkeypatch, tmp_path) -> None:
+    client = _Client(tmp_path / "demo.fpvsbundle")
+    client.service_url = MANAGED_LIBRARY_SERVICE_URL
+    client.connection = _connection()
+    client.public_error = True
+    controller, _client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path, lambda *_args: None, client=client,
+    )
+    dialog = controller.dialog
+    assert dialog.selected_scope() == "lab"
+    assert dialog.install_button.isEnabled()
+    assert dialog.public_retry.isVisible()
+    client.public_error = False
+    dialog.public_retry.click()
+    qtbot.waitUntil(lambda: not controller._catalog_jobs)
+    assert dialog.selected_scope() == "public"
+    client.authorization_error = True
+    dialog.refresh_button.click()
+    qtbot.waitUntil(lambda: not controller._catalog_jobs)
+    assert "revoked" in dialog.lab_status.text()
+    assert dialog.selected_scope() == "public"
+    assert dialog.install_button.isEnabled()
 
 
 def test_enrollment_import_lease_and_disconnect(qapp, qtbot, monkeypatch, tmp_path) -> None:
@@ -358,8 +502,8 @@ def test_enrollment_import_lease_and_disconnect(qapp, qtbot, monkeypatch, tmp_pa
     controller.dialog.disconnect_button.click()
     qtbot.waitUntil(lambda: controller._job is None)
     assert client.connection is None
-    assert controller.dialog.item_list.count() == 0
-    assert "remain available offline" in controller.dialog.status_label.text()
+    assert not _project_buttons(controller.dialog)
+    assert "remain available offline" in controller.dialog.lab_status.text()
 
 
 @pytest.mark.parametrize("action", ["escape", "close", "cancel", "shutdown"])
@@ -407,16 +551,16 @@ def test_authorization_failure_clears_catalog(qapp, qtbot, monkeypatch, tmp_path
     _enroll(controller, qtbot)
     client.authorization_error = True
     controller.dialog.refresh_button.click()
-    qtbot.waitUntil(lambda: controller._job is None)
-    assert controller.dialog.item_list.count() == 0
+    qtbot.waitUntil(lambda: not controller._catalog_jobs)
+    assert not _project_buttons(controller.dialog)
     assert not controller.dialog.install_button.isEnabled()
-    assert "revoked" in controller.dialog.status_label.text()
+    assert "revoked" in controller.dialog.lab_status.text()
     assert controller.dialog.connection_fields.isVisible()
     assert controller.dialog.connect_button.isVisible()
     assert not controller.dialog.disconnect_button.isVisible()
     client.authorization_error = False
     _enroll(controller, qtbot)
-    assert controller.dialog.item_list.count() == 1
+    assert len(_project_buttons(controller.dialog)) == 1
     assert controller.dialog.install_button.isEnabled()
 
 
@@ -445,15 +589,15 @@ def test_download_permission_denial_keeps_library_connected(qapp, qtbot, monkeyp
     controller.dialog.install_button.click()
     qtbot.waitUntil(lambda: controller._job is None)
     assert "view-only" in controller.dialog.status_label.text()
-    assert controller.dialog.item_list.count() == 1
+    assert len(_project_buttons(controller.dialog)) == 1
     assert not controller.dialog.connection_fields.isVisible()
     assert controller.dialog.disconnect_button.isVisible()
     assert client.connection is not None
     client.access_level = "view"
     controller.dialog.refresh_button.click()
-    qtbot.waitUntil(lambda: controller._job is None)
+    qtbot.waitUntil(lambda: not controller._catalog_jobs)
     assert not controller.dialog.install_button.isEnabled()
-    assert controller.dialog.item_list.count() == 1
+    assert len(_project_buttons(controller.dialog)) == 1
 
 
 def test_library_import_review_cancel_releases_handoff(controller, tmp_path, monkeypatch) -> None:
@@ -499,22 +643,33 @@ def test_library_import_cancel_and_late_commit(controller, qtbot, tmp_path, monk
         ),
     )
     monkeypatch.setattr(controller, "_confirm_imported_display_settings", lambda *args, **kw: True)
-    started = Event()
+    started, cancel_seen, finish_cancel = Event(), Event(), Event()
 
     def canceled_import(*args, cancel_event, **kwargs):
         started.set()
-        cancel_event.wait(3)
+        assert cancel_event.wait(5), "Import never received cancellation"
+        cancel_seen.set()
+        assert finish_cancel.wait(5), "Test never released canceled import"
         raise ProjectBundleCancelled("Canceled")
 
     monkeypatch.setattr(controller_module, "import_project_bundle", canceled_import)
     results = []
     controller.import_project_bundle_file(tmp_path / "test.fpvsbundle", on_finished=results.append)
-    qtbot.waitUntil(started.is_set)
-    progress = controller._import_bundle_processing_dialog
-    assert progress is not None
-    progress.reject()
+    try:
+        qtbot.waitUntil(started.is_set)
+        progress = controller._import_bundle_processing_dialog
+        assert progress is not None
+        progress.reject()
+        qtbot.waitUntil(cancel_seen.is_set)
+        assert progress.isVisible()
+        assert progress.page.title_label.text() == "Canceling import…"
+        assert not progress.cancel_button.isEnabled()
+        assert results == []
+    finally:
+        finish_cancel.set()
     qtbot.waitUntil(lambda: results == [None])
     assert controller._library_import_job is None
+    assert controller._import_bundle_processing_dialog is None
 
     def committed_import(bundle, root, cancel_event, **kwargs):
         scaffold = create_project(root, "Committed library project")
@@ -528,6 +683,54 @@ def test_library_import_cancel_and_late_commit(controller, qtbot, tmp_path, monk
     assert results[0] is not None and results[0].is_dir()
     qtbot.addWidget(controller.main_window)
     assert controller.main_window.document.project.meta.name == "Committed library project"
+
+
+def test_library_import_error_delays_handoff_release_until_dismissed(
+    controller, qtbot, tmp_path, monkeypatch,
+) -> None:
+    from fpvs_studio.gui import controller as controller_module
+
+    manifest = SimpleNamespace(project=SimpleNamespace(name="Library example"))
+    monkeypatch.setattr(
+        controller,
+        "_show_project_bundle_import_review",
+        lambda *_args, **_kwargs: (int(QDialog.DialogCode.Accepted), manifest),
+    )
+    monkeypatch.setattr(
+        controller_module,
+        "_show_error",
+        lambda *_args, **_kwargs: pytest.fail("Import failure should appear on the progress page"),
+    )
+    release = Event()
+
+    def invalid_import(*args, progress_callback, **kwargs):
+        progress_callback("oddball")
+        assert release.wait(5), "Test never released invalid import"
+        raise ProjectBundleError("Project bundle checksum mismatch: stimuli/oddball/example.png")
+
+    monkeypatch.setattr(controller_module, "import_project_bundle", invalid_import)
+    results = []
+    controller.import_project_bundle_file(
+        tmp_path / "invalid.fpvsbundle", on_finished=results.append,
+    )
+    progress = controller._import_bundle_processing_dialog
+    assert progress is not None
+    oddball = progress.page.findChild(QWidget, "bundle_import_processing_step_3")
+    assert oddball is not None
+    try:
+        qtbot.waitUntil(lambda: oddball.property("processingStepState") == "active")
+    finally:
+        release.set()
+    qtbot.waitUntil(lambda: oddball.property("processingStepState") == "failed")
+    assert results == []
+    assert progress.isVisible()
+    assert "damaged" in progress.page.outcome_label.text().lower()
+    assert progress.cancel_button.text() == "Close"
+    assert progress.cancel_button.isEnabled()
+    progress.cancel_button.click()
+    assert not progress.isVisible()
+    qtbot.waitUntil(lambda: results == [None])
+    assert controller._library_import_job is None
 
 
 @pytest.mark.parametrize("outcome", ["success", "cancel", "failure", "shutdown"])
@@ -696,9 +899,14 @@ def test_import_progress_escape_requests_cancel_and_stays_alive(qtbot) -> None:
     qtbot.addWidget(dialog)
     dialog.start()
     qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    qtbot.keyClick(dialog, Qt.Key.Key_Escape)
+    dialog.set_stage("oddball")
     assert canceled == [True]
     assert dialog.isVisible()
+    assert dialog.page.title_label.text() == "Canceling import…"
     assert not dialog.cancel_button.isEnabled()
+    verify = dialog.findChild(QWidget, "bundle_import_processing_step_1")
+    assert verify is not None and verify.property("processingStepState") == "stopped"
     dialog.finish()
 
 

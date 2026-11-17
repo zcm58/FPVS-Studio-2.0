@@ -32,3 +32,10 @@ tests/.tmp/
 pytest-cache-files-*/
 
 # Keep local project metadata out
+
+# Local agent tools and retained scratch output
+/.agents/skills/impeccable/
+/.codex/
+/.codex-tmp/
+/.impeccable/
+/Userszcm58fpvstmppjio-lock/

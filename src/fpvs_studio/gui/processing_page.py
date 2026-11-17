@@ -2,11 +2,31 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-from PySide6.QtCore import QRectF, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QColor, QHideEvent, QPainter, QPaintEvent, QPen, QShowEvent
+from PySide6.QtCore import (
+    QEasingCurve,
+    QPointF,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    Signal,
+)
+from PySide6.QtGui import (
+    QAccessible,
+    QAccessibleAnnouncementEvent,
+    QColor,
+    QHideEvent,
+    QPainter,
+    QPainterPath,
+    QPaintEvent,
+    QPen,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -14,6 +34,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QSizePolicy,
+    QStyle,
+    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -24,6 +46,7 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
     refresh_widget_style,
+    widget_animation_duration,
 )
 from fpvs_studio.gui.design_system import FONT_SIZE_PAGE_TITLE, resolve_studio_theme
 
@@ -38,25 +61,32 @@ _EXPORT_STEP_LABELS: dict[_ProcessingStage, tuple[str, str]] = {
     "stimuli": ("2", "Check stimuli"),
     "write": ("3", "Write bundle"),
 }
-_IMPORT_STEP_STAGE_ORDER: tuple[_ProcessingStage, ...] = (
-    "verify",
-    "base",
-    "oddball",
-    "project",
-)
-_IMPORT_STEP_LABELS: dict[_ProcessingStage, tuple[str, str]] = {
-    "verify": ("1", "Verify"),
-    "base": ("2", "Base"),
-    "oddball": ("3", "Oddball"),
-    "project": ("4", "Project"),
-}
-_IMPORT_ACTIVITY_LABELS: dict[_ProcessingStage, str] = {
-    "verify": "Verify bundle",
-    "base": "Check base stimuli",
-    "oddball": "Check oddball stimuli",
-    "project": "Create project",
-}
 _StepState = Literal["pending", "active", "complete"]
+ImportProcessingStage = BundleImportStage | Literal["commit"]
+_ImportStepState = _StepState | Literal["failed", "stopped"]
+_IMPORT_ORDER: tuple[ImportProcessingStage, ...] = ("verify", "base", "oddball", "project")
+_UPDATE_ORDER: tuple[ImportProcessingStage, ...] = ("verify", "commit")
+_IMPORT_LABELS = {
+    "verify": (
+        "Verify experiment files", "Verifying experiment files…", "Experiment files validated",
+        "Experiment file verification failed",
+    ),
+    "base": (
+        "Check base stimuli", "Checking base stimuli…", "Base stimuli checked",
+        "Base stimulus check failed",
+    ),
+    "oddball": (
+        "Check oddball stimuli", "Checking oddball stimuli…", "Oddball stimuli checked",
+        "Oddball stimulus check failed",
+    ),
+    "project": (
+        "Create project", "Creating project…", "Project created", "Project creation failed",
+    ),
+    "commit": (
+        "Apply project update", "Applying project update…", "Project updated",
+        "Project update failed",
+    ),
+}
 
 
 class SpinnerWidget(QWidget):
@@ -313,20 +343,396 @@ class BundleExportProcessingPage(_BundleProcessingPage):
         )
 
 
-class BundleImportProcessingPage(_BundleProcessingPage):
-    """Embedded progress page shown while an `.fpvsbundle` project is imported."""
+class _ImportStep(QFrame):
+    """One real worker stage, with a short marker transition when its state changes."""
+
+    def __init__(self, number: str, stage: ImportProcessingStage, *, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.stage = stage
+        self.state: _ImportStepState = "pending"
+        self._progress = 1.0
+        self._has_previous = False
+        self._has_next = False
+        self._animation = QVariantAnimation(self)
+        self._animation.setStartValue(0.0)
+        self._animation.setEndValue(1.0)
+        self._animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self._animation.valueChanged.connect(self._paint_progress)
+        prefix = f"bundle_import_processing_step_{number}"
+        self.setObjectName(prefix)
+        self.setProperty("importProcessingStep", "true")
+        self.setMinimumHeight(46)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(52, 7, 12, 7)
+        self.text_label = QLabel(self)
+        self.text_label.setObjectName(f"{prefix}_label")
+        self.text_label.setProperty("importProcessingStepLabel", "true")
+        self.text_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.text_label.setWordWrap(True)
+        layout.addWidget(self.text_label)
+        self.set_state("pending")
+
+    def set_rail(self, *, previous: bool, following: bool) -> None:
+        self._has_previous = previous
+        self._has_next = following
+        self.update()
+
+    def set_state(self, state: _ImportStepState, *, animate: bool = False) -> None:
+        if self.property("processingStepState") == state:
+            return
+        self.stop_animation()
+        self.state = state
+        pending, active, complete, failed = _IMPORT_LABELS[self.stage]
+        self.text_label.setText({
+            "pending": pending,
+            "active": active,
+            "complete": complete,
+            "failed": failed,
+            "stopped": pending,
+        }[state])
+        self.text_label.setAccessibleDescription({
+            "pending": "Pending",
+            "active": "In progress",
+            "complete": "Complete",
+            "failed": "Failed",
+            "stopped": "Stopped",
+        }[state])
+        self.setProperty("processingStepState", state)
+        self.text_label.setProperty("processingStepState", state)
+        refresh_widget_style(self)
+        refresh_widget_style(self.text_label)
+        duration = (
+            widget_animation_duration(self, 220)
+            if animate and state in {"active", "complete"} else 0
+        )
+        if duration:
+            self._progress = 0.0
+            self._animation.setDuration(duration)
+            self._animation.start()
+        self.update()
+
+    def _paint_progress(self, value: float) -> None:
+        self._progress = value
+        self.update()
+
+    def stop_animation(self) -> None:
+        self._animation.stop()
+        self._paint_progress(1.0)
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        theme = resolve_studio_theme(self.window().palette())
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        center = QPointF(23, self.height() / 2)
+        x, y = center.x(), center.y()
+        painter.setPen(QPen(QColor(theme.border_soft), 1.5))
+        if self._has_previous:
+            painter.drawLine(QPointF(x, 0), QPointF(x, y - 14))
+        if self._has_next:
+            if self.state == "complete":
+                painter.setPen(QPen(QColor(theme.success_border), 1.5))
+            painter.drawLine(QPointF(x, y + 14), QPointF(x, self.height()))
+
+        fill, ink = {
+            "pending": (theme.surface_elevated, theme.border),
+            "active": (theme.surface_elevated, theme.primary_hover),
+            "complete": (theme.success_bg, theme.success_text),
+            "failed": (theme.error_bg, theme.error_text),
+            "stopped": (theme.surface_elevated, theme.text_muted),
+        }[self.state]
+        painter.setPen(QPen(QColor(ink if self.state == "active" else theme.border_soft), 1))
+        painter.setBrush(QColor(fill))
+        radius = 13 * (0.82 + 0.18 * self._progress) if self.state == "active" else 13.0
+        painter.drawEllipse(center, radius, radius)
+        pen = QPen(QColor(ink), 1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        painter.setBrush(QColor(ink))
+        if self.state == "complete":
+            painter.setClipRect(QRectF(x - 8, y - 8, 16 * self._progress, 16))
+            check = QPainterPath(QPointF(x - 5, y))
+            check.lineTo(x - 1, y + 4)
+            check.lineTo(x + 6, y - 4)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawPath(check)
+        elif self.state == "failed":
+            painter.drawLine(QPointF(x, y - 5), QPointF(x, y + 1))
+            painter.drawPoint(QPointF(x, y + 5))
+        elif self.state == "stopped":
+            painter.drawLine(QPointF(x - 4, y), QPointF(x + 4, y))
+        else:
+            painter.setPen(Qt.PenStyle.NoPen)
+            dot = 4.0 if self.state == "active" else 2.5
+            painter.drawEllipse(center, dot, dot)
+        painter.end()
+
+
+class BundleImportProcessingPage(QWidget):
+    """Track import stages, or the actual verification and commit of a project update."""
 
     def __init__(self, *, parent: QWidget | None = None) -> None:
-        super().__init__(
-            object_prefix="bundle_import_processing",
-            title="Importing project bundle",
-            status_hint="Keep FPVS Studio open until the import finishes.",
-            complete_activity_text="Project ready",
-            stage_order=_IMPORT_STEP_STAGE_ORDER,
-            step_labels=_IMPORT_STEP_LABELS,
-            activity_labels=_IMPORT_ACTIVITY_LABELS,
-            parent=parent,
+        super().__init__(parent)
+        self.setObjectName("bundle_import_processing_page")
+        self.setProperty("bundleProcessingPage", "true")
+        self._updating = False
+        self._running = False
+        self._outcome: Literal["working", "canceling", "failed", "complete"] = "working"
+        self._stage: ImportProcessingStage | None = None
+        self._working_title = "Importing project"
+        self._show_error_details: Callable[[QWidget], None] | None = None
+
+        self.content = QFrame(self)
+        self.content.setObjectName("bundle_import_processing_content")
+        self.content.setProperty("bundleProcessingCard", "true")
+        self.content.setMaximumWidth(620)
+        card = QVBoxLayout(self.content)
+        card.setContentsMargins(1, 1, 1, 1)
+        card.setSpacing(0)
+
+        header = QFrame(self.content)
+        header.setObjectName("bundle_import_processing_header")
+        heading = QHBoxLayout(header)
+        heading.setContentsMargins(22, 16, 22, 16)
+        heading.setSpacing(12)
+        icon = QLabel(header)
+        icon.setObjectName("bundle_import_processing_icon")
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setFixedSize(34, 34)
+        icon.setPixmap(self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon).pixmap(18))
+        heading.addWidget(icon)
+        self.title_label = QLabel(self._working_title, header)
+        self.title_label.setObjectName("bundle_import_processing_title_label")
+        self.title_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.title_label.setMinimumWidth(0)
+        self.title_label.setWordWrap(True)
+        heading.addWidget(self.title_label, 1)
+        card.addWidget(header)
+
+        body = QWidget(self.content)
+        stages = QVBoxLayout(body)
+        stages.setContentsMargins(22, 12, 22, 12)
+        stages.setSpacing(0)
+        row_stages: tuple[ImportProcessingStage, ...] = (*_IMPORT_ORDER, "commit")
+        self._steps = {
+            stage: _ImportStep(number, stage, parent=body)
+            for stage, number in zip(row_stages, ("1", "2", "3", "4", "commit"), strict=True)
+        }
+        for step in self._steps.values():
+            stages.addWidget(step)
+        self.outcome_label = QLabel(body)
+        self.outcome_label.setObjectName("bundle_import_processing_outcome")
+        self.outcome_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.outcome_label.setMinimumWidth(0)
+        self.outcome_label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.TextSelectableByKeyboard,
         )
+        self.outcome_label.setWordWrap(True)
+        self.outcome_label.setContentsMargins(10, 7, 10, 0)
+        stages.addWidget(self.outcome_label)
+        card.addWidget(body)
+
+        footer = QFrame(self.content)
+        footer.setObjectName("bundle_import_processing_footer")
+        footer_contents = QVBoxLayout(footer)
+        footer_contents.setContentsMargins(22, 10, 22, 12)
+        footer_contents.setSpacing(8)
+        self.footer_layout = QHBoxLayout()
+        self.locations_button = QToolButton(footer)
+        self.locations_button.setObjectName("bundle_import_processing_locations")
+        self.locations_button.setText("File locations")
+        self.locations_button.setCheckable(True)
+        self.locations_button.setArrowType(Qt.ArrowType.RightArrow)
+        self.locations_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.locations_button.toggled.connect(self._show_locations)
+        self.locations_button.hide()
+        self.footer_layout.addWidget(self.locations_button)
+        self.footer_layout.addStretch(1)
+        self.error_details_button = QPushButton("Error details", footer)
+        self.error_details_button.setAutoDefault(False)
+        mark_secondary_action(self.error_details_button)
+        self.error_details_button.clicked.connect(self._open_error_details)
+        self.footer_layout.addWidget(self.error_details_button)
+        footer_contents.addLayout(self.footer_layout)
+        self.context_card = QWidget(footer)
+        self.context_card.setObjectName("bundle_import_processing_context_card")
+        context = QGridLayout(self.context_card)
+        context.setContentsMargins(0, 0, 0, 0)
+        context.setHorizontalSpacing(12)
+        context.setVerticalSpacing(6)
+        self.source_heading_label = QLabel("Source", self.context_card)
+        self.destination_heading_label = QLabel("Destination root", self.context_card)
+        self.source_value_label = PathValueLabel(parent=self.context_card, single_line=True)
+        self.destination_value_label = PathValueLabel(parent=self.context_card, single_line=True)
+        for index, (role, heading_label, path_label) in enumerate((
+            ("source", self.source_heading_label, self.source_value_label),
+            ("destination", self.destination_heading_label, self.destination_value_label),
+        )):
+            heading_label.setProperty("bundleProcessingRole", "contextLabel")
+            path_label.setObjectName(f"bundle_import_processing_{role}_value")
+            path_label.setProperty("pathValue", "false")
+            context.addWidget(heading_label, index, 0)
+            context.addWidget(path_label, index, 1)
+        context.setColumnStretch(1, 1)
+        self.context_card.hide()
+        footer_contents.addWidget(self.context_card)
+        card.addWidget(footer)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.addStretch(1)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(self.content, 1)
+        row.addStretch()
+        layout.addLayout(row)
+        layout.addStretch(1)
+        self.reset_steps()
+
+    @property
+    def _order(self) -> tuple[ImportProcessingStage, ...]:
+        return _UPDATE_ORDER if self._updating else _IMPORT_ORDER
+
+    def set_update_mode(self, updating: bool) -> None:
+        self._updating = updating
+        self.reset_steps()
+
+    def set_transfer_context(
+        self,
+        *,
+        title: str | None,
+        source_label: str,
+        source_path: Path,
+        destination_label: str,
+        destination_path: Path,
+    ) -> None:
+        self._working_title = title or (
+            "Updating project" if self._updating else "Importing project"
+        )
+        self.title_label.setText(self._working_title)
+        self.source_heading_label.setText(source_label)
+        self.source_value_label.set_path_text(str(source_path))
+        self.destination_heading_label.setText(destination_label)
+        self.destination_value_label.set_path_text(str(destination_path))
+        self.locations_button.show()
+
+    def _show_locations(self, visible: bool) -> None:
+        self.locations_button.setArrowType(
+            Qt.ArrowType.DownArrow if visible else Qt.ArrowType.RightArrow,
+        )
+        self.context_card.setVisible(visible)
+
+    def start(self) -> None:
+        self._running = self._outcome == "working"
+
+    def stop(self) -> None:
+        self._running = False
+        for step in self._steps.values():
+            step.stop_animation()
+
+    def reset_steps(self) -> None:
+        self.stop()
+        self._stage = None
+        self._outcome = "working"
+        self.title_label.setText(self._working_title)
+        self.outcome_label.clear()
+        self.outcome_label.setProperty("importOutcome", "")
+        refresh_widget_style(self.outcome_label)
+        self.outcome_label.hide()
+        self._show_error_details = None
+        self.error_details_button.hide()
+        self.locations_button.setChecked(False)
+        order = self._order
+        for stage, step in self._steps.items():
+            step.set_state("pending")
+            step.setVisible(stage in order)
+            step.set_rail(previous=stage != order[0], following=stage != order[-1])
+
+    def set_stage(self, stage: ImportProcessingStage) -> None:
+        if self._outcome in {"failed", "complete"} or (
+            self._outcome == "canceling" and stage != "complete"
+        ):
+            return
+        order = self._order
+        if stage == self._stage or (stage != "complete" and stage not in order):
+            return
+        next_index = len(order) if stage == "complete" else order.index(stage)
+        if self._stage is not None and next_index < order.index(self._stage):
+            return
+        animate = self._running and self.isVisible()
+        for index, step_stage in enumerate(order):
+            state: _ImportStepState = (
+                "complete" if index < next_index else
+                "active" if index == next_index else "pending"
+            )
+            self._steps[step_stage].set_state(state, animate=animate)
+        if stage == "complete":
+            self._outcome = "complete"
+            self._running = False
+            self._stage = None
+            self._show_success()
+            self._announce(self.title_label.text())
+        else:
+            self._stage = stage
+            self._announce(self._steps[stage].text_label.text())
+
+    def _announce(self, text: str) -> None:
+        if self.isVisible() and QAccessible.isActive():
+            QAccessible.updateAccessibility(QAccessibleAnnouncementEvent(self, text))
+
+    def _show_success(self) -> None:
+        if self._updating:
+            self.title_label.setText("Project updated")
+            return
+        name = self._working_title.removeprefix("Importing ")
+        self.title_label.setText(
+            "Project imported" if name in {self._working_title, "project"}
+            else f"{name} imported"
+        )
+        self.outcome_label.setText("Next, review the project’s display settings.")
+        self.outcome_label.show()
+
+    def set_canceling(self) -> None:
+        if self._outcome != "working":
+            return
+        self.stop()
+        self._outcome = "canceling"
+        self.title_label.setText("Canceling update…" if self._updating else "Canceling import…")
+        if self._stage is not None:
+            self._steps[self._stage].set_state("stopped")
+        self._announce(self.title_label.text())
+
+    def set_error(
+        self, message: str, show_details: Callable[[QWidget], None] | None = None,
+    ) -> None:
+        self.stop()
+        self._outcome = "failed"
+        self.title_label.setText(
+            "Update couldn’t finish" if self._updating else "Import couldn’t finish",
+        )
+        self.outcome_label.setText(message)
+        self.outcome_label.setProperty("importOutcome", "error")
+        refresh_widget_style(self.outcome_label)
+        self.outcome_label.show()
+        self._show_error_details = show_details
+        self.error_details_button.setVisible(show_details is not None)
+        if self._stage is not None:
+            self._steps[self._stage].set_state("failed")
+        self._announce(f"{self.title_label.text()}. {message}")
+
+    def _open_error_details(self) -> None:
+        if self._show_error_details is not None:
+            self._show_error_details(self.window())
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self.stop()
+        if not event.spontaneous():
+            self._show_error_details = None
+            self.error_details_button.hide()
+        super().hideEvent(event)
 
 
 def _format_file_size(size_bytes: int) -> str:

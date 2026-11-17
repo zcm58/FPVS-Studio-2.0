@@ -120,6 +120,7 @@ def update_job(tmp_path):
         _allow_project_handoff_during_fixation_load=lambda: flags.fixation,
         prepare_project_handoff=lambda: flags.save,
         start_bundle_import_processing=lambda **kw: calls.append(("freeze", kw)),
+        set_bundle_import_stage=lambda stage: calls.append(("stage", stage)),
         finish_bundle_import_processing=lambda **kw: calls.append(("unfreeze", kw)),
         show_home=lambda: calls.append("home"),
         fail_library_project_update=fail_window,
@@ -152,7 +153,9 @@ def update_job(tmp_path):
         applied.append(value)
 
     def commit(*_args, **_kwargs):
+        _kwargs["progress_callback"]("verify")
         _kwargs["precommit_check"]()
+        _kwargs["progress_callback"]("commit")
         calls.append("commit")
         if flags.fail:
             raise OSError("Disk is full")
@@ -166,6 +169,7 @@ def update_job(tmp_path):
 
     namespace = {
         "Path": Path, "Event": Event, "cast": cast, "_Checked": Checked,
+        "ImportProcessingStage": str,
         "LibraryProjectOrigin": LibraryProjectOrigin, "LibraryOriginError": LibraryOriginError,
         "LibraryError": LibraryError, "describe_error": describe_error,
         "LibraryCancelled": LibraryCancelled, "ProjectBundleCancelled": ProjectBundleCancelled,
@@ -238,6 +242,9 @@ def test_update_snapshots_before_transfer_and_applies_only_worker_success(update
     s.jobs[0].run()
     assert [x for x in s.calls if isinstance(x, str)] == [
         "snapshot", "download", "commit", "adopt", "home", "release",
+    ]
+    assert [x[1] for x in s.calls if isinstance(x, tuple) and x[0] == "stage"] == [
+        "verify", "commit", "complete",
     ]
     assert s.applied == [s.result]
     assert s.controller._last_backup[1] == s.result.backup_path

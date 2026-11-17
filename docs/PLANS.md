@@ -33,9 +33,9 @@ historical release draft does not authorize publishing an old version.
 Proposals are not implemented behavior. Start in `planned/` and move a plan to
 `active/` when implementation is authorized.
 
+- [Slate & Signal Teal desktop appearance](exec-plans/planned/slate-and-signal-teal-appearance.md)
 - [Image pool reset policy](exec-plans/planned/image-pool-reset-policy.md)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md)
-- [Luminance/RMS equalization investigation](exec-plans/planned/luminance-rms-equalization-investigation.md)
 - [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)
 
 ## Plan Rules and History
@@ -44,6 +44,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Master consolidation](exec-plans/completed/master-consolidation.md):
+  merged ImageEqualizer, Library updates and pending work with current updater/Mac repair source.
 - [Targeted SciPy repair](exec-plans/completed/targeted-scipy-repair.md):
   preserve working SciPy versions and consolidate the helper into Repair Mac 2.
 - [Mac repair preflight](exec-plans/completed/macos-repair-preflight.md):
@@ -52,8 +54,13 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Mac repair completion reports](exec-plans/completed/macos-repair-completion-reports.md):
   one-click source repair, SciPy selection, accurate dependency errors and deployed
   automatic completion reports; affected-Mac acceptance remains under macOS Phase 1.
+- [Project import progress](exec-plans/completed/import-progress-clarity.md)
+- [Public Experiment Library](exec-plans/completed/public-experiment-library.md)
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):
   added the authored rate and verified two fullscreen runs on the Lenovo's 60.020425 Hz signal.
+- [Image Equalizer](exec-plans/completed/image-equalizer.md): optional grayscale batch
+  preparation with shared targets and parallel processing; current mission/spec
+  updated. Focused and approved visible Windows checks passed; verification recorded.
 - [Desktop panel hierarchy](exec-plans/completed/desktop-panel-hierarchy.md):
   flattened redundant framing and verified the affected layouts in Light and Dark.
 - [Desktop interface polish](exec-plans/completed/desktop-interface-polish.md):

@@ -31,8 +31,8 @@ Core owns randomized block membership and occurrence identity; see the
 | `src/fpvs_studio/developer/` | Gated maintainer publishing and catalog services |
 | `src/fpvs_studio/engines/` | PsychoPy presentation, response pointers and graphics lifetime |
 | `src/fpvs_studio/gui/` | PySide6 views, document/controller bindings, components and worker lifecycle |
-| `src/fpvs_studio/library/` | Catalog, enrollment, verified downloads, submissions and update discovery |
-| `src/fpvs_studio/preprocessing/` | Image inspection/intake, normalization, derived assets and manifests |
+| `src/fpvs_studio/library/` | Public and lab catalog transport, enrollment, verified downloads, submissions and update discovery |
+| `src/fpvs_studio/preprocessing/` | Image inspection/intake, normalization, [equalization](docs/product-specs/image-equalizer.md), derivatives and manifests |
 | `src/fpvs_studio/runtime/` | Launch, preflight, participant/task/session flow, scoring, recovery and exports |
 | `src/fpvs_studio/support/` | Plain-language errors, diagnostics, reviewed reports and automatic crash outbox |
 | `src/fpvs_studio/tools/` | Condition figures, project inputs, Unicorn timing |
