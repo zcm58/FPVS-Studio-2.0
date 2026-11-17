@@ -190,6 +190,7 @@ explicitly, keeps each test file in one worker, and retains a separate temporary
 profile for every process. Start with two to four workers; more workers can increase
 Windows filesystem contention and memory use. Audits, lint and type checks still run
 in order. The default is one worker, which is also useful when diagnosing failures.
+Workers are not restarted after a crash, preserving the original failed-test report.
 Pytest nests fixture paths under the system temporary directory.
 
 The Qt-enabled `full` tier requires one worker. Its existing visible-environment
