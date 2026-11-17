@@ -910,6 +910,13 @@ For each project update download route, verify the transfer percentage, Cancel,
 and the verification or review handoff. Check the in-place apply stage and restored
 review after cancel. Repeat a transfer with reduced motion and verify the stage and
 percentage remain readable. After **Remind me later**, confirm manual review still opens.
+
+For a scripted live update check, run Studio's Qt application event loop and advance
+on worker signals or timer callbacks. Repeated `QTest.qWait` polling can starve the
+Python worker while it fingerprints the installed project, leaving the dialog on
+**Preparing update** before the download request is sent. Start with a fresh copy
+and an empty download cache, then reopen the updated copy from disk.
+
 On a computer with no Library connection, open Experiment Library, search for
 the Color Oddball Demo, and download and confirm its reviewed import. Connect a
 view-only lab and confirm a lab project is view-only while the public demo still
