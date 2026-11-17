@@ -147,6 +147,16 @@ def test_pip_chatter_stays_local_and_repeated_failure_is_shown_once(monkeypatch,
     assert session.details["failure_code"] == "scipy_macho"
 
 
+def test_compatibility_update_is_console_information_without_an_original_failure(session):
+    console = io.StringIO()
+    session.console_handler.setStream(console)
+    message = "Compatibility update available: scipy 1.15.3 does not satisfy scipy==1.14.1."
+    session.observe(message)
+    assert console.getvalue().strip() == message
+    assert session.details["failure_code"] == "none"
+    assert session.details["initial_failure_code"] == "none"
+
+
 @pytest.mark.parametrize("late_error, expected", [
     ("ImportError: a native graphics library could not load", "setup_failed"),
     ("ModuleNotFoundError: No module named 'graphics_dependency'", "missing_dependency"),
@@ -154,7 +164,8 @@ def test_pip_chatter_stays_local_and_repeated_failure_is_shown_once(monkeypatch,
 def test_new_setup_failure_does_not_reuse_or_replace_the_original_cause(
     monkeypatch, session, late_error, expected,
 ):
-    session.failure("dependency_mismatch")
+    session.failure("scipy_macho")
+    session.initial_checks_complete = True
     session.details.update(dependency_check="passed", engine_import="failed")
     monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
 
@@ -165,7 +176,7 @@ def test_new_setup_failure_does_not_reuse_or_replace_the_original_cause(
 
     monkeypatch.setattr(repair, "_command", fail_after_install)
     assert not repair._run_setup(session.root)
-    assert session.details["initial_failure_code"] == "dependency_mismatch"
+    assert session.details["initial_failure_code"] == "scipy_macho"
     assert session.details["failure_code"] == expected
     assert session.details["final_scipy_version"] == "1.14.1"
     assert session.details["dependency_check"] == "unknown"
@@ -176,15 +187,253 @@ def test_new_setup_failure_does_not_reuse_or_replace_the_original_cause(
 def test_new_engine_check_uses_its_own_failure_and_preserves_the_initial_cause(
     monkeypatch, session, engine_exit, expected,
 ):
-    session.failure("dependency_mismatch")
+    session.failure("scipy_macho")
+    session.initial_checks_complete = True
     monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
-    results = iter((0, engine_exit))
+    results = iter((engine_exit, 0, 0))
     monkeypatch.setattr(repair, "_run", lambda *args, **kwargs: next(results))
     assert repair._check_environment(session.root, "python") == (engine_exit == 0)
-    assert session.details["initial_failure_code"] == "dependency_mismatch"
+    assert session.details["initial_failure_code"] == "scipy_macho"
     assert session.details["failure_code"] == expected
     assert session.details["dependency_check"] == "passed"
     assert session.details["engine_import"] == ("passed" if engine_exit == 0 else "failed")
+
+
+@pytest.mark.parametrize(
+    "engine_ok,pip_ok,compatible,check_only,setup_ok,kind,initial_failure,exit_code", [
+        (True, True, False, False, True, "compatibility_update", "none", 0),
+        (False, True, False, False, True, "repair", "scipy_macho", 0),
+        (True, False, False, False, True, "repair", "missing_dependency", 0),
+        (True, True, True, False, True, "none", "none", 0),
+        (True, True, False, True, True, "none", "none", 1),
+        (True, True, False, False, False, "compatibility_update", "none", 1),
+    ],
+)
+def test_preflight_distinguishes_working_compatibility_drift_from_repairs(
+    monkeypatch, session, engine_ok, pip_ok, compatible, check_only, setup_ok,
+    kind, initial_failure, exit_code,
+):
+    calls = []
+    updated = False
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", lambda root: "selected-python")
+
+    def run(python, arguments, root, **kwargs):
+        assert python == "selected-python" and root == session.root
+        if arguments == ["-c", repair.ENGINE_PROBE]:
+            calls.append("engine")
+            session.observe(facts("3.0.1", "1.14.1") if updated else facts())
+            if not updated and not engine_ok:
+                session.observe("ImportError: scipy __thread_bss zero-fill offset is not zero")
+                return 1
+        elif arguments == ["-m", "pip", "check"]:
+            calls.append("pip check")
+            if not updated and not pip_ok:
+                return 1
+        elif arguments == ["-c", repair.COMPATIBILITY_PROBE, str(root)]:
+            calls.append("compatibility")
+            if not updated and not compatible:
+                session.observe("Compatibility update available: Installed Studio metadata "
+                                "is from a different source version.")
+                return 2
+        else:
+            assert arguments == ["-m", "pip", "--version"]
+            calls.append("pip version")
+        return 0
+
+    def setup(command, **kwargs):
+        nonlocal updated
+        assert command[0] == "/bin/bash"
+        # All independent baseline checks finish before the first setup mutation.
+        assert calls[:3] == ["engine", "pip check", "compatibility"]
+        calls.append("setup")
+        updated = True
+        session.observe(facts("3.0.1", "1.14.1"))
+        if not setup_ok:
+            session.observe("ImportError: a graphics dependency could not load")
+        return SimpleNamespace(returncode=0 if setup_ok else 1)
+
+    def configure(*args, **kwargs):
+        calls.append("ide")
+        return "ready"
+
+    monkeypatch.setattr(repair, "_run", run)
+    monkeypatch.setattr(repair, "_command", setup)
+    monkeypatch.setattr(repair, "_configure_pycharm", configure)
+    monkeypatch.setattr(
+        repair, "_backup_environment", lambda root: pytest.fail("Unexpected rebuild"),
+    )
+    assert repair.repair_environment(session.root, check_only=check_only) == exit_code
+    details = session.details
+    assert details["helper_version"] == "2.1"
+    assert details["initial_engine_import"] == ("passed" if engine_ok else "failed")
+    assert details["initial_dependency_check"] == ("passed" if pip_ok else "failed")
+    assert details["initial_compatibility_check"] == ("passed" if compatible else "failed")
+    assert details["initial_failure_code"] == initial_failure
+    assert details["change_kind"] == kind
+    assert details["environment_rebuild"] == "skipped"
+    assert details["package_updates"] == (
+        "skipped" if kind == "none" else "passed" if setup_ok else "failed"
+    )
+    if "setup" in calls:
+        assert details["initial_scipy_version"] == "1.15.3"
+        assert details["final_scipy_version"] == "1.14.1"
+    if exit_code == 0:
+        assert details["engine_import"] == details["dependency_check"] == "passed"
+        assert details["compatibility_check"] == "passed"
+        assert details["failure_code"] == "none"
+        assert calls[-1] == "ide"
+    elif not setup_ok:
+        assert details["failure_code"] == "setup_failed"
+        assert details["engine_import"] == details["dependency_check"] == "unknown"
+        assert details["compatibility_check"] == "unknown"
+    if kind == "none":
+        assert "setup" not in calls
+
+
+def test_missing_interpreter_keeps_unknown_baseline_and_reports_only_rebuild(monkeypatch, session):
+    validations = iter((repair.EnvironmentInvalidError("missing"), "selected-python"))
+    calls = []
+
+    def validate(root):
+        result = next(validations)
+        if isinstance(result, Exception):
+            raise result
+        return result
+
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", validate)
+    monkeypatch.setattr(repair, "_backup_environment", lambda root: calls.append("backup"))
+    monkeypatch.setattr(repair, "_command", lambda *args, **kwargs: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(repair, "_run", lambda *args, **kwargs: 0)
+    monkeypatch.setattr(repair, "_configure_pycharm", lambda *args, **kwargs: "ready")
+    assert repair.repair_environment(session.root) == 0
+    assert calls == ["backup"]
+    assert session.details["change_kind"] == "repair"
+    assert session.details["initial_failure_code"] == "python_incompatible"
+    for field in ("engine_import", "dependency_check", "compatibility_check"):
+        assert session.details[f"initial_{field}"] == "unknown"
+        assert session.details[field] == "passed"
+    assert session.details["environment_rebuild"] == "passed"
+    assert session.details["package_updates"] == "skipped"
+
+
+def test_check_only_compatibility_drift_completion_does_not_invent_an_engine_problem(
+    monkeypatch, session,
+):
+    module = repair._workflow_module(ROOT)
+    monkeypatch.setattr(repair, "_workflow_module", lambda root: module)
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "_native_dialog", lambda *args: "Close")
+    monkeypatch.setattr(module, "WorkflowReporter", lambda: SimpleNamespace(
+        queue=lambda report: False, deliver=lambda: 0, status=lambda report_id: "disabled",
+    ))
+    results = iter((0, 0, 2))
+    monkeypatch.setattr(repair, "_run", lambda *args, **kwargs: next(results))
+    session.details["check_only"] = True
+    assert not repair._check_environment(session.root, "selected-python", initial=True)
+    repair._complete_automatic_report(session, 1, "3.0.1")
+    report = json.loads(session.path.with_name("completion.json").read_text())
+    assert report["details"]["change_kind"] == "none"
+    assert report["details"]["initial_failure_code"] == "none"
+    assert report["details"]["failure_code"] == "dependency_mismatch"
+    assert report["details"]["engine_import"] == "passed"
+    summary = session.path.with_name("completion.txt").read_text(encoding="utf-8")
+    assert "no changes made" in summary
+    assert "Original problem" not in summary
+    assert "Remaining problem" not in summary
+
+
+@pytest.mark.parametrize("failed_phase", ["engine_import", "dependency_check"])
+def test_timed_out_baseline_check_does_not_prevent_other_initial_checks(
+    monkeypatch, session, failed_phase,
+):
+    phases = iter(("engine_import", "dependency_check", "compatibility_check"))
+    calls = []
+
+    def run(*args, **kwargs):
+        phase = next(phases)
+        calls.append(phase)
+        if phase == failed_phase:
+            raise repair.subprocess.TimeoutExpired("synthetic probe", 120)
+        return 0
+
+    monkeypatch.setattr(repair, "_DIAGNOSTICS", session)
+    monkeypatch.setattr(repair, "_run", run)
+    assert not repair._check_environment(session.root, "selected-python", initial=True)
+    assert calls == ["engine_import", "dependency_check", "compatibility_check"]
+    for phase in calls:
+        assert session.details[f"initial_{phase}"] == (
+            "failed" if phase == failed_phase else "passed"
+        )
+
+
+@pytest.mark.parametrize("problem", ["unexpected_exit", "timeout", "os_error"])
+@pytest.mark.parametrize("engine_failure", ["none", "scipy_macho", "engine_import_failed"])
+def test_unconfirmed_compatibility_stops_before_changes_and_preserves_baseline(
+    monkeypatch, tmp_path, problem, engine_failure,
+):
+    calls = []
+    reports = []
+    monkeypatch.setattr(repair, "__file__", str(tmp_path / "Repair Mac.py"))
+    monkeypatch.setattr(repair, "_collect_macos_build", lambda session: None)
+    monkeypatch.setattr(repair, "_snapshot_environment", lambda *args, **kwargs: None)
+    monkeypatch.setattr(repair, "_log_context", lambda *args: None)
+    monkeypatch.setattr(repair, "validate_checkout", lambda root: None)
+    monkeypatch.setattr(repair, "validate_environment", lambda root: "selected-python")
+
+    def run(python, arguments, root, **kwargs):
+        if arguments == ["-c", repair.ENGINE_PROBE]:
+            calls.append("engine")
+            if engine_failure == "scipy_macho":
+                repair._DIAGNOSTICS.observe("ImportError: scipy __thread_bss offset is not zero")
+            return 0 if engine_failure == "none" else 1
+        if arguments == ["-m", "pip", "check"]:
+            calls.append("pip check")
+            return 0
+        assert arguments == ["-c", repair.COMPATIBILITY_PROBE, str(root)]
+        calls.append("compatibility")
+        if problem == "timeout":
+            raise repair.subprocess.TimeoutExpired("synthetic compatibility probe", 120)
+        if problem == "os_error":
+            raise OSError("Synthetic compatibility process could not start")
+        repair._DIAGNOSTICS.observe("ValueError: Synthetic malformed compatibility metadata")
+        return 1
+
+    def mutation(*args, **kwargs):
+        pytest.fail("An unconfirmed compatibility check must stop before changes")
+
+    monkeypatch.setattr(repair, "_run", run)
+    monkeypatch.setattr(repair, "_run_setup", mutation)
+    monkeypatch.setattr(repair, "_backup_environment", mutation)
+    monkeypatch.setattr(repair, "_configure_pycharm", mutation)
+    monkeypatch.setattr(
+        repair, "_complete_automatic_report",
+        lambda session, *args: reports.append((dict(session.details), session.path)),
+    )
+    assert repair.main(["--automatic-report"]) == 1
+    assert calls == ["engine", "pip check", "compatibility"]
+    details, log_path = reports[0]
+    assert details["initial_engine_import"] == (
+        "passed" if engine_failure == "none" else "failed"
+    )
+    assert details["initial_dependency_check"] == "passed"
+    assert details["initial_compatibility_check"] == details["compatibility_check"] == "unknown"
+    assert details["initial_failure_code"] == engine_failure
+    assert details["failure_code"] == ("unknown" if engine_failure == "none" else engine_failure)
+    assert details["change_kind"] == "none"
+    assert details["package_updates"] == details["environment_rebuild"] == "skipped"
+    log = log_path.read_text(encoding="utf-8")
+    assert "Source compatibility could not be confirmed" in log
+    assert "Compatibility update available" not in log
+    module = repair._workflow_module(ROOT)
+    summary = module.render_report(module.build_report(
+        workflow="macos_repair", outcome="failure", app_version="3.0.1",
+        os_version="26.5.2", details=details,
+    ))
+    assert "updates available" not in summary
 
 
 @pytest.mark.parametrize("status", ["submitted", "queued", "offline", "disabled", "rejected"])
@@ -285,7 +534,11 @@ def test_detached_completion_keeps_auto_mode_and_final_result(monkeypatch, tmp_p
     state = log.with_name("continuation.json")
     state.write_text(json.dumps({
         "log": str(log), "job_log": str(job), "app_version": "3.0.1",
-        "automatic_report": True, "details": {"initial_scipy_version": "1.15.3"},
+        "automatic_report": True, "details": {
+            "initial_scipy_version": "1.15.3", "initial_engine_import": "passed",
+            "initial_dependency_check": "passed", "initial_compatibility_check": "failed",
+            "change_kind": "compatibility_update", "initial_failure_code": "none",
+        },
     }))
     calls = []
     monkeypatch.setattr(repair, "sys", SimpleNamespace(platform="darwin"))
@@ -299,6 +552,10 @@ def test_detached_completion_keeps_auto_mode_and_final_result(monkeypatch, tmp_p
     assert calls[0][0].details["pycharm_configuration"] == "failed"
     assert calls[0][0].details["initial_scipy_version"] == "1.15.3"
     assert calls[0][0].details["final_scipy_version"] == "1.14.1"
+    assert calls[0][0].details["initial_failure_code"] == "none"
+    assert calls[0][0].details["failure_code"] == "ide_configuration_failed"
+    assert calls[0][0].details["initial_engine_import"] == "passed"
+    assert calls[0][0].details["change_kind"] == "compatibility_update"
     assert calls[0][1] == 1
 
 
@@ -318,7 +575,7 @@ def test_detached_reporting_failure_keeps_repair_outcome_and_never_offers_manual
     state = log.with_name("continuation.json")
     state.write_text(json.dumps({
         "log": str(log), "job_log": str(job), "app_version": "3.0.1",
-        "automatic_report": True, "details": {},
+        "automatic_report": True, "details": {"change_kind": "compatibility_update"},
     }))
 
     def fail_reporting(session, code, version):
@@ -341,6 +598,8 @@ def test_detached_reporting_failure_keeps_repair_outcome_and_never_offers_manual
     assert repair.main(["--finish-diagnostics", str(state)]) == (0 if success else 1)
     assert len(dialogs) == 1 and dialogs[0][1] == ("Close",)
     message = dialogs[0][0]
-    assert ("Repair completed successfully." in message) == success
+    assert ("Environment checks completed successfully." in message) == success
+    assert ("Environment checks did not complete." in message) != success
+    assert "Repair completed" not in message
     assert ("could not be confirmed" in message) == summary_saved
     assert ("could not be saved or sent" in message) != summary_saved

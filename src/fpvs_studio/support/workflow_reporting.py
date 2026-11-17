@@ -50,10 +50,12 @@ _VERSION_FIELDS = frozenset({
 })
 _CHECK_FIELDS = frozenset({
     "dependency_check", "engine_import", "environment_rebuild", "pycharm_configuration",
+    "initial_engine_import", "initial_dependency_check", "initial_compatibility_check",
+    "compatibility_check", "package_updates",
 })
 _DETAIL_FIELDS = _VERSION_FIELDS | _CHECK_FIELDS | {
     "cpu", "python_cpu", "rosetta", "failure_code", "initial_failure_code", "check_only",
-    "elapsed_seconds", "macos_build",
+    "elapsed_seconds", "macos_build", "change_kind",
 }
 
 
@@ -120,6 +122,8 @@ def validate_report(report: Mapping[str, Any]) -> None:
             valid = value in ("arm64", "x86_64", "unknown")
         elif name == "rosetta":
             valid = value in ("native", "translated", "unknown")
+        elif name == "change_kind":
+            valid = value in ("none", "compatibility_update", "repair", "unknown")
         elif name in ("failure_code", "initial_failure_code"):
             valid = isinstance(value, str) and value in _FAILURES
         elif name == "check_only":
@@ -159,9 +163,28 @@ def render_report(report: Mapping[str, Any]) -> str:
     outcome = {
         "success": "Completed", "failure": "Incomplete", "action_required": "Action needed",
     }[report["outcome"]]
+    if detail.get("check_only"):
+        outcome = ("Checks passed" if report["outcome"] == "success" else
+                   "Checks need attention") + "; no changes made"
+    elif report["outcome"] == "success":
+        outcome = {
+            "none": "Checks passed; no package updates needed",
+            "compatibility_update": "Compatibility updates completed",
+            "repair": "Repair completed",
+        }.get(detail.get("change_kind"), outcome)
+    elif report["outcome"] == "failure":
+        outcome = {
+            "compatibility_update": "Compatibility update incomplete",
+            "repair": "Repair incomplete",
+        }.get(detail.get("change_kind"), outcome)
+    elif report["outcome"] == "action_required":
+        outcome = {
+            "compatibility_update": "Compatibility updates need user action",
+            "repair": "Repair needs user action",
+        }.get(detail.get("change_kind"), outcome)
     cpu_names = {"arm64": "Apple Silicon", "x86_64": "Intel", "unknown": "unknown"}
     failures = {
-        "none": "none", "scipy_macho": "SciPy's compiled library is incompatible with macOS.",
+        "none": "none", "scipy_macho": "macOS could not load SciPy's compiled library.",
         "missing_dependency": "A required dependency is missing.",
         "dependency_mismatch": "Installed package versions do not match this Studio source.",
         "python_incompatible": "The selected Python version or CPU architecture is unsupported.",
@@ -170,9 +193,9 @@ def render_report(report: Mapping[str, Any]) -> str:
         "ide_configuration_failed": "PyCharm configuration did not complete.",
         "cancelled": "Repair was canceled.", "unknown": "The cause is not yet classified.",
     }
-    lines = [f"FPVS Studio Mac repair: {outcome}", f"Studio source: {report['app_version']}"]
+    lines = [f"FPVS Studio Mac setup: {outcome}", f"Studio source: {report['app_version']}"]
     for label, initial, final in (
-        ("Installed Studio", "initial_studio_version", "final_studio_version"),
+        ("Studio package metadata", "initial_studio_version", "final_studio_version"),
         ("SciPy", "initial_scipy_version", "final_scipy_version"),
     ):
         before, after = detail.get(initial), detail.get(final)
@@ -202,23 +225,55 @@ def render_report(report: Mapping[str, Any]) -> str:
     ]
     if versions:
         lines.append("; ".join(versions))
-    for field, label in (
-        ("dependency_check", "Dependency check"), ("engine_import", "Presentation engine"),
-        ("environment_rebuild", "Environment rebuild"),
-        ("pycharm_configuration", "PyCharm configuration"),
-    ):
-        if field in detail:
-            state = str(detail[field]).replace("_", " ")
-            lines.append(f"{label}: {state}")
+    check_groups = ((("", "Checks"),) if detail.get("check_only") else
+                    (("initial_", "Before changes"), ("", "Final checks")))
+    for prefix, label in check_groups:
+        checks = [
+            f"{name} {str(detail[prefix + field]).replace('_', ' ')}"
+            for field, name in (("engine_import", "engine"), ("dependency_check", "dependencies"))
+            if prefix + field in detail
+        ]
+        if checks:
+            lines.append(label + ": " + "; ".join(checks))
+    compatibility = {
+        "passed": "matched", "failed": "updates available", "skipped": "not checked",
+        "action_required": "needs attention", "unknown": "unknown",
+    }
+    before, after = detail.get("initial_compatibility_check"), detail.get("compatibility_check")
+    if before or after:
+        value = (f"{compatibility[before]} → {compatibility[after]}"
+                 if before and after and not detail.get("check_only") else
+                 compatibility[after or before])
+        lines.append(f"Source requirements: {value}")
+    actions = [
+        f"{label}: {str(detail[field]).replace('_', ' ')}"
+        for field, label in (
+            ("package_updates", "Package updates"), ("environment_rebuild", "Environment rebuild"),
+        ) if field in detail
+    ]
+    if actions and not detail.get("check_only"):
+        lines.append("; ".join(actions))
+    if "pycharm_configuration" in detail:
+        lines.append(
+            "PyCharm configuration: " + str(detail["pycharm_configuration"]).replace("_", " ")
+        )
     initial = detail.get("initial_failure_code", "none")
     final = detail.get("failure_code", "none")
-    if initial != "none" and initial != final:
-        lines.append(f"Original problem: {failures[initial]}")
-    if final != "none":
-        lines.append(f"Remaining problem: {failures[final]}")
+    for code, label in (
+        (initial if initial != final else "none", "Original problem"),
+        (final, "Remaining problem"),
+    ):
+        if code == "none":
+            continue
+        if code == "dependency_mismatch":
+            if before or after:
+                continue  # Already described by the separate compatibility check.
+            label = ("Initial version difference" if label == "Original problem" else
+                     "Version difference")
+        lines.append(f"{label}: {failures[code]}")
     run = []
     if "check_only" in detail:
-        run.append("Check only" if detail["check_only"] else "Repair")
+        run.append("Check only; no changes made" if detail["check_only"] else "Setup workflow")
     if "elapsed_seconds" in detail:
         run.append(f"{detail['elapsed_seconds']:g} seconds")
     if "helper_version" in detail:

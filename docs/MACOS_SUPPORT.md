@@ -101,6 +101,17 @@ A missing/incompatible interpreter is prepared through the existing managed-Pyth
 bootstrap; the Python helper owns subsequent environment repair and diagnostics.
 OS installer/save prompts still require their normal user interaction.
 
+Helper 2.1 checks the current engine first, then checks dependency consistency and
+the source checkout's package requirements separately. Initial results are retained
+before any package/IDE changes. A missing or unusable interpreter cannot run that
+initial engine check and is reported as such. A working engine with older package
+metadata or different required versions receives **compatibility updates**; an
+observed engine/dependency/interpreter failure receives a **repair**. The report
+shows initial and final checks, package updates and full environment rebuilding
+separately. If compatibility cannot be checked, the helper stops further changes
+and reports that result as unknown. Opening the authoring GUI alone is
+not an engine-import test, and an import check does not verify presentation timing.
+
 The completion window distinguishes repair success/failure from report submission.
 `completion.txt` and `completion.json` live beside the detailed private `repair.log`.
 Normal console output shows progress and distinct failures; pip chatter stays in

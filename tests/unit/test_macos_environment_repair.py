@@ -288,7 +288,7 @@ def _fake_flow(
             raise value
         return value
 
-    def check(_root, selected):
+    def check(_root, selected, *, initial=False):
         assert _root == root
         calls.append(("check", selected))
         return next(pending_checks)
@@ -458,7 +458,7 @@ def test_failed_ide_configuration_cannot_report_ready(monkeypatch, mac_checkout)
     assert "Checks complete" not in log
 
 
-@pytest.mark.parametrize("failed", ["check", "-c"])
+@pytest.mark.parametrize("failed", ["check", "engine"])
 def test_dependency_check_preserves_engine_diagnostics_even_when_pip_check_fails(
     monkeypatch, tmp_path, failed,
 ):
@@ -468,11 +468,15 @@ def test_dependency_check_preserves_engine_diagnostics_even_when_pip_check_fails
     def run(selected, arguments, cwd, **kwargs):
         assert selected == str(python) and cwd == root
         calls.append(arguments)
-        return 1 if failed in arguments else 0
+        return 1 if (failed in arguments or
+                     failed == "engine" and arguments == ["-c", repair.ENGINE_PROBE]) else 0
 
     monkeypatch.setattr(repair, "_run", run)
     assert not repair._check_environment(root, str(python))
-    assert calls == [["-m", "pip", "check"], ["-c", repair.ENGINE_PROBE, str(root)]]
+    assert calls == [
+        ["-c", repair.ENGINE_PROBE], ["-m", "pip", "check"],
+        ["-c", repair.COMPATIBILITY_PROBE, str(root)],
+    ]
 
 
 @pytest.mark.parametrize("check_only", [False, True])
@@ -585,37 +589,52 @@ def _fake_probe(
     return calls
 
 
-def test_probe_reaches_only_engine_boundary_after_source_and_metadata_checks(monkeypatch, tmp_path):
+def test_compatibility_probe_checks_requirements_without_loading_engine(monkeypatch, tmp_path):
     calls = _fake_probe(monkeypatch, tmp_path, requirements=[
         "numpy>=1.26,<3", "psychopy>=2026.1; extra == 'engine'",
         "pytest>=9; extra == 'dev'", "absent-packaging-tool; extra == 'packaging'",
     ], source_requirements={"base": ["numpy>=1.26"], "dev": ["pytest>=9"],
                             "engine": ["psychopy>=2026.1"]})
-    exec(repair.ENGINE_PROBE, {})
-    assert calls == ["engine imports"]
-
-
-def test_probe_rejects_another_studio_checkout_before_loading_engine(monkeypatch, tmp_path):
-    calls = _fake_probe(monkeypatch, tmp_path, source_root=tmp_path / "another checkout")
-    with pytest.raises(RuntimeError, match="Studio imports from"):
-        exec(repair.ENGINE_PROBE, {})
+    exec(repair.COMPATIBILITY_PROBE, {})
     assert calls == []
 
 
-def test_probe_rejects_stale_editable_release_metadata(monkeypatch, tmp_path):
+def test_probe_rejects_another_studio_checkout_before_loading_engine(monkeypatch, tmp_path, caplog):
+    calls = _fake_probe(monkeypatch, tmp_path, source_root=tmp_path / "another checkout")
+    caplog.set_level(logging.INFO, logger="fpvs_studio.environment")
+    with pytest.raises(SystemExit) as stopped:
+        exec(repair.COMPATIBILITY_PROBE, {})
+    assert stopped.value.code == 2
+    assert "Compatibility update available: Studio imports from" in caplog.text
+    assert "RuntimeError" not in caplog.text
+    assert calls == []
+
+
+def test_probe_rejects_stale_editable_release_metadata(monkeypatch, tmp_path, caplog):
     calls = _fake_probe(monkeypatch, tmp_path, versions={"fpvs-studio": "2.8.0"})
-    with pytest.raises(RuntimeError, match="metadata"):
-        exec(repair.ENGINE_PROBE, {})
+    caplog.set_level(logging.INFO, logger="fpvs_studio.environment")
+    with pytest.raises(SystemExit) as stopped:
+        exec(repair.COMPATIBILITY_PROBE, {})
+    assert stopped.value.code == 2
+    assert "Compatibility update available: Installed Studio metadata" in caplog.text
+    assert "RuntimeError" not in caplog.text
     assert calls == []
 
 
 @pytest.mark.parametrize("requirement", [
     "psychopy>=2026.3; extra == 'engine'", "pytest>=10; extra == 'dev'", "numpy>=2",
 ])
-def test_probe_rejects_unsatisfied_installed_requirements(monkeypatch, tmp_path, requirement):
+def test_probe_rejects_unsatisfied_installed_requirements(
+    monkeypatch, tmp_path, requirement, caplog,
+):
     calls = _fake_probe(monkeypatch, tmp_path, requirements=[requirement])
-    with pytest.raises(RuntimeError, match="does not satisfy"):
-        exec(repair.ENGINE_PROBE, {})
+    caplog.set_level(logging.INFO, logger="fpvs_studio.environment")
+    with pytest.raises(SystemExit) as stopped:
+        exec(repair.COMPATIBILITY_PROBE, {})
+    assert stopped.value.code == 2
+    assert "Compatibility update available:" in caplog.text
+    assert f"does not satisfy {requirement.split(';')[0]}" in caplog.text
+    assert "RuntimeError" not in caplog.text
     assert calls == []
 
 
@@ -623,12 +642,54 @@ def test_probe_rejects_unsatisfied_installed_requirements(monkeypatch, tmp_path,
     ("base", "numpy>=2"), ("dev", "pytest>=10"), ("engine", "psychopy>=2026.3"),
 ])
 def test_probe_detects_source_requirement_changes_without_release_bump(
-    monkeypatch, tmp_path, group, requirement,
+    monkeypatch, tmp_path, group, requirement, caplog,
 ):
     calls = _fake_probe(monkeypatch, tmp_path, source_requirements={group: [requirement]})
-    with pytest.raises(RuntimeError, match="does not satisfy"):
-        exec(repair.ENGINE_PROBE, {})
+    caplog.set_level(logging.INFO, logger="fpvs_studio.environment")
+    with pytest.raises(SystemExit) as stopped:
+        exec(repair.COMPATIBILITY_PROBE, {})
+    assert stopped.value.code == 2
+    assert "Compatibility update available:" in caplog.text
+    assert f"does not satisfy {requirement}" in caplog.text
+    assert "RuntimeError" not in caplog.text
     assert calls == []
+
+
+@pytest.mark.parametrize("operation,package", [
+    ("version", "fpvs-studio"), ("version", "numpy"), ("version", "pytest"),
+    ("distribution", "fpvs-studio"),
+])
+def test_missing_distribution_metadata_is_a_controlled_compatibility_update(
+    monkeypatch, tmp_path, caplog, operation, package,
+):
+    calls = _fake_probe(monkeypatch, tmp_path, requirements=["pytest>=9"])
+    original = getattr(importlib.metadata, operation)
+
+    def read(name):
+        if name == package:
+            raise importlib.metadata.PackageNotFoundError(name)
+        return original(name)
+
+    monkeypatch.setattr(importlib.metadata, operation, read)
+    caplog.set_level(logging.INFO, logger="fpvs_studio.environment")
+    with pytest.raises(SystemExit) as stopped:
+        exec(repair.COMPATIBILITY_PROBE, {})
+    assert stopped.value.code == 2
+    assert (f"Compatibility update available: Installed distribution metadata is missing "
+            f"for {package}.") in caplog.text
+    assert "RuntimeError" not in caplog.text
+    assert calls == []
+
+
+def test_unexpected_compatibility_metadata_error_keeps_original_exception(monkeypatch, tmp_path):
+    _fake_probe(monkeypatch, tmp_path)
+
+    def corrupt(name):
+        raise ValueError("Synthetic unreadable metadata")
+
+    monkeypatch.setattr(importlib.metadata, "version", corrupt)
+    with pytest.raises(ValueError, match="Synthetic unreadable metadata"):
+        exec(repair.COMPATIBILITY_PROBE, {})
 
 
 def test_probe_keeps_engine_import_failure_cause_for_researcher(monkeypatch, tmp_path):
@@ -638,8 +699,30 @@ def test_probe_keeps_engine_import_failure_cause_for_researcher(monkeypatch, tmp
         except ImportError as cause:
             raise RuntimeError("PsychoPy is not installed") from cause
 
-    _fake_probe(monkeypatch, tmp_path, loader=fail)
+    _fake_probe(monkeypatch, tmp_path, versions={"fpvs-studio": "2.8.0"}, loader=fail)
     with pytest.raises(RuntimeError, match="PsychoPy is not installed") as failure:
         exec(repair.ENGINE_PROBE, {})
     assert isinstance(failure.value.__cause__, ImportError)
     assert str(failure.value.__cause__) == "synthetic missing native dependency"
+
+
+def test_engine_probe_runs_before_stale_metadata_or_requirements_can_block_it(
+    monkeypatch, tmp_path,
+):
+    calls = _fake_probe(
+        monkeypatch, tmp_path, versions={"fpvs-studio": "2.8.0", "scipy": "1.15.3"},
+        source_requirements={"engine": ["scipy==1.14.1"]},
+    )
+    exec(repair.ENGINE_PROBE, {})
+    assert calls == ["engine imports"]
+
+
+def test_engine_probe_runs_even_when_distribution_metadata_cannot_be_read(monkeypatch, tmp_path):
+    calls = _fake_probe(monkeypatch, tmp_path)
+
+    def unreadable(name):
+        raise ValueError("Synthetic corrupt distribution metadata")
+
+    monkeypatch.setattr(importlib.metadata, "version", unreadable)
+    exec(repair.ENGINE_PROBE, {})
+    assert calls == ["engine imports"]

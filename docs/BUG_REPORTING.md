@@ -59,11 +59,21 @@ native and Python CPU, Rosetta state, helper/Python/Studio/PsychoPy/SciPy/NumPy/
 versions, before/after repair versions, check results, failure categories, duration
 and final outcome. It sends no raw logs, paths, credentials or research data.
 
+Helper 2.1 runs the initial engine import before checking source-version policy or
+changing packages. Optional `initial_engine_import`, `initial_dependency_check` and
+`initial_compatibility_check` facts preserve that baseline; final `engine_import`,
+`dependency_check` and `compatibility_check` describe the last checks. `change_kind`
+distinguishes `none`, `compatibility_update`, `repair` and `unknown`. Package installs
+are reported through `package_updates`, independently of `environment_rebuild`.
+A successful compatibility update never implies the engine previously failed.
+Older reports without the added facts retain a generic completion outcome.
+
 The service accepts `kind: workflow` at `/v1/workflow-reports` after browser-free
 registration at `/v1/workflow-installations`. Installation capability authentication,
 strict 16-KiB envelopes, per-installation/global quotas and immutable report/receipt
 identities bound delivery. The existing service queue creates the private issue and
 maintainer email. An accepted receipt means submitted, not confirmed email delivery.
+Email calls the resulting record a **GitHub report**, including successful workflows.
 
 Private `support/automatic-workflows/` storage owns registration and a bounded
 seven-day outbox. Existing automatic-report preferences are read only: a saved off

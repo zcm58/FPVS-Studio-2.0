@@ -84,7 +84,7 @@ def test_module_loads_by_filename_without_site_packages(tmp_path):
         "assert 'pydantic' not in sys.modules; assert 'PySide6' not in sys.modules; "
         "r=module.build_report(workflow='macos_repair',outcome='failure',"
         "app_version='3.0.1',os_version='27.0',details={'failure_code':'scipy_macho'}); "
-        "assert 'Mac repair: Incomplete' in module.render_report(r)"
+        "assert 'Mac setup: Incomplete' in module.render_report(r)"
     )
     result = subprocess.run(
         [sys.executable, "-I", "-S", "-B", "-c", script, str(Path(workflow.__file__).resolve())],
@@ -99,6 +99,9 @@ def test_module_loads_by_filename_without_site_packages(tmp_path):
     {"elapsed_seconds": float("nan")}, {"elapsed_seconds": True},
     {"elapsed_seconds": 86401}, {"check_only": "false"},
     {"macos_build": "27.0/private"}, {"engine_import": "private error message"},
+    {"initial_engine_import": "private error"}, {"initial_dependency_check": True},
+    {"initial_compatibility_check": "different"}, {"compatibility_check": "different"},
+    {"package_updates": "reinstalled everything"}, {"change_kind": "private error"},
 ])
 def test_report_rejects_unstructured_or_invalid_details(details):
     with pytest.raises(ValueError):
@@ -127,20 +130,24 @@ def test_extra_top_level_data_and_changed_summary_are_rejected():
 
 
 def test_renderer_is_compact_and_explains_versions_and_repair_results():
-    value = report()
+    value = report(outcome="action_required")
     value["details"].update({
         "initial_studio_version": "2.8.1", "final_studio_version": "3.0.1",
         "psychopy_version": "2026.2.5", "numpy_version": "2.2.6",
         "pyside6_version": "6.11.3", "dependency_check": "passed",
         "environment_rebuild": "skipped", "pycharm_configuration": "action_required",
-        "helper_version": "2",
+        "helper_version": "2.1", "change_kind": "repair",
+        "initial_engine_import": "failed", "initial_dependency_check": "passed",
+        "initial_compatibility_check": "failed", "compatibility_check": "passed",
+        "package_updates": "passed", "failure_code": "ide_configuration_failed",
     })
     rendered = workflow.render_report(value)
-    assert "Installed Studio: 2.8.1 → 3.0.1" in rendered
+    assert "Studio package metadata: 2.8.1 → 3.0.1" in rendered
     assert "SciPy: 1.15.3 → 1.14.1" in rendered
     assert "Mac processor: Apple Silicon" in rendered
     assert "PyCharm configuration: action required" in rendered
-    assert "Original problem: SciPy's compiled library is incompatible with macOS." in rendered
+    assert "Original problem: macOS could not load SciPy's compiled library." in rendered
+    assert "Remaining problem: PyCharm configuration did not complete." in rendered
     assert "initial_failure_code" not in rendered
     assert len(rendered.splitlines()) <= 20
 
@@ -150,6 +157,91 @@ def test_dependency_version_mismatch_has_a_specific_explanation():
     assert "Installed package versions do not match this Studio source." in (
         workflow.render_report(value)
     )
+
+
+@pytest.mark.parametrize(("kind", "expected"), [
+    ("compatibility_update", "Compatibility updates completed"),
+    ("repair", "Repair completed"),
+    ("none", "Checks passed; no package updates needed"),
+    ("unknown", "Completed"),
+])
+def test_completion_heading_uses_recorded_change_kind(kind, expected):
+    rendered = workflow.render_report(report(details={"change_kind": kind}))
+    assert rendered.splitlines()[0] == f"FPVS Studio Mac setup: {expected}"
+
+
+def test_healthy_engine_with_version_drift_is_reported_as_an_update():
+    value = report()
+    value["details"].update({
+        "change_kind": "compatibility_update", "initial_engine_import": "passed",
+        "initial_dependency_check": "passed", "initial_compatibility_check": "failed",
+        "dependency_check": "passed", "compatibility_check": "passed",
+        "package_updates": "passed", "environment_rebuild": "skipped",
+        "initial_failure_code": "dependency_mismatch", "pycharm_configuration": "passed",
+        "initial_studio_version": "2.8.0", "final_studio_version": "3.0.1",
+        "psychopy_version": "2026.2.5", "numpy_version": "2.2.6",
+        "pyside6_version": "6.11.3", "helper_version": "2.1",
+    })
+    rendered = workflow.render_report(value)
+    assert "Compatibility updates completed" in rendered
+    assert "Before changes: engine passed; dependencies passed" in rendered
+    assert "Final checks: engine passed; dependencies passed" in rendered
+    assert "Source requirements: updates available → matched" in rendered
+    assert "Package updates: passed; Environment rebuild: skipped" in rendered
+    assert "Original problem" not in rendered
+    assert "Repair completed" not in rendered
+    assert len(rendered.splitlines()) <= 20
+
+
+def test_failed_compatibility_update_preserves_healthy_baseline_and_failed_final_check():
+    rendered = workflow.render_report(report(outcome="failure", details={
+        "change_kind": "compatibility_update", "initial_engine_import": "passed",
+        "engine_import": "failed", "package_updates": "failed",
+        "failure_code": "engine_import_failed",
+    }))
+    assert "Compatibility update incomplete" in rendered
+    assert "Before changes: engine passed" in rendered
+    assert "Final checks: engine failed" in rendered
+    assert "Remaining problem: The presentation engine could not load its dependencies." in rendered
+    assert "completed" not in rendered.lower()
+
+
+@pytest.mark.parametrize("outcome", ["success", "failure", "action_required"])
+def test_check_only_reports_do_not_claim_changes(outcome):
+    rendered = workflow.render_report(report(outcome=outcome, details={
+        "check_only": True, "change_kind": "repair",
+        "initial_engine_import": "passed", "engine_import": "passed",
+        "initial_dependency_check": "passed", "dependency_check": "passed",
+        "initial_compatibility_check": "failed", "compatibility_check": "failed",
+        "failure_code": "dependency_mismatch", "package_updates": "skipped",
+        "environment_rebuild": "skipped",
+    }))
+    assert "Check only; no changes made" in rendered
+    assert "Repair completed" not in rendered
+    assert "Compatibility updates completed" not in rendered
+    assert "Checks: engine passed; dependencies passed" in rendered
+    assert "Source requirements: updates available\n" in rendered
+    assert "Before changes" not in rendered
+    assert "→" not in rendered
+    assert "Package updates:" not in rendered
+    assert "Remaining problem" not in rendered
+
+
+@pytest.mark.parametrize(("kind", "expected"), [
+    ("compatibility_update", "Compatibility updates need user action"),
+    ("repair", "Repair needs user action"),
+])
+def test_action_required_identifies_the_attempted_work(kind, expected):
+    rendered = workflow.render_report(report(
+        outcome="action_required", details={"change_kind": kind},
+    ))
+    assert rendered.splitlines()[0] == f"FPVS Studio Mac setup: {expected}"
+
+
+def test_legacy_success_does_not_infer_that_a_repair_was_necessary():
+    rendered = workflow.render_report(report())
+    assert rendered.splitlines()[0] == "FPVS Studio Mac setup: Completed"
+    assert "Repair completed" not in rendered
 
 
 def test_receipt_precedes_http_and_same_identity_is_not_sent_twice(tmp_path):

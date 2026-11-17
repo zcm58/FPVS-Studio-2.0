@@ -96,10 +96,15 @@ class _Diagnostics:
         self.job_log: Path | None = None
         self.pending = False
         self.automatic_report = False
+        self.initial_checks_complete = False
+        self.checking_compatibility = False
         self.details: dict = {
-            "helper_version": "2", "cpu": "unknown", "python_cpu": "unknown",
+            "helper_version": "2.1", "cpu": "unknown", "python_cpu": "unknown",
             "rosetta": "unknown", "macos_build": "unknown",
             "dependency_check": "unknown", "engine_import": "unknown",
+            "initial_dependency_check": "unknown", "initial_engine_import": "unknown",
+            "initial_compatibility_check": "unknown", "compatibility_check": "unknown",
+            "package_updates": "skipped", "change_kind": "none",
             "environment_rebuild": "skipped", "pycharm_configuration": "unknown",
             "failure_code": "none", "initial_failure_code": "none",
         }
@@ -147,6 +152,9 @@ class _Diagnostics:
 
     def observe(self, line: str) -> None:
         text = line.strip()
+        compatibility_update = text.startswith("Compatibility update available: ")
+        if compatibility_update:
+            _LOGGER.info("%s", _redact(text)[:700])
         if text.startswith("FPVS_REPAIR_FACTS "):
             facts = json.loads(text.removeprefix("FPVS_REPAIR_FACTS "))
             for package, field in (("fpvs-studio", "studio"), ("scipy", "scipy")):
@@ -170,7 +178,7 @@ class _Diagnostics:
             failure = "dependency_mismatch"
         elif "Studio requires Python 3.10" in text or "Python must match the native" in text:
             failure = "python_incompatible"
-        if failure:
+        if failure and not self.checking_compatibility and not compatibility_update:
             self.failure(failure)
         if re.match(r"(?:[\w.]+(?:Error|Exception):|ERROR:)", text):
             safe = _redact(text)[:700]
@@ -193,7 +201,8 @@ class _Diagnostics:
         if self.details["failure_code"] not in specific or code in specific:
             self.details["failure_code"] = code
         initial = self.details["initial_failure_code"]
-        if initial == "none" or initial not in specific and code in specific:
+        if (not self.initial_checks_complete
+                and (initial == "none" or initial not in specific and code in specific)):
             self.details["initial_failure_code"] = code
 
     def command(self, command: list[str], *, cwd: Path, check: bool = False,
@@ -380,8 +389,9 @@ def _complete_automatic_report_safely(
             summary_saved = _owned_path(diagnostics.root, summary_path).is_file()
         except (OSError, ValueError):
             summary_saved = False
-        outcome = ("Repair completed successfully." if code == 0 else
-                   "Repair was interrupted." if code == 130 else "Repair did not complete.")
+        outcome = ("Environment checks completed successfully." if code == 0 else
+                   "Environment checks were interrupted." if code == 130 else
+                   "Environment checks did not complete.")
         delivery = (
             "The completion summary is saved as completion.txt, but automatic delivery "
             "could not be confirmed. Keep the diagnostic log."
@@ -457,6 +467,7 @@ def _finish_diagnostics(root: Path, state_path: Path) -> int:
     diagnostics.automatic_report = state.get("automatic_report", False)
     if diagnostics.automatic_report:
         diagnostics.details.update(state["details"])
+        diagnostics.initial_checks_complete = True
         diagnostics.started -= state.get("elapsed_seconds", 0)
     outcome = "PyCharm repair completion could not be confirmed."
     code = 1
@@ -549,9 +560,18 @@ logger.info("FPVS_REPAIR_FACTS %s", json.dumps({
 }))
 """
 
-# Run through the engine boundary in a fresh interpreter after pip finishes.
+# Test the actual engine before considering package metadata or source requirements.
 # An uncaught exception preserves the original cause hidden by the UI's short message.
-ENGINE_PROBE = METADATA_PROBE + """
+ENGINE_PROBE = """
+import logging
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+logger = logging.getLogger("fpvs_studio.environment")
+from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
+load_psychopy_modules()
+logger.info("Studio's PsychoPy engine imports passed. No presentation window was opened.")
+"""
+
+COMPATIBILITY_PROBE = METADATA_PROBE + """
 import sys
 from importlib.metadata import distribution
 from pathlib import Path
@@ -559,23 +579,36 @@ from packaging.requirements import Requirement
 from packaging.version import Version
 import tomli
 
+def compatibility_update(message):
+    logger.info("Compatibility update available: %s", message)
+    raise SystemExit(2)
+
+def required_version(name):
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        compatibility_update(f"Installed distribution metadata is missing for {name}.")
+
 root = Path(sys.argv[1]).resolve()
 import fpvs_studio
 actual = Path(fpvs_studio.__file__).resolve().parent
 expected = (root / "src/fpvs_studio").resolve()
 if actual != expected:
-    raise RuntimeError(f"Studio imports from {actual}, but this checkout is {expected}.")
-if Version(version("fpvs-studio")) != Version(fpvs_studio.__version__):
-    raise RuntimeError(
+    compatibility_update(f"Studio imports from {actual}, but this checkout is {expected}.")
+if Version(required_version("fpvs-studio")) != Version(fpvs_studio.__version__):
+    compatibility_update(
         "Installed Studio metadata is from a different source version. "
         "Run this helper again without --check to refresh the environment."
     )
 
 for name in ("fpvs-studio", "psychopy", "PySide6", "PyQt6", "numpy", "scipy"):
-    logger.info("%s: %s", name, version(name))
+    logger.info("%s: %s", name, required_version(name))
 with (root / "pyproject.toml").open("rb") as source:
     project = tomli.load(source)["project"]
-requirements = list(distribution("fpvs-studio").requires or [])
+try:
+    requirements = list(distribution("fpvs-studio").requires or [])
+except PackageNotFoundError:
+    compatibility_update("Installed distribution metadata is missing for fpvs-studio.")
 requirements.extend(project.get("dependencies", []))
 for extra in ("dev", "engine"):
     requirements.extend(project["optional-dependencies"][extra])
@@ -585,13 +618,11 @@ for raw in requirements:
         requirement.marker.evaluate({"extra": extra}) for extra in ("", "dev", "engine")
     ):
         continue
-    installed = version(requirement.name)
+    installed = required_version(requirement.name)
     if installed not in requirement.specifier:
-        raise RuntimeError(f"{requirement.name} {installed} does not satisfy {requirement}.")
+        compatibility_update(f"{requirement.name} {installed} does not satisfy {requirement}.")
 
-from fpvs_studio.engines.psychopy_loader import load_psychopy_modules
-load_psychopy_modules()
-logger.info("Studio's PsychoPy engine imports passed. No presentation window was opened.")
+logger.info("Installed Studio source, metadata and checkout requirements match.")
 """
 
 INTERPRETER_PROBE = """
@@ -737,46 +768,89 @@ def _backup_environment(repo_root: Path) -> None:
 
 
 def _run_setup(repo_root: Path) -> bool:
+    rebuilding = (_DIAGNOSTICS is not None
+                  and _DIAGNOSTICS.details["environment_rebuild"] == "action_required")
+    action = "environment_rebuild" if rebuilding else "package_updates"
     if _DIAGNOSTICS is not None:
         _DIAGNOSTICS.details["failure_code"] = "none"
         _DIAGNOSTICS.details["dependency_check"] = "unknown"
         _DIAGNOSTICS.details["engine_import"] = "unknown"
+        _DIAGNOSTICS.details["compatibility_check"] = "unknown"
+        _DIAGNOSTICS.details[action] = "action_required"
     _LOGGER.info("Running Mac setup to prepare native Python and Studio's engine dependencies...")
     environment = os.environ.copy()
     # Setup normally writes the generated Run configuration. Defer all IDE writes
     # to the closed-IDE finalizer when repair was launched from within PyCharm.
     environment["FPVS_SKIP_PYCHARM_CONFIG"] = "1"
-    result = _command(
-        ["/bin/bash", str(repo_root / "scripts/macos-source.sh"), "setup"],
-        cwd=repo_root, env=environment, check=False,
-    )
+    try:
+        result = _command(
+            ["/bin/bash", str(repo_root / "scripts/macos-source.sh"), "setup"],
+            cwd=repo_root, env=environment, check=False,
+        )
+    except Exception:
+        if _DIAGNOSTICS is not None:
+            _DIAGNOSTICS.details[action] = "failed"
+        raise
+    if _DIAGNOSTICS is not None:
+        _DIAGNOSTICS.details[action] = "passed" if result.returncode == 0 else "failed"
     if result.returncode != 0:
         _LOGGER.error("Mac setup failed. Keep the error above; repair has not completed.")
         if _DIAGNOSTICS is not None:
             _DIAGNOSTICS.failure("setup_failed")
-    elif _DIAGNOSTICS is not None:
-        if _DIAGNOSTICS.details["environment_rebuild"] == "action_required":
-            _DIAGNOSTICS.details["environment_rebuild"] = "passed"
     return result.returncode == 0
 
 
-def _check_environment(repo_root: Path, python: str) -> bool:
+def _check_environment(repo_root: Path, python: str, *, initial: bool = False) -> bool:
     if _DIAGNOSTICS is not None:
         _DIAGNOSTICS.details["failure_code"] = "none"
-        _DIAGNOSTICS.details["dependency_check"] = "unknown"
-        _DIAGNOSTICS.details["engine_import"] = "unknown"
-    _LOGGER.info("Checking dependency consistency...")
-    dependencies_ok = _run(python, ["-m", "pip", "check"], repo_root, timeout=120) == 0
-    _LOGGER.info("Checking the installed Studio source, dependency versions and engine imports...")
-    imports_ok = _run(python, ["-c", ENGINE_PROBE, str(repo_root)], repo_root, timeout=120) == 0
+        if not initial:
+            _DIAGNOSTICS.initial_checks_complete = True
+    results = {}
+    for field, arguments, label, failure in (
+        ("engine_import", ["-c", ENGINE_PROBE], "actual PsychoPy engine imports",
+         "engine_import_failed"),
+        ("dependency_check", ["-m", "pip", "check"], "installed dependency consistency",
+         "missing_dependency"),
+        ("compatibility_check", ["-c", COMPATIBILITY_PROBE, str(repo_root)],
+         "compatibility with this checkout's source and requirements", "dependency_mismatch"),
+    ):
+        _LOGGER.info("Checking %s...", label)
+        if _DIAGNOSTICS is not None:
+            _DIAGNOSTICS.details[field] = "unknown"
+            _DIAGNOSTICS.checking_compatibility = field == "compatibility_check"
+        try:
+            exit_code = _run(python, arguments, repo_root, timeout=120)
+        except (OSError, subprocess.TimeoutExpired):
+            _LOGGER.exception("Could not complete the %s check", label)
+            exit_code = None
+        finally:
+            if _DIAGNOSTICS is not None:
+                _DIAGNOSTICS.checking_compatibility = False
+        passed = exit_code == 0
+        status = "passed" if passed else "failed"
+        if field == "compatibility_check" and exit_code not in (0, 2):
+            status = "unknown"
+        results[field] = passed
+        if _DIAGNOSTICS is not None:
+            _DIAGNOSTICS.details[field] = status
+            if initial and not _DIAGNOSTICS.initial_checks_complete:
+                _DIAGNOSTICS.details[f"initial_{field}"] = status
+            if status == "failed":
+                if field == "compatibility_check":
+                    if _DIAGNOSTICS.details["failure_code"] == "none":
+                        _DIAGNOSTICS.details["failure_code"] = failure
+                elif field == "engine_import" or results["engine_import"]:
+                    _DIAGNOSTICS.failure(failure)
+        if status == "unknown":
+            if _DIAGNOSTICS is not None:
+                _DIAGNOSTICS.initial_checks_complete = True
+            raise RuntimeError(
+                "Source compatibility could not be confirmed. Stopping before further changes; "
+                "see the probe diagnostics above."
+            )
     if _DIAGNOSTICS is not None:
-        _DIAGNOSTICS.details["dependency_check"] = "passed" if dependencies_ok else "failed"
-        _DIAGNOSTICS.details["engine_import"] = "passed" if imports_ok else "failed"
-        if dependencies_ok and imports_ok:
-            _DIAGNOSTICS.details["failure_code"] = "none"
-        else:
-            _DIAGNOSTICS.failure("engine_import_failed" if not imports_ok else "missing_dependency")
-    return dependencies_ok and imports_ok
+        _DIAGNOSTICS.initial_checks_complete = True
+    return all(results.values())
 
 
 def _configure_pycharm(repo_root: Path, python: str, *, check_only: bool = False) -> str:
@@ -807,25 +881,47 @@ def _configure_pycharm(repo_root: Path, python: str, *, check_only: bool = False
 def repair_environment(repo_root: Path, *, check_only: bool = False) -> int:
     validate_checkout(repo_root)
     repaired = False
+    initial = True
     try:
         python = validate_environment(repo_root)
     except EnvironmentInvalidError as exc:
         if _DIAGNOSTICS is not None:
             _DIAGNOSTICS.failure("python_incompatible")
+            _DIAGNOSTICS.initial_checks_complete = True
         if check_only:
             raise
+        if _DIAGNOSTICS is not None:
+            _DIAGNOSTICS.details["change_kind"] = "repair"
+            _DIAGNOSTICS.details["environment_rebuild"] = "action_required"
         _LOGGER.info("Preparing a compatible environment automatically: %s", exc)
         _backup_environment(repo_root)
         if not _run_setup(repo_root):
             return 1
         python = validate_environment(repo_root)
         repaired = True
+        initial = False
 
-    healthy = _check_environment(repo_root, python)
+    healthy = _check_environment(repo_root, python, initial=initial)
     if not healthy and not check_only:
-        _LOGGER.info("Repairing Setup Mac's environment...")
+        change_kind = "repair"
+        if _DIAGNOSTICS is not None:
+            details = _DIAGNOSTICS.details
+            if (details["initial_engine_import"] == "passed"
+                    and details["initial_dependency_check"] == "passed"
+                    and details["initial_compatibility_check"] == "failed"):
+                change_kind = "compatibility_update"
+            details["change_kind"] = change_kind
+        _LOGGER.info(
+            "Updating packages for compatibility with this checkout..."
+            if change_kind == "compatibility_update" else "Repairing Setup Mac's environment..."
+        )
         if _run(python, ["-m", "pip", "--version"], repo_root, timeout=60) != 0:
-            if _run(python, ["-m", "ensurepip", "--upgrade"], repo_root) != 0:
+            if _DIAGNOSTICS is not None:
+                _DIAGNOSTICS.details["package_updates"] = "action_required"
+            restored_pip = _run(python, ["-m", "ensurepip", "--upgrade"], repo_root) == 0
+            if _DIAGNOSTICS is not None:
+                _DIAGNOSTICS.details["package_updates"] = "passed" if restored_pip else "failed"
+            if not restored_pip:
                 _LOGGER.error("Could not restore pip in the selected environment.")
                 return 1
         if not _run_setup(repo_root):
@@ -834,7 +930,7 @@ def repair_environment(repo_root: Path, *, check_only: bool = False) -> int:
         repaired = True
         if not healthy:
             _LOGGER.info(
-                "Dependencies remain broken; preserving this venv and rebuilding it once..."
+                "Environment checks still fail; preserving this venv and rebuilding it once..."
             )
             _backup_environment(repo_root)
             if not _run_setup(repo_root):
@@ -843,8 +939,8 @@ def repair_environment(repo_root: Path, *, check_only: bool = False) -> int:
             healthy = _check_environment(repo_root, python)
     if not healthy:
         _LOGGER.error(
-            "Environment checks failed. The specific dependency or import failure is shown "
-            "above; full details are saved in repair.log. Studio is not ready for Test/Pilot."
+            "An engine, dependency consistency or source compatibility check failed. "
+            "Full details are saved in repair.log. This environment has not passed all checks."
         )
         return 1
     result = _configure_pycharm(repo_root, python, check_only=check_only)
@@ -859,9 +955,13 @@ def repair_environment(repo_root: Path, *, check_only: bool = False) -> int:
             "Checks passed: Studio's environment, engine and PyCharm configuration are ready."
         )
     else:
+        completion = "Repair complete." if repaired else "Checks complete."
+        if (_DIAGNOSTICS is not None
+                and _DIAGNOSTICS.details["change_kind"] == "compatibility_update"):
+            completion = "Compatibility update complete."
         _LOGGER.info(
             "%s Studio's environment, engine and PyCharm are ready.",
-            "Repair complete." if repaired else "Checks complete.",
+            completion,
         )
     _LOGGER.info("Run Test/Pilot again; this import check does not verify display refresh timing.")
     return 0
@@ -1240,7 +1340,8 @@ def main(argv: list[str] | None = None) -> int:
         code = 1
         if diagnostics is not None:
             diagnostics.pending = False
-            diagnostics.failure("unknown")
+            if diagnostics.details["failure_code"] == "none":
+                diagnostics.failure("unknown")
         elif sys.platform == "darwin":
             message = "Could not finish diagnostic capture: " + _redact(str(exc))
             if arguments.finish_diagnostics:

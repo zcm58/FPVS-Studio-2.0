@@ -44,6 +44,9 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Mac repair preflight](exec-plans/completed/macos-repair-preflight.md):
+  engine checks before changes, preserved initial health and distinct compatibility
+  update/repair reports; affected-Mac acceptance remains under macOS Phase 1.
 - [Mac repair completion reports](exec-plans/completed/macos-repair-completion-reports.md):
   one-click source repair, SciPy selection, accurate dependency errors and deployed
   automatic completion reports; affected-Mac acceptance remains under macOS Phase 1.
