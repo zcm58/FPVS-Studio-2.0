@@ -412,7 +412,11 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
         LIGHT_STUDIO_THEME,
     )
     from fpvs_studio.gui.library_dialog import LibraryDialog
-    from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
+    from fpvs_studio.gui.project_version_dialog import (
+        DEFAULT_SIZE,
+        MINIMUM_SIZE,
+        ProjectVersionDialog,
+    )
     from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
     from fpvs_studio.library.project_updates import select_project_update
 
@@ -480,7 +484,7 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
         installed_version="1.0.0", local_project_id="synthetic-project",
     )
     versions = ProjectVersionDialog(item.title)
-    for size in ((760, 680), (820, 720)):
+    for size in (MINIMUM_SIZE, DEFAULT_SIZE):
         for permission in ("view", "download"):
             update = select_project_update(origin, catalog.model_copy(
                 update={"access_level": permission},
@@ -493,7 +497,7 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
                 "permission_enforced": (
                     versions.install_button.isEnabled() == (permission == "download")
                 ),
-                "latest_retained": item.title in versions.details.toPlainText(),
+                "latest_retained": item.description in versions.details.toPlainText(),
                 "view_only_explained": permission == "download" or "view-only" in update.message,
             })
     versions.close()

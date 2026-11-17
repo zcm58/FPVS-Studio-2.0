@@ -260,17 +260,20 @@ Opening a linked project checks the Library in an app-owned worker, then recheck
 every five minutes while that project is open and idle. A newer compatible published
 version eligible for download opens the nonmodal update-review dialog once per project and
 release during a Studio session. The offer waits until presentation, modal dialogs
-and other active windows finish, and Studio is in the foreground. A dismissed version
-is not offered again in that session; a later release can be offered. Existing open
-review/download work is not interrupted by polling. There is no automatic installation.
+and other active windows finish, and Studio is in the foreground. **Remind me later**
+closes the review and allows the same release to be offered at the next eligible
+automatic check after 30 minutes in the current Studio session. Closing the window
+normally dismisses that offer for the session. A later release can be offered
+independently. Polling waits while review or download work is open. Installation
+requires an explicit action.
 The Home notice, **Review update...** and **File > Update Project Version...** retain
 manual access. Offline, revoked
 or unavailable service states do not block project opening or claim the project is current.
 
-The dialog shows installed/latest versions, the release description and minimum
+The dialog shows the installed and Library versions, the release description and minimum
 Studio version. **Update current project** is the primary action for a known,
-linked older version. **Download separately** remains secondary; **Keep current
-version** closes without changing the experiment or automatic-check preference.
+linked older version. **Download separately** remains secondary. A reminder leaves
+the automatic-check preference in place and manual review available from Home or File.
 View-only access and incompatible Studio versions keep details visible but disable
 installation. Unknown installed versions require explicit version review before
 updating in place; a separate download remains available when eligible.
@@ -323,6 +326,11 @@ Unlinked projects show explicit linking fields; empty details/status rows remain
 hidden. The Library browser retains descriptions, restrictions, installation state
 and recoverable errors.
 
+Both download choices replace the review with a progress view using the Studio
+updater rail in `gui/update_progress.py`. The percentage reflects bundle bytes.
+In-place updates show file verification and apply as separate stages with an
+indeterminate rail. The rail respects the system motion preference.
+
 New Library imports atomically include `.fpvs-library/project-origin.json`, storing
 the service origin, stable item identity, installed version, verified bundle SHA-256,
 local project ID and automatic-check preference. `core/library_origin.py` owns this
@@ -336,8 +344,8 @@ Earlier downloads and manually created projects have no trustworthy Library iden
 This also applies to ordinary imports of bundles downloaded through the website.
 Use the version dialog to link one explicitly; enter its installed version only when
 known, otherwise leave it unknown. Studio never guesses from a title or folder name.
-**Change library link...** can correct an association. The project-local checkbox
-controls both on-open and periodic automatic checks; the manual Check action still
+**Change library link...** can correct an association. **Check automatically**
+controls both on-open and periodic automatic checks. **Check again** still
 works when automatic checks are off. New unrelated experiments and unpublished review
 uploads are not updates to a linked project.
 
@@ -346,8 +354,9 @@ the installed release does not prevent discovery of a newer one. Changed bytes u
 same version and ambiguous equivalent versions are reported explicitly. The saved
 service origin cannot redirect credentials or requests away from the configured client.
 `gui/project_update_controller.py` owns jobs, cancellation, stale-window suppression,
-automatic offers, notices and explicit import handoff. The dialog minimum/default is `760x680` /
-`820x720`; Home notice acceptance includes `760x520` and `1120x720` with long content.
+automatic offers, notices and explicit import handoff. The dialog minimum/default is
+`640x470` / `700x500`. Home notice acceptance includes `760x520` and `1120x720`
+with long content.
 
 ## Service and access boundary
 
@@ -877,7 +886,7 @@ with controlled clients/importers; it does not access the live service.
 | Surface | Minimum | Default |
 | --- | --- | --- |
 | Experiment Library | 900×640 | 1040×760 |
-| Project version review | 760×680 | 820×720 |
+| Project version review | 640×470 | 700×500 |
 | Welcome with four project actions | 760×520 | 1120×720 |
 | Create Project, all three pages | 760×500 | 800×500 |
 | Developer publisher | 860×680 | 940×760 |
@@ -890,11 +899,15 @@ In an approved visible session, check both themes, display scaling, long titles 
 descriptions, empty/error/disconnected/busy states, keyboard navigation, and all controls
 at these sizes. Exercise root-picker and Save cancellation, download Cancel/Close/Escape,
 Already installed, Review update and Review existing project with long installed paths,
-the collection warning and **Keep current version** / **Download separately**,
+the collection warning and **Remind me later** / **Download separately**,
 refresh after an external import, and an older project with the latest version already
 installed beside it. Confirm all duplicate paths transfer no payload bytes. Exercise
 extraction cancellation, late commit, app quit and a revoked credential. Existing local
 bundle import/export remains available independently of the Library.
+For each project update download route, verify the transfer percentage, Cancel,
+and the verification or review handoff. Check the in-place apply stage and restored
+review after cancel. Repeat a transfer with reduced motion and verify the stage and
+percentage remain readable. After **Remind me later**, confirm manual review still opens.
 On a computer with no Library connection, open Experiment Library, search for
 the Color Oddball Demo, and download and confirm its reviewed import. Connect a
 view-only lab and confirm a lab project is view-only while the public demo still

@@ -8,24 +8,14 @@ import sys
 from collections.abc import Callable
 from threading import Event
 
-from PySide6.QtCore import QAbstractAnimation, QRectF, Qt, QTimer, QUrl, QVariantAnimation, Slot
-from PySide6.QtGui import (
-    QCloseEvent,
-    QColor,
-    QDesktopServices,
-    QHideEvent,
-    QLinearGradient,
-    QPainter,
-    QPaintEvent,
-    QShowEvent,
-)
+from PySide6.QtCore import Qt, QTimer, QUrl, Slot
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -36,9 +26,8 @@ from fpvs_studio.gui.components import (
     apply_studio_theme,
     mark_primary_action,
     mark_secondary_action,
-    widget_animation_duration,
 )
-from fpvs_studio.gui.design_system import elide_middle, resolve_studio_theme
+from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateCallback,
@@ -47,6 +36,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.gui.update_progress import PROGRESS_MAXIMUM, UpdateProgressBar
 from fpvs_studio.support.error_explanations import explain_error
 from fpvs_studio.updates.helper_client import (
     HelperClient,
@@ -63,7 +53,6 @@ from fpvs_studio.updates.models import (
 _LOGGER = logging.getLogger(__name__)
 _MINIMUM_SIZE = (680, 600)
 _DEFAULT_SIZE = (760, 620)
-_PROGRESS_MAXIMUM = 1000
 SOURCE_UPDATE_INSTRUCTIONS = (
     "To update this source checkout, close Studio, pull the latest changes from "
     "the remote Git repository, then restart Studio."
@@ -93,98 +82,6 @@ def _launch_update(downloaded: DownloadedInstaller, cancel_event: Event) -> obje
     return HelperClient().launch_install(
         downloaded, parent_pid=os.getpid(), cancel_event=cancel_event
     )
-
-
-class UpdateProgressBar(QProgressBar):
-    """Display reported progress on a compact rail with optional download motion."""
-
-    def __init__(self, parent: QWidget, *, animate_download: bool = False) -> None:
-        super().__init__(parent)
-        self.setMinimumHeight(22)
-        self._animate_download = animate_download
-        self._motion_enabled = False
-        self._animation = QVariantAnimation(self)
-        self._animation.setStartValue(0.0)
-        self._animation.setEndValue(1.0)
-        self._animation.setDuration(1650)
-        self._animation.setLoopCount(-1)
-        self._animation.valueChanged.connect(lambda _value: self.update())
-        self.valueChanged.connect(self._sync_animation)
-
-    def setRange(self, minimum: int, maximum: int) -> None:  # noqa: N802
-        if (minimum, maximum) != (self.minimum(), self.maximum()):
-            super().setRange(minimum, maximum)
-            self._sync_animation()
-
-    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
-        super().showEvent(event)
-        self._motion_enabled = bool(widget_animation_duration(self, 160))
-        self._sync_animation()
-
-    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
-        self._animation.stop()
-        super().hideEvent(event)
-
-    @Slot()
-    def _sync_animation(self) -> None:
-        should_move = self._motion_enabled and self.isVisible() and (
-            self.maximum() == 0
-            or (self._animate_download and self.minimum() < self.value() < self.maximum())
-        )
-        if should_move:
-            if self._animation.state() != QAbstractAnimation.State.Running:
-                self._animation.start()
-        else:
-            self._animation.stop()
-        self.update()
-
-    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
-        theme = resolve_studio_theme(self.window().palette())
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        bar_height = 6.0
-        rail = QRectF(0, (self.height() - bar_height) / 2, self.width(), bar_height)
-        percentage = self.text() if self.isTextVisible() else ""
-        if percentage:
-            rail.setWidth(rail.width() - self.fontMetrics().horizontalAdvance("100%") - 12)
-            painter.setPen(QColor(theme.text_secondary))
-            painter.drawText(
-                self.rect(), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
-                percentage,
-            )
-            painter.setPen(Qt.PenStyle.NoPen)
-
-        painter.setBrush(QColor(theme.border_soft))
-        radius = bar_height / 2
-        painter.drawRoundedRect(rail, radius, radius)
-        fill = QRectF(rail)
-        accent = QColor(theme.primary)
-        painter.setBrush(accent)
-        moving = self._animation.state() == QAbstractAnimation.State.Running
-        position = float(self._animation.currentValue()) if moving else 0.5
-        if self.maximum() == 0:
-            segment = rail.width() * 0.20
-            fill.setWidth(segment)
-            fill.moveLeft(position * (rail.width() + segment) - segment)
-            fill = fill.intersected(rail)
-        else:
-            span = max(1, self.maximum() - self.minimum())
-            progress = max(0, self.value() - self.minimum()) / span
-            fill.setWidth(rail.width() * progress)
-            if moving:
-                # The highlight travels across the reported fill. It adds no progress of its own.
-                band = min(rail.width() * 0.14, 64.0)
-                center = position * (fill.width() + 2 * band) - band
-                highlight = QLinearGradient(center - band, 0, center + band, 0)
-                highlight.setColorAt(0.0, accent)
-                highlight.setColorAt(0.5, accent.lighter(135))
-                highlight.setColorAt(1.0, accent)
-                painter.setBrush(highlight)
-        if fill.width() > 0:
-            radius = min(radius, fill.width() / 2)
-            painter.drawRoundedRect(fill, radius, radius)
-        painter.end()
 
 
 class UpdateDialog(QDialog):
@@ -554,8 +451,8 @@ class UpdateDialog(QDialog):
         self.close_button.setEnabled(True)
         self._set_close_button_text("Close")
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, _PROGRESS_MAXIMUM)
-        self.progress_bar.setValue(_PROGRESS_MAXIMUM)
+        self.progress_bar.setRange(0, PROGRESS_MAXIMUM)
+        self.progress_bar.setValue(PROGRESS_MAXIMUM)
 
     def _handle_task_error(self, error: object, kind: str | None = None) -> None:
         _LOGGER.warning("Updater operation failed", extra={"operation": kind, "error": str(error)})
@@ -596,12 +493,10 @@ class UpdateDialog(QDialog):
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setVisible(True)
             return
-        if isinstance(downloaded, int) and isinstance(total, int) and total > 0:
-            # Qt widgets accept signed 32-bit integers, but supported downloads can
-            # exceed 2 GiB. Keep Python-sized byte math and pass only scaled units.
-            scaled = max(0, min(downloaded, total)) * _PROGRESS_MAXIMUM // total
-            self.progress_bar.setRange(0, _PROGRESS_MAXIMUM)
-            self.progress_bar.setValue(scaled)
+        if isinstance(downloaded, int):
+            self.progress_bar.set_byte_progress(
+                downloaded, total if isinstance(total, int) else None,
+            )
         else:
             self.progress_bar.setRange(0, 0)
         self.progress_bar.setVisible(True)

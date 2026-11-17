@@ -27,9 +27,11 @@ def discovery():
     tree = ast.parse(source.read_text(encoding="utf-8"))
     controller = next(n for n in tree.body if isinstance(n, ast.ClassDef)
                       and n.name == "ProjectUpdateController")
-    names = {"_current", "_automatic_check", "_offer_key", "_try_offer", "_checked", "_shutdown"}
+    names = {"_current", "_automatic_check", "_offer_key", "_try_offer", "_checked", "_shutdown",
+             "_action", "show"}
     methods = [n for n in controller.body if isinstance(n, ast.FunctionDef) and n.name in names]
-    flags = SimpleNamespace(visible=True, foreground=1, modal=None, active=None, busy=False)
+    flags = SimpleNamespace(visible=True, foreground=1, modal=None, active=None, busy=False,
+                            now=100.0)
 
     def timer():
         calls = []
@@ -51,6 +53,7 @@ def discovery():
     )
     namespace = {
         "cast": cast, "_Checked": checked, "isValid": lambda _window: True,
+        "monotonic": lambda: flags.now, "_REMINDER_SECONDS": 30 * 60,
         "Qt": SimpleNamespace(ApplicationState=SimpleNamespace(ApplicationActive=1)),
         application_name: SimpleNamespace(
             applicationState=lambda: flags.foreground,
@@ -71,7 +74,7 @@ def discovery():
     context = SimpleNamespace(
         _window=window, _current_window=lambda: window, _result=None, _checked_result=None,
         _lifecycle=SimpleNamespace(is_shutting_down=False), _job=None, _importing=False,
-        _offered=set(), _pending_check=None, _last_backup=None, dialog=None,
+        _offered_until={}, _pending_check=None, _last_backup=None, dialog=None,
         _poll_timer=timer(), _offer_timer=timer(),
         _message=lambda result: result.message,
         _queue_check=lambda window, **kwargs: requests.append((window, kwargs)),
@@ -87,6 +90,9 @@ def discovery():
             )
             dialog.isVisible = lambda: dialog.visible
             dialog.show = lambda: setattr(dialog, "visible", True)
+            dialog.reject = lambda: setattr(dialog, "visible", False)
+            dialog.raise_ = lambda: None
+            dialog.activateWindow = lambda: None
             context.dialog = dialog
 
     context._ensure_dialog = ensure_dialog
@@ -126,6 +132,37 @@ def test_automatic_discovery_offers_new_version_without_install_and_deduplicates
     assert d.states[-1]["latest"].version == "1.2.0"
 
 
+@pytest.mark.parametrize("next_action", ["timer", "manual", "newer-version"])
+def test_reminder_defers_only_the_current_automatic_offer(discovery, next_action):
+    d, c = discovery, discovery.controller
+    result = select_project_update(origin(), catalog(item("1.1.0")))
+    c._checked(d.checked(result), automatic=True)
+    c._try_offer()
+    assert d.states[-1]["can_remind"]
+    c._action("remind")
+    assert not c.dialog.visible
+    assert d.requests == []
+
+    d.flags.now += 30 * 60 - 1
+    c._checked(d.checked(result), automatic=True)
+    c._try_offer()
+    assert not c.dialog.visible
+
+    if next_action == "manual":
+        c.show(c._window)
+        assert d.requests == [(c._window, {"automatic": False})]
+    elif next_action == "newer-version":
+        newer = select_project_update(origin(), catalog(item("1.2.0")))
+        c._checked(d.checked(newer), automatic=True)
+        c._try_offer()
+        assert d.states[-1]["latest"].version == "1.2.0"
+    else:
+        d.flags.now += 1
+        c._checked(d.checked(result), automatic=True)
+        c._try_offer()
+    assert c.dialog.visible
+
+
 @pytest.mark.parametrize("reason", ["busy", "modal", "background", "other-window", "job", "import"])
 def test_automatic_discovery_defers_offer_until_safe(discovery, reason):
     d, c = discovery, discovery.controller
@@ -145,7 +182,7 @@ def test_automatic_discovery_defers_offer_until_safe(discovery, reason):
         c._importing = True
     c._try_offer()
     assert c.dialog is None
-    assert c._offered == set()
+    assert c._offered_until == {}
     assert c._offer_timer.calls == [(1000,)]
     d.flags.busy, d.flags.modal, d.flags.foreground, d.flags.active = False, None, 1, None
     c._job, c._importing = None, False

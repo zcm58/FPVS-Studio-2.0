@@ -3,21 +3,20 @@
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QAbstractAnimation, Qt
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.home_page import HomePage
 from fpvs_studio.gui.main_window import StudioMainWindow
-from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
-from fpvs_studio.library.models import LibraryItem
-
-_SHORT_UPDATE_WARNING = (
-    "If data collection has started, review changes before switching versions.\n"
-    "Updating replaces experiment settings and stimuli. Participant data and local "
-    "recording/display setup are kept, with a backup of the previous version."
+from fpvs_studio.gui.packaged_smoke import _verification_palette
+from fpvs_studio.gui.project_version_dialog import (
+    DEFAULT_SIZE,
+    MINIMUM_SIZE,
+    ProjectVersionDialog,
 )
+from fpvs_studio.library.models import LibraryItem
 
 
 def _item(**updates) -> LibraryItem:
@@ -43,17 +42,19 @@ def _fit(widget) -> None:
             assert button.width() >= button.sizeHint().width(), button.text()
 
 
-@pytest.mark.parametrize("size", [(760, 680), (820, 720)])
+@pytest.mark.parametrize("size", [MINIMUM_SIZE, DEFAULT_SIZE])
+@pytest.mark.parametrize("dark", [False, True])
 @pytest.mark.parametrize(
     "state", [
         "unlinked", "unknown", "relink", "current", "update", "incompatible", "offline", "busy",
         "reporting-blocked", "updated",
     ],
 )
-def test_project_version_states_fit_and_preserve_full_description(qtbot, size, state):
+def test_project_version_states_fit_and_preserve_full_description(qtbot, size, dark, state):
     project_name = "Long local project name with individually authored settings " * 2
     dialog = ProjectVersionDialog(project_name)
     qtbot.addWidget(dialog)
+    dialog.setPalette(_verification_palette(dark=dark))
     item = _item(title="Long experiment name " * 7, description="Protocol details. " * 200)
     dialog.set_link_items([item])
     status = {
@@ -78,9 +79,10 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
         linked=state != "unlinked", auto_check=True, status=status,
         can_install=state in {"unknown", "update", "busy", "reporting-blocked"},
         can_update=state in {"update", "busy"},
+        can_remind=state in {"update", "busy", "reporting-blocked"},
     )
     if state == "busy":
-        dialog.set_busy(True, status)
+        dialog.set_busy(True, "Preparing update…", show_progress=True)
     elif state == "relink":
         dialog.begin_linking()
         dialog.link_combo.setCurrentIndex(1)
@@ -95,13 +97,11 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     assert dialog.header.title_label.text() == project_name
     assert not dialog.header.subtitle_label.isVisible()
     assert dialog.status_label.text() == ("" if state == "relink" else status)
-    assert dialog.status_label.isVisible() == (state != "relink")
-    if state in {"update", "busy"}:
-        assert dialog.preservation_label.text() == _SHORT_UPDATE_WARNING
+    assert dialog.status_label.isVisible() == (state not in {"relink", "busy"})
     assert dialog.preservation_label.textFormat() == Qt.TextFormat.PlainText
     assert dialog.preservation_label.wordWrap()
     assert dialog.preservation_label.isVisible() == (
-        state in {"unknown", "update", "busy", "reporting-blocked"}
+        state in {"unknown", "update"}
     )
     for control in (dialog.preservation_label, dialog.install_button, dialog.update_button):
         assert control.accessibleDescription() == control.toolTip()
@@ -112,24 +112,26 @@ def test_project_version_states_fit_and_preserve_full_description(qtbot, size, s
     assert dialog.update_button.isEnabled() == (state == "update")
     assert dialog.update_button.isDefault() == (state == "update")
     assert dialog.install_button.text() == "Download separately"
-    assert dialog.check_button.text() == "Check for updates"
-    assert dialog.auto_check_checkbox.text() == "Check for updates automatically"
-    assert dialog.auto_check_checkbox.isVisible() == (state not in {"unlinked", "relink"})
-    assert dialog.close_button.text() == "Keep current version"
-    assert dialog.close_button.isVisible() == (state != "busy")
+    assert dialog.check_button.text() == "Check again"
+    assert dialog.auto_check_checkbox.text() == "Check automatically"
+    assert dialog.auto_check_checkbox.isVisible() == (state not in {"unlinked", "relink", "busy"})
+    assert dialog.close_button.isVisible() == (state not in {"update", "reporting-blocked", "busy"})
+    assert dialog.remind_button.isVisible() == (state in {"update", "reporting-blocked"})
     assert dialog.cancel_button.isVisible() == (state == "busy")
-    if state in {"update", "busy"}:
+    assert dialog.progress_bar.isVisible() == (state == "busy")
+    if state == "update":
         assert "participant data" in dialog.preservation_label.text()
+        assert "data collection" in dialog.preservation_label.text()
     elif state == "unknown":
-        assert "installed version is unknown" in dialog.preservation_label.text()
+        assert "Enter the installed version" in dialog.preservation_label.text()
     assert dialog.details.isReadOnly()
-    assert dialog.details.isVisible() == (state not in {"unlinked", "offline"})
+    assert dialog.details.isVisible() == (state not in {"unlinked", "offline", "busy"})
     if state == "relink":
         assert item.description in dialog.details.toPlainText()
         assert dialog.link_panel.isVisible()
         assert not dialog.relink_button.isVisible()
     elif state == "unknown":
-        assert "Installed: Unknown" in dialog.versions_label.text()
+        assert "Installed unknown" in dialog.versions_label.text()
         assert dialog.link_panel.isVisible()
         assert item.description in dialog.details.toPlainText()
     elif state not in {"unlinked", "offline"}:
@@ -149,7 +151,7 @@ def test_unlinked_review_shows_only_link_inputs_until_an_experiment_is_selected(
     dialog.show()
     _fit(dialog)
 
-    assert dialog.versions_label.text() == "Installed: Not linked\nLatest: Not checked"
+    assert not dialog.versions_label.isVisible()
     assert dialog.link_panel.isVisible()
     assert not dialog.auto_check_checkbox.isVisible()
     assert not dialog.details.isVisible()
@@ -191,12 +193,12 @@ def test_review_retains_error_feedback_and_hides_empty_status_after_refresh(qtbo
     _fit(dialog)
     assert dialog.status_label.isVisible()
     assert dialog.status_label.text() == error
-    assert "Installed: 1.0.0\nLatest: Not checked" == dialog.versions_label.text()
+    assert dialog.versions_label.text() == "Installed 1.0.0"
     assert not dialog.details.isVisible()
 
     dialog.set_state(
         installed_version="1.0.0", latest=_item(), linked=True, auto_check=True,
-        can_install=True,
+        can_install=True, can_update=True,
     )
     _fit(dialog)
     assert not dialog.status_label.isVisible()
@@ -405,7 +407,7 @@ def test_project_update_menu_and_notice_respect_busy_guards(qtbot, tmp_path, mon
     monkeypatch.setattr(window, "_allow_project_handoff_during_fixation_load", lambda: True)
 
 
-@pytest.mark.parametrize("size", [(760, 680), (820, 720)])
+@pytest.mark.parametrize("size", [MINIMUM_SIZE, DEFAULT_SIZE])
 def test_primary_update_keeps_separate_download_secondary_and_blocks_unknown(qtbot, size):
     dialog = ProjectVersionDialog("Long current project name " * 4)
     qtbot.addWidget(dialog)
@@ -422,7 +424,53 @@ def test_primary_update_keeps_separate_download_secondary_and_blocks_unknown(qtb
     _fit(dialog)
     assert not dialog.update_button.isEnabled()
     assert dialog.install_button.isEnabled() and dialog.install_button.isDefault()
-    assert "installed version is unknown" in dialog.preservation_label.text()
+    assert "Enter the installed version" in dialog.preservation_label.text()
+
+
+@pytest.mark.parametrize("motion", [False, True])
+def test_animated_transfer_uses_reported_bytes_and_returns_to_review(qtbot, monkeypatch, motion):
+    monkeypatch.setattr(
+        "fpvs_studio.gui.update_progress.widget_animation_duration",
+        lambda *_: 160 if motion else 0,
+    )
+    dialog = ProjectVersionDialog("Masking")
+    qtbot.addWidget(dialog)
+    installed, latest = "1.0.0+" + "W" * 58, _item(version="2.0.0+" + "W" * 58)
+    dialog.set_state(installed_version=installed, latest=latest, linked=True,
+                     auto_check=True, can_install=True, can_update=True, can_remind=True)
+    actions = []
+    dialog.action_requested.connect(actions.append)
+    dialog.resize(*MINIMUM_SIZE)
+    dialog.show()
+    _fit(dialog)
+    assert installed in dialog.versions_label.toolTip()
+    assert latest.version in dialog.versions_label.accessibleDescription()
+    assert latest.title not in dialog.details.toPlainText()
+    dialog.remind_button.click()
+    assert actions == ["remind"]
+
+    dialog.set_busy(True, "Preparing update…", show_progress=True)
+    dialog.set_download_progress(3_000_000_000, 4_000_000_000)
+    _fit(dialog)
+    assert dialog.progress_bar.text() == "75%"
+    assert dialog.progress_bar.isVisible()
+    assert (dialog.progress_bar._animation.state() == QAbstractAnimation.State.Running) is motion
+    assert not dialog.details.isVisible()
+    assert not dialog.update_button.isVisible()
+    assert dialog.cancel_button.isVisible()
+    dialog.set_progress_stage("Verifying project files…")
+    assert dialog.progress_label.text() == "Verifying project files…"
+    assert dialog.progress_bar.maximum() == 0
+    dialog.cancel_button.click()
+    assert actions == ["remind", "cancel"]
+
+    dialog.set_busy(False, "Update canceled. Your project is unchanged.")
+    _fit(dialog)
+    assert dialog.status_label.isVisible()
+    assert dialog.update_button.isEnabled()
+    assert dialog.remind_button.isVisible()
+    assert not dialog.progress_bar.isVisible()
+    assert dialog.progress_bar._animation.state() == QAbstractAnimation.State.Stopped
 
 
 def _update_window(qtbot, tmp_path):

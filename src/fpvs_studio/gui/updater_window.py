@@ -27,11 +27,7 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
     mark_text_role,
 )
-from fpvs_studio.gui.update_dialog import (
-    SOURCE_UPDATE_INSTRUCTIONS,
-    UpdateDialog,
-    UpdateProgressBar,
-)
+from fpvs_studio.gui.update_dialog import SOURCE_UPDATE_INSTRUCTIONS, UpdateDialog
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateCallback,
@@ -40,6 +36,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.gui.update_progress import UpdateProgressBar
 from fpvs_studio.support.error_explanations import describe_error, explain_error
 from fpvs_studio.updates.helper_client import HelperClient, installer_updates_supported
 from fpvs_studio.updates.helper_service import (

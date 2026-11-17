@@ -903,7 +903,7 @@ def test_download_motion_respects_preference_and_stops_when_hidden_or_complete(
     qtbot, deferred_updates, monkeypatch, motion_enabled,
 ) -> None:
     monkeypatch.setattr(
-        dialog_module, "widget_animation_duration",
+        "fpvs_studio.gui.update_progress.widget_animation_duration",
         lambda _widget, limit: limit if motion_enabled else 0,
     )
     lifecycle, jobs, _ = deferred_updates
@@ -1407,7 +1407,9 @@ def test_standalone_handoff_does_not_claim_to_be_studio(qtbot, deferred_updates,
 def test_apply_progress_is_minimal_and_preserves_target_version(
     qtbot, deferred_updates, monkeypatch, size,
 ):
-    monkeypatch.setattr(dialog_module, "widget_animation_duration", lambda _widget, limit: limit)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.update_progress.widget_animation_duration", lambda _widget, limit: limit,
+    )
     lifecycle, jobs, _ = deferred_updates
     window = ApplyUpdateDialog(lambda _progress, _cancel: None, lifecycle=lifecycle)
     qtbot.addWidget(window)

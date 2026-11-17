@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event
+from time import monotonic
 from typing import TYPE_CHECKING, cast
 
 from PySide6.QtCore import QObject, Qt, QTimer
@@ -60,6 +61,7 @@ if TYPE_CHECKING:
     from fpvs_studio.gui.main_window import StudioMainWindow
 
 _LOGGER = logging.getLogger(__name__)
+_REMINDER_SECONDS = 30 * 60
 
 
 @dataclass(frozen=True)
@@ -109,7 +111,7 @@ class ProjectUpdateController(QObject):
         self._separate_download_allowed = True
         self._update_bridge: ProgressSignalBridge | None = None
         self._last_backup: tuple[Path, Path] | None = None
-        self._offered: set[tuple[str, str, str, str, str]] = set()
+        self._offered_until: dict[tuple[str, str, str, str, str], float] = {}
         self._poll_timer = QTimer(self)
         self._poll_timer.setInterval(5 * 60 * 1000)
         self._poll_timer.timeout.connect(self._automatic_check)
@@ -169,7 +171,10 @@ class ProjectUpdateController(QObject):
     def _try_offer(self) -> None:
         window = self._window
         key = self._offer_key()
-        if window is None or not self._current(window) or key is None or key in self._offered:
+        if window is None or not self._current(window) or key is None:
+            return
+        until = self._offered_until.get(key)
+        if until is not None and until > monotonic():
             return
         checked = self._checked_result
         if checked is None or checked.result is not self._result:
@@ -182,7 +187,7 @@ class ProjectUpdateController(QObject):
         ):
             self._offer_timer.start(1000)
             return
-        self._offered.add(key)
+        self._offered_until[key] = float("inf")
         self._ensure_dialog(window)
         # Reuse the checked candidate; opening an automatic offer does not issue
         # another request or begin a download.
@@ -296,9 +301,11 @@ class ProjectUpdateController(QObject):
         generation = self._generation
         if self.dialog is not None:
             self.dialog.status_label.setToolTip("")
-            self.dialog.set_busy(True, message)
+            self.dialog.set_busy(True, message, show_progress=holds_download)
         job = self._lifecycle.start_task(callback, keep_success_on_cancel=True)
         self._job = job
+        if holds_download and self.dialog is not None:
+            job.progress_changed.connect(self.dialog.set_download_progress)
 
         def finished(value: object) -> None:
             self._job = None
@@ -340,30 +347,38 @@ class ProjectUpdateController(QObject):
         self._separate_download_allowed = checked.can_download_separately
         result = checked.result
         latest, origin = result.latest_item, result.origin
+        offer_key = self._offer_key()
         message = self._message(result)
+        dialog_message = {
+            "update_available": "",
+            "version_unknown": "",
+            "incompatible": "Update FPVS Studio to install this release.",
+            "current": "Up to date.",
+        }.get(result.status, message)
         if (
             self._last_backup is not None and self._window is not None
             and self._last_backup[0] == self._window.document.project_root
             and result.status == "current"
         ):
-            message = f"Previous version backup: {self._last_backup[1]}"
+            dialog_message = f"Previous version backup: {self._last_backup[1]}"
         link_errors = checked.link_choices.errors if checked.link_choices is not None else ()
-        message = "\n".join(filter(None, (
-            message, checked.reporting_error, checked.reporting_notice, *link_errors,
-        )))
+        extra_messages = (checked.reporting_error, checked.reporting_notice, *link_errors)
         if self.dialog is not None:
+            dialog_message = "\n".join(filter(None, (dialog_message, *extra_messages)))
             self.dialog.set_state(
                 installed_version=origin.installed_version if origin else None,
                 latest=latest, linked=origin is not None,
                 auto_check=origin.auto_check if origin else True,
-                status=message, can_install=result.can_install,
+                status=dialog_message, can_install=result.can_install,
                 can_update=result.status == "update_available" and not checked.reporting_error,
                 can_download_separately=(
                     result.can_install and checked.can_download_separately
                 ),
+                can_remind=offer_key is not None,
             )
             self.dialog.status_label.setToolTip(
-                f"{message}\n\nDetails: {checked.error_details}" if checked.error_details else "",
+                f"{dialog_message}\n\nDetails: {checked.error_details}"
+                if checked.error_details else "",
             )
             if checked.link_choices is not None:
                 self._link_options = checked.link_choices
@@ -371,13 +386,13 @@ class ProjectUpdateController(QObject):
         window = self._window
         if window is not None and self._current(window):
             window.set_project_update_notice(
-                message if result.status in {"update_available", "incompatible", "version_unknown"}
+                "\n".join(filter(None, (message, *extra_messages)))
+                if result.status in {"update_available", "incompatible", "version_unknown"}
                 and latest is not None else ""
             )
-            key = self._offer_key()
-            if key is not None:
+            if offer_key is not None:
                 if self.dialog is not None and self.dialog.isVisible():
-                    self._offered.add(key)
+                    self._offered_until[offer_key] = float("inf")
                 elif automatic:
                     self._offer_timer.start(0)
 
@@ -397,6 +412,11 @@ class ProjectUpdateController(QObject):
                 self._install()
             elif action == "update":
                 self._update_current()
+            elif action == "remind" and self.dialog is not None:
+                key = self._offer_key()
+                if key is not None:
+                    self._offered_until[key] = monotonic() + _REMINDER_SECONDS
+                    self.dialog.reject()
             elif action in {"link", "set_auto"}:
                 self._save_origin(link=action == "link")
             elif action == "relink":
@@ -480,7 +500,7 @@ class ProjectUpdateController(QObject):
             )
             return path, manifest, origin
 
-        self._start(download, self._downloaded, "Downloading and verifying the new version…",
+        self._start(download, self._downloaded, "Preparing download…",
                     holds_download=True)
 
     def _update_current(self) -> None:
@@ -509,8 +529,14 @@ class ProjectUpdateController(QObject):
         self._update_bridge = bridge
 
         def stage_changed(stage: str) -> None:
-            if self._current(window) and stage in {"verify", "commit"}:
+            if not self._current(window) or generation != self._generation:
+                return
+            if stage in {"verify", "commit"}:
                 window.set_bundle_import_stage(cast(ImportProcessingStage, stage))
+                if self.dialog is not None:
+                    self.dialog.set_progress_stage(
+                        "Verifying project files…" if stage == "verify" else "Applying update…"
+                    )
 
         bridge.stage_changed.connect(stage_changed, Qt.ConnectionType.QueuedConnection)
         window.start_bundle_import_processing(
@@ -520,7 +546,7 @@ class ProjectUpdateController(QObject):
         self._importing = True
         if self.dialog is not None:
             self.dialog.status_label.setToolTip("")
-            self.dialog.set_busy(True, "Downloading and updating the current project…")
+            self.dialog.set_busy(True, "Preparing update…", show_progress=True)
 
         def update(progress: ProgressReporter, cancel: Event) -> _Updated:
             ensure_project_update_recovery_ready(root, cancel_event=cancel)
@@ -548,13 +574,16 @@ class ProjectUpdateController(QObject):
 
         try:
             job = self._lifecycle.start_task(update, keep_success_on_cancel=True)
-        except Exception:
+        except Exception as error:
             self._importing = False
             window.finish_bundle_import_processing(restore_previous=True)
             bridge.deleteLater()
             self._update_bridge = None
-            raise
+            self._show_error(error)
+            return
         self._job = job
+        if self.dialog is not None:
+            job.progress_changed.connect(self.dialog.set_download_progress)
 
         def finished(value: object) -> None:
             self._job = None

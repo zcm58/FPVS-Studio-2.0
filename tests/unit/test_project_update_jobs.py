@@ -51,13 +51,14 @@ class Job:
         self.callback = callback
         self.cancel_event = Event()
         self.finished = Signal()
+        self.progress_changed = Signal()
 
     def cancel(self):
         self.cancel_event.set()
 
     def run(self, *, late_cancel=False):
         try:
-            value = self.callback(lambda *_args: None, self.cancel_event)
+            value = self.callback(self.progress_changed.emit, self.cancel_event)
             outcome = SimpleNamespace(value=value, error=None, cancelled=False)
         except Exception as error:
             outcome = SimpleNamespace(value=None, error=error, cancelled=False)
@@ -90,10 +91,11 @@ def update_job(tmp_path):
     cls = next(n for n in tree.body if isinstance(n, ast.ClassDef)
                and n.name == "ProjectUpdateController")
     names = {"_current", "_update_current", "_action", "_run_pending", "_queue_check",
-             "_save_origin", "_invalidate_failed_update_candidate", "_show_error"}
+             "_save_origin", "_invalidate_failed_update_candidate", "_show_error", "_start"}
     methods = [n for n in cls.body if isinstance(n, ast.FunctionDef) and n.name in names]
     calls, jobs, applied, messages = [], [], [], []
     tooltips = []
+    progress = []
     origin = LibraryProjectOrigin(
         service_url="https://library.example.test", item_id="study", installed_version="1.0.0",
         bundle_sha256="b" * 64, local_project_id="local-study",
@@ -138,6 +140,7 @@ def update_job(tmp_path):
 
     def download(_item, **_kwargs):
         calls.append("download")
+        _kwargs["progress_callback"](33, 100)
         return tmp_path / item.filename
 
     def reporting(*_args, **_kwargs):
@@ -202,7 +205,10 @@ def update_job(tmp_path):
         _poll_timer=SimpleNamespace(stop=lambda: None),
         _offer_timer=SimpleNamespace(stop=lambda: None),
         dialog=SimpleNamespace(
-            set_busy=lambda *args: messages.append(args), clear_install_candidate=lambda: None,
+            set_busy=lambda *args, **_kwargs: messages.append(args),
+            clear_install_candidate=lambda: None,
+            set_download_progress=lambda *args: progress.append(args),
+            set_progress_stage=progress.append,
             status_label=SimpleNamespace(setToolTip=tooltips.append),
             check_button=SimpleNamespace(setEnabled=lambda _enabled: None),
             relink_button=SimpleNamespace(setEnabled=lambda _enabled: None),
@@ -216,7 +222,8 @@ def update_job(tmp_path):
     for name in names:
         setattr(context, name, MethodType(namespace[name], context))
     return SimpleNamespace(controller=context, flags=flags, jobs=jobs, calls=calls,
-                           applied=applied, messages=messages, tooltips=tooltips, result=committed)
+                           applied=applied, messages=messages, tooltips=tooltips,
+                           progress=progress, result=committed)
 
 
 @pytest.mark.parametrize("blocked", ["save", "fixation", "unknown-version"])
@@ -246,10 +253,26 @@ def test_update_snapshots_before_transfer_and_applies_only_worker_success(update
     assert [x[1] for x in s.calls if isinstance(x, tuple) and x[0] == "stage"] == [
         "verify", "commit", "complete",
     ]
+    assert s.progress == [(33, 100), "Verifying project files…", "Applying update…"]
     assert s.applied == [s.result]
     assert s.controller._last_backup[1] == s.result.backup_path
     assert not s.controller._importing and s.controller._job is None
     assert any(isinstance(x, tuple) and x[0] == "unfreeze" for x in s.calls)
+
+
+def test_separate_download_reports_bytes_before_handoff(update_job):
+    s = update_job
+    handed_off = []
+
+    def download(progress, _cancel):
+        progress(75, 100)
+        return "verified"
+
+    s.controller._start(download, handed_off.append, "Preparing download…", holds_download=True)
+    s.jobs[0].run()
+    assert s.progress == [(75, 100)]
+    assert handed_off == ["verified"]
+    assert s.messages[-1] == (False,)
 
 
 def test_late_cancel_preserves_committed_result(update_job):

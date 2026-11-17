@@ -61,6 +61,9 @@ class _Widget:
     def setValue(self, value):
         self.value = value
 
+    def set_byte_progress(self, _received, _total):
+        pass
+
 
 class _DialogBase:
     class DialogCode(IntEnum):
@@ -151,7 +154,7 @@ def update_flow(tmp_path):
     namespace = {
         "__name__": __name__, "dataclass": dataclass, "QDialog": _DialogBase,
         "DownloadedInstaller": DownloadedInstaller, "UpdatePhase": UpdatePhase,
-        "_PROGRESS_MAXIMUM": 1000, "_LOGGER": logging.getLogger(__name__),
+        "PROGRESS_MAXIMUM": 1000, "_LOGGER": logging.getLogger(__name__),
         "sys": SimpleNamespace(platform="win32"),
         "explain_error": explain_error,
         "SOURCE_UPDATE_INSTRUCTIONS": "Pull the latest changes from the remote Git repository.",

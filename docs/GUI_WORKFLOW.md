@@ -355,20 +355,17 @@ condition imports are deferred to Phase 2.
 
 Library-linked projects check for newer versions on open and every five minutes
 while idle. Eligible versions show a Home notice and an automatic update-review
-offer. Offers wait for presentation/other dialogs and background use to
-finish, and are shown once per project/release in a Studio session.
+offer. Offers wait for presentation and other dialogs to finish and for Studio
+to regain focus.
 **File > Update Project Version...** also checks manually, controls automatic
 checks, and links earlier downloads explicitly. **Update current project** is primary
 for a known older linked version; it replaces authored settings/stimuli in the same
 folder, retaining participant data/local setup and a recoverable authored backup.
 **Download separately** remains secondary. Review explains collection changes and
 any Results reconnection requirement. Unresolved saved Results evidence blocks
-replacement. **Keep current version** closes without changes.
-The warning is concise and shown with an eligible download; detailed preservation
-guidance remains in control help. Linking and empty states avoid instructional
-release-note text and disabled automatic-check controls. Keeping the version leaves
-automatic checks enabled according to the
-existing preference. See the [version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
+replacement. During transfer the dialog shows bytes as a percentage and a Cancel
+action. **Remind me later** defers the automatic offer for 30 minutes. See the
+[version workflow](EXPERIMENT_LIBRARY.md#project-version-checks).
 
 Library jobs use the application-owned coordinator. Close/Escape/cancel drain transfers;
 **Cancel setup** cooperatively stops extraction before commit. The cache lease lasts
