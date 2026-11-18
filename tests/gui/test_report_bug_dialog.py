@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import json
 from threading import Event
+from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QFileDialog, QLabel, QPushButton
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
@@ -49,18 +50,31 @@ class FakeLifecycle(QObject):
         return FakeJob(callback)
 
 
-@pytest.mark.parametrize("size", [(760, 680), (860, 760)])
+@pytest.fixture
+def clipboard(monkeypatch):
+    clipboard = Mock()
+    monkeypatch.setattr(QApplication, "clipboard", lambda: clipboard)
+    return clipboard
+
+
+@pytest.mark.parametrize("size", [(620, 440), (700, 480)])
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_feature_editor_limit_and_layout(qtbot, size, background):
+def test_feature_editor_limit_and_layout(qtbot, size, background, clipboard):
     dialog = ReportBugDialog(Draft(report=Report(kind="feature"), include_logs=False), online=True)
     qtbot.addWidget(dialog)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
+    assert dialog.size().toTuple() == (700, 480)
+    assert dialog.minimumSize().toTuple() == (620, 440)
     dialog.resize(*size)
     dialog.show()
-    assert dialog.tabs.count() == 1
+    assert not dialog.tabs.isVisible()
     assert not dialog.title_edit.isVisible()
+    assert not dialog.diagnostics_edit.isVisible()
+    assert dialog.happened_edit.accessibleName() == "Feature request"
+    assert dialog.happened_edit.tabChangesFocus()
+    assert dialog.status_label.property("studioTextRole") == "body"
     assert not dialog.submit_button.isEnabled()
     dialog.happened_edit.setPlainText("😀" * 4000)
     assert dialog.submit_button.isEnabled()
@@ -69,11 +83,15 @@ def test_feature_editor_limit_and_layout(qtbot, size, background):
         dialog.submit_button.click()
     assert emitted.args == ["submit"]
     dialog.menu_actions["copy"].trigger()
-    assert "Requested feature" in QApplication.clipboard().text()
-    assert "Error logs" not in QApplication.clipboard().text()
+    copied = clipboard.setText.call_args.args[0]
+    assert "Requested feature" in copied
+    assert "Error logs" not in copied
+    assert dialog.status_label.text().startswith("Request copied")
     dialog.happened_edit.insertPlainText("x")
     assert not dialog.submit_button.isEnabled()
     assert len(dialog.happened_edit.toPlainText()) == 4001
+    privacy = dialog.findChild(QLabel, "feature_privacy")
+    assert privacy is not None
     for delivery, state in (
         ("editing", "editing"), ("editing", "loading"), ("editing", "verifying"),
         ("uncertain", "sending"), ("uncertain", "checking"),
@@ -86,6 +104,17 @@ def test_feature_editor_limit_and_layout(qtbot, size, background):
         QApplication.processEvents()
         assert (dialog.width(), dialog.height()) == size
         assert_visible_children_within_parent(dialog)
+        assert dialog.happened_edit.mapTo(dialog, dialog.happened_edit.rect().topLeft()).x() == 22
+        assert dialog.feature_count.alignment() & Qt.AlignmentFlag.AlignRight
+        for label in (
+            dialog.header.title_label, dialog.header.subtitle_label, dialog.feature_count,
+            privacy, dialog.notice_label, dialog.status_label,
+        ):
+            assert label.isVisible()
+            assert label.height() >= label.heightForWidth(label.width()), label.text()
+        for button in dialog.findChildren(QPushButton):
+            if button.isVisible():
+                assert button.width() >= button.sizeHint().width(), button.text()
 
 
 def test_feature_controller_never_collects_logs(qtbot, qapp, tmp_path, monkeypatch):
@@ -216,7 +245,7 @@ def test_layout_every_state_and_tab(qtbot, size, background):
                     assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
 
 
-def test_offline_editor_validation_exclusion_and_save_cancel(qtbot, monkeypatch):
+def test_offline_editor_validation_exclusion_and_save_cancel(qtbot, monkeypatch, clipboard):
     dialog = ReportBugDialog(Draft(report=Report(diagnostics="Private diagnostic")))
     qtbot.addWidget(dialog)
     assert not dialog.submit_button.isEnabled()
@@ -230,7 +259,7 @@ def test_offline_editor_validation_exclusion_and_save_cancel(qtbot, monkeypatch)
     dialog.include_logs.setChecked(False)
     assert "Private diagnostic" not in dialog.snapshot().report.as_text(include_logs=False)
     dialog._secondary("copy")
-    assert "Private diagnostic" not in QApplication.clipboard().text()
+    assert "Private diagnostic" not in clipboard.setText.call_args.args[0]
     requests = []
     dialog.export_requested.connect(requests.append)
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *args: ("", ""))

@@ -143,8 +143,8 @@ or participant data is needed for this acceptance.
 
 ## Bug reporting
 
-File > Request a Feature opens a separate text-only draft using the same reporting
-workflow and window sizes, with a 4,000-character counter and copy/save actions.
+File > Request a Feature opens a separate text-only draft at 700x480
+(minimum 620x440), with a 4,000-character counter and copy/save actions.
 It collects no logs. Both reporting actions use the approved service by default.
 
 File > Report a Bug opens a native report editor at 860x760 (minimum 760x680).

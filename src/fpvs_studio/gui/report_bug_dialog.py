@@ -26,6 +26,7 @@ from fpvs_studio.gui.components import (
     apply_dialog_theme,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
 )
 from fpvs_studio.support.diagnostics import combine_diagnostics
 from fpvs_studio.support.models import MAX_FEATURE_CHARACTERS, MAX_LOG_BYTES, Draft
@@ -47,8 +48,12 @@ class ReportBugDialog(QDialog):
         caption = "Request a Feature" if self.is_feature else "Report a Bug"
         self.setObjectName("report_bug_dialog")
         self.setWindowTitle(caption)
-        self.setMinimumSize(760, 680)
-        self.resize(860, 760)
+        if self.is_feature:
+            self.setMinimumSize(620, 440)
+            self.resize(700, 480)
+        else:
+            self.setMinimumSize(760, 680)
+            self.resize(860, 760)
         self.online = online
         self._draft = draft
         self._updating = False
@@ -68,12 +73,7 @@ class ReportBugDialog(QDialog):
         )
         layout.addWidget(self.header)
         self.tabs = QTabWidget(self)
-        layout.addWidget(self.tabs, 1)
-        details = QWidget(self.tabs)
-        form = QFormLayout(details)
-        form.setContentsMargins(12, 12, 12, 12)
-        form.setSpacing(8)
-        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        details = QWidget(self if self.is_feature else self.tabs)
         self.title_edit = QLineEdit(details)
         self.title_edit.setPlaceholderText("A brief summary (required, up to 160 characters)")
         self.happened_edit = QPlainTextEdit(details)
@@ -101,21 +101,73 @@ class ReportBugDialog(QDialog):
                 editor.setMinimumHeight(48)
                 editor.setMaximumHeight(110)
             editor.textChanged.connect(self._changed)
-        for caption, editor in (
-            ("Summary *", self.title_edit),
-            ("What happened? *", self.happened_edit),
-            ("Steps to reproduce (optional)", self.steps_edit),
-            ("Expected behavior", self.expected_edit),
-            ("Reply email", self.email_edit),
-        ):
-            label = QLabel(caption, details)
-            label.setBuddy(editor)
-            editor.setAccessibleName(caption)
-            form.addRow(label, editor)
         self.unknown_steps = QCheckBox("I don't know how to reproduce it", details)
         self.unknown_steps.toggled.connect(self._unknown_steps)
-        form.addRow("", self.unknown_steps)
-        self.tabs.addTab(details, "Details")
+
+        self.feature_count = self._label("", details)
+        self.notice_label = self._label(
+            "Drafts stay local for seven days."
+            if self.is_feature
+            else "Drafts stay local for seven days. "
+            "Submitting includes a brief browser verification.",
+            self,
+        )
+        if self.is_feature:
+            self.setObjectName("request_feature_dialog")
+            self.tabs.hide()
+            for control in (
+                self.title_edit, self.steps_edit, self.expected_edit, self.email_edit,
+                self.unknown_steps,
+            ):
+                control.hide()
+            editor_layout = QVBoxLayout(details)
+            editor_layout.setContentsMargins(0, 0, 0, 0)
+            editor_layout.setSpacing(6)
+            feature_label = QLabel("Feature request", details)
+            feature_label.setBuddy(self.happened_edit)
+            mark_text_role(feature_label, "body")
+            editor_layout.addWidget(feature_label)
+
+            self.happened_edit.setAccessibleName("Feature request")
+            self.happened_edit.setPlaceholderText("")
+            self.happened_edit.setTabChangesFocus(True)
+            self.happened_edit.setMaximumHeight(16777215)
+            self.happened_edit.setMinimumHeight(120)
+            editor_layout.addWidget(self.happened_edit, 1)
+
+            mark_text_role(self.feature_count, "metadata")
+            self.feature_count.setAlignment(Qt.AlignmentFlag.AlignRight)
+            editor_layout.addWidget(self.feature_count)
+            privacy = self._label(
+                "Only your text and app version are included. When connected, requests go "
+                "privately to the developer and remain in a GitHub issue until removed.", details,
+            )
+            privacy.setObjectName("feature_privacy")
+            mark_text_role(privacy, "supporting")
+            editor_layout.addWidget(privacy)
+            mark_text_role(self.notice_label, "supporting")
+            editor_layout.addWidget(self.notice_label)
+            layout.addWidget(details, 1)
+        else:
+            form = QFormLayout(details)
+            form.setContentsMargins(12, 12, 12, 12)
+            form.setSpacing(8)
+            form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+            for caption, editor in (
+                ("Summary *", self.title_edit),
+                ("What happened? *", self.happened_edit),
+                ("Steps to reproduce (optional)", self.steps_edit),
+                ("Expected behavior", self.expected_edit),
+                ("Reply email", self.email_edit),
+            ):
+                label = QLabel(caption, details)
+                label.setBuddy(editor)
+                editor.setAccessibleName(caption)
+                form.addRow(label, editor)
+            form.addRow("", self.unknown_steps)
+            self.feature_count.hide()
+            self.tabs.addTab(details, "Details")
+            layout.addWidget(self.tabs, 1)
 
         diagnostics = QWidget(self.tabs)
         diagnostic_layout = QVBoxLayout(diagnostics)
@@ -151,43 +203,19 @@ class ReportBugDialog(QDialog):
                 diagnostics,
             )
         )
-        self.tabs.addTab(diagnostics, "Diagnostics")
-        self.feature_count = self._label("", details)
-        if self.is_feature:
-            self.setObjectName("request_feature_dialog")
-            for editor in (self.title_edit, self.steps_edit, self.expected_edit, self.email_edit):
-                form.setRowVisible(editor, False)
-            form.setRowVisible(self.unknown_steps, False)
-            feature_label = form.labelForField(self.happened_edit)
-            if isinstance(feature_label, QLabel):
-                feature_label.setText("Feature request *")
-            self.happened_edit.setAccessibleName("Feature request")
-            self.happened_edit.setPlaceholderText(
-                "What would you like FPVS Studio to do? Describe your idea and why it helps."
-            )
-            self.happened_edit.setMinimumHeight(260)
-            self.happened_edit.setMaximumHeight(16777215)
-            form.addRow("", self.feature_count)
-            form.addRow(self._label(
-                "Only your text and app version are included. When connected, requests go "
-                "privately to the developer and remain in a GitHub issue until removed.", details
-            ))
-            self.tabs.removeTab(1)
-            self.tabs.tabBar().hide()
-        else:
-            self.feature_count.hide()
+        if not self.is_feature:
+            self.tabs.addTab(diagnostics, "Diagnostics")
         self.context_button = QPushButton("Use newly reported error", self)
         self.context_button.clicked.connect(lambda: self.action_requested.emit("context"))
         self.context_button.hide()
         layout.addWidget(self.context_button)
         self.status_label = self._label("", self)
         self.status_label.setObjectName("report_status")
+        if self.is_feature:
+            mark_text_role(self.status_label, "body")
         layout.addWidget(self.status_label)
-        self.notice_label = self._label(
-            "Drafts stay local for seven days. Submitting includes a brief browser verification.",
-            self,
-        )
-        layout.addWidget(self.notice_label)
+        if not self.is_feature:
+            layout.addWidget(self.notice_label)
         footer = QHBoxLayout()
         self.more_button = QPushButton("More", self)
         menu = QMenu(self.more_button)
@@ -213,7 +241,9 @@ class ReportBugDialog(QDialog):
         mark_secondary_action(self.save_button)
         footer.addWidget(self.save_button)
         footer.addStretch(1)
-        self.verify_button = QPushButton("Open verification page", self)
+        self.verify_button = QPushButton(
+            "Open browser" if self.is_feature else "Open verification page", self,
+        )
         self.verify_button.clicked.connect(lambda: self.action_requested.emit("browser"))
         self.verify_button.hide()
         footer.addWidget(self.verify_button)
@@ -244,7 +274,7 @@ class ReportBugDialog(QDialog):
     def connection_notice(self) -> str:
         if self.is_feature:
             return (
-                "Review your feature request before submitting."
+                "Submitting opens a browser page for verification."
                 if self.online else
                 "Online submission is not connected yet. You can copy or save this request."
             )
@@ -406,7 +436,10 @@ class ReportBugDialog(QDialog):
         if name == "copy":
             draft = self.snapshot()
             QApplication.clipboard().setText(draft.report.as_text(include_logs=draft.include_logs))
-            self.status_label.setText("Report copied to the clipboard. Nothing was sent.")
+            self.status_label.setText(
+                "Request copied to the clipboard. Nothing was sent."
+                if self.is_feature else "Report copied to the clipboard. Nothing was sent."
+            )
         elif name == "receipt":
             QApplication.clipboard().setText(str(self._draft.report.report_id))
         else:

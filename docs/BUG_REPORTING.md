@@ -2,9 +2,10 @@
 
 ## Feature requests
 
-File > Request a Feature opens a text-only editor at minimum 760x680 and default
-860x760. One required text box has a live 4,000-character counter (Unicode code
-points), Copy Request and Save Request. Over-limit pasted text remains editable;
+File > Request a Feature opens a single-column editor at minimum 620x440 and
+default 700x480. One required text box has a live 4,000-character counter (Unicode
+code points), with privacy and draft retention guidance below it. Copy Request and
+Save Request are available. Over-limit pasted text remains editable;
 Submit Request is disabled until shortened. Online submission remains disabled
 until service activation. Feature requests never collect logs or include OS,
 email, project or participant data.
