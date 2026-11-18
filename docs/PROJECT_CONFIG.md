@@ -129,6 +129,14 @@ recordings, presents unresolved or ambiguous visit matches for review, and runs
 the supported batch after the analyst resolves the required checks. Raw EEG stays in the
 lab's recording files.
 
+Give the collecting Studio project a persistent identity that works offline.
+Reopening the study preserves this identity and existing execution IDs. A
+separate project created from the same template or Library experiment gets
+its own identity. Identify the exported roster revision so Toolbox can
+recognize an already applied snapshot and preview a later revision in the
+same analysis project. The project title, protocol fingerprint and export
+timestamp alone cannot establish that relationship.
+
 The file covers the study's completed research visits, including repeat visits.
 Each execution refers to the protocol revision used at launch. Include each
 revision's common protocol information once. The OpenFPVS protocol fingerprint
