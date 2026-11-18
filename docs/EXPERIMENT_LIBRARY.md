@@ -1,9 +1,10 @@
 # Experiment Library
 
-Phase 1 installs complete `.fpvsbundle` projects as independent, editable local copies.
-Individual conditions, trigger-code remapping during a merge, and condition setup drafts
-belong to Phase 2 of the [execution plan](exec-plans/active/private-experiment-library.md).
-The Library never runs an experiment automatically or updates an existing experiment.
+The Library installs complete `.fpvsbundle` projects as independent, editable local
+copies. Operators launch them from Studio and can explicitly review and
+[update an installed version](#project-version-checks). Individual-condition
+imports, trigger-code remapping during a merge and condition setup drafts belong
+to Phase 2 of the [execution plan](exec-plans/active/private-experiment-library.md).
 
 Generic bundle import, review and export reject executable/script, shortcut, web
 active and nested-archive payload extensions beneath `stimuli/` before extraction

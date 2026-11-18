@@ -30,8 +30,17 @@ feature parity.
 3. **Run repeated participant sessions.** Ready projects open to Home. Runtime consumes
    compiled frame schedules and session plans, handles participant flow and tasks,
    records results, and supports the current recording/recovery workflows.
-4. **Review and transfer results.** Review participant/task results and timing evidence,
-   and use the existing export and Toolbox handoff contracts for subsequent analysis.
+4. **Review and hand off.** Review session results and timing evidence. Send a runnable
+   experiment to another Studio workstation or a protocol or completed-session config
+   to the Toolbox analyst. [Export choices and limits](../PROJECT_CONFIG.md#user-workflow-and-limits)
+
+## Role in OpenFPVS
+
+Researchers can author and run local projects offline. OpenFPVS hosts the
+[Experiment Library](../EXPERIMENT_LIBRARY.md) and [enrolled study results](../DATA_SHARING.md).
+Toolbox owns EEG registration, processing and analysis. As the platform grows,
+preserve local work, explicit sharing choices and the provenance of each handoff.
+Maintainers track cross-app work in the private umbrella checkout's `INTEGRATION_PLAN.md`.
 
 ## Current scope and boundaries
 

@@ -12,9 +12,10 @@ project services. It must import without Qt, PsychoPy or hardware dependencies.
   compile-time fixation realization; runtime owns execution/scoring.
 - `task_models.py`, `condition_modifiers.py`, `modifier_presets.py`: declarative tasks,
   assignment changes and independent local presets. Preserve unaffected bindings.
-- `paths.py`, `project_service.py`, serialization/config/bundle services: portable I/O.
-  `project_bundle_update.py` owns reviewed same-folder replacement/backups/rollback;
-  ordinary imports never replace existing projects. See `docs/EXPERIMENT_LIBRARY.md`.
+- `paths.py` and `project_service.py` own portable project I/O. `project_config.py`
+  owns the [Toolbox exchange format](../../../docs/PROJECT_CONFIG.md). `project_bundle.py`
+  owns runnable Studio archives. `project_bundle_update.py` owns reviewed same-folder
+  replacement, backup and rollback. Ordinary imports create separate projects.
 - `recording_hardware.py`: versioned hardware declarations, never measured qualification.
 - `data_sharing.py`: strict neutral wire models and read-only protocol fingerprints;
   consent, credentials and outbox I/O belong outside core.

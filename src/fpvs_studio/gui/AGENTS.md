@@ -1,35 +1,17 @@
 # GUI Guidance
 
 GUI owns PySide6 views, shallow interaction state, document/controller bindings and
-app-owned jobs. Domain/persisted truth remains in backend services. Read one relevant
-`docs/GUI_WORKFLOW.md` section; design contracts live in `docs/FRONTEND.md`.
+app-owned jobs. Core, runtime and project services own scientific and persisted state.
+Use the [Studio design guide](../../../docs/DESIGN.md#shared-openfpvs-desktop-experience)
+for OpenFPVS desktop decisions.
 
 ## Workflow and Ownership
 
-- Preserve Home as the launch surface and guided Setup for detailed editing. The nine
-  steps are Project, Demographics, Conditions, Timing, Display & Session, Image Size
-  (Character Size for native AB), Fixation, Response, and Review. All fit `1120x820`
-  without required scroll.
-  All step content shares a top anchor and 24 px vertical insets. Use the current
-  [layout map](../../../docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy) for widths
-  and column groupings rather than introducing per-page positioning rules.
-  Timing retains `experiment`/`timing`; `display`/`runtime`/`session` open the combined step.
-  Frequency/duration/counts/cadence stay on Timing. The combined step uses Display
-  controls on the left and Session controls on the right at 1040 px; both columns fit
-  the 1120x820 window with shared section headings and compact field labels.
-  Display & Session has the sole condition-order editor entry. Timing defers order-only
-  conflicts there while retaining drafts for atomic order/timing save. Drag condition
-  presentations only within fixed block headers; Alt+Up/Down supports keyboard moves.
-  New ordinary GUI projects opt into blocks; existing pooled designs change only on
-  explicit editor Save. Keep AB/masking group workflows and occurrence timing intact.
-  Demographics owns the ordered questionnaire draft and validates it before Save.
-  Preview and Participant Information share the answer widgets. Participant number
-  and electrode review stay separate from authored questions.
-- Preserve Edit Setup/Complete Setup and earliest-incomplete navigation. Manual creation
-  offers FPVS Oddball, Cognitive Load FPVS and disabled Standard FPVS; Library uses
-  reviewed bundle import.
-  Categories are locked. Retain standalone image/native AB editors outside guided
-  Setup; use `docs/EXPERIMENT_CATEGORIES.md` for current/retired behavior.
+- Ready projects launch from Home. Incomplete projects open at the earliest incomplete
+  Setup step. Preserve staged edits, category-specific editors and keyboard navigation.
+  Use [Setup layout](../../../docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy),
+  [order editing](../../../docs/GUI_WORKFLOW.md#choose-and-save-condition-order) or
+  [categories](../../../docs/EXPERIMENT_CATEGORIES.md) for the affected workflow.
 - Conditions owns modality and Base/Oddball source folders/word lists. Fresh image
   imports use workers and block navigation/disposal during mutation; normalization runs
   on leaving Conditions. There is no guided Design step or image preview. Instructions
@@ -48,15 +30,10 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
   Reporting/support jobs retain their cancellation and draft/receipt contracts.
 - Updater verification/launch stays in backend workers; Save/confirmation stays on the
   GUI thread. Keep newer-release visibility if trust evidence prevents installation.
-- Settings > Recording embeds `RecordingSetupEditor` with project/default save actions;
-  only the mandatory launch review uses its `RecordingSetupDialog` wrapper. Apply to
-  Project atomically saves the override and selected BioSemi port; closing without
-  applying preserves saved values. Explicit project choice overrides computer defaults. Recorder
-  readiness runs in the launch worker; metadata discovery/access checks send no bytes.
-  Normal Brain Products launches require project timing confirmation before participant
-  entry. Use the shared modal error for Recording Setup and keep progress inline.
-  Do not add a manual Unicorn checkbox or claim hardware receipt. See Recording and
-  launch sections in `docs/GUI_WORKFLOW.md` before changing this surface.
+- [Settings](../../../docs/GUI_WORKFLOW.md#settings-appearance-and-layout) embeds
+  `RecordingSetupEditor` and distinguishes project settings from computer defaults.
+  [Launch](../../../docs/GUI_WORKFLOW.md#launch) owns recorder review and readiness.
+  Keep discovery checks passive and hardware receipt distinct from host evidence.
 - `trigger_tester.py` owns temporary port selection, checks and digit sends. Use
   [Trigger Tester](../../../docs/GUI_WORKFLOW.md#trigger-tester) for discovery and
   reconnect behavior. Normal launch resolves saved recording settings independently.
@@ -66,22 +43,12 @@ app-owned jobs. Domain/persisted truth remains in backend services. Read one rel
 
 ## Design and Acceptance
 
-- Use `gui.components` for shells, cards, labels, semantic button roles and shared
-  styles; no one-off shared-concept `setStyleSheet` rules. Preserve established visual
-  identity. Use [UI design guidance](../../../docs/design-docs/agent-ui-design.md)
-  for substantial layout work without adding an approval stage.
-- Follow the [shared text hierarchy](../../../docs/FRONTEND.md#shared-text-hierarchy).
-  Use `mark_text_role` for standalone labels and shared heading components for groups.
-  Place scope, status and recovery next to the content or control they explain.
-- Keep headings, fields, essential status and actionable errors visible. Optional
-  explanation belongs in tooltips. Preserve participant instructions and decision
-  information; do not add routine subtitles, footer guidance or Setup Advanced buttons.
-- No clipping: budget the minimum/default size for longest realistic content. Use
-  wrapping/responsive layout or intentional elision with full-value tooltip/copy access.
-  Never require enlarging a window to reach required controls.
-- Cover empty, busy, invalid, failed, successful and unsaved states. Preserve drafts
-  and selection during recovery. Retain Tab order, shortcuts and accessible names;
-  pair status colors with text/symbols. Find Action remains File > Find Action, Ctrl+F.
+- Use `gui.components` and [shared text roles](../../../docs/FRONTEND.md#shared-text-hierarchy).
+  The [layout review](../../../docs/design-docs/agent-ui-design.md) covers substantial changes.
+  Keep essential instructions, status and recovery beside the decision.
+- Check for clipping at minimum/default size with realistic long values. Keep the full
+  value accessible when elided. Preserve drafts, selection, tab order and shortcuts.
+  [Frontend acceptance](../../../docs/FRONTEND.md#verification) covers states and sizing.
 
 ## Verification
 

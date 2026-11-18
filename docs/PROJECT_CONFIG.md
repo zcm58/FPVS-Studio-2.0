@@ -69,16 +69,24 @@ authored `project.json` contract when creating a Studio project shell.
 
 ## User workflow and limits
 
-**Export > FPVS Toolbox Config…** writes a setup document. **Export > Completed
-Project Config…** exports the latest retained completed-session snapshot. Native
-research completion also writes one handoff per execution under
-`logs/acquisition/`; see the [runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff).
+Use **File > Export** and choose the artifact for the next operator.
 
-A completed handoff describes one session, not an entire multi-participant study.
-Raw EEG remains external. Toolbox owns hardware confirmation, recording
-registration and the supported analysis interpretation. Participant/session
-labels and send logs cannot independently prove which raw recording belongs to
-the session or establish EEG sample timing.
+| Next task | Studio action and output |
+| --- | --- |
+| Reopen and run the experiment in Studio | **Project Bundle…** writes a portable `.fpvsbundle` with the project and stimulus assets. Import it into Studio and review local setup before launch. |
+| Set up a Toolbox analysis project | **FPVS Toolbox Config…** writes a setup `.fpvsconfig` with the authored protocol and recording declarations. |
+| Review a participant visit in Toolbox | **Completed Project Config…** exports the latest retained completed-session snapshot. A completed native research session with recording enabled also writes `logs/acquisition/<execution_id>-completed.fpvsconfig` automatically. Test/Pilot and interrupted runs do not produce that handoff. [Runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff) |
+
+In Toolbox, **Import FPVS Studio Config…** creates a local project for a supported
+design. The operator confirms hardware and registers the external EEG recordings.
+Import copies neither raw EEG nor stimulus or task media. Completed evidence
+starts unbound. Matching participant labels or Studio's trigger-send logs alone
+cannot identify a recording or establish EEG sample timing.
+
+Saving a reviewed link between a Studio session and its Toolbox recording is
+planned. See `../FPVS-Toolbox/docs/agent/architecture/project-io.md` from the
+Studio checkout for current support and the adjacent `hardware-pipeline-studio-roadmap.md`
+for planned protocol coverage.
 
 Studio config import creates a new project shell under the configured Studio
 root. FPVS stimulus image libraries remain separate; hashed modular-task media

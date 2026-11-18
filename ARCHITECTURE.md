@@ -109,8 +109,8 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 
 | Concern | Current contract |
 | --- | --- |
-| Product and category scope | `docs/PRODUCT_SENSE.md`, `docs/EXPERIMENT_CATEGORIES.md` |
-| GUI and design | `docs/FRONTEND.md`, `docs/GUI_WORKFLOW.md` |
+| Product, platform and handoff | [Studio](docs/product-specs/studio.md), [exports](docs/PROJECT_CONFIG.md#user-workflow-and-limits) |
+| GUI | [Desktop design](docs/DESIGN.md#shared-openfpvs-desktop-experience), [frontend](docs/FRONTEND.md), [workflows](docs/GUI_WORKFLOW.md) |
 | Compilation/session flow | `docs/RUNSPEC.md`, `docs/SESSION_PLAN.md` |
 | Runtime, recording and exports | `docs/RUNTIME_EXECUTION.md` |
 | Engine seam | `docs/ENGINE_INTERFACE.md` |
@@ -121,10 +121,9 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 
 ## Task Context Recipes
 
-[Topic recipes](docs/agent/task-recipes.md) locate less obvious owners and focused tests.
+[Topic recipes](docs/agent/task-recipes.md) locate focused tests and owners.
 
 ## Verification and Documentation Freshness
 
-Use the task index for verification routes. Update this map and the nearest guide
-when ownership changes. Keep behavior in canonical contracts, measured debt in
-`docs/exec-plans/tech-debt-tracker.md`, and the version in `pyproject.toml`.
+Routes live in the task index, behavior in the owning contract, debt in
+`docs/exec-plans/tech-debt-tracker.md` and version in `pyproject.toml`.
