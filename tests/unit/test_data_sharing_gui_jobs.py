@@ -1291,13 +1291,18 @@ def test_completed_handoff_requires_exact_library_scope_for_same_protocol_enroll
         assert "toolbox_handoff_enrollment_scope_mismatch" in caplog.text
 
 
-@pytest.mark.parametrize("edited_after_compilation", [False, True])
+@pytest.mark.parametrize("scenario", [
+    "current", "edited_after_compilation", "current_setup_replacement", "versioned_frozen",
+    "external_stimulus_replacement", "stale_replacement_source", "legacy_frozen",
+    "legacy_frozen_external_change",
+])
 def test_launch_hash_belongs_to_current_compiled_plan_only(
-    sample_project, sample_project_root, edited_after_compilation,
+    sample_project, sample_project_root, scenario,
 ):
     launches, hashed_projects = [], []
     from fpvs_studio.core.serialization import save_project_file
-    from fpvs_studio.core.study_versions import prepare_change
+    from fpvs_studio.core.study_versions import current_version, prepare_change
+    from fpvs_studio.runtime.condition_recovery import build_replacement_session_plan
 
     save_project_file(sample_project, sample_project_root / "project.json")
 
@@ -1336,24 +1341,52 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         ),
     )
     plan = namespace["compile_session"](document, refresh_hz=60.0)
-    if edited_after_compilation:
+    prepare_change(sample_project_root, sample_project)
+    version = current_version(sample_project_root)
+    options = {}
+    if scenario in {"edited_after_compilation", "stale_replacement_source"}:
         changed = sample_project.model_copy(update={"conditions": [
             condition.model_copy(update={"instructions": "Different reviewed instructions."})
             for condition in sample_project.conditions
         ]})
         namespace["_replace_project"](document, changed)
         assert document._last_session_plan is None
+    if scenario not in {"current", "edited_after_compilation"}:
+        source = plan
+        plan = build_replacement_session_plan(source, source.ordered_entries()[0].condition_id)
+        if scenario in {"current_setup_replacement", "stale_replacement_source"}:
+            options["replacement_source"] = source
+        else:
+            options["frozen_record"] = SimpleNamespace(
+                protocol_version_id=None if scenario.startswith("legacy") else version.version_id
+            )
+    if scenario in {"external_stimulus_replacement", "legacy_frozen_external_change"}:
+        asset = next((sample_project_root / "stimuli").rglob("*.png"))
+        asset.write_bytes(asset.read_bytes() + b"changed")
+    if scenario in {
+        "external_stimulus_replacement", "legacy_frozen_external_change",
+        "stale_replacement_source",
+    }:
+        with pytest.raises(RuntimeError, match="changed"):
+            namespace["launch_compiled_session"](
+                document, plan, participant_number="1", display_index=None, **options
+            )
+        assert not launches
+        return
     namespace["launch_compiled_session"](
-        document, plan, participant_number="1", display_index=None,
+        document, plan, participant_number="1", display_index=None, **options,
     )
     assert len(launches) == 1 and launches[0][1] is plan  # Local launch still proceeds.
     supplied = launches[0][2].sharing_protocol_sha256
-    if edited_after_compilation:
+    if scenario in {"edited_after_compilation", "legacy_frozen"}:
         assert supplied is None
         assert hashed_projects == []
+        assert launches[0][2].studio_protocol_version_id is None
     else:
         assert supplied == protocol_fingerprint(sample_project, sample_project_root)
         assert hashed_projects == [sample_project]
+        assert launches[0][2].studio_protocol_version_id == version.version_id
+        assert launches[0][2].toolbox_handoff_config
 
 
 def test_sharing_privacy_tooltips_describe_current_fields_without_importing_qt():

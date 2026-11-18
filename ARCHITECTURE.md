@@ -60,7 +60,7 @@ Runtime -> core execution results -> exporters -> project logs and detailed arti
 | Contract or seam | Canonical owner |
 | --- | --- |
 | Editable state and migrations | `core/models.py`, `core/migrations.py` |
-| Local study identity, collection state and protocol history | `core/study_lifecycle.py`, `core/study_versions.py`. Studio's edit review and Library updater share the version store. |
+| Collection and protocol history | `core/study_lifecycle.py`, `core/study_versions.py` |
 | Run/session/result schemas | `core/run_spec.py`, `core/session_plan.py`, `core/execution.py` |
 | Effective frequency/duration and ordering | `core/condition_timing.py`, `core/session_ordering.py` |
 | Common display frame grid for mixed image rates | `core/validation.py`; shared by authoring, readiness and compilation |

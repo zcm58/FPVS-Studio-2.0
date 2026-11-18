@@ -1,12 +1,14 @@
 """Local authoring history and participant-data protection, using synthetic files."""
 
 import json
+import os
 
 import pytest
 
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.study_lifecycle import get_study, read_study, set_collection_complete
 from fpvs_studio.core.study_versions import (
+    ProtocolReviewRequired,
     commit_change,
     create_from_version,
     current_version,
@@ -116,6 +118,52 @@ def test_study_state_survives_long_project_path(tmp_path, sample_project):
     save_project_file(sample_project, root / "project.json")
     state = get_study(root)
     assert read_study(root) == state
+
+
+def test_manifest_refresh_is_not_a_protocol_edit(sample_project_root, sample_project):
+    from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    write_stimulus_manifest(root, create_empty_manifest(sample_project.meta.project_id))
+    prepare_change(root, sample_project)
+    write_stimulus_manifest(root, create_empty_manifest(sample_project.meta.project_id))
+    assert not prepare_change(root, sample_project).changes
+
+
+def test_same_size_image_replacement_with_original_timestamp_is_detected(
+    sample_project_root, sample_project
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    image = next((root / "stimuli").rglob("*.png"))
+    image.write_bytes(b"AAAA")
+    stamp = image.stat()
+    prepare_change(root, sample_project)
+    image.write_bytes(b"BBBB")
+    os.utime(image, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+    assert any(image.name in line for line in prepare_change(root, sample_project).changes)
+
+
+def test_data_arriving_after_review_requires_a_reason(sample_project_root, sample_project):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    sample_project.settings.protocol.base_hz = 8
+    draft = prepare_change(root, sample_project)
+    directory = root / "logs/.participant-results"
+    directory.mkdir(parents=True)
+    (directory / "partial.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "participant_number": "P001",
+                "runs": [{"completed_frames": 3}],
+            }
+        )
+    )
+    with pytest.raises(ProtocolReviewRequired):
+        commit_change(root, sample_project, draft, "")
+    assert len(list_versions(root)) == 1
 
 
 def test_real_partial_records_activate_protection(sample_project_root):

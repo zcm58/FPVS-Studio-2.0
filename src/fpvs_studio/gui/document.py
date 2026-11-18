@@ -797,10 +797,6 @@ class ProjectDocument(
             return
 
         draft = self.prepare_protocol_change(project)
-        if draft.changes and research_visits_by_version(self.project_root):
-            raise DocumentError(
-                "Review the proposed changes in Studio before saving this collecting study."
-            )
         commit_change(self.project_root, project, draft, "")
 
     def prepare_protocol_change(self, project: ProjectFile) -> ProtocolDraft:

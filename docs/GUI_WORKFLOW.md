@@ -123,8 +123,9 @@ before/after activities, in a new participant visit. The original results remain
 unchanged. Allow repeat participant sessions must be enabled in Setup > Project;
 normal participant details, recording confirmation, display and hardware checks still
 apply. Test/Pilot mode must be off for a participant retry. Older acquisition receipts
-require confirmation that the session is no longer running. If the original compiled
-plan is missing, **Re-run with Current Setup** offers one occurrence of the same
+require confirmation that the session is no longer running. If the original plan is
+missing or its recorded protocol version is no longer active, **Re-run with Current Setup**
+offers one occurrence of the same
 condition using current project settings and a new randomized schedule, with an
 explicit confirmation. If the condition was removed, this action is disabled.
 

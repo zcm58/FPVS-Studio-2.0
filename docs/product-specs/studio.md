@@ -94,13 +94,16 @@ Only later visits should carry the new revision in the [study handoff](../PROJEC
 From the first saved protocol, automatically retain one local version for each
 save that changes the experiment. A version can have an optional name.
 Show the save time, what changed and which research visits, if any, used it.
-Opening a version for inspection leaves the active experiment alone. Version
+Open **File > Experiment version history** to inspect, name, restore or copy a
+saved version. Inspecting a version leaves the active experiment alone. Version
 history works offline and requires no Library publication.
 
 Retain the settings and exact stimuli needed to restore a saved version,
 including an image later replaced under the same filename. Reuse unchanged
 assets across versions. If a historical asset is missing, name it and leave
 the current protocol active until the saved version can be restored exactly.
+When the author keeps the saved protocol after an external image replacement,
+restore the saved image and retain the unapplied files in the location shown in Studio.
 
 From history, the author can **Save as new study** using that version or
 **Restore this version** inside the existing study. Restoring records a new

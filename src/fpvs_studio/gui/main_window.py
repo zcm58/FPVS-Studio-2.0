@@ -1356,11 +1356,10 @@ class StudioMainWindow(QMainWindow):
             return
         if not self.flush_pending_edits():
             return
-        replacement_plan = None
         if not record.can_rerun:
             if QMessageBox.question(
                 self, "Re-run with Current Setup",
-                f"The original compiled schedule for {record.condition_name} is unavailable.\n\n"
+                f"The original schedule or protocol for {record.condition_name} is unavailable.\n\n"
                 "Create a replacement presentation using the current project settings and "
                 "seed policy? This will not reproduce the unavailable original schedule. "
                 "Review Setup first if settings have changed. "
@@ -1378,19 +1377,6 @@ class StudioMainWindow(QMainWindow):
                         "Try Re-run again in a moment.",
                     )
                     return
-            try:
-                resolved_seeds = self.document.prepare_participant_randomization(
-                    record.participant_number, None,
-                )
-                replacement_plan = build_replacement_session_plan(
-                    self.document.compile_session(
-                        refresh_hz=self._home_launch_refresh_hz(),
-                        resolved_seeds=resolved_seeds,
-                    ), record.condition_id,
-                )
-            except Exception as error:
-                _show_error_dialog(self, "Re-run Blocked", error)
-                return
         dialog = ParticipantNumberDialog(
             self, manual_removed_electrodes=self.document.project.manual_removed_electrodes,
             demographics_questions=self.document.project.demographics_questions,
@@ -1416,16 +1402,27 @@ class StudioMainWindow(QMainWindow):
             return
 
         def launch() -> LaunchTaskResult:
-            plan = replacement_plan or build_recovery_session_plan(
-                self.document.project_root, record,
-                allow_unverified=record.status == "unverified",
-            )
+            ordinal = self.document.next_participant_session_number(details.participant_number)
+            replacement_source = None
+            if record.can_rerun:
+                plan = build_recovery_session_plan(
+                    self.document.project_root, record,
+                    allow_unverified=record.status == "unverified",
+                )
+            else:
+                seeds = self.document.prepare_participant_randomization(
+                    details.participant_number, ordinal
+                )
+                replacement_source = self.document.compile_session(
+                    refresh_hz=self._home_launch_refresh_hz(), resolved_seeds=seeds
+                )
+                plan = build_replacement_session_plan(replacement_source, record.condition_id)
             summary = self.document.launch_compiled_session(
                 plan, participant_number=details.participant_number,
                 participant_metadata=details.participant_metadata,
-                participant_session_number=self.document.next_participant_session_number(
-                    details.participant_number,
-                ),
+                participant_session_number=ordinal,
+                replacement_source=replacement_source,
+                frozen_record=record if record.can_rerun else None,
                 display_index=None, fullscreen=True,
                 **selected_display_options(display_device_name),
             )

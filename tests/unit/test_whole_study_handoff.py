@@ -5,13 +5,16 @@ from uuid import uuid4
 import pytest
 
 from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings, protocol_fingerprint
 from fpvs_studio.core.project_config import (
     create_project_from_config,
     read_project_config,
+    retain_session_snapshot,
     write_project_config,
 )
-from fpvs_studio.core.serialization import write_json_file
+from fpvs_studio.core.serialization import save_project_file, write_json_file
 from fpvs_studio.core.study_lifecycle import get_study, set_collection_complete
+from fpvs_studio.data_sharing.storage import save_settings
 from fpvs_studio.runtime.study_handoff import (
     build_study_handoff,
     capture_study_run,
@@ -62,7 +65,7 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
             ("P9", "P10"),
         )
         write_json_file(folder / f"{key}.acquisition-v1.json", evidence)
-        write_project_config(folder / f"{key}-completed.fpvsconfig", config)
+        retain_session_snapshot(root, config)
 
     records = root / "logs" / ".participant-results"
     records.mkdir()
@@ -136,3 +139,32 @@ def test_older_session_is_readable_and_mismatched_local_evidence_blocks_export(t
     write_json_file(folder / f"{key}.acquisition-v1.json", evidence)
     with pytest.raises(ValueError, match="conflicts"):
         build_study_handoff(root)
+
+
+def test_website_destination_requires_verified_as_run_and_current_scope(tmp_path):
+    config = read_project_config(FIXTURES / "v2-completed-biosemi.fpvsconfig")
+    scaffold = create_project_from_config(tmp_path, config)
+    root = scaffold.project_root
+    fingerprint = protocol_fingerprint(scaffold.project, root)
+    site = {
+        "project_id": str(uuid4()),
+        "experiment_id": "fixture-experiment",
+        "experiment_version": "1.0",
+        "protocol_sha256": fingerprint,
+    }
+    profile = SharingProfile(**site, title="Linked experiment", device_id="private-device")
+    save_settings(root, SharingSettings(enabled=True, profile=profile))
+    config.toolbox.study_id = profile.project_id
+    config.toolbox.experiment_id = profile.experiment_id
+    config.toolbox.experiment_version = profile.experiment_version
+    config.toolbox.protocol_sha256 = fingerprint
+    evidence = config.completed_session.acquisition_evidence
+    folder = root / "logs/acquisition"
+    folder.mkdir(exist_ok=True)
+    write_json_file(folder / f"{evidence.execution_id}.acquisition-v1.json", evidence)
+    retain_session_snapshot(root, config)
+    assert build_study_handoff(root)["website_study"] == site
+    assert "private-device" not in json.dumps(build_study_handoff(root))
+    scaffold.project.settings.protocol.base_hz = 5
+    save_project_file(scaffold.project, root / "project.json")
+    assert "website_study" not in build_study_handoff(root)

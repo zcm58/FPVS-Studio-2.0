@@ -138,7 +138,7 @@ class ProjectUpdateController(QObject):
             and window is self._window and window is self._current_window()
         )
 
-    def opened(self, window: StudioMainWindow) -> None:
+    def opened(self, window: StudioMainWindow, *, check_now: bool = True) -> None:
         if self._lifecycle.is_shutting_down:
             return
         self._offer_timer.stop()
@@ -154,7 +154,8 @@ class ProjectUpdateController(QObject):
             self.dialog.deleteLater()
         self.dialog = None
         self._poll_timer.start()
-        self._queue_check(window, automatic=True)
+        if check_now:
+            self._queue_check(window, automatic=True)
 
     def _automatic_check(self) -> None:
         window = self._window
@@ -216,7 +217,7 @@ class ProjectUpdateController(QObject):
         if self._importing or self._lifecycle.is_shutting_down or window.is_launch_busy():
             return
         if window is not self._window:
-            self.opened(window)
+            self.opened(window, check_now=False)
         self._ensure_dialog(window)
         assert self.dialog is not None
         self.dialog.show()
@@ -815,6 +816,6 @@ class ProjectUpdateController(QObject):
                 installed = origin.installed_version if origin else "?"
                 return (
                     f"Project update available: {installed} → {item.version}. "
-                    "Review the update before continuing data collection."
+                    f"Keep using version {installed} or review the proposed changes."
                 )
         return f"Project version {origin.installed_version if origin else ''} is up to date."

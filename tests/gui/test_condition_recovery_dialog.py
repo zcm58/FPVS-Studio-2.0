@@ -70,7 +70,7 @@ def test_missing_plan_and_finished_playback_are_explicit(qtbot):
     dialog = module.ConditionRecoveryDialog(ConditionRecoveryReport(records=(item,)))
     qtbot.addWidget(dialog)
     assert "Stimulus playback completed" in dialog.details.toPlainText()
-    assert "original compiled condition is unavailable" in dialog.details.toPlainText()
+    assert "original schedule or protocol is unavailable" in dialog.details.toPlainText()
     dialog.confirmation.setChecked(True)
     assert not dialog.rerun_button.isEnabled()
 
@@ -183,6 +183,7 @@ def test_cancelled_recording_setup_stops_recovery_before_participant_entry(monke
     monkeypatch.setattr(main_window, "configure_brainproducts_for_launch", setup)
     monkeypatch.setattr(main_window, "ParticipantNumberDialog", participant)
     document = SimpleNamespace(
+        check_collection_open=Mock(),
         local_testing_enabled=False,
         project=SimpleNamespace(settings=SimpleNamespace(allow_repeated_participant_sessions=True)),
         validate_recording_launch=Mock(),
@@ -210,6 +211,7 @@ def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
     task = Mock()
     monkeypatch.setattr(main_window, "ProgressTask", task)
     document = SimpleNamespace(
+        check_collection_open=Mock(),
         local_testing_enabled=False,
         require_biosemi_recording_confirmation=False,
         project=SimpleNamespace(
@@ -237,6 +239,7 @@ def test_brainvision_reminder_cancel_blocks_recovery_launch(monkeypatch):
 
 def test_current_setup_replacement_cancel_does_not_compile_or_launch(monkeypatch):
     document = SimpleNamespace(
+        check_collection_open=Mock(),
         local_testing_enabled=False,
         project=SimpleNamespace(settings=SimpleNamespace(allow_repeated_participant_sessions=True)),
         validate_recording_launch=Mock(), compile_session=Mock(),
@@ -260,6 +263,7 @@ def test_current_setup_replacement_cancel_does_not_compile_or_launch(monkeypatch
 
 def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypatch):
     document = SimpleNamespace(
+        check_collection_open=Mock(),
         local_testing_enabled=False,
         project=SimpleNamespace(settings=SimpleNamespace(allow_repeated_participant_sessions=True)),
         validate_recording_launch=Mock(), compile_session=Mock(),
@@ -285,9 +289,9 @@ def test_current_setup_waits_for_new_seed_without_starting_full_session(monkeypa
     window.launch_session.assert_not_called()
 
 
-@pytest.mark.parametrize("accepted", [True, False])
+@pytest.mark.parametrize(("accepted", "replacement"), [(True, False), (True, True), (False, False)])
 def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
-    qtbot, monkeypatch, tmp_path, accepted,
+    qtbot, monkeypatch, tmp_path, accepted, replacement,
 ):
     selected = r"\\.\DISPLAY2"
     window = QWidget()
@@ -298,6 +302,8 @@ def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
     window._project_update_reload_failed = False
     window._trigger_tester = None
     window.flush_pending_edits = lambda: True
+    window._home_launch_refresh_hz = lambda: 60.0
+    window._session_seed_ready = True
     window.launch_action = Mock()
     window._condition_recovery = SimpleNamespace(close_dialog=Mock())
     window._notify_session_started = lambda start: start()
@@ -309,6 +315,7 @@ def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
     )
     document = SimpleNamespace(
         project_root=tmp_path,
+        check_collection_open=Mock(),
         local_testing_enabled=False,
         require_biosemi_recording_confirmation=False,
         project=SimpleNamespace(
@@ -318,6 +325,7 @@ def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
         validate_recording_launch=Mock(return_value="serial"),
         update_manual_removed_electrodes=Mock(), save=Mock(),
         next_participant_session_number=Mock(return_value=2),
+        prepare_participant_randomization=Mock(return_value=None), compile_session=Mock(),
         launch_compiled_session=Mock(return_value=object()),
     )
     window.document = document
@@ -334,6 +342,12 @@ def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
     monkeypatch.setattr(main_window, "ProgressTask", ImmediateProgressTask)
     frozen_plan = object()
     monkeypatch.setattr(main_window, "build_recovery_session_plan", lambda *_, **__: frozen_plan)
+    new_plan = Mock()
+    monkeypatch.setattr(main_window, "build_replacement_session_plan", new_plan)
+    monkeypatch.setattr(
+        main_window.QMessageBox, "question",
+        lambda *_: main_window.QMessageBox.StandardButton.Yes,
+    )
 
     def choose(_parent, proceed):
         if accepted:
@@ -342,12 +356,23 @@ def test_recovery_uses_selected_monitor_and_cancel_stops_participant_entry(
     advice = Mock(side_effect=lambda _parent, proceed, **_kwargs: proceed())
     monkeypatch.setattr(main_window, "choose_experiment_display", choose)
     monkeypatch.setattr(main_window, "check_windows_refresh", advice)
-    main_window.StudioMainWindow._launch_recovered_condition(window, _record())
+    record = _record(can_rerun=not replacement, protocol_version_id="original-version")
+    main_window.StudioMainWindow._launch_recovered_condition(window, record)
 
     if accepted:
         assert advice.call_args.kwargs["display_device_name"] == selected
         call = document.launch_compiled_session.call_args
-        assert call.args == (frozen_plan,)
+        assert call.args == ((new_plan.return_value if replacement else frozen_plan),)
+        if replacement:
+            document.prepare_participant_randomization.assert_called_once_with("0012", 2)
+            new_plan.assert_called_once_with(
+                document.compile_session.return_value, record.condition_id
+            )
+            assert call.kwargs["replacement_source"] is document.compile_session.return_value
+            assert call.kwargs["frozen_record"] is None
+        else:
+            assert call.kwargs["frozen_record"] is record
+            assert call.kwargs["replacement_source"] is None
         assert call.kwargs["display_device_name"] == selected
         assert call.kwargs["participant_session_number"] == 2
         assert call.kwargs["display_index"] is None

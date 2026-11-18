@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Event
 from typing import BinaryIO, Literal, TypeVar
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -24,6 +24,8 @@ from fpvs_studio.core.paths import (
 )
 from fpvs_studio.core.serialization import write_json_file
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
+from fpvs_studio.core.study_lifecycle import read_study
+from fpvs_studio.core.study_versions import current_version
 
 RecoveryStage = Literal[
     "setup",
@@ -65,12 +67,24 @@ class InterruptedCondition:
     evidence_path: str
     updated_at: datetime
     acknowledged_at: datetime | None = None
+    protocol_version_id: str | None = None
 
 
 @dataclass(frozen=True)
 class ConditionRecoveryReport:
     records: tuple[InterruptedCondition, ...] = ()
     warnings: tuple[str, ...] = ()
+
+
+class _StudyRunIdentity(BaseModel):
+    format_version: Literal[1]
+    study_id: UUID | None
+    project_id: str
+    execution_id: str
+    participant_number: str
+    participant_session_number: int | None
+    session_id: str | None
+    protocol_version_id: UUID | None
 
 
 class _Acknowledgement(BaseModel):
@@ -397,6 +411,31 @@ def _is_test_checkpoint(project_root: Path, checkpoint: _Checkpoint) -> bool:
     )
 
 
+def _frozen_protocol_version(
+    project_root: Path, source: _Checkpoint | AcquisitionEvidence
+) -> str | None:
+    path = resolve_project_relative_path(
+        project_root, f"logs/acquisition/{source.execution_id}.study-run-v1.json"
+    )
+    if not path.exists():
+        return None
+    identity = _bounded_read(path, _StudyRunIdentity)
+    if (
+        identity.project_id != source.project_id
+        or identity.execution_id != source.execution_id
+        or identity.participant_number != source.participant_number
+        or identity.participant_session_number != source.participant_session_number
+        or identity.session_id != source.session_id
+    ):
+        raise ValueError("The retained study record belongs to another visit.")
+    if identity.protocol_version_id is None:
+        return None
+    state = read_study(project_root)
+    if state is None or str(identity.study_id) != state.study_id:
+        raise ValueError("The original study identity cannot be verified.")
+    return str(identity.protocol_version_id)
+
+
 def query_condition_recovery(
     project_root: Path, *, include_acknowledged: bool = True,
 ) -> ConditionRecoveryReport:
@@ -415,11 +454,21 @@ def query_condition_recovery(
                 f"{record.execution_id}."
             )
         if include_acknowledged or record.acknowledged_at is None:
-            record = replace(record, can_rerun=_original_plan(project_root, source) is not None)
+            frozen_available = _original_plan(project_root, source) is not None
+            version_id = None
+            try:
+                version_id = _frozen_protocol_version(project_root, source)
+                if version_id and frozen_available:
+                    active = current_version(project_root)
+                    frozen_available = active is not None and active.version_id == version_id
+            except (OSError, ValueError) as exc:
+                warnings.append(f"Cannot verify the protocol for {source.execution_id}: {exc}")
+                frozen_available = False
+            record = replace(record, can_rerun=frozen_available, protocol_version_id=version_id)
             records.append(record)
             if not record.can_rerun:
                 warnings.append(
-                    f"Original compiled plan unavailable for execution {record.execution_id}."
+                    f"Original schedule or protocol unavailable for {record.execution_id}."
                 )
 
     known: set[str] = set()

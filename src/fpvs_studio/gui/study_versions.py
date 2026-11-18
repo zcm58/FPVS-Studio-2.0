@@ -26,6 +26,7 @@ from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.core.study_versions import (
     ProtocolDraft,
+    ProtocolReviewRequired,
     StudyVersion,
     commit_change,
     create_from_version,
@@ -49,6 +50,10 @@ _Result = TypeVar("_Result")
 
 class ProtocolReviewCancelled(DocumentError):
     """The author kept the original study active."""
+
+
+class _StudyCopied(ProtocolReviewCancelled):
+    """The source was already restored and the new study is ready to open."""
 
 
 class StudyVersionController:
@@ -109,6 +114,7 @@ class StudyVersionController:
                 on_fork(draft)
             elif self._copy(draft, version_id=version_id, restore_source_assets=version_id is None):
                 self._reload()
+                raise _StudyCopied("Saved as a separate study.")
             raise ProtocolReviewCancelled("The original study was kept.")
         if first.clickedButton() is not same:
             raise ProtocolReviewCancelled("The original study was kept.")
@@ -150,15 +156,18 @@ class StudyVersionController:
     def save(self, project: ProjectFile) -> None:
         def save_or_review() -> ProtocolDraft | None:
             draft = self.document.prepare_protocol_change(project)
-            if draft.changes and research_visits_by_version(self.root):
+            try:
+                commit_change(self.root, project, draft, "")
+            except ProtocolReviewRequired:
                 return draft
-            commit_change(self.root, project, draft, "")
             return None
 
         draft = self._work("Saving the experiment…", save_or_review)
         if draft is not None:
             try:
                 reason = self.review(draft)
+            except _StudyCopied:
+                raise
             except ProtocolReviewCancelled:
                 recovered = self._work(
                     "Keeping the saved protocol…",
@@ -232,6 +241,11 @@ class StudyVersionController:
         lineage = self.window.document.study_lineage()
         if lineage:
             layout.addWidget(QLabel("Created from " + lineage))
+        if visits.get(""):
+            count = len(visits[""])
+            unknown = QLabel(f"Research visits with an unrecorded protocol version: {count}")
+            unknown.setToolTip(", ".join(sorted(visits[""])))
+            layout.addWidget(unknown)
         items = QListWidget()
         details = QPlainTextEdit()
         details.setReadOnly(True)
@@ -282,7 +296,8 @@ class StudyVersionController:
                 name_version(self.root, version.version_id, label)
             return
         draft = self._work(
-            "Checking the selected version…", lambda: historical_draft(self.root, version.version_id)
+            "Checking the selected version…",
+            lambda: historical_draft(self.root, version.version_id),
         )
         if self.document.dirty:
             raise DocumentError(

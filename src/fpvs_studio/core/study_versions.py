@@ -7,6 +7,8 @@ import json
 import os
 import sqlite3
 import stat
+import sys
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +25,29 @@ from .paths import (
 )
 from .serialization import load_project_file, save_project_file
 from .study_lifecycle import database_path, get_study, study_transaction
+
+if sys.platform == "win32":
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    class _FileBasicInfo(ctypes.Structure):
+        _fields_ = [
+            ("creation", ctypes.c_int64),
+            ("access", ctypes.c_int64),
+            ("write", ctypes.c_int64),
+            ("change", ctypes.c_int64),
+            ("attributes", wintypes.DWORD),
+        ]
+
+    _basic_info = ctypes.windll.kernel32.GetFileInformationByHandleEx
+    _basic_info.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.POINTER(_FileBasicInfo),
+        wintypes.DWORD,
+    ]
+    _basic_info.restype = wintypes.BOOL
 
 
 @dataclass(frozen=True)
@@ -41,6 +66,20 @@ class ProtocolDraft:
     assets: dict[str, str]
     changes: tuple[str, ...]
     working_assets: dict[str, str] | None = None
+
+
+class ProtocolReviewRequired(ValueError):
+    """A changed protocol needs the author's recorded decision."""
+
+
+def _require_reason(root: Path, draft: ProtocolDraft, reason: str) -> None:
+    if draft.changes and not reason.strip():
+        from fpvs_studio.runtime.participant_results import research_visits_by_version
+
+        if research_visits_by_version(root):
+            raise ProtocolReviewRequired(
+                "Review this protocol change and record a reason in Studio."
+            )
 
 
 def _tables(db: sqlite3.Connection) -> None:
@@ -70,10 +109,16 @@ def _version(row: sqlite3.Row) -> StudyVersion:
 
 
 def current_version(root: Path) -> StudyVersion | None:
-    if not database_path(root).exists():
+    path = database_path(root)
+    if not path.is_file():
         return None
-    with study_transaction(root) as db:
-        _tables(db)
+    with closing(sqlite3.connect(path)) as db:
+        db.execute("PRAGMA query_only=ON")
+        db.row_factory = sqlite3.Row
+        if not db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name='versions' AND type='table'"
+        ).fetchone():
+            return None
         row = _latest(db)
         return _version(row) if row else None
 
@@ -81,7 +126,12 @@ def current_version(root: Path) -> StudyVersion | None:
 def list_versions(root: Path) -> list[StudyVersion]:
     with study_transaction(root) as db:
         _tables(db)
-        return [_version(row) for row in db.execute("SELECT * FROM versions ORDER BY rowid")]
+        return [
+            _version(row)
+            for row in db.execute(
+                "SELECT version_id,saved_at,label,reason,changes FROM versions ORDER BY rowid"
+            )
+        ]
 
 
 def name_version(root: Path, version_id: str, label: str) -> None:
@@ -109,11 +159,32 @@ def _object(root: Path, digest: str) -> Path:
     return resolve_project_relative_path(root, f".fpvs-study/objects/{digest}")
 
 
+def _asset_stamp(path: Path, info: os.stat_result) -> str | None:
+    change = info.st_ctime_ns
+    if sys.platform == "win32":
+        # Python 3.10 st_ctime is Windows creation time. Use the filesystem's
+        # change time so a same-size replacement with a restored mtime is caught.
+        with path.open("rb") as handle:
+            basic = _FileBasicInfo()
+            if (
+                not _basic_info(
+                    msvcrt.get_osfhandle(handle.fileno()),
+                    0,
+                    ctypes.byref(basic),
+                    ctypes.sizeof(basic),
+                )
+                or not basic.change
+            ):
+                return None  # This volume cannot verify a cached digest. Read the bytes.
+            change = basic.change
+    return f"{info.st_dev}:{info.st_ino}:{info.st_size}:{info.st_mtime_ns}:{change}"
+
+
 def _capture_file(root: Path, path: Path, relative: str, db: sqlite3.Connection) -> str:
     info = _regular(path)
     if not stat.S_ISREG(info.st_mode):
         raise ValueError(f"Expected a regular stimulus file: {relative}")
-    stamp = f"{info.st_dev}:{info.st_ino}:{info.st_size}:{info.st_mtime_ns}:{info.st_ctime_ns}"
+    stamp = _asset_stamp(path, info)
     cached = db.execute(
         "SELECT digest FROM asset_cache WHERE path=? AND stamp=?", (relative, stamp)
     ).fetchone()
@@ -129,7 +200,12 @@ def _capture_file(root: Path, path: Path, relative: str, db: sqlite3.Connection)
                 digest.update(block)
                 target.write(block)
         after = _regular(path)
-        if (info.st_size, info.st_mtime_ns, info.st_ino, info.st_ctime_ns) != (
+        if _asset_stamp(path, after) != stamp or (
+            info.st_size,
+            info.st_mtime_ns,
+            info.st_ino,
+            info.st_ctime_ns,
+        ) != (
             after.st_size,
             after.st_mtime_ns,
             after.st_ino,
@@ -140,7 +216,9 @@ def _capture_file(root: Path, path: Path, relative: str, db: sqlite3.Connection)
         target_path = _object(root, key)
         if not target_path.exists():
             os.replace(temp, target_path)
-        db.execute("INSERT OR REPLACE INTO asset_cache VALUES (?,?,?)", (relative, stamp, key))
+        db.execute(
+            "INSERT OR REPLACE INTO asset_cache VALUES (?,?,?)", (relative, stamp or "", key)
+        )
         return key
     finally:
         temp.unlink(missing_ok=True)
@@ -163,7 +241,26 @@ def _assets(root: Path, db: sqlite3.Connection, source: Path | None = None) -> d
             path = Path(parent) / name
             relative = path.relative_to(folder).as_posix()
             inventory[relative] = _capture_file(root, path, relative, db)
+    head = _latest(db)
+    previous = json.loads(head["assets"]).get("manifest.json") if head else None
+    current = inventory.get("manifest.json")
+    if previous and current and previous != current:
+        if _manifest_content(root, previous) == _manifest_content(root, current):
+            inventory["manifest.json"] = previous
+            db.execute("UPDATE asset_cache SET digest=? WHERE path='manifest.json'", (previous,))
     return inventory
+
+
+def _manifest_content(root: Path, digest: str) -> dict:
+    """Compare authored stimulus declarations independently of inspection timestamps."""
+    data = json.loads(_object(root, digest).read_bytes())
+    data.pop("generated_at", None)
+    for entry in data.get("sets", []):
+        for asset in entry.get("assets", []):
+            asset["source"].pop("imported_at", None)
+            for derivative in asset.get("derivatives", []):
+                derivative.pop("created_at", None)
+    return cast(dict, data)
 
 
 def _show(value: object) -> str:
@@ -305,6 +402,7 @@ def _check_current(db: sqlite3.Connection, draft: ProtocolDraft) -> None:
 def commit_change(root: Path, project: ProjectFile, draft: ProtocolDraft, reason: str) -> None:
     with study_transaction(root) as db:
         _check_current(db, draft)
+        _require_reason(root, draft, reason)
         if _protocol(project) != draft.protocol or _assets(root, db) != draft.assets:
             raise ValueError(
                 "The experiment changed after review. Review its settings and stimuli again."
@@ -337,6 +435,7 @@ def record_library_update(
         if draft is not None and draft != installed:
             raise ValueError("The installed experiment differs from the reviewed protocol.")
         if installed.changes:
+            _require_reason(root, installed, reason)
             _record(db, installed, reason)
 
 
@@ -380,6 +479,7 @@ def _materialize(source: Path, destination: Path, assets: dict[str, str]) -> Non
 def restore_version(root: Path, draft: ProtocolDraft, reason: str) -> ProjectFile:
     with study_transaction(root) as db:
         _check_current(db, draft)
+        _require_reason(root, draft, reason)
         if draft.working_assets is not None and draft.working_assets != _assets(root, db):
             raise ValueError(
                 "The working stimuli changed during review. Review this version again."
@@ -488,8 +588,14 @@ def create_from_version(
         prepare_change(stage, project)
         with study_transaction(stage) as db:
             parent_version = source_version_id or version.version_id
-            ancestor = next(v for v in list_versions(root) if v.version_id == parent_version)
-            description = ancestor.label or ancestor.saved_at[:19].replace("T", " ") + " UTC"
+            with study_transaction(root) as source_db:
+                ancestor = source_db.execute(
+                    "SELECT label,saved_at FROM versions WHERE version_id=?",
+                    (parent_version,),
+                ).fetchone()
+            if ancestor is None:
+                raise ValueError("The source version is unavailable.")
+            description = ancestor["label"] or ancestor["saved_at"][:19].replace("T", " ") + " UTC"
             origin = f"{source.meta.name}, version {description} [{study_id} / {parent_version}]"
             db.execute("UPDATE study SET created_from=?", (origin,))
         with study_transaction(root) as db:

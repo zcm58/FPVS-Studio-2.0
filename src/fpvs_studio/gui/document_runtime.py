@@ -46,6 +46,9 @@ from fpvs_studio.runtime.recording import (
     validate_recording_configuration,
 )
 
+if TYPE_CHECKING:
+    from fpvs_studio.runtime.condition_recovery import InterruptedCondition
+
 
 class _SessionLaunchRequired(TypedDict):
     participant_number: str
@@ -361,6 +364,8 @@ class DocumentRuntimeMixin:
         recording_operator_confirmed: bool = False,
         recording_association: str | None = None,
         recorder_version: str | None = None,
+        replacement_source: SessionPlan | None = None,
+        frozen_record: InterruptedCondition | None = None,
     ) -> LaunchSummary:
         """Launch an already-prepared session plan through the runtime boundary."""
 
@@ -377,7 +382,15 @@ class DocumentRuntimeMixin:
                 participant_session_number = 1
             self.validate_recording_launch()
             revision = None
-            if not self.local_testing_enabled and session_plan is self._last_session_plan:
+            if replacement_source is not None and replacement_source is not self._last_session_plan:
+                raise DocumentError("The replacement protocol changed. Prepare the re-run again.")
+            frozen_version_id = frozen_record.protocol_version_id if frozen_record else None
+            verified_setup = (
+                session_plan is self._last_session_plan
+                or replacement_source is not None
+                or frozen_version_id is not None
+            )
+            if not self.local_testing_enabled and (verified_setup or frozen_record is not None):
                 from fpvs_studio.core.study_versions import current_version
                 if not (self._project_root / "project.json").is_file():
                     self._save_protocol(self._project)
@@ -390,11 +403,18 @@ class DocumentRuntimeMixin:
                 revision = current_version(self._project_root)
                 if revision is None or revision.version_id != draft.previous:
                     raise DocumentError("The study changed during launch. Review and launch again.")
+                if frozen_version_id is not None and revision.version_id != frozen_version_id:
+                    raise DocumentError(
+                        "The original protocol has changed. Reopen Interrupted Sessions "
+                        "to prepare a replacement using the current setup."
+                    )
+                if not verified_setup:
+                    revision = None  # An older schedule has no recorded version to attribute.
             recording_configuration = self.recording_configuration
             trigger_settings = self._project.settings.triggers
             sharing_protocol = (
                 _sharing_protocol(self._project, self._project_root)
-                if session_plan is self._last_session_plan else None
+                if verified_setup else None
             )
             launch_kwargs: _SessionLaunchArguments = {
                 "participant_number": participant_number,
@@ -457,7 +477,7 @@ class DocumentRuntimeMixin:
                             sharing_protocol,
                             recording_configuration,
                         )
-                        if session_plan is self._last_session_plan else None
+                        if verified_setup else None
                     ),
                 ),
             }

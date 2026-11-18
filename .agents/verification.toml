@@ -134,6 +134,9 @@ manual_smoke = []
 [scopes."project-io"]
 checks = []
 tests = [
+  "tests/unit/test_study_versions.py",
+  "tests/unit/test_study_collection.py",
+  "tests/unit/test_whole_study_handoff.py",
   "tests/unit/test_post_questions.py",
   "tests/unit/test_post_condition_responses.py",
   "tests/unit/test_saved_condition_order.py",

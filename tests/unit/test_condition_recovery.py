@@ -284,6 +284,41 @@ def test_rerun_preserves_exact_occurrence_and_never_changes_original(execution):
     assert _files(root) == before
 
 
+def test_updated_stimulus_version_offers_replacement_only(execution, multi_condition_project):
+    from fpvs_studio.core.serialization import save_project_file
+    from fpvs_studio.core.study_lifecycle import get_study
+    from fpvs_studio.core.study_versions import commit_change, current_version, prepare_change
+
+    root, plan = execution
+    save_project_file(multi_condition_project, root / "project.json")
+    prepare_change(root, multi_condition_project)
+    revision = current_version(root).version_id
+    recorder = _record(root, plan)
+    recorder.start_run(plan.ordered_entries()[0].run_id)
+    recorder.close()
+    legacy, = query_condition_recovery(root).records
+    assert legacy.can_rerun and legacy.protocol_version_id is None
+
+    path = root / "logs/acquisition" / f"{recorder.execution_id}.study-run-v1.json"
+    path.parent.mkdir(exist_ok=True)
+    path.write_text(json.dumps({
+        "format_version": 1, "study_id": get_study(root).study_id,
+        "protocol_version_id": revision, "project_id": plan.project_id,
+        "execution_id": recorder.execution_id, "participant_number": "0012",
+        "participant_session_number": 3, "session_id": plan.session_id,
+    }), encoding="utf-8")
+    known, = query_condition_recovery(root).records
+    assert known.can_rerun and known.protocol_version_id == revision
+    asset = next((root / "stimuli").rglob("*.png"))
+    asset.write_bytes(asset.read_bytes() + b"changed")
+    draft = prepare_change(root, multi_condition_project)
+    commit_change(root, multi_condition_project, draft, "Replaced a stimulus")
+    newer, = query_condition_recovery(root).records
+    assert not newer.can_rerun and newer.protocol_version_id == revision
+    with pytest.raises(ValueError, match="unavailable"):
+        build_recovery_session_plan(root, known)
+
+
 @pytest.mark.parametrize("export_mode", ["compact", "full"])
 def test_feedback_failure_preserves_completed_playback_and_reports_distinct_stage(
     execution,
@@ -548,7 +583,7 @@ def test_historical_acquisition_identifies_sixth_occurrence_and_requires_confirm
     assert record.not_started_run_ids == ("run_007", "run_008")
     assert not record.playback_completed
     assert not record.can_rerun
-    assert "Original compiled plan unavailable" in report.warnings[0]
+    assert "Original schedule or protocol unavailable" in report.warnings[0]
     assert _files(root) == before
 
 

@@ -1389,7 +1389,10 @@ does not silently compile the current project to replace the missing original. A
 explicit **Re-run with Current Setup** action may instead compile the surviving
 condition after warning that current settings and a new random seed replace the missing
 original schedule. `build_replacement_session_plan` restricts that new compilation to
-one occurrence, even when the condition repeats across blocks.
+one occurrence, even when the condition repeats across blocks. The replacement visit
+records the newly compiled protocol and stimuli. A versioned frozen rerun requires
+the same saved protocol and unchanged working stimulus files. Older frozen plans
+without a recorded version retain unknown protocol provenance.
 
 An explicit rerun selects exactly one saved occurrence, retaining its original RunSpec,
 seed and pre/post tasks, and creates a new session UUID. It repeats the complete selected

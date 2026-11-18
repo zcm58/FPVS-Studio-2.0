@@ -199,11 +199,16 @@ class ConditionRecoveryDialog(QDialog):
                     "Its opening reminder has been dismissed. The session record is unchanged.",
                 ])
             if not record.can_rerun:
-                lines.extend(["", "The original compiled condition is unavailable. Review the "
+                lines.extend(["", "The original schedule or protocol is unavailable. Review the "
                               "current project setup before preparing a replacement run. "
                               "It will use current settings and a new randomized schedule."])
                 if record.condition_id not in self._current_condition_ids:
                     lines.append("This condition is no longer available in the current project.")
+            elif record.protocol_version_id is None:
+                lines.extend([
+                    "", "The original schedule is available. Older records do not identify "
+                    "the protocol version or verify the original stimulus files.",
+                ])
             lines.extend(["", f"Evidence: {record.evidence_path}"])
         lines.extend(["", *self._warnings])
         self.details.setPlainText("\n".join(lines).strip())
