@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sqlite3
 import stat
 import sys
@@ -24,7 +25,7 @@ from .paths import (
     slugify_project_name,
     validate_project_id,
 )
-from .serialization import load_project_file, save_project_file
+from .serialization import load_project_file, read_json_file, save_project_file
 from .study_lifecycle import database_path, get_study, study_transaction
 
 if sys.platform == "win32":
@@ -120,7 +121,10 @@ def current_version(root: Path) -> StudyVersion | None:
             "SELECT 1 FROM sqlite_master WHERE name='versions' AND type='table'"
         ).fetchone():
             return None
-        row = _latest(db)
+        row = db.execute(
+            "SELECT version_id,saved_at,label,reason,changes FROM versions "
+            "ORDER BY rowid DESC LIMIT 1"
+        ).fetchone()
         return _version(row) if row else None
 
 
@@ -374,6 +378,43 @@ def _record(db: sqlite3.Connection, draft: ProtocolDraft, reason: str = "") -> S
     return StudyVersion(version_id, stamp, "", reason.strip(), draft.changes)
 
 
+def _record_initial_version(root: Path, db: sqlite3.Connection, assets: dict[str, str]) -> None:
+    from fpvs_studio.preprocessing.models import (
+        DerivedImageRecord,
+        SourceImageRecord,
+        StimulusManifest,
+    )
+
+    saved = _protocol(load_project_file(root / "project.json"))
+    baseline = assets.copy()
+    # A legacy manifest can identify an original that was replaced before migration.
+    # Preserve that identity so the next review reports the replacement.
+    if manifest_digest := assets.get("manifest.json"):
+        manifest = read_json_file(_object(root, manifest_digest), StimulusManifest)
+        for pool in manifest.sets:
+            for asset in pool.assets:
+                images: tuple[SourceImageRecord | DerivedImageRecord, ...] = (
+                    asset.source, *asset.derivatives,
+                )
+                for image in images:
+                    digest = image.sha256 or ""
+                    if image.relative_path.startswith("stimuli/") and re.fullmatch(
+                        r"[0-9a-fA-F]{64}", digest
+                    ):
+                        baseline[image.relative_path.removeprefix("stimuli/")] = digest.lower()
+    _record(db, _draft(None, saved, baseline))
+
+
+def ensure_initial_version(root: Path) -> None:
+    """Retain the saved protocol and stimuli once, before authoring can change them."""
+    if not filesystem_path(root / "project.json").is_file() or current_version(root) is not None:
+        return
+    with study_transaction(root) as db:
+        _tables(db)
+        if _latest(db) is None:
+            _record_initial_version(root, db, _assets(root, db))
+
+
 def prepare_change(
     root: Path,
     project: ProjectFile,
@@ -386,12 +427,7 @@ def prepare_change(
         _tables(db)
         row = _latest(db)
         if row is None:
-            _record(
-                db,
-                _draft(
-                    None, _protocol(load_project_file(root / "project.json")), _assets(root, db)
-                ),
-            )
+            _record_initial_version(root, db, _assets(root, db))
             row = _latest(db)
         assets = _assets(root, db, candidate_root)
         protocol = _protocol(project)

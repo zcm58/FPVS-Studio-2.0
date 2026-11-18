@@ -98,6 +98,11 @@ Open **File > Experiment version history** to inspect, name, restore or copy a
 saved version. Inspecting a version leaves the active experiment alone. Version
 history works offline and requires no Library publication.
 
+Opening Home reads the saved project and stimulus manifest. For projects that
+predate version history, capture the first local version on entering Setup,
+editing stimuli, reviewing history, saving or preparing a research visit.
+Browsing Home must never require walking or copying the stimulus folder.
+
 Retain the settings and exact stimuli needed to restore a saved version,
 including an image later replaced under the same filename. Reuse unchanged
 assets across versions. If a historical asset is missing, name it and leave

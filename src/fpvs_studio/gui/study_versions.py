@@ -23,18 +23,18 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.models import ProjectFile
-from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.core.study_versions import (
     ProtocolDraft,
     ProtocolReviewRequired,
     StudyVersion,
     commit_change,
     create_from_version,
+    current_version,
+    ensure_initial_version,
     historical_draft,
     keep_saved_stimuli,
     list_versions,
     name_version,
-    prepare_change,
     restore_version,
 )
 from fpvs_studio.gui.components import apply_dialog_theme, mark_primary_action, mark_text_role
@@ -232,6 +232,17 @@ class StudyVersionController:
             QTimer.singleShot(0, lambda: open_project(path))
         return path
 
+    def ready_for_setup(self) -> bool:
+        """Protect older projects before opening editors that can write stimulus files."""
+        try:
+            if current_version(self.root) is None:
+                self._work("Saving original settings and stimuli for version history…",
+                           lambda: ensure_initial_version(self.root))
+            return True
+        except (OSError, ValueError, RuntimeError, DatabaseError) as error:
+            QMessageBox.warning(self.window, "Unable to prepare experiment setup", str(error))
+            return False
+
     def show_history(self) -> None:
         try:
             self._history()
@@ -242,7 +253,7 @@ class StudyVersionController:
 
     def _history(self) -> None:
         def load() -> tuple[list[StudyVersion], dict[str, set[str]]]:
-            prepare_change(self.root, load_project_file(self.root / "project.json"))
+            ensure_initial_version(self.root)
             return list_versions(self.root)[::-1], research_visits_by_version(self.root)
 
         versions, visits = self._work("Reading experiment history…", load)

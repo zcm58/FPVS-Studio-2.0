@@ -76,6 +76,55 @@ def test_save_restore_and_fork_exact_image_and_protocol(
     assert len(list_versions(root)) == 3
 
 
+def test_first_asset_import_preserves_the_legacy_stimuli(sample_project_root, sample_project):
+    from fpvs_studio.core.task_assets import copy_task_asset
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    image = next((root / "stimuli").rglob("*.png"))
+    original = image.read_bytes()
+    target = copy_task_asset(root, "memory", image)
+    initial = current_version(root)
+    assert initial is not None
+    draft = prepare_change(root, sample_project)
+    assert draft.changes == (f"Stimulus added: {target.removeprefix('stimuli/')}",)
+    image.write_bytes(b"replacement")
+    restored = historical_draft(root, initial.version_id)
+    restore_version(root, restored, "", research_visits_by_version)
+    assert image.read_bytes() == original
+    assert not (root / target).exists()
+
+
+def test_first_review_detects_external_changes_since_legacy_inspection(
+    sample_project_root, sample_project,
+):
+    from fpvs_studio.preprocessing.inspection import inspect_source_directory
+    from fpvs_studio.preprocessing.manifest import (
+        create_empty_manifest,
+        inspection_summary_to_manifest_set,
+        upsert_manifest_set,
+        write_stimulus_manifest,
+    )
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    pool = sample_project.stimulus_sets[0]
+    inspected = inspect_source_directory(root / pool.source_dir, relative_prefix=pool.source_dir)
+    manifest = upsert_manifest_set(
+        create_empty_manifest(sample_project.meta.project_id),
+        inspection_summary_to_manifest_set(set_id=pool.set_id, summary=inspected),
+    )
+    write_stimulus_manifest(root, manifest)
+    original, missing = inspected.files[:2]
+    (root / original.relative_path).write_bytes(b"externally replaced")
+    (root / missing.relative_path).unlink()
+    draft = prepare_change(root, sample_project)
+    assert set(draft.changes) == {
+        f"Stimulus replaced: {original.relative_path.removeprefix('stimuli/')}",
+        f"Stimulus removed: {missing.relative_path.removeprefix('stimuli/')}",
+    }
+
+
 def test_fork_changed_draft_keeps_original_bytes(sample_project_root, sample_project, tmp_path):
     root = sample_project_root
     save_project_file(sample_project, root / "project.json")

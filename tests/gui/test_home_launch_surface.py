@@ -832,13 +832,11 @@ def test_complete_setup_jumps_to_earliest_incomplete_step(
     QApplication.processEvents()
 
     assert window.main_stack.currentWidget() is window.setup_wizard_page
-    assert window.setup_wizard_page.step_stack.currentWidget() is (
-        window.setup_wizard_page.conditions_step_surface
-    )
-    assert (
-        window.setup_wizard_page.progress_steps.step_circles[1].property("setupProgressState")
-        == "current"
-    )
+    wizard = window.setup_wizard_page
+    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
+    conditions_index = wizard.step_stack.indexOf(wizard.conditions_step_surface)
+    indicator = wizard.progress_steps.step_circles[conditions_index]
+    assert indicator.property("setupProgressState") == "current"
 
 
 def test_main_window_no_longer_exposes_top_level_tab_bar(

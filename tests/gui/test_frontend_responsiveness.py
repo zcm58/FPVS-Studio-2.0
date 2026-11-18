@@ -17,6 +17,36 @@ from fpvs_studio.gui.data_sharing_dialog import StartupReportNotice
 from fpvs_studio.gui.document import ProjectDocument
 
 
+def test_legacy_project_opens_to_home_before_first_setup_snapshot(
+    qtbot, qapp, controller, sample_project_root, sample_project, monkeypatch,
+):
+    from fpvs_studio.core import study_versions
+    from fpvs_studio.core.serialization import save_project_file
+
+    save_project_file(sample_project, sample_project_root / "project.json")
+    snapshots = []
+    original = study_versions._assets
+
+    def capture(*args):
+        snapshots.append(QThread.currentThread() == qapp.thread())
+        return original(*args)
+
+    monkeypatch.setattr(study_versions, "_assets", capture)
+    controller.request_open_project(sample_project_root)
+    qtbot.waitUntil(lambda: controller._project_open_job is None)
+    window = controller.main_window
+    qtbot.addWidget(window)
+    assert window.isVisible() and window.main_stack.currentWidget() is window.home_page
+    assert not snapshots and study_versions.current_version(sample_project_root) is None
+    window.show_setup_wizard()
+    assert window.main_stack.currentWidget() is window.setup_wizard_page
+    assert snapshots == [False]
+    assert study_versions.current_version(sample_project_root) is not None
+    window.show_home()
+    window.show_setup_wizard()
+    assert snapshots == [False]
+
+
 def test_late_startup_sharing_notice_ignores_destroyed_windows(controller, tmp_path):
     previous_welcome, previous_main = controller.welcome_window, controller.main_window
     disposed_welcome, disposed_main = QWidget(), QWidget()
@@ -51,6 +81,8 @@ def test_native_studio_startup_and_shutdown_with_synthetic_library(tmp_path, sce
         controllers = []
         observed = []
         class SyntheticClient:
+            service_url = library_access_dialog.MANAGED_LIBRARY_SERVICE_URL
+
             def __init__(self):
                 if scenario == "cache-error":
                     raise LibraryError("Synthetic unavailable Library cache")
@@ -64,6 +96,7 @@ def test_native_studio_startup_and_shutdown_with_synthetic_library(tmp_path, sce
                 super().__init__(app)
                 self.startup_update_checks_enabled = False
                 self.save_fpvs_root_dir(root)
+                self.save_default_recording_configuration({"recording_backend": "serial"})
                 self._startup_cache_cleanup_callback = lambda *_args, **_kwargs: None
                 controllers.append(self)
                 self._app = app
@@ -126,14 +159,15 @@ def test_project_open_keeps_ui_responsive_and_preserves_current_on_failure(
     timer.start()
     try:
         controller.open_recent_project(str(incoming.project_root))
+        assert not controller._project_open_dialog.isVisible()
         qtbot.waitUntil(entered.is_set)
         ticks.clear()
         qtbot.waitUntil(lambda: bool(ticks))
         assert controller.main_window is previous
         assert threads == [threads[0]] and threads[0] != qapp.thread()
         dialog = controller._project_open_dialog
-        assert dialog.isVisible()
-        assert "Opening" in dialog.labelText()
+        qtbot.waitUntil(dialog.isVisible)
+        assert "stimulus manifest" in dialog.labelText()
         if outcome == "cancel":
             qtbot.mouseClick(dialog.findChild(QPushButton), Qt.MouseButton.LeftButton)
             assert controller._project_open_job.cancel_event.is_set()

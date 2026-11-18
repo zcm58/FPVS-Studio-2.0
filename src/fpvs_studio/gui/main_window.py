@@ -413,24 +413,20 @@ class StudioMainWindow(QMainWindow):
         *,
         step_key: str | None = None,
         allow_step_jumps: bool = False,
+        first_incomplete: bool = False,
     ) -> None:
-        if self._project_update_reload_failed:
+        if self._project_update_reload_failed or not self._study_versions.ready_for_setup():
             return
         setup_wizard_page = self.setup_wizard_page
         self._set_home_chrome_visible(True)
         self._apply_setup_window_size()
         self.main_stack.setCurrentWidget(setup_wizard_page)
-        setup_wizard_page.open_wizard(
-            step_key=step_key,
-            allow_step_jumps=allow_step_jumps,
-        )
+        if first_incomplete:
+            step_key = setup_wizard_page.first_incomplete_step_key()
+        setup_wizard_page.open_wizard(step_key=step_key, allow_step_jumps=allow_step_jumps)
 
     def show_incomplete_setup_wizard(self) -> None:
-        setup_wizard_page = self.setup_wizard_page
-        self.show_setup_wizard(
-            step_key=setup_wizard_page.first_incomplete_step_key(),
-            allow_step_jumps=False,
-        )
+        self.show_setup_wizard(first_incomplete=True)
 
     def show_image_resizer(self) -> None:
         if not self.flush_pending_edits():

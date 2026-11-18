@@ -975,10 +975,12 @@ class StudioController(QObject):
             self._project_open_dialog.close()
             self._project_open_dialog.deleteLater()
         parent = self.main_window or self.welcome_window
-        dialog = QProgressDialog("Opening project…", "Cancel", 0, 0, parent)
+        dialog = QProgressDialog(
+            "Reading project settings and stimulus manifest…", "Cancel", 0, 0, parent,
+        )
         dialog.setWindowTitle("Open Project")
         dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
-        dialog.setMinimumDuration(0)
+        dialog.setMinimumDuration(350)
         dialog.setMinimumWidth(420)
         dialog.setToolTip(str(project_location))
         self._project_open_dialog = dialog
@@ -997,7 +999,7 @@ class StudioController(QObject):
         self._project_open_job = job
         dialog.canceled.connect(job.cancel)
         job.finished.connect(lambda result: self._finish_project_open(job, result, on_opened))
-        dialog.show()
+        dialog.setValue(0)
 
     def _finish_project_open(
         self, job: UpdateJob, result: UpdateTaskResult,

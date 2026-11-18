@@ -57,7 +57,6 @@ from fpvs_studio.core.study_lifecycle import database_path, read_study
 from fpvs_studio.core.study_versions import (
     ProtocolDraft,
     commit_change,
-    current_version,
     prepare_change,
 )
 from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
@@ -236,9 +235,6 @@ class ProjectDocument(
             read_stimulus_manifest(project_root)
             if filesystem_path(manifest_path).is_file() else None
         )
-        # Establish a legacy baseline before the stimulus editor can touch the files.
-        if current_version(project_root) is None:
-            prepare_change(project_root, project)
         return project_root, project, manifest
 
     @property

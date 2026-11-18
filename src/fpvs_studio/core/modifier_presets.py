@@ -25,6 +25,7 @@ from fpvs_studio.core.condition_modifiers import (
 )
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import filesystem_path, resolve_project_relative_path, templates_dir
+from fpvs_studio.core.study_versions import ensure_initial_version
 from fpvs_studio.core.task_assets import (
     SUPPORTED_TASK_ASSET_SUFFIXES,
     modifier_scene_visuals,
@@ -234,6 +235,8 @@ def apply_modifier_project(
         ))
     sources = _asset_sources(project.task_modules, project_root, asset_sources,
                              modifiers=project.condition_modifiers)
+    if sources:
+        ensure_initial_version(project_root)
     _copy_assets(Path(project_root), sources)
     return project
 

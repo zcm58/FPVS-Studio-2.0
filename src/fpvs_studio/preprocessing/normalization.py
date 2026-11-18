@@ -23,6 +23,7 @@ from fpvs_studio.core.paths import (
     stimulus_normalized_images_root,
     to_project_relative_posix,
 )
+from fpvs_studio.core.study_versions import ensure_initial_version
 from fpvs_studio.preprocessing.source_files import source_image_directory_files
 
 NORMALIZATION_INPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
@@ -184,6 +185,7 @@ def normalize_stimulus_sets(
     if not scan.can_normalize:
         raise ImageNormalizationError(_scan_blocker_message(scan))
 
+    ensure_initial_version(project_root)
     output_root = stimulus_normalized_images_root(project_root)
     output_root.mkdir(parents=True, exist_ok=True)
     temporary_results: list[tuple[StimulusSet, Path, Path, int]] = []

@@ -88,7 +88,6 @@ def test_open_imported_project_without_windows_long_path_policy(
         resolve_project_location=resolve_project_location,
         load_project_file=load_project_file, stimulus_manifest_path=stimulus_manifest_path,
         read_stimulus_manifest=read_stimulus_manifest, filesystem_path=filesystem_path,
-        current_version=current_version, prepare_change=prepare_change,
     )["read_existing"]
     location = imported_long_project / "project.json" if json_file else imported_long_project
     assert current_version(imported_long_project) is None
@@ -96,7 +95,29 @@ def test_open_imported_project_without_windows_long_path_policy(
     assert root == imported_long_project
     assert project.meta.project_id == root.name
     assert manifest is not None and manifest.project_id == project.meta.project_id
+    assert current_version(root) is None
+    assert not prepare_change(root, project).changes
     assert current_version(root) is not None
+
+
+def test_opening_an_unversioned_project_never_scans_stimuli(
+    sample_project_root, sample_project, monkeypatch,
+):
+    from fpvs_studio.core import study_versions
+
+    _save_bundle_ready_project(sample_project_root, sample_project)
+    monkeypatch.setattr(study_versions, "_assets",
+                        lambda *args: pytest.fail("Opening walked the stimulus tree"))
+    read = _source_functions(
+        "src/fpvs_studio/gui/document.py", ["read_existing"],
+        resolve_project_location=resolve_project_location, load_project_file=load_project_file,
+        stimulus_manifest_path=stimulus_manifest_path,
+        read_stimulus_manifest=read_stimulus_manifest, filesystem_path=filesystem_path,
+    )["read_existing"]
+    for location in (sample_project_root, sample_project_root / "project.json"):
+        root, project, manifest = read(location)
+        assert project.meta.project_id == manifest.project_id
+        assert not (root / ".fpvs-study").exists()
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")

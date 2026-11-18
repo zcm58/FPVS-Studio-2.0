@@ -14,6 +14,8 @@ for OpenFPVS desktop decisions.
   Use [Setup layout](../../../docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy),
   [order editing](../../../docs/GUI_WORKFLOW.md#choose-and-save-condition-order) or
   [categories](../../../docs/EXPERIMENT_CATEGORIES.md) for the affected workflow.
+- Project open reads settings and the manifest only. Initialize legacy history before
+  editing, through the [local version history contract](../../../docs/product-specs/studio.md#local-version-history).
 - Conditions owns modality and Base/Oddball source folders/word lists. Fresh image
   imports use workers and block navigation/disposal during mutation; normalization runs
   on leaving Conditions. There is no guided Design step or image preview. Instructions
