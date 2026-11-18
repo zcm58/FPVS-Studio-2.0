@@ -322,7 +322,8 @@ class ReportBugDialog(QDialog):
             self._sent_animation.stop()
             self._sent_animation.deleteLater()
             self._sent_animation = None
-            self.submit_button.setGraphicsEffect(None)
+            # Qt accepts a null effect to clear it, but PySide's stub omits None.
+            self.submit_button.setGraphicsEffect(None)  # type: ignore[arg-type]
         self._state = state
         frozen = state in ("loading", "verifying", "sending", "checking") or self._draft.locked
         for editor in self.fields.values():
