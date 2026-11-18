@@ -17,34 +17,26 @@ from fpvs_studio.gui.data_sharing_dialog import StartupReportNotice
 from fpvs_studio.gui.document import ProjectDocument
 
 
-def test_legacy_project_opens_to_home_before_first_setup_snapshot(
-    qtbot, qapp, controller, sample_project_root, sample_project, monkeypatch,
+def test_legacy_project_opens_home_and_enters_setup_without_a_snapshot(
+    qtbot, controller, sample_project_root, sample_project, monkeypatch,
 ):
     from fpvs_studio.core import study_versions
     from fpvs_studio.core.serialization import save_project_file
 
     save_project_file(sample_project, sample_project_root / "project.json")
-    snapshots = []
-    original = study_versions._assets
-
-    def capture(*args):
-        snapshots.append(QThread.currentThread() == qapp.thread())
-        return original(*args)
-
-    monkeypatch.setattr(study_versions, "_assets", capture)
+    monkeypatch.setattr(study_versions, "_assets",
+                        lambda *args: pytest.fail("Entering Setup walked the stimuli"))
     controller.request_open_project(sample_project_root)
     qtbot.waitUntil(lambda: controller._project_open_job is None)
     window = controller.main_window
     qtbot.addWidget(window)
     assert window.isVisible() and window.main_stack.currentWidget() is window.home_page
-    assert not snapshots and study_versions.current_version(sample_project_root) is None
+    assert study_versions.current_version(sample_project_root) is None
     window.show_setup_wizard()
     assert window.main_stack.currentWidget() is window.setup_wizard_page
-    assert snapshots == [False]
-    assert study_versions.current_version(sample_project_root) is not None
     window.show_home()
     window.show_setup_wizard()
-    assert snapshots == [False]
+    assert study_versions.list_versions(sample_project_root) == []
 
 
 def test_late_startup_sharing_notice_ignores_destroyed_windows(controller, tmp_path):

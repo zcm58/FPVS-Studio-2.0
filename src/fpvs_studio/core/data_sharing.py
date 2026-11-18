@@ -335,6 +335,15 @@ def protocol_fingerprint(
     image without updating its manifest cannot silently retain a registered protocol.
     """
 
+    fingerprint, _ = protocol_fingerprint_with_assets(project, project_root, cancelled=cancelled)
+    return fingerprint
+
+
+def protocol_fingerprint_with_assets(
+    project: ProjectFile, project_root: Path, *, cancelled: Callable[[], bool] | None = None,
+) -> tuple[str, dict[str, str]]:
+    """Return the protocol fingerprint and referenced media hashes from the same reads."""
+
     def check_cancelled() -> None:
         if cancelled is not None and cancelled():
             raise InterruptedError("Protocol verification cancelled.")
@@ -434,4 +443,4 @@ def protocol_fingerprint(
         ensure_ascii=False,
         allow_nan=False,
     )
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest(), dict(provenance)

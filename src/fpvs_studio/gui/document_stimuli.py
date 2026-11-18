@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.models import Condition, ProjectFile, StimulusSet
 from fpvs_studio.core.paths import filesystem_path
-from fpvs_studio.core.study_versions import ensure_initial_version
+from fpvs_studio.core.study_versions import ensure_working_setup
 from fpvs_studio.gui.document_support import DocumentError, validated_copy
 from fpvs_studio.preprocessing.importer import (
     import_fresh_stimulus_source_directory,
@@ -123,7 +123,7 @@ class DocumentStimulusMixin:
             )
 
         project = validated_copy(self._project, stimulus_sets=updated_sets)
-        ensure_initial_version(self._project_root)
+        ensure_working_setup(self._project_root)
         self._replace_project(project)
         self._manifest = manifest
         write_stimulus_manifest(self._project_root, manifest)
@@ -204,7 +204,7 @@ class DocumentStimulusMixin:
                 ]
             }
         )
-        ensure_initial_version(self._project_root)
+        ensure_working_setup(self._project_root)
         write_stimulus_manifest(self._project_root, manifest)
         self._manifest = manifest
         self._replace_project(project)
@@ -340,6 +340,7 @@ class DocumentStimulusMixin:
             )
 
         project = validated_copy(self._project, stimulus_sets=updated_sets)
+        ensure_working_setup(self._project_root)
         self._replace_project(project)
         self._manifest = manifest
         write_stimulus_manifest(self._project_root, manifest)

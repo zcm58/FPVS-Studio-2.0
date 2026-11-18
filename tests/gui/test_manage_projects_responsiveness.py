@@ -1,12 +1,20 @@
 """Project discovery keeps the manager usable without touching widgets from workers."""
 
+import json
 from threading import Event
 from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QPushButton
+from PySide6.QtWidgets import (
+    QApplication,
+    QDialog,
+    QListWidget,
+    QMessageBox,
+    QPushButton,
+    QTreeWidget,
+)
 from shiboken6 import delete, isValid
 from tests.gui.helpers import assert_visible_children_within_parent
 
@@ -82,8 +90,12 @@ class _PendingJob(QObject):
 @pytest.fixture
 def pending_jobs(controller, monkeypatch):
     jobs = []
+    start_task = controller._update_lifecycle.start_task
 
-    def start(callback):
+    def start(callback, **options):
+        # Reporting can finish startup while the synthetic manager scan is pending.
+        if options:
+            return start_task(callback, **options)
         job = _PendingJob(callback, controller)
         jobs.append(job)
         return job
@@ -404,3 +416,119 @@ def test_manage_project_groups_keep_collection_state_through_archive(
     dialog.collection_button.click()
     group("Active")
     assert not read_study(root).collection_complete
+
+
+@pytest.mark.parametrize("action", ["open", "inspect", "restore", "cancel_restore", "review"])
+def test_manage_saved_versions_keeps_latest_open_and_routes_explicit_choices(
+    controller, qtbot, qapp, monkeypatch, action,
+):
+    from fpvs_studio.core import study_versions
+    from fpvs_studio.core.study_lifecycle import get_study
+    from fpvs_studio.runtime.participant_results import research_visits_by_version
+
+    scaffold = create_project(controller.load_fpvs_root_dir(), "Versioned study")
+    root, project = scaffold.project_root, scaffold.project
+    for frequency, keep in ((6, True), (8, True), (10, False)):
+        project.settings.protocol.base_hz = frequency
+        draft = study_versions.prepare_setup_change(root, project)
+        study_versions.commit_setup_change(
+            root, project, draft, "", research_visits_by_version, save_version=keep,
+        )
+    original_id = get_study(root).study_id
+    snapshots = study_versions.list_versions(root)
+    assert len(snapshots) == 2
+    if action in ("open", "inspect"):
+        def forbid_asset_scan(*_args, **_kwargs):
+            pytest.fail("Project discovery, opening and read-only inspection must skip assets.")
+
+        monkeypatch.setattr(study_versions, "_assets", forbid_asset_scan)
+
+    visited = []
+    confirmations = []
+    collection_reviews = []
+    if action == "review":
+        evidence = root / "logs/.participant-results"
+        evidence.mkdir(parents=True, exist_ok=True)
+        (evidence / "partial.json").write_text(json.dumps({
+            "schema_version": 1,
+            "participant_number": "synthetic",
+            "session_id": "visit",
+            "protocol_version_id": snapshots[1].version_id,
+            "runs": [{"completed_frames": 1}],
+        }), encoding="utf-8")
+
+        def cancel_review(dialog):
+            collection_reviews.append(dialog.windowTitle())
+            dialog.reject()
+            return dialog.result()
+
+        monkeypatch.setattr(QMessageBox, "exec", cancel_review)
+
+    def confirm_restore(_parent, title, message, buttons, default):
+        confirmations.append(title)
+        assert default == QMessageBox.StandardButton.Cancel
+        assert "working settings and stimuli" in message
+        return QMessageBox.StandardButton.Yes if action == "restore" else default
+
+    monkeypatch.setattr(QMessageBox, "question", confirm_restore)
+
+    def open_dialog(dialog):
+        visited.append(dialog.windowTitle())
+        dialog.show()
+        qapp.processEvents()
+        assert dialog.size().toTuple() == (660, 460)
+        assert_visible_children_within_parent(dialog)
+        dialog.resize(dialog.minimumSize())
+        qapp.processEvents()
+        assert_visible_children_within_parent(dialog)
+        if dialog.windowTitle() == "Experiment version history":
+            rows = dialog.findChild(QListWidget)
+            assert rows.item(0).text().startswith("Version 2 ")
+            assert rows.item(1).text().startswith("Version 1 ")
+            rows.setCurrentRow(1)
+            buttons = {button.text(): button for button in dialog.findChildren(QPushButton)}
+            if action in ("restore", "cancel_restore", "review"):
+                buttons["Restore this version…"].click()
+            else:
+                buttons["Open version read-only…"].click()
+                dialog.reject()
+        else:
+            assert dialog.windowTitle() == "Version 1 — read-only"
+            tree = dialog.findChild(QTreeWidget)
+            match = Qt.MatchFlag.MatchExactly | Qt.MatchFlag.MatchRecursive
+            rates = tree.findItems("base hz", match)
+            assert any(rate.text(1) == "6.0" for rate in rates)
+            assert all(not rate.flags() & Qt.ItemFlag.ItemIsEditable for rate in rates)
+            assert tree.findItems("conditions", Qt.MatchFlag.MatchExactly)
+            dialog.reject()
+        return dialog.result()
+
+    monkeypatch.setattr(QDialog, "exec", open_dialog)
+    controller.show_manage_projects_dialog()
+    manager = controller._manage_projects_dialog
+    qtbot.waitUntil(lambda: controller._manage_projects_job is None)
+    assert manager.project_list.currentItem().text() == "Versioned study  ·  2 saved versions"
+    assert manager.versions_button.text() == "View 2 saved versions…"
+    assert manager.size().toTuple() == (860, 520)
+    assert_visible_children_within_parent(manager)
+    if action == "open":
+        manager.filter_edit.setFocus()
+        qtbot.keyClick(manager.filter_edit, Qt.Key.Key_Return)
+    else:
+        manager.versions_button.click()
+    qtbot.waitUntil(lambda: controller.main_window is not None)
+    qtbot.addWidget(controller.main_window)
+    if action != "open":
+        qtbot.waitUntil(lambda: bool(visited))
+    document = controller.main_window.document
+    assert document.project_root == root
+    assert document.project.settings.protocol.base_hz == (6 if action == "restore" else 10)
+    assert get_study(root).study_id == original_id
+    assert study_versions.list_versions(root)[:2] == snapshots
+    assert len(study_versions.list_versions(root)) == (3 if action == "restore" else 2)
+    expected = [] if action == "open" else ["Experiment version history"]
+    if action == "inspect":
+        expected.append("Version 1 — read-only")
+    assert visited == expected
+    assert confirmations == (["Restore Version 1?"] if "restore" in action else [])
+    assert collection_reviews == (["Review changes to this study"] if action == "review" else [])

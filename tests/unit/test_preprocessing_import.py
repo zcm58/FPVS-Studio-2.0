@@ -41,6 +41,29 @@ def _file_bytes(root):
     return {path.relative_to(root): path.read_bytes() for path in root.rglob("*") if path.is_file()}
 
 
+def test_authoring_retains_pre_edit_manifest_identity_without_archiving(
+    sample_project, sample_project_root, tmp_path, monkeypatch,
+):
+    from fpvs_studio.core import study_versions
+    from fpvs_studio.core.serialization import load_project_file, save_project_file
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    monkeypatch.setattr(study_versions, "_assets",
+                        lambda *args: pytest.fail("Stimulus authoring archived project media"))
+    document = _Document(sample_project, root)
+    document.refresh_stimulus_inspection()
+    source = _source(tmp_path, "replacement", ["new.png"])
+    document.import_condition_stimulus_folder("faces", role="base", source_dir=source)
+
+    # The manifest was written before Setup Save. Reopening must still detect the
+    # changed stimulus declarations even if the staged project model was discarded.
+    reopened = load_project_file(root / "project.json")
+    assert study_versions.prepare_setup_change(root, reopened).changes
+    assert not study_versions.list_versions(root)
+    assert not (root / ".fpvs-study/objects").exists()
+
+
 def test_reimport_replaces_only_selected_pool_and_keeps_previous_files(
     sample_project, sample_project_root, tmp_path,
 ):

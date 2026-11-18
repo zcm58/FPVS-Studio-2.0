@@ -42,7 +42,7 @@ from fpvs_studio.core.serialization import atomic_text_write, load_project_file,
 from fpvs_studio.core.study_versions import (
     ProtocolDraft,
     StudyVisitLookup,
-    prepare_change,
+    prepare_library_update,
     record_library_update,
 )
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
@@ -90,6 +90,7 @@ class ProjectUpdateSnapshot:
     project_id: str
     origin: LibraryProjectOrigin
     fingerprint: str
+    stimulus_assets: dict[str, str]
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,8 @@ def _root(path: Path) -> Path:
     return root.resolve()
 
 
-def _fingerprint(root: Path, cancel_event: Event | None) -> str:
+def _fingerprint(root: Path, cancel_event: Event | None) -> tuple[str, dict[str, str]]:
+    assets: dict[str, str] = {}
     digest = hashlib.sha256()
     observed: dict[Path, tuple[int, int, int, int]] = {}
     for relative in _OWNED:
@@ -164,10 +166,15 @@ def _fingerprint(root: Path, cancel_event: Event | None) -> str:
             if is_directory:
                 continue
             before = path.stat()
+            media_digest = hashlib.sha256() if relative == "stimuli" else None
             with path.open("rb") as handle:
                 for block in iter(lambda: handle.read(65536), b""):
                     _cancelled(cancel_event)
                     digest.update(block)
+                    if media_digest is not None:
+                        media_digest.update(block)
+            if media_digest is not None:
+                assets[path.relative_to(base).as_posix()] = media_digest.hexdigest()
             after = path.stat()
             if (before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns) != (
                 after.st_ino,
@@ -185,7 +192,7 @@ def _fingerprint(root: Path, cancel_event: Event | None) -> str:
         info = path.stat()
         if previous_stamp != (info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns):
             raise ProjectBundleError("Project changed during update review. Save and try again.")
-    return digest.hexdigest()
+    return digest.hexdigest(), assets
 
 
 def capture_project_update_snapshot(
@@ -208,7 +215,7 @@ def capture_project_update_snapshot(
         if origin.local_project_id != project.meta.project_id:
             raise ProjectBundleError("Project identity does not match its Library link.")
         return ProjectUpdateSnapshot(
-            root, project.meta.project_id, origin, _fingerprint(root, cancel_event)
+            root, project.meta.project_id, origin, *_fingerprint(root, cancel_event)
         )
     except ProjectBundleError:
         raise
@@ -415,10 +422,21 @@ def update_project_bundle(
             raise ProjectBundleError(
                 "Project changed during download. Save and check the version again."
             )
-        draft = None
+        candidate_assets = {
+            record.path.removeprefix("stimuli/"): record.sha256
+            for record in bundle_manifest.files
+            if record.path.startswith("stimuli/")
+        }
+        # The installed manifest has the local project ID; all other media still use
+        # the archive digests verified during extraction.
+        candidate_assets["manifest.json"] = hashlib.sha256(
+            filesystem_path(imported.project_root / "stimuli/manifest.json").read_bytes()
+        ).hexdigest()
+        draft = prepare_library_update(
+            root, imported.project_root, updated, snapshot.stimulus_assets, candidate_assets
+        )
         reason = ""
         if research_visits(root):
-            draft = prepare_change(root, updated, candidate_root=imported.project_root)
             if draft.changes:
                 if review_protocol is None:
                     raise ProjectBundleError(
@@ -475,7 +493,8 @@ def update_project_bundle(
                 moves.append((source, target))
             journal["status"] = "complete"
             atomic_text_write(backup / "update.json", json.dumps(journal, indent=2))
-            record_library_update(root, backup, draft, reason, research_visits)
+            _, installed_assets = _fingerprint(root, None)
+            record_library_update(root, draft, installed_assets, reason, research_visits)
             committed = True
         except Exception as error:
             try:

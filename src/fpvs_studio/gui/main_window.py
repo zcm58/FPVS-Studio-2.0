@@ -178,7 +178,7 @@ class StudioMainWindow(QMainWindow):
         self.document = document
         from fpvs_studio.gui.study_versions import StudyVersionController
         self._study_versions = StudyVersionController(self, on_open_study_path)
-        self.document.protocol_save_handler = self._study_versions.save
+        self.document.setup_save_handler = self._study_versions.save
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
         self._on_request_manage_projects = on_request_manage_projects
@@ -318,7 +318,7 @@ class StudioMainWindow(QMainWindow):
                 manage_condition_templates=self._on_manage_condition_templates,
                 load_fpvs_root_dir=self._on_load_fpvs_root_dir,
                 on_return_home=self.show_home,
-                on_save_project=self.save_project,
+                on_save_project=lambda: self.save_project(completed_setup=True),
             )
             self._setup_wizard_page = page
             page.run_page.session_completed.connect(self._notify_session_completed)
@@ -415,7 +415,7 @@ class StudioMainWindow(QMainWindow):
         allow_step_jumps: bool = False,
         first_incomplete: bool = False,
     ) -> None:
-        if self._project_update_reload_failed or not self._study_versions.ready_for_setup():
+        if self._project_update_reload_failed:
             return
         setup_wizard_page = self.setup_wizard_page
         self._set_home_chrome_visible(True)
@@ -920,7 +920,9 @@ class StudioMainWindow(QMainWindow):
             self.export_menu.addAction(self.publish_library_action)
         self.file_menu.addMenu(self.export_menu)
         self.file_menu.addAction(self.project_update_action)
-        self.file_menu.addAction("Experiment version history…", self._study_versions.show_history)
+        self.file_menu.addAction(
+            "Experiment version history…", self.show_experiment_version_history
+        )
         self.file_menu.addAction(self.find_action_action)
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addAction(self.check_updates_action)
@@ -1114,7 +1116,10 @@ class StudioMainWindow(QMainWindow):
             ),
         )
 
-    def save_project(self) -> bool:
+    def show_experiment_version_history(self) -> None:
+        self._study_versions.show_history()
+
+    def save_project(self, *, completed_setup: bool = False) -> bool:
         if self._project_update_reload_failed or self._bundle_import_processing_active:
             return False
         # Ctrl+S does not move focus like clicking Save. Commit editingFinished
@@ -1129,7 +1134,10 @@ class StudioMainWindow(QMainWindow):
             )
             return False
         try:
-            self.document.save()
+            if completed_setup:
+                self.document.save(completed_setup=True)
+            else:
+                self.document.save()
         except Exception as error:
             from fpvs_studio.gui.study_versions import ProtocolReviewCancelled
             if isinstance(error, ProtocolReviewCancelled):

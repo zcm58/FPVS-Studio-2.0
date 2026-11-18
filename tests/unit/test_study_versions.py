@@ -12,15 +12,23 @@ from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.study_lifecycle import get_study, read_study, set_collection_complete
 from fpvs_studio.core.study_versions import (
     ProtocolReviewRequired,
+    accepted_stimulus_digests,
     commit_change,
+    commit_setup_change,
     create_from_version,
     current_version,
+    ensure_working_setup,
+    has_pending_setup_save,
     historical_draft,
     keep_saved_stimuli,
     list_versions,
+    list_working_revisions,
     name_version,
     prepare_change,
+    prepare_setup_change,
+    read_version_protocol,
     restore_version,
+    saved_version_count,
 )
 from fpvs_studio.runtime.participant_results import research_visits_by_version
 
@@ -76,27 +84,166 @@ def test_save_restore_and_fork_exact_image_and_protocol(
     assert len(list_versions(root)) == 3
 
 
-def test_first_asset_import_preserves_the_legacy_stimuli(sample_project_root, sample_project):
+def test_first_setup_save_captures_final_candidate_once(
+    sample_project_root, sample_project, monkeypatch
+):
+    from fpvs_studio.core import study_versions
     from fpvs_studio.core.task_assets import copy_task_asset
 
     root = sample_project_root
     save_project_file(sample_project, root / "project.json")
     image = next((root / "stimuli").rglob("*.png"))
-    original = image.read_bytes()
+    scans = []
+    original_scan = study_versions._assets
+
+    def count_scans(*args, **kwargs):
+        scans.append(args[0])
+        return original_scan(*args, **kwargs)
+
+    monkeypatch.setattr(study_versions, "_assets", count_scans)
     target = copy_task_asset(root, "memory", image)
+    assert saved_version_count(root) == 0
+    sample_project.conditions[0].name = "Edited during setup"
+    draft = prepare_setup_change(root, sample_project)
+    assert not scans
+    commit_setup_change(
+        root, sample_project, draft, "", research_visits_by_version, save_version=False
+    )
+    assert scans == [root]
+    (only,) = list_versions(root)
+    assert (
+        read_version_protocol(root, only.version_id)["conditions"][0]["name"]
+        == "Edited during setup"
+    )
+    assert accepted_stimulus_digests(root)[target] == hashlib.sha256(image.read_bytes()).hexdigest()
+
+
+def test_skip_save_and_unchanged_save_do_not_read_stimuli(
+    sample_project_root, sample_project, monkeypatch
+):
+    from fpvs_studio.core import study_versions
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    commit_setup_change(
+        root,
+        sample_project,
+        prepare_setup_change(root, sample_project),
+        "",
+        research_visits_by_version,
+        save_version=False,
+    )
+    first = current_version(root)
+    with monkeypatch.context() as guard:
+        guard.setattr(study_versions, "_assets", lambda *_: pytest.fail("unexpected stimulus scan"))
+        sample_project.settings.protocol.base_hz = 8
+        draft = prepare_setup_change(root, sample_project)
+        commit_setup_change(
+            root,
+            sample_project,
+            draft,
+            "Changed after collection",
+            research_visits_by_version,
+            save_version=False,
+        )
+        working = current_version(root)
+        assert working.version_id != first.version_id
+        assert working in list_working_revisions(root)
+        assert working.reason == "Changed after collection"
+        unchanged = prepare_setup_change(root, sample_project)
+        assert not unchanged.changes
+        commit_setup_change(
+            root, sample_project, unchanged, "", research_visits_by_version, save_version=True
+        )
+        assert current_version(root) == working
+        assert list_versions(root) == [first]
+        with pytest.raises(ValueError, match="changed during review"):
+            commit_setup_change(
+                root, sample_project, draft, "", research_visits_by_version, save_version=False
+            )
+
+    rollback = historical_draft(root, first.version_id)
+    assert rollback.changes
+    restored = restore_version(root, rollback, "", research_visits_by_version)
+    assert restored.settings.protocol.base_hz != 8
+    assert len(list_versions(root)) == 2
+
+
+@pytest.mark.parametrize("save_version", [True, False])
+def test_inline_review_then_final_save_preserves_decision(
+    sample_project_root, sample_project, save_version
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    commit_setup_change(
+        root,
+        sample_project,
+        prepare_setup_change(root, sample_project),
+        "",
+        research_visits_by_version,
+        save_version=True,
+    )
+    sample_project.settings.protocol.base_hz = 10
+    draft = prepare_setup_change(root, sample_project)
+
+    def visits(_root):
+        return {"first": {"P001"}}
+
+    with pytest.raises(ProtocolReviewRequired):
+        commit_setup_change(
+            root, sample_project, draft, "", visits, save_version=False, completed_setup=False
+        )
+    reason = "Reviewed after an early visit"
+    commit_setup_change(
+        root, sample_project, draft, reason, visits, save_version=False, completed_setup=False
+    )
+    assert has_pending_setup_save(root)
+    assert saved_version_count(root) == 1
+    final = prepare_setup_change(root, sample_project)
+    assert not final.changes
+    commit_setup_change(root, sample_project, final, "", visits, save_version=save_version)
+    assert not has_pending_setup_save(root)
+    assert saved_version_count(root) == 1 + save_version
+    assert current_version(root).reason == reason
+
+
+def test_working_setup_before_first_save_creates_no_snapshot(sample_project_root, sample_project):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    assert saved_version_count(root) == 0 and list_versions(root) == []
+    assert not (root / ".fpvs-study").exists()
+    ensure_working_setup(root)
     initial = current_version(root)
-    assert initial is not None
-    draft = prepare_change(root, sample_project)
-    assert draft.changes == (f"Stimulus added: {target.removeprefix('stimuli/')}",)
-    image.write_bytes(b"replacement")
-    restored = historical_draft(root, initial.version_id)
-    restore_version(root, restored, "", research_visits_by_version)
-    assert image.read_bytes() == original
-    assert not (root / target).exists()
+    assert initial is not None and saved_version_count(root) == 0
+    assert not (root / ".fpvs-study/objects").exists()
+    sample_project.conditions[0].name = "Inline edit"
+    draft = prepare_setup_change(root, sample_project)
+    commit_setup_change(
+        root,
+        sample_project,
+        draft,
+        "Reviewed",
+        research_visits_by_version,
+        save_version=False,
+        completed_setup=False,
+    )
+    assert not (root / ".fpvs-study/objects").exists()
+    assert has_pending_setup_save(root) and saved_version_count(root) == 0
+    commit_setup_change(
+        root,
+        sample_project,
+        prepare_setup_change(root, sample_project),
+        "",
+        research_visits_by_version,
+        save_version=False,
+    )
+    assert saved_version_count(root) == 1
+    assert not has_pending_setup_save(root)
 
 
 def test_first_review_detects_external_changes_since_legacy_inspection(
-    sample_project_root, sample_project,
+    sample_project_root,
+    sample_project,
 ):
     from fpvs_studio.preprocessing.inspection import inspect_source_directory
     from fpvs_studio.preprocessing.manifest import (
@@ -125,6 +272,99 @@ def test_first_review_detects_external_changes_since_legacy_inspection(
     }
 
 
+def test_review_is_read_only_and_restore_does_not_archive_skipped_media(
+    sample_project_root, sample_project, tmp_path
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    first = prepare_setup_change(root, sample_project)
+    assert not (root / ".fpvs-study").exists()
+    commit_setup_change(
+        root, sample_project, first, "", research_visits_by_version, save_version=True
+    )
+    checkpoint = current_version(root)
+    image = next((root / "stimuli").rglob("*.png"))
+    before = image.read_bytes()
+    changed_bytes = b"unique uncheckpointed working bytes"
+    image.write_bytes(changed_bytes)
+    sample_project.conditions[0].name = "Working edits"
+    draft = prepare_setup_change(root, sample_project, stimuli_changed=True)
+    commit_setup_change(
+        root, sample_project, draft, "", research_visits_by_version, save_version=False
+    )
+    skipped_digest = hashlib.sha256(changed_bytes).hexdigest()
+    skipped_object = root / ".fpvs-study/objects" / skipped_digest
+    assert not skipped_object.exists()
+    history = historical_draft(root, checkpoint.version_id)
+    branch = create_from_version(
+        root, tmp_path, "Copied checkpoint", history, source_version_id=checkpoint.version_id
+    )
+    assert (branch / image.relative_to(root)).read_bytes() == before
+    assert image.read_bytes() == changed_bytes
+    restore_version(root, history, "", research_visits_by_version)
+    assert image.read_bytes() == before and not skipped_object.exists()
+
+
+def test_inline_edits_back_to_completed_working_setup_need_no_checkpoint(
+    sample_project_root, sample_project
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+
+    def accept(rate, *, final):
+        sample_project.settings.protocol.base_hz = rate
+        commit_setup_change(
+            root,
+            sample_project,
+            prepare_setup_change(root, sample_project),
+            "",
+            research_visits_by_version,
+            save_version=False,
+            completed_setup=final,
+        )
+
+    accept(6, final=True)
+    accept(7, final=True)
+    accept(8, final=False)
+    assert has_pending_setup_save(root)
+    accept(7, final=False)
+    assert not has_pending_setup_save(root)
+    accept(6, final=False)
+    assert has_pending_setup_save(root)
+
+
+def test_setup_capture_rejects_second_external_edit_after_launch_review(
+    sample_project_root, sample_project
+):
+    from fpvs_studio.core.run_stimulus_identity import verify_run_stimuli
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    commit_setup_change(
+        root,
+        sample_project,
+        prepare_setup_change(root, sample_project),
+        "",
+        research_visits_by_version,
+        save_version=True,
+    )
+    version = current_version(root).version_id
+    path = next((root / "stimuli").rglob("*.png"))
+    relative = path.relative_to(root).as_posix()
+    verify_run_stimuli(root, version, {relative: hashlib.sha256(path.read_bytes()).hexdigest()})
+    path.write_bytes(b"change seen at launch")
+    with pytest.raises(ValueError):
+        verify_run_stimuli(root, version, {relative: hashlib.sha256(path.read_bytes()).hexdigest()})
+    draft = prepare_setup_change(root, sample_project)
+    assert any(relative in change for change in draft.changes)
+    path.write_bytes(b"changed again during review")
+    with pytest.raises(ValueError, match="changed after review"):
+        commit_setup_change(
+            root, sample_project, draft, "", research_visits_by_version, save_version=True
+        )
+    assert saved_version_count(root) == 1 and current_version(root).version_id == version
+
+
 def test_fork_changed_draft_keeps_original_bytes(sample_project_root, sample_project, tmp_path):
     root = sample_project_root
     save_project_file(sample_project, root / "project.json")
@@ -138,6 +378,36 @@ def test_fork_changed_draft_keeps_original_bytes(sample_project_root, sample_pro
     assert image.read_bytes() == before
     assert (fork / image.relative_to(root)).read_bytes() == b"candidate"
     assert current_version(root) == original
+
+
+def test_collecting_checkpoint_discovers_external_changes_for_next_save(
+    sample_project_root, sample_project
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    commit_setup_change(root, sample_project, prepare_setup_change(root, sample_project), "",
+                        research_visits_by_version, save_version=True)
+    sample_project.conditions[0].name = "New condition name"
+    image = next((root / "stimuli").rglob("*.png"))
+    image.write_bytes(b"new after collection")
+    key = hashlib.sha256(image.read_bytes()).hexdigest()
+    draft = prepare_setup_change(root, sample_project)
+    assert not any(image.name in change for change in draft.changes)
+
+    def visits(_root):
+        return {"first": {"P001"}}
+
+    with pytest.raises(ProtocolReviewRequired, match="Save again"):
+        commit_setup_change(root, sample_project, draft, "Reviewed name", visits, save_version=True)
+    assert saved_version_count(root) == 1
+    assert not (root / ".fpvs-study/objects" / key).exists()
+    review = prepare_setup_change(root, sample_project)
+    assert dict(review.observed_changes) == {image.relative_to(root).as_posix(): key}
+    commit_setup_change(
+        root, sample_project, review, "Reviewed name and image", visits, save_version=False
+    )
+    assert saved_version_count(root) == 1 and not (root / ".fpvs-study/objects" / key).exists()
+    assert accepted_stimulus_digests(root)[image.relative_to(root).as_posix()] == key
 
 
 def test_unreviewed_asset_change_keeps_settings_and_history(sample_project_root, sample_project):
@@ -225,9 +495,13 @@ def _on_stimulus_read(monkeypatch, image, change, *, repeat=False):
     monkeypatch.setattr(Path, "open", open_file)
 
 
-@pytest.mark.parametrize(("relative", "retime_access_only"), [
-    ("original-images/base/item.jpg", True), ("derived/base/gray/item.png", False),
-])
+@pytest.mark.parametrize(
+    ("relative", "retime_access_only"),
+    [
+        ("original-images/base/item.jpg", True),
+        ("derived/base/gray/item.png", False),
+    ],
+)
 def test_first_baseline_accepts_timestamp_change_when_stimulus_bytes_match(
     sample_project_root, sample_project, monkeypatch, relative, retime_access_only
 ):

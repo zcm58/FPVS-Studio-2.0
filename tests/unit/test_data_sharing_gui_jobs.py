@@ -1297,18 +1297,25 @@ def test_completed_handoff_requires_exact_library_scope_for_same_protocol_enroll
     "legacy_frozen_external_change",
 ])
 def test_launch_hash_belongs_to_current_compiled_plan_only(
-    sample_project, sample_project_root, scenario,
+    sample_project, sample_project_root, scenario, monkeypatch,
 ):
     launches, hashed_projects = [], []
+    from fpvs_studio.core import study_versions
     from fpvs_studio.core.serialization import save_project_file
-    from fpvs_studio.core.study_versions import current_version, prepare_change
+    from fpvs_studio.core.study_versions import (
+        current_version,
+        ensure_working_setup,
+        list_versions,
+        prepare_setup_change,
+    )
     from fpvs_studio.runtime.condition_recovery import build_replacement_session_plan
 
     save_project_file(sample_project, sample_project_root / "project.json")
 
-    def sharing_hash(project, root):
+    def sharing_hash(project, root, verified_digest):
         hashed_projects.append(project)
-        return protocol_fingerprint(project, root)
+        assert verified_digest == protocol_fingerprint(project, root)
+        return verified_digest
 
     def launch(root, plan, **kwargs):
         launches.append((root, plan, kwargs["launch_settings"]))
@@ -1332,7 +1339,9 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         attentional_blink_pilot_mode_enabled=False, _session_export_mode="full",
         validate_recording_launch=lambda: None, refresh_participant_summary_if_stale=lambda: None,
         ensure_unused_session_seed_for_launch=lambda: None,
-        prepare_protocol_change=lambda project: prepare_change(sample_project_root, project),
+        prepare_protocol_change=lambda project, **kw: prepare_setup_change(
+            sample_project_root, project, **kw
+        ),
         validation_report=lambda **_values: SimpleNamespace(is_valid=True),
         session_plan_changed=_Signal(), project_changed=_Signal(), _set_dirty=lambda _value: None,
         _randomization_signature=namespace["_randomization_signature"],
@@ -1341,7 +1350,9 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         ),
     )
     plan = namespace["compile_session"](document, refresh_hz=60.0)
-    prepare_change(sample_project_root, sample_project)
+    monkeypatch.setattr(study_versions, "_assets",
+                        lambda *args: pytest.fail("Research launch archived stimuli"))
+    ensure_working_setup(sample_project_root)
     version = current_version(sample_project_root)
     options = {}
     if scenario in {"edited_after_compilation", "stale_replacement_source"}:
@@ -1361,6 +1372,12 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
                 protocol_version_id=None if scenario.startswith("legacy") else version.version_id
             )
     if scenario in {"external_stimulus_replacement", "legacy_frozen_external_change"}:
+        # This legacy project has no manifest or checkpoint. The already verified
+        # research launch still protects its image bytes on the next attempt.
+        namespace["launch_compiled_session"](
+            document, source, participant_number="1", display_index=None,
+        )
+        launches.clear()
         asset = next((sample_project_root / "stimuli").rglob("*.png"))
         asset.write_bytes(asset.read_bytes() + b"changed")
     if scenario in {
@@ -1372,11 +1389,13 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
                 document, plan, participant_number="1", display_index=None, **options
             )
         assert not launches
+        assert not list_versions(sample_project_root)
         return
     namespace["launch_compiled_session"](
         document, plan, participant_number="1", display_index=None, **options,
     )
     assert len(launches) == 1 and launches[0][1] is plan  # Local launch still proceeds.
+    assert not list_versions(sample_project_root)
     supplied = launches[0][2].sharing_protocol_sha256
     if scenario in {"edited_after_compilation", "legacy_frozen"}:
         assert supplied is None
@@ -1387,6 +1406,66 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         assert hashed_projects == [sample_project]
         assert launches[0][2].studio_protocol_version_id == version.version_id
         assert launches[0][2].toolbox_handoff_config
+
+
+@pytest.mark.parametrize("edit", ["replace", "add", "remove"])
+def test_external_image_change_since_checkpoint_can_be_reviewed_and_saved_without_a_new_version(
+    sample_project, sample_project_root, monkeypatch, edit,
+):
+    from fpvs_studio.core import study_versions
+    from fpvs_studio.core.data_sharing import protocol_fingerprint_with_assets
+    from fpvs_studio.core.run_stimulus_identity import verify_run_stimuli
+    from fpvs_studio.core.serialization import save_project_file
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    def lookup(_root):
+        return {}
+
+    study_versions.commit_setup_change(
+        root, sample_project, study_versions.prepare_setup_change(root, sample_project), "", lookup,
+        save_version=True,
+    )
+    initial = study_versions.current_version(root).version_id
+    _, original = protocol_fingerprint_with_assets(sample_project, root)
+    monkeypatch.setattr(study_versions, "_assets", lambda *_: pytest.fail("Archived a stimulus"))
+    relative = next(iter(original))
+    path = root / relative
+    prior = path.read_bytes()
+    if edit == "add":
+        path = path.with_name("new.png")
+        relative = path.relative_to(root).as_posix()
+
+    def change():
+        if edit == "remove":
+            path.unlink()
+        else:
+            path.write_bytes(prior + b"replacement")
+
+    change()
+    _, replaced = protocol_fingerprint_with_assets(sample_project, root)
+    with pytest.raises(ValueError, match="stimulus files changed"):
+        verify_run_stimuli(root, initial, replaced)
+    draft = study_versions.prepare_setup_change(root, sample_project)
+    assert dict(draft.observed_changes) == {relative: replaced.get(relative)}
+
+    if edit == "add":
+        path.unlink()
+    else:
+        path.write_bytes(prior)
+    _, restored = protocol_fingerprint_with_assets(sample_project, root)
+    verify_run_stimuli(root, initial, restored)
+    assert not study_versions.prepare_setup_change(root, sample_project).changes
+
+    change()
+    with pytest.raises(ValueError, match="stimulus files changed"):
+        verify_run_stimuli(root, initial, replaced)
+    draft = study_versions.prepare_setup_change(root, sample_project)
+    study_versions.commit_setup_change(root, sample_project, draft, "", lookup, save_version=False)
+    accepted = study_versions.current_version(root).version_id
+    assert accepted != initial
+    assert [v.version_id for v in study_versions.list_versions(root)] == [initial]
+    verify_run_stimuli(root, accepted, replaced)
 
 
 def test_sharing_privacy_tooltips_describe_current_fields_without_importing_qt():

@@ -137,6 +137,7 @@ def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) ->
     assert (project_root / "runs").is_dir()
     assert (project_root / "cache").is_dir()
     assert (project_root / "logs").is_dir()
+    assert not (project_root / ".fpvs-study").exists()
 
     project = load_project_file(project_json_path(project_root))
     manifest = read_json_file(stimulus_manifest_path(project_root), StimulusManifest)

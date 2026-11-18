@@ -91,24 +91,34 @@ Only later visits should carry the new revision in the [study handoff](../PROJEC
 
 ### Local version history
 
-From the first saved protocol, automatically retain one local version for each
-save that changes the experiment. A version can have an optional name.
-Show the save time, what changed and which research visits, if any, used it.
-Open **File > Experiment version history** to inspect, name, restore or copy a
-saved version. Inspecting a version leaves the active experiment alone. Version
-history works offline and requires no Library publication.
+**Save and Return Home** at the end of Setup creates **Project version 1** from
+the finished setup. Existing projects keep their saved versions. A project with
+no history starts at version 1 on its next completed setup save.
 
-Opening Home reads the saved project and stimulus manifest. For projects that
-predate version history, capture the first local version on entering Setup,
-editing stimuli, reviewing history, saving or preparing a research visit.
-Browsing Home must never require walking or copying the stimulus folder.
+On later setup saves, offer **Save project version** or **Save changes only**
+when the protocol or stimuli have changed. Both choices save the working project.
+Only the first adds a numbered rollback point. Cancel keeps Setup open. Routine
+saves, imports, opening Setup or history, collecting a visit and saving an
+unchanged setup do not create rollback copies or scan media for the archive.
+Research visits retain the identity of the settings used, including settings
+saved without a rollback point. The collection safeguards above still apply.
+Installing a Library update retains its installation backup separately. A
+changed Library setup can become a numbered local version at the next final
+Setup save.
+
+Normal Open always opens the latest working setup. **Manage Projects** shows
+which projects have multiple saved versions and offers their history. There
+and under **File > Experiment version history**, authors can open a saved
+version read-only, name it, restore it or create a separate study from it.
+Show the save time, changes and associated visits. History works offline.
 
 Retain the settings and exact stimuli needed to restore a saved version,
 including an image later replaced under the same filename. Reuse unchanged
 assets across versions. If a historical asset is missing, name it and leave
 the current protocol active until the saved version can be restored exactly.
-When the author keeps the saved protocol after an external image replacement,
-restore the saved image and retain the unapplied files in the location shown in Studio.
+If a replacement is rejected and a saved copy of the active stimulus exists,
+restore those exact bytes and retain the unapplied files in the location shown
+in Studio. Never substitute an earlier checkpoint for an unsnapshotted setup.
 
 From history, the author can **Save as new study** using that version or
 **Restore this version** inside the existing study. Restoring records a new

@@ -128,11 +128,13 @@ def _read_project_management_entry(
     """Read display metadata without consulting live document or widget state."""
 
     from fpvs_studio.core.study_lifecycle import read_study
+    from fpvs_studio.core.study_versions import saved_version_count
 
     is_current = project_root == current_root
     try:
         project = load_project_file(project_json_path(project_root))
         state = read_study(project_root)
+        saved_versions = saved_version_count(project_root)
     except Exception:
         return ProjectManagementEntry(
             name=project_root.name,
@@ -158,6 +160,7 @@ def _read_project_management_entry(
         can_rename=True,
         collection_complete=bool(state and state.collection_complete),
         archived=bool(state and state.archived),
+        saved_versions=saved_versions,
     )
 
 
@@ -841,6 +844,9 @@ class StudioController(QObject):
             parent=parent,
         )
         dialog.open_requested.connect(lambda root: self._open_managed_project(dialog, root))
+        dialog.versions_requested.connect(
+            lambda root: self._open_managed_project(dialog, root, show_versions=True)
+        )
         dialog.delete_requested.connect(lambda root: self._delete_managed_project(dialog, root))
         dialog.collection_requested.connect(
             lambda root, value: self._change_managed_state(dialog, root, complete=value)
@@ -1786,11 +1792,25 @@ class StudioController(QObject):
         root_dir = self._fpvs_root_dir
         return discover_project_roots(root_dir) if root_dir is not None else []
 
-    def _open_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
+    def _open_managed_project(
+        self, dialog: ManageProjectsDialog, project_root: str, *, show_versions: bool = False,
+    ) -> None:
+        root = Path(project_root)
+        if show_versions and self.main_window is not None and self._current_project_root() == root:
+            dialog.accept()
+            self.main_window.show_experiment_version_history()
+            return
         if self.main_window is not None and not self.main_window.prepare_project_handoff():
             return
         dialog.accept()
-        self.request_open_project(Path(project_root))
+        if show_versions:
+            def open_history() -> None:
+                if self.main_window is not None:
+                    self.main_window.show_experiment_version_history()
+
+            self.request_open_project(root, on_opened=open_history)
+        else:
+            self.request_open_project(root)
 
     def _delete_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         self.delete_project(Path(project_root), parent=dialog)

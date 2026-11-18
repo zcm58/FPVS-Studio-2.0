@@ -17,7 +17,9 @@ project services. It must import without Qt, PsychoPy or hardware dependencies.
   owns runnable Studio archives. `project_bundle_update.py` owns reviewed same-folder
   replacement, backup and rollback. Ordinary imports create separate projects.
 - `study_lifecycle.py` owns offline study identity and collection state.
-  `study_versions.py` owns local protocol history and deduplicated stimulus bytes.
+  `study_versions.py` owns as-run setup identities and explicitly saved rollback
+  versions. Only an archival action captures stimulus bytes. See the
+  [version contract](../../../docs/product-specs/studio.md#local-version-history).
   Authoring saves and Library replacements receive the runtime visit lookup
   from the application. Core never imports the acquisition or GUI layer.
 - `recording_hardware.py`: versioned hardware declarations, never measured qualification.

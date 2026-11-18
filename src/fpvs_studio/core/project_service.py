@@ -262,6 +262,4 @@ def create_project(
     else:
         write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     save_project_file(project, project_json_path(target_dir))
-    from fpvs_studio.core.study_versions import prepare_change
-    prepare_change(target_dir, project)
     return ProjectScaffold(project_root=target_dir, project=project)

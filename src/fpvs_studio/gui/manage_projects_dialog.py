@@ -49,6 +49,7 @@ class ProjectManagementEntry:
     can_rename: bool = False
     collection_complete: bool = False
     archived: bool = False
+    saved_versions: int = 0
 
     @property
     def group(self) -> str:
@@ -61,6 +62,7 @@ class ManageProjectsDialog(QDialog):
     """Thin GUI surface for managing projects known to the Studio root/recent list."""
 
     open_requested = Signal(str)
+    versions_requested = Signal(str)
     delete_requested = Signal(str)
     rename_requested = Signal(str)
     retry_requested = Signal()
@@ -135,6 +137,13 @@ class ManageProjectsDialog(QDialog):
         self.status_badge.setObjectName("manage_projects_status_badge")
         detail_layout.addWidget(self.status_badge, 0, Qt.AlignmentFlag.AlignLeft)
 
+        self.versions_button = QPushButton(detail_panel)
+        self.versions_button.setObjectName("manage_projects_versions_button")
+        self.versions_button.setAutoDefault(False)
+        mark_secondary_action(self.versions_button)
+        self.versions_button.clicked.connect(self._request_versions)
+        detail_layout.addWidget(self.versions_button, 0, Qt.AlignmentFlag.AlignLeft)
+
         self.folder_label = QLabel("Project Folder", detail_panel)
         self.folder_label.setProperty("setupMetricLabel", "true")
         detail_layout.addWidget(self.folder_label)
@@ -182,6 +191,8 @@ class ManageProjectsDialog(QDialog):
 
         self.open_button = QPushButton("Open Project", self)
         self.open_button.setObjectName("manage_projects_open_button")
+        self.open_button.setToolTip("Open the latest working project.")
+        self.open_button.setDefault(True)
         mark_primary_action(self.open_button)
         self.open_button.clicked.connect(self._request_open)
         action_row.addWidget(self.open_button)
@@ -231,7 +242,10 @@ class ManageProjectsDialog(QDialog):
         self._items_by_root = {}
         for entry in self._entries:
             root_key = str(entry.root)
-            item = QListWidgetItem(entry.name)
+            title = entry.name
+            if entry.saved_versions > 1:
+                title = f"{entry.name}  ·  {entry.saved_versions} saved versions"
+            item = QListWidgetItem(title)
             item.setData(Qt.ItemDataRole.UserRole, root_key)
             item.setToolTip(root_key)
             self._items_by_root[root_key] = item
@@ -327,12 +341,15 @@ class ManageProjectsDialog(QDialog):
         self.delete_button.setEnabled(has_entry and entry.can_delete if entry else False)
         self.copy_path_button.setEnabled(has_entry)
         self.rename_button.setEnabled(entry.can_rename if entry else False)
+        self.versions_button.setVisible(bool(entry and entry.saved_versions))
 
         valid = bool(entry and entry.can_rename)
         self.archive_button.setVisible(valid)
         self.collection_button.setVisible(bool(valid and entry and not entry.archived))
         if entry is None:
             return
+        count = entry.saved_versions
+        self.versions_button.setText(f"View {count} saved version{'s' if count != 1 else ''}…")
         self.archive_button.setText("Restore" if entry.archived else "Archive")
         self.collection_button.setText(
             "Reopen Collection" if entry.collection_complete else "Mark Collection Complete"
@@ -371,6 +388,11 @@ class ManageProjectsDialog(QDialog):
         entry = self._selected_entry()
         if entry is not None and entry.can_open:
             self.open_requested.emit(str(entry.root))
+
+    def _request_versions(self) -> None:
+        entry = self._selected_entry()
+        if entry is not None and entry.saved_versions:
+            self.versions_requested.emit(str(entry.root))
 
     def _request_delete(self) -> None:
         entry = self._selected_entry()

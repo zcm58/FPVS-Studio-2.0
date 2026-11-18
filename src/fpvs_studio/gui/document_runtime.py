@@ -64,10 +64,12 @@ def _document_dependency(name: str) -> Any:
     return getattr(import_module("fpvs_studio.gui.document"), name)
 
 
-def _sharing_protocol(project: ProjectFile, project_root: Path) -> str | None:
+def _sharing_protocol(
+    project: ProjectFile, project_root: Path, verified_digest: str | None = None,
+) -> str | None:
     try:
         if load_settings(project_root).enabled:
-            return protocol_fingerprint(project, project_root)
+            return verified_digest or protocol_fingerprint(project, project_root)
     except Exception:
         logging.getLogger(__name__).warning(
             "Sharing protocol could not be verified; "
@@ -138,7 +140,9 @@ class DocumentRuntimeMixin:
         def uses_default_recording_configuration(self) -> bool: ...
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
-        def prepare_protocol_change(self, project: ProjectFile) -> ProtocolDraft: ...
+        def prepare_protocol_change(
+            self, project: ProjectFile, *, include_run_observations: bool = True,
+        ) -> ProtocolDraft: ...
         def _save_protocol(self, project: ProjectFile) -> None: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
         def prepare_participant_randomization(
@@ -382,6 +386,7 @@ class DocumentRuntimeMixin:
                 participant_session_number = 1
             self.validate_recording_launch()
             revision = None
+            verified_digest = None
             if replacement_source is not None and replacement_source is not self._last_session_plan:
                 raise DocumentError("The replacement protocol changed. Prepare the re-run again.")
             frozen_version_id = frozen_record.protocol_version_id if frozen_record else None
@@ -391,10 +396,14 @@ class DocumentRuntimeMixin:
                 or frozen_version_id is not None
             )
             if not self.local_testing_enabled and (verified_setup or frozen_record is not None):
-                from fpvs_studio.core.study_versions import current_version
+                from fpvs_studio.core.data_sharing import protocol_fingerprint_with_assets
+                from fpvs_studio.core.run_stimulus_identity import verify_run_stimuli
+                from fpvs_studio.core.study_versions import current_version, ensure_working_setup
+
                 if not (self._project_root / "project.json").is_file():
                     self._save_protocol(self._project)
-                draft = self.prepare_protocol_change(self._project)
+                ensure_working_setup(self._project_root)
+                draft = self.prepare_protocol_change(self._project, include_run_observations=False)
                 if draft.changes:
                     raise DocumentError(
                         "The protocol or stimuli changed. Review and save the experiment "
@@ -408,12 +417,16 @@ class DocumentRuntimeMixin:
                         "The original protocol has changed. Reopen Interrupted Sessions "
                         "to prepare a replacement using the current setup."
                     )
+                verified_digest, media = protocol_fingerprint_with_assets(
+                    self._project, self._project_root
+                )
+                verify_run_stimuli(self._project_root, revision.version_id, media)
                 if not verified_setup:
                     revision = None  # An older schedule has no recorded version to attribute.
             recording_configuration = self.recording_configuration
             trigger_settings = self._project.settings.triggers
             sharing_protocol = (
-                _sharing_protocol(self._project, self._project_root)
+                _sharing_protocol(self._project, self._project_root, verified_digest)
                 if verified_setup else None
             )
             launch_kwargs: _SessionLaunchArguments = {
@@ -474,7 +487,7 @@ class DocumentRuntimeMixin:
                         _toolbox_handoff_config(
                             self._project,
                             self._project_root,
-                            sharing_protocol,
+                            verified_digest or sharing_protocol,
                             recording_configuration,
                         )
                         if verified_setup else None

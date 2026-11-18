@@ -56,8 +56,8 @@ from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.core.study_lifecycle import database_path, read_study
 from fpvs_studio.core.study_versions import (
     ProtocolDraft,
-    commit_change,
-    prepare_change,
+    commit_setup_change,
+    prepare_setup_change,
 )
 from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
 from fpvs_studio.engines.registry import create_engine
@@ -81,10 +81,7 @@ from fpvs_studio.gui.document_support import (
 from fpvs_studio.gui.document_support import (
     validated_copy as _validated_copy,
 )
-from fpvs_studio.preprocessing.manifest import (
-    create_empty_manifest,
-    read_stimulus_manifest,
-)
+from fpvs_studio.preprocessing.manifest import read_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 from fpvs_studio.preprocessing.normalization import ImageNormalizationScan
 from fpvs_studio.runtime.export_modes import EXPORT_MODE_FULL, VALID_EXPORT_MODES
@@ -162,7 +159,7 @@ class ProjectDocument(
         super().__init__()
         self._project_root = Path(project_root)
         self._automatic_session_seed: int | None = None
-        self.protocol_save_handler: Callable[[ProjectFile], None] | None = None
+        self.setup_save_handler: Callable[[ProjectFile, bool], None] | None = None
         self._project = project
         self._manifest = manifest
         self._dirty = False
@@ -203,7 +200,7 @@ class ProjectDocument(
             condition_template_profile=condition_template_profile,
             experiment_category=experiment_category,
         )
-        manifest = create_empty_manifest(scaffold.project.meta.project_id)
+        manifest = read_stimulus_manifest(scaffold.project_root)
         document = cls(
             project_root=scaffold.project_root,
             project=scaffold.project,
@@ -756,15 +753,19 @@ class ProjectDocument(
         settings = _validated_copy(self._project.settings, triggers=triggers)
         self._apply_project_update(settings=settings)
 
-    def save(self) -> None:
-        """Persist the current project to `project.json`."""
+    def save(self, *, completed_setup: bool = False) -> None:
+        """Persist the working project. Only Setup's final Save offers a rollback point."""
 
-        self._project = self._persist_project_candidate(self._project)
+        self._project = self._persist_project_candidate(
+            self._project, completed_setup=completed_setup
+        )
         self._set_dirty(False)
         self.saved.emit()
         self.project_changed.emit()
 
-    def _persist_project_candidate(self, project: ProjectFile) -> ProjectFile:
+    def _persist_project_candidate(
+        self, project: ProjectFile, *, completed_setup: bool = False
+    ) -> ProjectFile:
         """Use the normal atomic save workflow before adopting a validated draft."""
 
         consistency_issues = validate_condition_repeat_cycle_consistency(project)
@@ -775,10 +776,10 @@ class ProjectDocument(
 
         meta = _validated_copy(project.meta, updated_at=utc_now())
         project = _validated_copy(project, meta=meta)
-        self._save_protocol(project)
+        self._save_protocol(project, completed_setup=completed_setup)
         return project
 
-    def _save_protocol(self, project: ProjectFile) -> None:
+    def _save_protocol(self, project: ProjectFile, *, completed_setup: bool = False) -> None:
         from fpvs_studio.runtime.participant_results import research_visits_by_version
 
         if not self.project_file_path.exists():
@@ -786,18 +787,28 @@ class ProjectDocument(
                     or research_visits_by_version(self.project_root)):
                 raise DocumentError("Restore the saved project file before collecting data.")
             save_project_file(project, self.project_file_path)
-            prepare_change(self.project_root, project)
+            if not completed_setup:
+                return
+        if self.setup_save_handler is not None:
+            self.setup_save_handler(project, completed_setup)
             return
-        if self.protocol_save_handler is not None:
-            self.protocol_save_handler(project)
-            return
-
         draft = self.prepare_protocol_change(project)
-        commit_change(self.project_root, project, draft, "", research_visits_by_version)
+        if not completed_setup and not draft.changes:
+            save_project_file(project, self.project_file_path)
+        else:
+            commit_setup_change(
+                self.project_root, project, draft, "", research_visits_by_version,
+                save_version=False, completed_setup=completed_setup,
+            )
 
-    def prepare_protocol_change(self, project: ProjectFile) -> ProtocolDraft:
+    def prepare_protocol_change(
+        self, project: ProjectFile, *, include_run_observations: bool = True
+    ) -> ProtocolDraft:
         transient = self._automatic_session_seed == project.settings.session.session_seed
-        return prepare_change(self.project_root, project, transient_session_seed=transient)
+        return prepare_setup_change(
+            self.project_root, project, transient_session_seed=transient,
+            include_run_observations=include_run_observations,
+        )
 
     def _persist_project_update(self, project: ProjectFile) -> None:
         project = self._persist_project_candidate(project)

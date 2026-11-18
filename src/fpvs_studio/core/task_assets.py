@@ -125,9 +125,6 @@ def copy_task_asset(
             f"A different task asset already uses destination path: {relative_path}"
         )
 
-    from fpvs_studio.core.study_versions import ensure_initial_version
-
-    ensure_initial_version(project_root)
     destination_dir.mkdir(parents=True, exist_ok=True)
     temporary_path: Path | None = None
     try:

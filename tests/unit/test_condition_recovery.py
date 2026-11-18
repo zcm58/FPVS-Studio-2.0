@@ -287,11 +287,18 @@ def test_rerun_preserves_exact_occurrence_and_never_changes_original(execution):
 def test_updated_stimulus_version_offers_replacement_only(execution, multi_condition_project):
     from fpvs_studio.core.serialization import save_project_file
     from fpvs_studio.core.study_lifecycle import get_study
-    from fpvs_studio.core.study_versions import commit_change, current_version, prepare_change
+    from fpvs_studio.core.study_versions import (
+        commit_setup_change,
+        current_version,
+        ensure_working_setup,
+        list_versions,
+        prepare_setup_change,
+    )
 
     root, plan = execution
     save_project_file(multi_condition_project, root / "project.json")
-    prepare_change(root, multi_condition_project)
+    ensure_working_setup(root)
+    assert not list_versions(root)
     revision = current_version(root).version_id
     recorder = _record(root, plan)
     recorder.start_run(plan.ordered_entries()[0].run_id)
@@ -311,11 +318,12 @@ def test_updated_stimulus_version_offers_replacement_only(execution, multi_condi
     assert known.can_rerun and known.protocol_version_id == revision
     asset = next((root / "stimuli").rglob("*.png"))
     asset.write_bytes(asset.read_bytes() + b"changed")
-    draft = prepare_change(root, multi_condition_project)
+    draft = prepare_setup_change(root, multi_condition_project, stimuli_changed=True)
     from fpvs_studio.runtime.participant_results import research_visits_by_version
 
-    commit_change(
-        root, multi_condition_project, draft, "Replaced a stimulus", research_visits_by_version
+    commit_setup_change(
+        root, multi_condition_project, draft, "Replaced a stimulus", research_visits_by_version,
+        save_version=True,
     )
     newer, = query_condition_recovery(root).records
     assert not newer.can_rerun and newer.protocol_version_id == revision

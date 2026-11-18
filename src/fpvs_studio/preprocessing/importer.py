@@ -26,7 +26,7 @@ from fpvs_studio.core.paths import (
     to_project_relative_posix,
 )
 from fpvs_studio.core.portable_paths import validate_portable_path_inventory
-from fpvs_studio.core.study_versions import ensure_initial_version
+from fpvs_studio.core.study_versions import ensure_working_setup
 from fpvs_studio.preprocessing.controls import (
     generate_phase_scrambled_png,
     generate_rot180_png,
@@ -114,7 +114,6 @@ def import_stimulus_source_directory(
             "Unsupported source image files found: " + ", ".join(sorted(unsupported))
         )
 
-    ensure_initial_version(project_root)
     destination_dir.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".import-", dir=destination_dir.parent) as temporary:
         staging = filesystem_path(Path(temporary))
@@ -148,7 +147,6 @@ def materialize_project_assets(
     project_root = filesystem_path(project_root)
     requested_variants = variants or list(project.settings.supported_variants)
     existing_manifest = manifest or _load_or_create_manifest(project, project_root)
-    ensure_initial_version(project_root)
     working_manifest = existing_manifest
 
     for stimulus_set in project.stimulus_sets:
@@ -181,6 +179,7 @@ def materialize_project_assets(
         )
         working_manifest = upsert_manifest_set(working_manifest, manifest_set)
 
+    ensure_working_setup(project_root)
     write_stimulus_manifest(project_root, working_manifest)
     return working_manifest
 

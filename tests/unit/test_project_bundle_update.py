@@ -171,13 +171,69 @@ def test_collected_study_reviews_library_changes_before_install(update_case):
     assert any("Stimulus replaced" in change for change in seen)
     assert any("New authored condition" in change for change in seen)
     assert current_version(case.root).reason == "Future visits use the revised instructions"
+    from fpvs_studio.core.study_versions import saved_version_count
+
+    assert saved_version_count(case.root) == 0
+    assert not (case.root / ".fpvs-study/objects").exists()
+
+
+def test_fork_library_candidate_without_archiving_original(update_case):
+    from fpvs_studio.core.study_versions import create_from_version, saved_version_count
+
+    case = update_case
+    evidence = case.root / "logs/.participant-results"
+    evidence.mkdir()
+    (evidence / "partial.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "participant_number": "001",
+                "runs": [{"run_id": "r", "completed_frames": 2}],
+            }
+        )
+    )
+
+    def fork(draft):
+        create_from_version(case.root, case.studio, "Separate cohort", draft)
+        return ""
+
+    with pytest.raises(ProjectBundleCancelled):
+        _update(case, review_protocol=fork)
+    created = case.studio / "separate-cohort"
+    assert (
+        load_project_file(created / "project.json").conditions[0].name == "New authored condition"
+    )
+    assert (
+        load_project_file(case.root / "project.json").conditions[0].name != "New authored condition"
+    )
+    assert saved_version_count(case.root) == 0
+    assert not (case.root / ".fpvs-study/objects").exists()
+    assert not (created / "logs/.participant-results").exists()
 
 
 @pytest.mark.parametrize("scope", ["lab", "public"])
 def test_update_replaces_authored_files_and_preserves_local_identity_evidence_and_backup(
-    update_case, scope,
+    update_case,
+    scope,
 ):
     case = update_case
+    from fpvs_studio.core.study_versions import (
+        commit_setup_change,
+        prepare_setup_change,
+        saved_version_count,
+    )
+
+    # An existing local rollback point remains exactly as it was after an install.
+    commit_setup_change(
+        case.root,
+        case.local,
+        prepare_setup_change(case.root, case.local),
+        "",
+        research_visits_by_version,
+        save_version=True,
+    )
+    objects = case.root / ".fpvs-study/objects"
+    archived = _bytes(objects)
     initial_origin = load_library_origin(case.root)
     save_library_origin(case.root, initial_origin.model_copy(update={"scope": scope}))
     case.origin = case.origin.model_copy(update={"scope": scope})
@@ -215,8 +271,11 @@ def test_update_replaces_authored_files_and_preserves_local_identity_evidence_an
     assert receipt.auto_check is False
     assert receipt.scope == scope
     after = _bytes(case.root)
+    assert saved_version_count(case.root) == 1
+    assert _bytes(objects) == archived
     for relative, payload in before.items():
         if not relative.startswith("stimuli/") and relative not in (
+            ".fpvs-study/study.sqlite3",
             "project.json",
             ".fpvs-library/project-origin.json",
         ):

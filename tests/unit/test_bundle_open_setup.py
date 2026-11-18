@@ -21,7 +21,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.project_bundle import export_project_bundle, import_project_bundle
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.core.serialization import load_project_file
-from fpvs_studio.core.study_versions import current_version, prepare_change
+from fpvs_studio.core.study_versions import current_version
 from fpvs_studio.gui.document_support import resolve_project_location
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest
 
@@ -96,8 +96,7 @@ def test_open_imported_project_without_windows_long_path_policy(
     assert project.meta.project_id == root.name
     assert manifest is not None and manifest.project_id == project.meta.project_id
     assert current_version(root) is None
-    assert not prepare_change(root, project).changes
-    assert current_version(root) is not None
+    assert not filesystem_path(root / ".fpvs-study").exists()
 
 
 def test_opening_an_unversioned_project_never_scans_stimuli(

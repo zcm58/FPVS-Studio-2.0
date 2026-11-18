@@ -17,7 +17,7 @@ from fpvs_studio.core.paths import (
     slugify_project_name,
 )
 from fpvs_studio.core.serialization import model_to_json, save_project_file
-from fpvs_studio.core.study_versions import ensure_initial_version
+from fpvs_studio.core.study_versions import ensure_working_setup
 from fpvs_studio.preprocessing.manifest import create_empty_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -137,7 +137,7 @@ def separate_legacy_mixed_project(
 
     root = filesystem_path(project_root).resolve()
     source_roots, manifest_files = _validated_source_inventory(root, project, manifest)
-    ensure_initial_version(root)
+    ensure_working_setup(root)
     parent = root.parent
     stem = slugify_project_name(project.meta.name + " FPVS Oddball")
     suffix = 1
