@@ -17,7 +17,10 @@ policy and does not establish the safety of arbitrarily renamed file bytes.
 ### Upload a project for review
 
 **File > Export > Upload Project for Review...** is available to normal Studio
-users without Library enrollment, a contributor grant or a GitHub account. The
+users. Bundles up to 64 MiB can be submitted without connecting a Library account.
+For larger bundles, connect Studio to your personal OpenFPVS account with an
+active lab PI role. The prepared bundle must be smaller than 2 GiB
+(2,147,483,647 bytes maximum). Your administrator reviews submissions of either size. The
 title and description come from the current project. Enter your name/contact,
 confirm sharing permission and choose **Upload for Review**. That one action saves,
 prepares and uploads the whole project. The dialog is minimum `760x600`, default
@@ -35,7 +38,8 @@ This workflow does not add condition merging to the existing Library importer.
 
 Submission uses `/submissions/v1` and `/submissions/v1/<UUID>/bundle`; the
 private OpenFPVS project owns its additive review schema and GitHub writes. Uploads
-are capped at 64 MiB. The UUID, metadata, byte size and SHA-256 remain fixed on an
+over 64 MiB stream to the private review draft over a secure WebSocket. The UUID,
+metadata, byte size and SHA-256 remain fixed on an
 exact retry; confirmed requests cannot have their bundles replaced. Cancel or an
 uncertain upload retains prepared files and **Retry Upload** reuses them. Preparation
 that finishes just before cancellation is also retained for the next Upload

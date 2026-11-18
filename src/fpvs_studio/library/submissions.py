@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import secrets
 import time
 import zipfile
@@ -18,10 +19,56 @@ from fpvs_studio.developer.library_publisher import PreparedPublication
 from fpvs_studio.library.cache import check_cancel
 from fpvs_studio.library.client import METADATA_TOTAL_SECONDS, CredentialOwner, LibraryClient
 from fpvs_studio.library.credentials import CredentialStore, DeviceCredential, credential_store
-from fpvs_studio.library.errors import LibraryError
+from fpvs_studio.library.errors import LibraryAuthorizationError, LibraryError
+from fpvs_studio.library.models import MAX_DOWNLOAD_BYTES
 from fpvs_studio.support.website_transfer import website_export
 
 MAX_SUBMISSION_BYTES = 64 * 1024 * 1024
+_PI_FRAME_BYTES = 1024 * 1024
+
+
+def _upload_pi_bundle(
+    client: LibraryClient, endpoint: str, token: str, pi_token: str, source: BinaryIO,
+    cancel: Event | None,
+) -> SubmissionStatus:
+    from websockets.exceptions import InvalidStatus, WebSocketException
+    from websockets.sync.client import connect
+
+    # LibraryClient accepts HTTPS origins only. The sync transport rejects redirects.
+    url = "wss://" + client.service_url.removeprefix("https://") + endpoint
+    headers = {"Authorization": f"Bearer {token}", "X-FPVS-PI-Device": pi_token}
+    # WebSocket debug tracing includes handshake headers.
+    logger = logging.Logger("studio.review_upload", level=logging.CRITICAL)
+    try:
+        with connect(
+            url, additional_headers=headers, compression=None, open_timeout=45, close_timeout=2,
+            max_size=16 * 1024, max_queue=2, logger=logger,
+        ) as socket:
+            deadline = time.monotonic() + 56 * 60
+            idle = time.monotonic() + 100
+            while True:
+                check_cancel(cancel)
+                if time.monotonic() >= min(deadline, idle):
+                    raise LibraryError("The upload timed out. Retry the same prepared bundle.")
+                try:
+                    reply = socket.recv(timeout=0.5)
+                except TimeoutError:
+                    continue
+                if reply != "ready":
+                    if not isinstance(reply, str):
+                        raise LibraryError("OpenFPVS returned an invalid upload receipt.")
+                    return _receipt(json.loads(reply))
+                chunk = source.read(_PI_FRAME_BYTES)
+                if not chunk:
+                    raise LibraryError("OpenFPVS requested data beyond the prepared bundle.")
+                socket.send(chunk)
+                idle = time.monotonic() + 100
+    except InvalidStatus as error:
+        if error.response.status_code in (401, 403):
+            raise LibraryAuthorizationError("Reconnect Studio with your lab PI account.") from None
+        raise LibraryError("The upload could not start. Retry the prepared bundle.") from None
+    except (OSError, WebSocketException, json.JSONDecodeError):
+        raise LibraryError("The upload was interrupted. Retry the same prepared bundle.") from None
 
 
 class SubmissionStatus(BaseModel):
@@ -194,8 +241,19 @@ def _submit(
     prefix = "submitted-" if project_uploads else "reviewed-"
     submission_id = str(UUID(prepared.request.item_id.removeprefix(prefix)))
     report = prepared.report
-    if report.condition_count < 1 or not 0 < report.size_bytes <= MAX_SUBMISSION_BYTES:
-        raise LibraryError("Upload a project bundle no larger than 64 MiB.")
+    if report.condition_count < 1 or not 0 < report.size_bytes <= (
+        MAX_DOWNLOAD_BYTES if project_uploads else MAX_SUBMISSION_BYTES
+    ):
+        raise LibraryError("The project bundle must be smaller than 2 GiB.")
+    pi_token = None
+    if report.size_bytes > MAX_SUBMISSION_BYTES:
+        try:
+            pi_token = client.enrolled_credential(cancel_event=cancel_event).token
+        except LibraryAuthorizationError:
+            raise LibraryAuthorizationError(
+                "Connect Studio to your personal OpenFPVS lab PI account "
+                "to submit a project larger than 64 MiB."
+            ) from None
     if not author_name.strip() or len(author_name) > 200:
         raise LibraryError("Enter your name (up to 200 characters).")
     if not author_email.strip() or len(author_email) > 254 or "@" not in author_email:
@@ -249,11 +307,21 @@ def _submit(
                 payload=metadata,
                 cancel_event=cancel_event,
                 credential_owner=credential_owner,
+                pi_device_token=pi_token,
             )
             status = _receipt(raw)
             if str(status.submission_id) != submission_id or status.sha256 != report.sha256:
                 raise LibraryError("OpenFPVS returned a receipt for a different submission.")
             if status.status != "uploading":
+                return status
+            if pi_token:
+                status = _upload_pi_bundle(
+                    client, f"{endpoint}/{submission_id}/bundle", token, pi_token, source,
+                    cancel_event,
+                )
+                if (str(status.submission_id) != submission_id or status.sha256 != report.sha256
+                        or status.status != "pending"):
+                    raise LibraryError("OpenFPVS did not confirm this bundle for review.")
                 return status
             with client._response(
                 "PUT",

@@ -32,8 +32,9 @@ validation and extraction; this package only transfers and verifies bytes.
   service key before cache creation/reuse. Response keys cannot establish trust;
   see `docs/LIBRARY_ARTIFACT_PROVENANCE.md` for the bounded proof contract.
 - `submissions.py` transfers an explicitly confirmed whole-project bundle through
-  `/submissions/v1`, using a separate OS-protected upload identity without enrollment
-  or Library privileges. Retain the enrolled `/v2/submissions` condition API for older
+  `/submissions/v1` using its own OS-protected upload identity. Above 64 MiB,
+  send the linked PI credential and stream bounded frames over same-origin WSS.
+  The bundle must be under 2 GiB. Retain the enrolled `/v2/submissions` condition API for older
   clients. Bind retries to the UUID/digest; preparation uses
   core's clean exporter through the existing prepared-file owner. No GitHub write
   credential enters the desktop client. Approval covers exact bytes only.

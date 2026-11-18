@@ -8,7 +8,7 @@ import json
 import zipfile
 from contextlib import contextmanager
 from dataclasses import replace
-from threading import Event
+from threading import Event, Thread
 from urllib.error import HTTPError
 from uuid import uuid4
 
@@ -398,6 +398,79 @@ def test_project_history_never_uses_library_enrollment(submission, monkeypatch):
     assert not list_submissions(client, project_uploads=True, upload_store=store).submissions
     assert calls[0][1] == "/submissions/v1"
     assert calls[0][2]["token"] == store.value.token
+
+
+def test_pi_project_streams_exact_prepared_bundle_and_retries_receipt(submission, monkeypatch):
+    from websockets.sync.client import connect
+    from websockets.sync.server import serve
+
+    client, prepared, status, calls = submission
+    store = MemoryStore(connected=False)
+    item_id = prepared.request.item_id.replace("reviewed-", "submitted-")
+    prepared = replace(prepared, request=replace(prepared.request, item_id=item_id))
+    data = prepared.bundle_path.read_bytes()
+    received = []
+    handshakes = []
+    monkeypatch.setattr("fpvs_studio.library.submissions.MAX_SUBMISSION_BYTES", 16)
+    monkeypatch.setattr("fpvs_studio.library.submissions._PI_FRAME_BYTES", 16)
+
+    def review(socket):
+        handshakes.append(socket.request)
+        size = 0
+        while size < len(data):
+            socket.send("ready")
+            frame = socket.recv(timeout=5)
+            assert isinstance(frame, bytes) and 0 < len(frame) <= 16
+            received.append(frame)
+            size += len(frame)
+        socket.send(json.dumps({"schema_version": "1.0", "submission": {
+            **status, "item_id": item_id, "status": "pending",
+        }}))
+
+    def send_project():
+        return submit_project(client, prepared, author_name="PI", author_email="pi@example.test",
+                              upload_store=store)
+
+    with serve(review, "127.0.0.1", 0, compression=None) as server:
+        worker = Thread(target=server.serve_forever)
+        worker.start()
+        endpoint = f"/submissions/v1/{status['submission_id']}/bundle"
+
+        def loopback(url, **kwargs):
+            assert url == "wss://library.example.test" + endpoint
+            port = server.socket.getsockname()[1]
+            return connect(f"ws://127.0.0.1:{port}{endpoint}", proxy=None, **kwargs)
+
+        monkeypatch.setattr("websockets.sync.client.connect", loopback)
+        try:
+            assert send_project().status == "pending"
+            status["status"] = "pending"
+            assert send_project().status == "pending"
+        finally:
+            server.shutdown()
+            worker.join(5)
+    assert b"".join(received) == data
+    assert len(handshakes) == 1
+    assert handshakes[0].headers["Authorization"] == f"Bearer {store.value.token}"
+    assert handshakes[0].headers["X-FPVS-PI-Device"] == client._credential().token
+    assert all(call[2]["pi_device_token"] == client._credential().token for call in calls)
+    assert calls[0][2]["payload"] == calls[1][2]["payload"]
+
+
+def test_large_project_needs_connected_account_and_stops_at_github_limit(submission):
+    client, prepared, _, calls = submission
+    prepared = replace(prepared, request=replace(
+        prepared.request, item_id=prepared.request.item_id.replace("reviewed-", "submitted-"),
+    ))
+    client._store = MemoryStore(connected=False)
+    store = MemoryStore(connected=False)
+    limits = [(64 * 1024**2 + 1, "lab PI account"), (2 * 1024**3, "smaller than 2 GiB")]
+    for size, message in limits:
+        candidate = replace(prepared, report=replace(prepared.report, size_bytes=size))
+        with pytest.raises(LibraryError, match=message):
+            submit_project(client, candidate, author_name="PI", author_email="pi@example.test",
+                           upload_store=store)
+    assert not calls and not store.saved
 
 
 def test_linking_code_uses_only_the_upload_identity_and_rejects_invalid_response(

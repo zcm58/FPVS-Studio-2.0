@@ -31,6 +31,7 @@ dependencies = [
   # Keep Mac source on the 6.11 maintenance line during native crash qualification.
   "PySide6==6.11.3; sys_platform == 'darwin'",
   "pydantic>=2.8,<3.0",
+  "websockets>=16,<17",
   "cryptography>=50.0,<51.0",
   "keyring>=25,<26; sys_platform == 'linux' or sys_platform == 'darwin'",
   "secretstorage>=3.3,<4; sys_platform == 'linux'",

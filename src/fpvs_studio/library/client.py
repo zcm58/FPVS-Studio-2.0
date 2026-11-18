@@ -153,6 +153,7 @@ class LibraryClient:
         self, method: str, path: str, *, token: str = "", data: bytes | BinaryIO | None = None,
         cancel_event: Event | None = None, content_length: int | None = None,
         credential_owner: CredentialOwner = "library",
+        pi_device_token: str | None = None,
     ) -> Iterator[Any]:
         url = self.service_url + path
         public = path.startswith(_PUBLIC_API + "/")
@@ -172,6 +173,8 @@ class LibraryClient:
             headers["Content-Length"] = str(content_length)
         if token:
             headers["Authorization"] = f"Bearer {token}"
+        if pi_device_token:
+            headers["X-FPVS-PI-Device"] = pi_device_token
         request = Request(url, data=data, headers=headers, method=method)
         try:
             response = build_opener(_NoRedirect()).open(request, timeout=NETWORK_TIMEOUT_SECONDS)
@@ -187,6 +190,11 @@ class LibraryClient:
             if view_only:
                 raise LibraryError(_VIEW_ONLY_MESSAGE) from None
             if token and status in (401, 403):
+                if pi_device_token:
+                    raise LibraryAuthorizationError(
+                        "Large project uploads require a connected OpenFPVS account "
+                        "with an active lab PI role."
+                    ) from None
                 if credential_owner == "project_upload":
                     # This identity also owns existing immutable upload requests. Retain it
                     # for recovery rather than rotating it or deleting Library enrollment.
@@ -261,6 +269,7 @@ class LibraryClient:
         cancel_event: Event | None = None,
         limit: int = MAX_CATALOG_BYTES,
         credential_owner: CredentialOwner = "library",
+        pi_device_token: str | None = None,
     ) -> object:
         check_cancel(cancel_event)
         data = json.dumps(payload).encode("utf-8") if payload is not None else None
@@ -268,6 +277,7 @@ class LibraryClient:
         with self._response(
             method, path, token=token, data=data, cancel_event=cancel_event,
             credential_owner=credential_owner,
+            pi_device_token=pi_device_token,
         ) as response:
             if response.headers.get_content_type() != "application/json":
                 raise LibraryError("The Library service returned an unexpected response type.")

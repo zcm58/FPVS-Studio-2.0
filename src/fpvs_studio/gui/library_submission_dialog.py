@@ -77,7 +77,7 @@ class LibrarySubmissionDialog(QDialog):
             + " "
             + "Participant data, results, logs and local credentials are excluded. "
             "Review authored text and images for identifying information before submitting. "
-            "Maximum bundle size: 64 MiB.",
+            "For bundles over 64 MiB and under 2 GiB, connect your lab PI account.",
         )
         self.review = QPlainTextEdit(page)
         self.review.setReadOnly(True)

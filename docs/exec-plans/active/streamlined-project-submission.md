@@ -8,6 +8,13 @@ upload/email/validation/publication qualification remains pending.
 
 Date: 2026-10-08
 
+## Large whole-project submissions
+
+Studio keeps the 64 MiB HTTP path and streams larger bundles under 2 GiB to the
+same private review draft using a linked lab PI account. Verify ordinary and PI
+submissions, loss of membership during upload, exact-byte retry and the pending
+receipt before deployment. Installer delivery follows the Studio release cycle.
+
 ## October 29 cancellation recovery
 
 Cancel can arrive after preparation succeeds while the worker is finishing native
@@ -31,8 +38,8 @@ Reuse the existing clean publication exporter, submission transport, private Git
 drafts, administrator review and accepted catalog overlay. File > Export > Upload
 Project for Review opens a compact form with prefilled project title/description,
 author/contact and sharing permission. Upload automatically prepares and submits all
-conditions and required assets. Submission does not require Library enrollment or a
-contributor grant. The exact uploaded bytes remain immutable and retries reuse the
+conditions and required assets. Standard-size submissions require no Library
+enrollment or contributor grant. The exact uploaded bytes remain immutable and retries reuse the
 same request. Research data, logs and credentials stay excluded.
 
 OpenFPVS emails the administrator after a complete upload, with GitHub/admin review
