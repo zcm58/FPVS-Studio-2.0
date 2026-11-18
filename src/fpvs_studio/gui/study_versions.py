@@ -157,7 +157,7 @@ class StudyVersionController:
         def save_or_review() -> ProtocolDraft | None:
             draft = self.document.prepare_protocol_change(project)
             try:
-                commit_change(self.root, project, draft, "")
+                commit_change(self.root, project, draft, "", research_visits_by_version)
             except ProtocolReviewRequired:
                 return draft
             return None
@@ -179,7 +179,9 @@ class StudyVersionController:
                 raise
             self._work(
                 "Saving the reviewed experiment…",
-                lambda: commit_change(self.root, project, draft, reason),
+                lambda: commit_change(
+                    self.root, project, draft, reason, research_visits_by_version
+                ),
             )
 
     def _reload(self) -> None:
@@ -309,6 +311,7 @@ class StudyVersionController:
         if draft.changes:
             reason = self.review(draft, version_id=version.version_id) if visits else ""
             self._work(
-                "Restoring the saved experiment…", lambda: restore_version(self.root, draft, reason)
+                "Restoring the saved experiment…",
+                lambda: restore_version(self.root, draft, reason, research_visits_by_version),
             )
             self._reload()

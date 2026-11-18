@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -12,7 +11,6 @@ from uuid import UUID
 
 from fpvs_studio import __version__
 from fpvs_studio.core.execution import AcquisitionEvidence
-from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import project_json_path, resolve_project_relative_path
 from fpvs_studio.core.project_config import ProjectConfigFile, read_retained_session_config
 from fpvs_studio.core.run_spec import RunSpec
@@ -226,48 +224,10 @@ def _add_history(
     }
 
 
-def _website_scope(
-    root: Path,
-    project: ProjectFile,
-    setups: dict[str, dict[str, Any]],
-    roster: list[dict[str, Any]],
-) -> dict[str, str] | None:
-    from fpvs_studio.core.data_sharing import protocol_fingerprint
-    from fpvs_studio.data_sharing.errors import DataSharingError
-    from fpvs_studio.data_sharing.library_scope import validate_library_scope
-    from fpvs_studio.data_sharing.storage import SharingStorageError, load_settings
-
-    try:
-        settings = load_settings(root)
-        profile = settings.profile
-        if not settings.enabled or profile is None or not profile.project_id or not roster:
-            return None
-        validate_library_scope(root, profile)
-        scope = {
-            "project_id": profile.project_id,
-            "experiment_id": profile.experiment_id,
-            "experiment_version": profile.experiment_version,
-            "protocol_sha256": profile.protocol_sha256,
-        }
-        for visit in roster:
-            if not visit["setup_id"]:
-                return None
-            captured = setups[visit["setup_id"]]["toolbox"]
-            if any(
-                captured.get("study_id" if k == "project_id" else k) != v for k, v in scope.items()
-            ):
-                return None
-        return scope if profile.protocol_sha256 == protocol_fingerprint(project, root) else None
-    except (DataSharingError, SharingStorageError, OSError, ValueError):
-        logging.getLogger(__name__).warning(
-            "Cannot verify the website destination for this local export."
-        )
-        return None
-
-
 def build_study_handoff(project_root: Path) -> dict[str, Any]:
     """Read the roster and its reproducible fingerprint without exporting a file."""
     from fpvs_studio.core.study_lifecycle import get_study
+    from fpvs_studio.data_sharing.library_scope import verified_handoff_scope
 
     root = Path(project_root)
     study = get_study(root)
@@ -456,7 +416,8 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
     ]
     used_setups = {visit["setup_id"] for visit in roster}
     setups = {key: value for key, value in setups.items() if key in used_setups}
-    website = _website_scope(root, project, setups, roster)
+    captured_scopes = [setups.get(visit["setup_id"], {}).get("toolbox") for visit in roster]
+    website = verified_handoff_scope(root, project, captured_scopes)
     return {
         **({"website_study": website} if website else {}),
         "format": "fpvs-study-handoff",

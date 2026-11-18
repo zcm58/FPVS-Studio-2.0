@@ -1,7 +1,7 @@
 # AGENTS.md
 
-FPVS Studio authors experiments, runs participant sessions and exports configurations
-for Toolbox. Windows supports acquisition. macOS has experimental source support.
+FPVS Studio authors versioned experiments, runs participant visits and hands
+completed studies to Toolbox. Windows supports acquisition. macOS has experimental source support.
 
 ## Efficient Working Route
 

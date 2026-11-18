@@ -21,6 +21,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.project_bundle import export_project_bundle, import_project_bundle
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.core.serialization import load_project_file
+from fpvs_studio.core.study_versions import current_version, prepare_change
 from fpvs_studio.gui.document_support import resolve_project_location
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest
 
@@ -87,12 +88,15 @@ def test_open_imported_project_without_windows_long_path_policy(
         resolve_project_location=resolve_project_location,
         load_project_file=load_project_file, stimulus_manifest_path=stimulus_manifest_path,
         read_stimulus_manifest=read_stimulus_manifest, filesystem_path=filesystem_path,
+        current_version=current_version, prepare_change=prepare_change,
     )["read_existing"]
     location = imported_long_project / "project.json" if json_file else imported_long_project
+    assert current_version(imported_long_project) is None
     root, project, manifest = read(location)
     assert root == imported_long_project
     assert project.meta.project_id == root.name
     assert manifest is not None and manifest.project_id == project.meta.project_id
+    assert current_version(root) is not None
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")

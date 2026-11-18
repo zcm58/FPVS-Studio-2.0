@@ -8,6 +8,7 @@ import os
 import sqlite3
 import stat
 import sys
+from collections.abc import Callable
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -72,14 +73,14 @@ class ProtocolReviewRequired(ValueError):
     """A changed protocol needs the author's recorded decision."""
 
 
-def _require_reason(root: Path, draft: ProtocolDraft, reason: str) -> None:
-    if draft.changes and not reason.strip():
-        from fpvs_studio.runtime.participant_results import research_visits_by_version
+StudyVisitLookup = Callable[[Path], dict[str, set[str]]]
 
-        if research_visits_by_version(root):
-            raise ProtocolReviewRequired(
-                "Review this protocol change and record a reason in Studio."
-            )
+
+def _require_reason(
+    root: Path, draft: ProtocolDraft, reason: str, visits: StudyVisitLookup
+) -> None:
+    if draft.changes and not reason.strip() and visits(root):
+        raise ProtocolReviewRequired("Review this protocol change and record a reason in Studio.")
 
 
 def _tables(db: sqlite3.Connection) -> None:
@@ -399,10 +400,12 @@ def _check_current(db: sqlite3.Connection, draft: ProtocolDraft) -> None:
         )
 
 
-def commit_change(root: Path, project: ProjectFile, draft: ProtocolDraft, reason: str) -> None:
+def commit_change(
+    root: Path, project: ProjectFile, draft: ProtocolDraft, reason: str, visits: StudyVisitLookup
+) -> None:
     with study_transaction(root) as db:
         _check_current(db, draft)
-        _require_reason(root, draft, reason)
+        _require_reason(root, draft, reason, visits)
         if _protocol(project) != draft.protocol or _assets(root, db) != draft.assets:
             raise ValueError(
                 "The experiment changed after review. Review its settings and stimuli again."
@@ -413,7 +416,7 @@ def commit_change(root: Path, project: ProjectFile, draft: ProtocolDraft, reason
 
 
 def record_library_update(
-    root: Path, backup: Path, draft: ProtocolDraft | None, reason: str
+    root: Path, backup: Path, draft: ProtocolDraft | None, reason: str, visits: StudyVisitLookup
 ) -> None:
     """Record a verified Library installation while its file rollback is still available."""
     with study_transaction(root) as db:
@@ -435,7 +438,7 @@ def record_library_update(
         if draft is not None and draft != installed:
             raise ValueError("The installed experiment differs from the reviewed protocol.")
         if installed.changes:
-            _require_reason(root, installed, reason)
+            _require_reason(root, installed, reason, visits)
             _record(db, installed, reason)
 
 
@@ -476,10 +479,12 @@ def _materialize(source: Path, destination: Path, assets: dict[str, str]) -> Non
             raise ValueError(f"Saved stimulus is damaged: {relative}")
 
 
-def restore_version(root: Path, draft: ProtocolDraft, reason: str) -> ProjectFile:
+def restore_version(
+    root: Path, draft: ProtocolDraft, reason: str, visits: StudyVisitLookup
+) -> ProjectFile:
     with study_transaction(root) as db:
         _check_current(db, draft)
-        _require_reason(root, draft, reason)
+        _require_reason(root, draft, reason, visits)
         if draft.working_assets is not None and draft.working_assets != _assets(root, db):
             raise ValueError(
                 "The working stimuli changed during review. Review this version again."

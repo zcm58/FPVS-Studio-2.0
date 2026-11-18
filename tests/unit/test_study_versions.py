@@ -38,13 +38,15 @@ def test_save_restore_and_fork_exact_image_and_protocol(
     draft = prepare_change(root, sample_project)
     assert any("Hz" in line and "8" in line for line in draft.changes)
     assert any(image.name in line for line in draft.changes)
-    commit_change(root, sample_project, draft, "Changed after pilot feedback")
+    commit_change(
+        root, sample_project, draft, "Changed after pilot feedback", research_visits_by_version
+    )
     revised = current_version(root)
     assert revised.reason == "Changed after pilot feedback"
     assert not prepare_change(root, sample_project).changes
     assert len(list_versions(root)) == 2
     with pytest.raises(ValueError, match="changed during review"):
-        commit_change(root, sample_project, draft, "stale review")
+        commit_change(root, sample_project, draft, "stale review", research_visits_by_version)
     branch = historical_draft(root, revised.version_id)
     (root / "logs").mkdir(exist_ok=True)
     (root / "logs/private.txt").write_text("local only")
@@ -58,7 +60,10 @@ def test_save_restore_and_fork_exact_image_and_protocol(
     assert not get_study(clone).collection_complete and not list((clone / "logs").iterdir())
     assert (clone / image.relative_to(root)).read_bytes() == b"replacement image"
     restored = restore_version(
-        root, historical_draft(root, initial.version_id), "Return to original"
+        root,
+        historical_draft(root, initial.version_id),
+        "Return to original",
+        research_visits_by_version,
     )
     assert restored.settings.protocol.base_hz != 8
     assert image.read_bytes() == first_image
@@ -92,7 +97,7 @@ def test_unreviewed_asset_change_keeps_settings_and_history(sample_project_root,
     draft = prepare_change(root, sample_project)
     next((root / "stimuli").rglob("*.png")).write_bytes(b"changed during review")
     with pytest.raises(ValueError, match="changed after review"):
-        commit_change(root, sample_project, draft, "Already reviewed")
+        commit_change(root, sample_project, draft, "Already reviewed", research_visits_by_version)
     assert load_project_file(root / "project.json") == before
     assert len(list_versions(root)) == 1
 
@@ -162,7 +167,7 @@ def test_data_arriving_after_review_requires_a_reason(sample_project_root, sampl
         )
     )
     with pytest.raises(ProtocolReviewRequired):
-        commit_change(root, sample_project, draft, "")
+        commit_change(root, sample_project, draft, "", research_visits_by_version)
     assert len(list_versions(root)) == 1
 
 

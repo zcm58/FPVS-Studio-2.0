@@ -35,6 +35,7 @@ from fpvs_studio.preprocessing.manifest import (
     read_stimulus_manifest,
     write_stimulus_manifest,
 )
+from fpvs_studio.runtime.participant_results import research_visits_by_version
 
 
 def _bytes(root):
@@ -140,6 +141,7 @@ def _update(case, **kwargs):
         case.studio,
         library_origin=case.origin,
         expected_snapshot=updater.capture_project_update_snapshot(case.root),
+        research_visits=research_visits_by_version,
         **kwargs,
     )
 
@@ -353,6 +355,7 @@ def test_review_snapshot_rejects_saved_changes_before_download(update_case, muta
             case.studio,
             library_origin=case.origin,
             expected_snapshot=snapshot,
+            research_visits=research_visits_by_version,
         )
     assert _bytes(case.root) == changed
 
@@ -509,6 +512,7 @@ def test_project_outside_configured_root_cannot_be_updated(update_case, tmp_path
             studio,
             library_origin=update_case.origin,
             expected_snapshot=snapshot,
+            research_visits=research_visits_by_version,
         )
 
 
@@ -521,6 +525,7 @@ def test_studio_root_itself_is_not_an_update_target(update_case):
             case.root,
             library_origin=case.origin,
             expected_snapshot=updater.capture_project_update_snapshot(case.root),
+            research_visits=research_visits_by_version,
         )
 
 

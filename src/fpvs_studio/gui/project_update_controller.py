@@ -57,6 +57,7 @@ from fpvs_studio.library.project_updates import (
     project_link_choices,
 )
 from fpvs_studio.runtime.condition_recovery import ensure_project_update_recovery_ready
+from fpvs_studio.runtime.participant_results import research_visits_by_version
 from fpvs_studio.support.error_explanations import describe_error
 
 if TYPE_CHECKING:
@@ -616,6 +617,7 @@ class ProjectUpdateController(QObject):
                 expected_snapshot=snapshot, cancel_event=cancel,
                 progress_callback=bridge.stage_changed.emit,
                 precommit_check=precommit,
+                research_visits=research_visits_by_version,
                 review_protocol=review,
             )
             return _Updated(updated, reporting.reconnect_required)

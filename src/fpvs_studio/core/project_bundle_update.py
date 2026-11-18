@@ -39,7 +39,12 @@ from fpvs_studio.core.project_bundle import (
 )
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import atomic_text_write, load_project_file, save_project_file
-from fpvs_studio.core.study_versions import ProtocolDraft, prepare_change, record_library_update
+from fpvs_studio.core.study_versions import (
+    ProtocolDraft,
+    StudyVisitLookup,
+    prepare_change,
+    record_library_update,
+)
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -293,6 +298,7 @@ def update_project_bundle(
     *,
     library_origin: LibraryProjectOrigin,
     expected_snapshot: ProjectUpdateSnapshot,
+    research_visits: StudyVisitLookup,
     cancel_event: Event | None = None,
     progress_callback: Callable[[str], None] | None = None,
     precommit_check: Callable[[], None] | None = None,
@@ -409,11 +415,9 @@ def update_project_bundle(
             raise ProjectBundleError(
                 "Project changed during download. Save and check the version again."
             )
-        from fpvs_studio.runtime.participant_results import research_visits_by_version
-
         draft = None
         reason = ""
-        if research_visits_by_version(root):
+        if research_visits(root):
             draft = prepare_change(root, updated, candidate_root=imported.project_root)
             if draft.changes:
                 if review_protocol is None:
@@ -471,7 +475,7 @@ def update_project_bundle(
                 moves.append((source, target))
             journal["status"] = "complete"
             atomic_text_write(backup / "update.json", json.dumps(journal, indent=2))
-            record_library_update(root, backup, draft, reason)
+            record_library_update(root, backup, draft, reason, research_visits)
             committed = True
         except Exception as error:
             try:

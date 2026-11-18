@@ -312,7 +312,11 @@ def test_updated_stimulus_version_offers_replacement_only(execution, multi_condi
     asset = next((root / "stimuli").rglob("*.png"))
     asset.write_bytes(asset.read_bytes() + b"changed")
     draft = prepare_change(root, multi_condition_project)
-    commit_change(root, multi_condition_project, draft, "Replaced a stimulus")
+    from fpvs_studio.runtime.participant_results import research_visits_by_version
+
+    commit_change(
+        root, multi_condition_project, draft, "Replaced a stimulus", research_visits_by_version
+    )
     newer, = query_condition_recovery(root).records
     assert not newer.can_rerun and newer.protocol_version_id == revision
     with pytest.raises(ValueError, match="unavailable"):

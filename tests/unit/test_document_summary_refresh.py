@@ -218,14 +218,12 @@ def test_document_compile_session_filters_conditions_without_persisting_selectio
         condition_ids=[selected_condition_id],
     )
 
-    assert session_plan.total_runs == document.project.settings.session.block_count
-    assert all(
-        block.condition_order == [selected_condition_id]
-        for block in session_plan.blocks
-    )
-    assert {
+    presentations = [selected_condition_id] * document.project.settings.session.block_count
+    assert session_plan.total_runs == len(presentations)
+    assert [block.condition_order for block in session_plan.blocks] == [presentations]
+    assert [
         entry.condition_id for entry in session_plan.ordered_entries()
-    } == {selected_condition_id}
+    ] == presentations
     assert [condition.condition_id for condition in document.project.conditions] == (
         original_condition_ids
     )
@@ -626,11 +624,15 @@ def test_computer_recording_default_updates_only_inheriting_projects(tmp_path):
     "unicorn_udp",
 ])
 @pytest.mark.parametrize("test_mode", [False, True])
-def test_inherited_recording_launch_and_handoff_share_effective_device(
+def test_computer_recording_default_and_project_confirmation_reach_handoff(
     multi_condition_project, multi_condition_project_root, monkeypatch, selection, test_mode,
 ):
+    from tests.platform_adapters import set_module_platform
+
+    from fpvs_studio.gui import document_runtime
     from fpvs_studio.runtime.recording import validate_recording_configuration
 
+    set_module_platform(monkeypatch, document_runtime, "win32")
     document = ProjectDocument(
         project_root=multi_condition_project_root,
         project=multi_condition_project.model_copy(deep=True),
@@ -654,11 +656,30 @@ def test_inherited_recording_launch_and_handoff_share_effective_device(
     monkeypatch.setattr("fpvs_studio.gui.document.launch_session", launch)
     monkeypatch.setattr(document, "refresh_participant_summary_if_stale", lambda: None)
 
+    requires_confirmation = not test_mode and selection in {
+        "brainproducts_triggerbox", "brainproducts_parallel",
+    }
+    assert document.needs_project_brainproducts_setup() is requires_confirmation
+    if requires_confirmation:
+        with pytest.raises(DocumentError, match="Confirm this project's Brain Products"):
+            document.launch_compiled_session(plan, participant_number="7", display_index=None)
+        launch.assert_not_called()
+        assert document.project_file_path.read_bytes() == saved_before
+        assert document.project.model_dump(mode="json") == before
+        document.save_recording_configuration(document.recording_configuration)
+        assert not document.needs_project_brainproducts_setup()
+        assert not document.uses_default_recording_configuration
+        plan = document.compile_session(refresh_hz=60.0)
+        before = document.project.model_dump(mode="json")
+        saved_before = document.project_file_path.read_bytes()
+
     document.launch_compiled_session(plan, participant_number="7", display_index=None)
 
     settings = launch.call_args.kwargs["launch_settings"]
     assert settings.recording_backend == selection
-    assert settings.recording_selection_source == "local_settings"
+    assert settings.recording_selection_source == (
+        "project_settings" if requires_confirmation else "local_settings"
+    )
     assert settings.unicorn_udp_port == 2345
     assert settings.brainproducts_serial_port == "COM123"
     assert settings.brainproducts_parallel_address == 0x378

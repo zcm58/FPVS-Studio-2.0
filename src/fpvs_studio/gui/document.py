@@ -797,7 +797,7 @@ class ProjectDocument(
             return
 
         draft = self.prepare_protocol_change(project)
-        commit_change(self.project_root, project, draft, "")
+        commit_change(self.project_root, project, draft, "", research_visits_by_version)
 
     def prepare_protocol_change(self, project: ProjectFile) -> ProtocolDraft:
         transient = self._automatic_session_seed == project.settings.session.session_seed
