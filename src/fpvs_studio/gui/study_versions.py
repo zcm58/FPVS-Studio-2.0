@@ -7,7 +7,7 @@ from pathlib import Path
 from sqlite3 import Error as DatabaseError
 from typing import TYPE_CHECKING, TypeVar
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, Qt, QTimer
 from PySide6.QtWidgets import (
     QAbstractButton,
     QCheckBox,
@@ -37,6 +37,7 @@ from fpvs_studio.core.study_versions import (
     prepare_change,
     restore_version,
 )
+from fpvs_studio.gui.components import apply_dialog_theme, mark_primary_action, mark_text_role
 from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.gui.workers import ProgressTask
 from fpvs_studio.preprocessing.manifest import create_empty_manifest
@@ -99,11 +100,16 @@ class StudyVersionController:
             "Participant data has already been collected. "
             "Save as a new study to keep the cohorts separate."
         )
-        first.setInformativeText("\n".join(draft.changes[:5]))
-        first.setDetailedText("\n".join(draft.changes))
+        first.setTextFormat(Qt.TextFormat.PlainText)
+        summary = list(draft.changes[:5])
+        if len(draft.changes) > len(summary):
+            summary.append(f"Show Details for all {len(draft.changes)} changes.")
+            first.setDetailedText("\n".join(draft.changes))
+        first.setInformativeText("\n".join(summary))
         new_study = first.addButton("Save as new study…", QMessageBox.ButtonRole.ActionRole)
+        mark_primary_action(new_study)
         same = first.addButton(
-            "I reviewed the changes — continue in this study", QMessageBox.ButtonRole.AcceptRole
+            "Reviewed — continue in this study…", QMessageBox.ButtonRole.AcceptRole
         )
         cancel = first.addButton(QMessageBox.StandardButton.Cancel)
         first.setDefaultButton(cancel)
@@ -120,14 +126,16 @@ class StudyVersionController:
             raise ProtocolReviewCancelled("The original study was kept.")
         second = QDialog(self.window)
         second.setWindowTitle("Confirm the risk to earlier data")
+        second.setMinimumWidth(440)
         layout = QVBoxLayout(second)
-        warning = QLabel(
-            "Earlier participants experienced a different protocol. Comparing or pooling their "
-            "data with future visits may be invalid. "
-            "Earlier data could be unusable for your intended analysis."
-        )
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(8)
+        warning = QLabel("Earlier visits used a different protocol. Their data may be unusable "
+                         "for your analysis. Pooling them with future visits may invalidate "
+                         "the comparison.")
         warning.setWordWrap(True)
         layout.addWidget(warning)
+        layout.addSpacing(4)
         label = QLabel("Why are you changing this study?")
         reason = QLineEdit()
         label.setBuddy(reason)
@@ -149,6 +157,8 @@ class StudyVersionController:
         buttons.accepted.connect(second.accept)
         buttons.rejected.connect(second.reject)
         layout.addWidget(buttons)
+        apply_dialog_theme(second)
+        second.resize(460, 190)
         if second.exec() != QDialog.DialogCode.Accepted:
             raise ProtocolReviewCancelled("The original study was kept.")
         return reason.text().strip()
@@ -242,20 +252,31 @@ class StudyVersionController:
         layout = QVBoxLayout(dialog)
         lineage = self.window.document.study_lineage()
         if lineage:
-            layout.addWidget(QLabel("Created from " + lineage))
+            origin = QLabel("Created from " + lineage)
+            origin.setTextFormat(Qt.TextFormat.PlainText)
+            origin.setWordWrap(True)
+            layout.addWidget(origin)
         if visits.get(""):
             count = len(visits[""])
             unknown = QLabel(f"Research visits with an unrecorded protocol version: {count}")
             unknown.setToolTip(", ".join(sorted(visits[""])))
             layout.addWidget(unknown)
         items = QListWidget()
+        items.setAccessibleName("Saved protocol versions")
         details = QPlainTextEdit()
         details.setReadOnly(True)
+        details.setAccessibleName("Selected version details")
         for version in versions:
             stamp = version.saved_at[:19].replace("T", " ")
-            items.addItem(f"{stamp} UTC   {version.label or version.version_id[:8]}")
-        layout.addWidget(items)
-        layout.addWidget(details)
+            text = f"{stamp} UTC   {version.label or version.version_id[:8]}"
+            items.addItem(text)
+            items.item(items.count() - 1).setToolTip(text)
+        layout.addWidget(items, 2)
+        detail_label = QLabel("Version details", dialog)
+        mark_text_role(detail_label, "sectionTitle")
+        detail_label.setBuddy(details)
+        layout.addWidget(detail_label)
+        layout.addWidget(details, 3)
 
         def selected() -> StudyVersion:
             return versions[items.currentRow()]

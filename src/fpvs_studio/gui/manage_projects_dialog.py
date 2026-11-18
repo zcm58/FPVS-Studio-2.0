@@ -167,9 +167,12 @@ class ManageProjectsDialog(QDialog):
         self.collection_button.clicked.connect(self._change_collection)
         self.archive_button = QPushButton(detail_panel)
         self.archive_button.clicked.connect(self._change_archive)
+        lifecycle_actions = QHBoxLayout()
         for button in (self.collection_button, self.archive_button):
             mark_secondary_action(button)
-            detail_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
+            lifecycle_actions.addWidget(button)
+        lifecycle_actions.addStretch()
+        detail_layout.addLayout(lifecycle_actions)
         detail_layout.addStretch(1)
 
         action_row = QHBoxLayout()
@@ -312,7 +315,7 @@ class ManageProjectsDialog(QDialog):
                 self._entries and self.project_list.count() == 0
                 and self.filter_edit.text().strip()
             ) else
-            "No projects are available to manage."
+            f"No {self.groups.tabText(self.groups.currentIndex()).lower()} projects."
         )
         self.empty_label.setToolTip(self._load_error)
         self.empty_label.setAccessibleDescription(self._load_error)
@@ -332,7 +335,7 @@ class ManageProjectsDialog(QDialog):
             return
         self.archive_button.setText("Restore" if entry.archived else "Archive")
         self.collection_button.setText(
-            "Reopen Collection" if entry.collection_complete else "Data Collection Complete"
+            "Reopen Collection" if entry.collection_complete else "Mark Collection Complete"
         )
         self.status_badge.set_state(entry.status_state, entry.status_text)
         self.name_label.setText(entry.name)

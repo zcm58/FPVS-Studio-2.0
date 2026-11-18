@@ -96,7 +96,7 @@ def test_partial_visit_requires_two_decisions(qtbot, controller, tmp_path, monke
             isinstance(dialog, QMessageBox)
             and dialog.windowTitle() == "Review changes to this study"
         ):
-            seen.append(("first", dialog.detailedText()))
+            seen.append(("first", dialog.informativeText()))
             next(b for b in dialog.buttons() if "continue in this study" in b.text()).click()
         elif (
             isinstance(dialog, QDialog)

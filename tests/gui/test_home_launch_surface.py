@@ -1128,6 +1128,7 @@ def test_completed_home_offers_results_and_reopens(controller, qtbot, tmp_path, 
     window.collection_action.trigger()
     assert read_study(document.project_root).collection_complete
     assert home.launch_button.text() == "Review results"
+    assert home.launch_button.icon().isNull()
     assert home.edit_setup_button.text() == "Export results"
     home.edit_setup_button.click()
     assert home.export_results_menu.isVisible()
@@ -1166,6 +1167,7 @@ def test_completed_home_offers_results_and_reopens(controller, qtbot, tmp_path, 
     window.collection_action.trigger()
     assert not read_study(document.project_root).collection_complete
     assert home.launch_button.text() == "Launch Experiment"
+    assert not home.launch_button.icon().isNull()
     assert not home.export_results_menu.isVisible()
     assert not window.export_study_action.isEnabled()
 
@@ -1192,11 +1194,11 @@ def test_linked_study_status_and_manual_roster_consent(
     dialog = study_collection.LinkedStudyDialog(root, window)
     qtbot.addWidget(dialog)
     dialog.show()
-    assert "unconfirmed" in dialog.confirmed.text()
+    assert dialog.confirmed.text() == "Unconfirmed"
     monkeypatch.setattr(study_collection, "refresh_collection_status", lambda *_: "complete")
     dialog.refresh.click()
     qtbot.waitUntil(lambda: "confirmed." in dialog.notice.text())
-    assert dialog.confirmed.text().endswith("complete")
+    assert dialog.confirmed.text() == "Complete"
     calls = []
     monkeypatch.setattr("fpvs_studio.data_sharing.roster.share_study_roster",
                         lambda root, _cancel: calls.append(root) or "a" * 64)

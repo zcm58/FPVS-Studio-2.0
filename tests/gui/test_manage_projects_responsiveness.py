@@ -309,7 +309,11 @@ def test_manage_projects_search_preserves_selection_and_recovers_at_minimum_size
 
     dialog.set_project_entries([])
     assert dialog.empty_label.isVisible()
-    assert dialog.empty_label.text() == "No projects are available to manage."
+    assert dialog.empty_label.text() == "No active projects."
+    dialog.groups.setCurrentIndex(1)
+    assert dialog.empty_label.text() == "No completed projects."
+    dialog.groups.setCurrentIndex(2)
+    assert dialog.empty_label.text() == "No archived projects."
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])

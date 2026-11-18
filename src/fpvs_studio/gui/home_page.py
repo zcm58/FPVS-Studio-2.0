@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QPainter, QPaintEvent, QResizeEvent, QShowEvent
+from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPaintEvent, QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -481,6 +481,12 @@ class HomePage(QWidget):
         self.edit_setup_button.clicked.connect(self._open_setup_from_home)
 
     def set_collection_state(self, complete: bool, created_from: str | None) -> None:
+        if self._collection_complete != complete:
+            if complete:
+                self.launch_button.setIcon(QIcon())
+            else:
+                mark_home_launch_action(self.launch_button)
+            self._sync_launch_button_geometry()
         self._collection_complete = complete
         self._created_from = created_from or ""
         self.refresh()
