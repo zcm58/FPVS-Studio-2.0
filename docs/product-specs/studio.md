@@ -34,6 +34,47 @@ feature parity.
    experiment to another Studio workstation or a protocol or completed-session config
    to the Toolbox analyst. [Export choices and limits](../PROJECT_CONFIG.md#user-workflow-and-limits)
 
+## Planned safeguard for changes during collection
+
+Protect the project's experiment settings once its first research session has
+started, even if that session is interrupted. Use retained research history
+for existing projects. The safeguard survives restart and **Reopen Collection**.
+Setup and Test/Pilot runs alone leave the project in ordinary authoring mode.
+
+Treat changes to experiment settings as exceptional. This includes replacing
+images in a condition (even under the same filename), changing, adding or
+removing conditions, base or oddball frequencies, timing, display, task,
+randomization, trigger, recording and scoring settings. Ordinary participant
+entry, project-title corrections that are purely descriptive, and saves with
+no experiment change use the usual workflow.
+
+Before a changed protocol can be saved as active or used for a research visit,
+show **two separate warning dialogs** for the proposed changes.
+
+1. **Review changes to this study.** Explain that collection has already
+   started. Compare the saved and proposed settings, grouped by condition.
+   For example, show the old base frequency of 6 Hz alongside the proposed
+   7.5 Hz. For stimuli and conditions, identify additions, removals and
+   replacements. **I have reviewed these changes** opens the second warning.
+2. **Confirm the risk to earlier data.** Explain that earlier participants
+   experienced the previous protocol. Comparing or pooling their data with
+   future visits may be invalid, and earlier data could be unusable for the
+   intended analysis. Require an explicit acknowledgement of that risk, then
+   **Apply to future visits**. Cancellation is the default in both dialogs.
+
+Confirm the exact change once per revision. Cancelling either dialog keeps
+the prior protocol active. A different proposal requires fresh confirmation.
+The confirmed revision applies only to visits that start afterward.
+Apply this rule to normal edits, bulk changes and in-place Library updates.
+If stimulus files change outside Studio, require review before the next
+research visit can use them. Preserve each earlier visit's protocol and
+stimulus identities. Its saved evidence must continue to describe what ran.
+
+Verify with a study that already has research visits. Independently change a
+frequency, replace an image under the same filename, and add or remove a
+condition. Cancel at each step, then confirm a change and reopen the project.
+Only later visits should carry the new revision in the [study handoff](../PROJECT_CONFIG.md#planned-whole-study-handoff).
+
 ## Planned collection workflow
 
 Once collection ends, the operator can explicitly mark the Studio project

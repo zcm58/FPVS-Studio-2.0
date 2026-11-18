@@ -12,7 +12,7 @@ owners and targeted tests.
 | `repo` | Harness, shared configuration, Windows source bootstrap and PyCharm setup, cross-layer ownership | `AGENTS.md` | `ARCHITECTURE.md` or [Windows setup](../ENVIRONMENT.md#windows-source-setup) |
 | `macos` | Source bootstrap, environment/PyCharm repair, automatic completion reports, display/input recovery, resolution confirmation, native adapters and bundle handoff | `AGENTS.md` plus owning package guide | `docs/MACOS_SUPPORT.md` |
 | `docs` | Guidance, contracts and plans | `AGENTS.md` | Edited document; `docs/exec-plans/README.md` for plan work |
-| `gui` | PySide6 authoring, Settings, Tools, controllers and workers | `src/fpvs_studio/gui/AGENTS.md` | `docs/GUI_WORKFLOW.md` for behavior or `docs/FRONTEND.md` for design |
+| `gui` | PySide6 authoring, Settings, Tools, controllers and workers | `src/fpvs_studio/gui/AGENTS.md` | `docs/GUI_WORKFLOW.md` for behavior, `docs/FRONTEND.md` for design, [planned mid-study edit safeguard](../product-specs/studio.md#planned-safeguard-for-changes-during-collection) |
 | `core` | Models, validation and neutral domain logic | `src/fpvs_studio/core/AGENTS.md` | Relevant model contract from `ARCHITECTURE.md` |
 | `compiler` | Compiled runs, sessions, participant reuse policies, scheduling and fixation | `src/fpvs_studio/core/AGENTS.md` | `docs/RUNSPEC.md` for runs or `docs/SESSION_PLAN.md` for sessions |
 | `project-io` | Persistence, Studio → Toolbox handoff, runnable bundles, templates and paths | `src/fpvs_studio/core/AGENTS.md` | [Current exports](../PROJECT_CONFIG.md#user-workflow-and-limits), [planned study handoff](../PROJECT_CONFIG.md#planned-whole-study-handoff), [project open/save](../GUI_WORKFLOW.md#project-opening-and-saving) |
