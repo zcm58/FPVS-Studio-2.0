@@ -85,9 +85,9 @@ checks in [FPVS Toolbox `3e90420`](https://github.com/zcm58/FPVS-Toolbox/commit/
   Black factory 8, using Toolbox's exact versioned profile/montage/decoder IDs.
 - [x] Add declarations to saved recording settings, setup configs and runtime
   evidence. Optional metadata keeps existing config/result envelope versions readable.
-- [x] Snapshot the current native config before launch and atomically write a
-  completed config after research finalization in full and compact modes. Keep
-  aborted/interrupted evidence without a completed artifact.
+- [x] Capture the effective recording settings before launch. On research
+  finalization, atomically write a private completion receipt in full and compact
+  modes. Interrupted runs retain acquisition evidence for recovery.
 - [x] Default first enrollment on; atomically preserve saved off choices, including
   an off choice saved while enrollment is in flight.
 - [x] Focused profile, completed-session association, abort and preference-race checks.

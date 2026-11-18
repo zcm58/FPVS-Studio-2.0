@@ -1373,9 +1373,9 @@ and `.fpvsbundle` authoring transfers retain that distinction. Standalone docume
 callers without an injected computer preference retain the legacy BioSemi default.
 Runtime Toolbox handoffs use a detached effective recording snapshot, so local
 hardware is recorded accurately without inserting an override into the source project.
-Manual completed-config export prefers the retained completed `.fpvsconfig` snapshot,
-including compact sessions. Changing the PC default afterward does not relabel earlier
-recordings. Invalid newest snapshots or acquisition-era evidence without a completed
+Manual completed-config export uses the newest private completion receipt or historical
+completed `.fpvsconfig` in either output mode. Each preserves the hardware recorded
+at collection time. Invalid newest snapshots or acquisition-era evidence without a completed
 handoff surface an error. Only sessions without acquisition artifacts retain the
 legacy full-run plan-only export path. Authoring-only exports remain unchanged.
 The typed `recording_backend` values are `serial`, `biosemi_active_three`,
