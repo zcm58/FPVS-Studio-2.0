@@ -74,6 +74,12 @@ def test_feature_editor_limit_and_layout(qtbot, size, background, clipboard):
     assert not dialog.diagnostics_edit.isVisible()
     assert dialog.happened_edit.accessibleName() == "Feature request"
     assert dialog.happened_edit.tabChangesFocus()
+    assert dialog.happened_edit.placeholderText() == (
+        "Describe the feature and how it would help your work."
+    )
+    assert not dialog.happened_edit.toPlainText()
+    assert not dialog.header.subtitle_label.isVisible()
+    assert not dialog.status_label.text()
     assert dialog.status_label.property("studioTextRole") == "body"
     assert not dialog.submit_button.isEnabled()
     dialog.happened_edit.setPlainText("😀" * 4000)
@@ -90,10 +96,8 @@ def test_feature_editor_limit_and_layout(qtbot, size, background, clipboard):
     dialog.happened_edit.insertPlainText("x")
     assert not dialog.submit_button.isEnabled()
     assert len(dialog.happened_edit.toPlainText()) == 4001
-    privacy = dialog.findChild(QLabel, "feature_privacy")
-    assert privacy is not None
     for delivery, state in (
-        ("editing", "editing"), ("editing", "loading"), ("editing", "verifying"),
+        ("editing", "editing"), ("editing", "loading"),
         ("uncertain", "sending"), ("uncertain", "checking"),
         ("received", "editing"), ("submitted", "editing"),
     ):
@@ -106,15 +110,72 @@ def test_feature_editor_limit_and_layout(qtbot, size, background, clipboard):
         assert_visible_children_within_parent(dialog)
         assert dialog.happened_edit.mapTo(dialog, dialog.happened_edit.rect().topLeft()).x() == 22
         assert dialog.feature_count.alignment() & Qt.AlignmentFlag.AlignRight
+        assert not dialog.verify_button.isVisible()
         for label in (
-            dialog.header.title_label, dialog.header.subtitle_label, dialog.feature_count,
-            privacy, dialog.notice_label, dialog.status_label,
+            dialog.header.title_label, dialog.feature_count, dialog.status_label,
         ):
             assert label.isVisible()
             assert label.height() >= label.heightForWidth(label.width()), label.text()
         for button in dialog.findChildren(QPushButton):
             if button.isVisible():
                 assert button.width() >= button.sizeHint().width(), button.text()
+
+
+@pytest.mark.parametrize("motion", [0, 300])
+def test_feature_submits_directly_and_confirms_service_receipt(
+    qtbot, qapp, tmp_path, monkeypatch, motion,
+):
+    monkeypatch.setattr(module, "update_lifecycle", lambda _app: FakeLifecycle())
+    monkeypatch.setattr(
+        module.QDesktopServices, "openUrl", lambda *_args: pytest.fail("Opened a browser")
+    )
+    monkeypatch.setattr(
+        "fpvs_studio.gui.report_bug_dialog.widget_animation_duration", lambda *_args: motion,
+    )
+    paths = []
+
+    def transport(method, url, data, headers):
+        paths.append(url.removeprefix(SERVICE_ORIGIN))
+        if url.endswith("/v1/feature-intents"):
+            return Intent(
+                intent_id="i" * 20, browser_token="b" * 43, desktop_token="d" * 43,
+            ).model_dump_json().encode()
+        persisted = DraftStore(tmp_path, kind="feature").load_latest()
+        assert persisted.delivery == "uncertain"
+        assert persisted.report.payload() == data
+        assert headers["Authorization"] == f"Bearer {'d' * 43}"
+        return json.dumps({
+            "report_id": str(persisted.report.report_id), "state": "received",
+        }).encode()
+
+    controller = module.BugReportController(
+        qapp, root=tmp_path, kind="feature",
+        client=ReportClient(SERVICE_ORIGIN, transport=transport),
+    )
+    controller.show()
+    dialog = controller.dialog
+    qtbot.addWidget(dialog)
+    controller._job.complete()
+    dialog.happened_edit.setPlainText("Add a shortcut for the last project.")
+    dialog.submit_button.click()
+    controller._job.complete()
+    assert dialog.snapshot().delivery == "uncertain"
+    assert dialog._sent_animation is None
+    controller._job.complete()
+    assert paths == ["/v1/feature-intents", f"/v1/feature-reports?intent_id={'i' * 20}"]
+    assert dialog.snapshot().delivery == "received"
+    if motion:
+        assert dialog.submit_button.text() == "Sent"
+        assert dialog._sent_animation.duration() == 300
+        qtbot.waitUntil(lambda: dialog.submit_button.text() == "Check status", timeout=1500)
+    else:
+        assert dialog._sent_animation is None
+        assert dialog.submit_button.text() == "Check status"
+    assert dialog.submit_button.graphicsEffect() is None
+    assert "Delivery to the developer is pending" in dialog.status_label.text()
+    dialog.close()
+    if controller._job is not None:
+        controller._job.complete()
 
 
 def test_feature_controller_never_collects_logs(qtbot, qapp, tmp_path, monkeypatch):

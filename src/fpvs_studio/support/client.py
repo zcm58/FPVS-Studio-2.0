@@ -153,7 +153,7 @@ class ReportClient:
 
     def create_intent(self, draft: Draft, cancel: Event) -> Intent:
         if draft.locked or draft.report.problems(include_logs=draft.include_logs):
-            raise ReportServiceError("Review the report before requesting verification.")
+            raise ReportServiceError("Review the report before submitting.")
         body = json.dumps(
             {
                 "schema_version": "1",
@@ -162,7 +162,8 @@ class ReportClient:
                 "receipt_token_sha256": hashlib.sha256(draft.receipt_token.encode()).hexdigest(),
             }
         ).encode()
-        response = self._request("POST", "/v1/intents", data=body, cancel=cancel)
+        path = "/v1/feature-intents" if draft.report.kind == "feature" else "/v1/intents"
+        response = self._request("POST", path, data=body, cancel=cancel)
         try:
             return Intent.model_validate(response)
         except ValueError:
@@ -241,9 +242,10 @@ class ReportClient:
         if draft.report.problems(include_logs=draft.include_logs):
             raise ReportServiceError("The report exceeds its permitted fields or limits.")
         body = draft.report.payload(include_logs=draft.include_logs)
+        path = "/v1/feature-reports" if draft.report.kind == "feature" else "/v1/reports"
         response = self._request(
             "POST",
-            f"/v1/reports?intent_id={quote(intent.intent_id, safe='')}",
+            f"{path}?intent_id={quote(intent.intent_id, safe='')}",
             data=body,
             token=intent.desktop_token,
             cancel=cancel,

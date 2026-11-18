@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtCore import QEasingCurve, QEvent, QPropertyAnimation, Qt, Signal
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
     QApplication,
@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFormLayout,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -27,7 +28,9 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
     mark_text_role,
+    widget_animation_duration,
 )
+from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.support.diagnostics import combine_diagnostics
 from fpvs_studio.support.models import MAX_FEATURE_CHARACTERS, MAX_LOG_BYTES, Draft
 
@@ -58,6 +61,7 @@ class ReportBugDialog(QDialog):
         self._draft = draft
         self._updating = False
         self._state = "editing"
+        self._sent_animation: QPropertyAnimation | None = None
         self._pending_error = ""
         self._pending_title = ""
         self._pending_message = ""
@@ -67,7 +71,7 @@ class ReportBugDialog(QDialog):
         layout.setSpacing(10)
         self.header = DialogHeader(
             caption,
-            "Describe the feature and how it would help your work."
+            ""
             if self.is_feature else "Describe the problem and review the text you want to share.",
             parent=self,
         )
@@ -105,13 +109,6 @@ class ReportBugDialog(QDialog):
         self.unknown_steps.toggled.connect(self._unknown_steps)
 
         self.feature_count = self._label("", details)
-        self.notice_label = self._label(
-            "Drafts stay local for seven days."
-            if self.is_feature
-            else "Drafts stay local for seven days. "
-            "Submitting includes a brief browser verification.",
-            self,
-        )
         if self.is_feature:
             self.setObjectName("request_feature_dialog")
             self.tabs.hide()
@@ -129,7 +126,9 @@ class ReportBugDialog(QDialog):
             editor_layout.addWidget(feature_label)
 
             self.happened_edit.setAccessibleName("Feature request")
-            self.happened_edit.setPlaceholderText("")
+            self.happened_edit.setPlaceholderText(
+                "Describe the feature and how it would help your work."
+            )
             self.happened_edit.setTabChangesFocus(True)
             self.happened_edit.setMaximumHeight(16777215)
             self.happened_edit.setMinimumHeight(120)
@@ -138,15 +137,6 @@ class ReportBugDialog(QDialog):
             mark_text_role(self.feature_count, "metadata")
             self.feature_count.setAlignment(Qt.AlignmentFlag.AlignRight)
             editor_layout.addWidget(self.feature_count)
-            privacy = self._label(
-                "Only your text and app version are included. When connected, requests go "
-                "privately to the developer and remain in a GitHub issue until removed.", details,
-            )
-            privacy.setObjectName("feature_privacy")
-            mark_text_role(privacy, "supporting")
-            editor_layout.addWidget(privacy)
-            mark_text_role(self.notice_label, "supporting")
-            editor_layout.addWidget(self.notice_label)
             layout.addWidget(details, 1)
         else:
             form = QFormLayout(details)
@@ -215,6 +205,11 @@ class ReportBugDialog(QDialog):
             mark_text_role(self.status_label, "body")
         layout.addWidget(self.status_label)
         if not self.is_feature:
+            self.notice_label = self._label(
+                "Drafts stay local for seven days. "
+                "Submitting includes a brief browser verification.",
+                self,
+            )
             layout.addWidget(self.notice_label)
         footer = QHBoxLayout()
         self.more_button = QPushButton("More", self)
@@ -241,9 +236,7 @@ class ReportBugDialog(QDialog):
         mark_secondary_action(self.save_button)
         footer.addWidget(self.save_button)
         footer.addStretch(1)
-        self.verify_button = QPushButton(
-            "Open browser" if self.is_feature else "Open verification page", self,
-        )
+        self.verify_button = QPushButton("Open verification page", self)
         self.verify_button.clicked.connect(lambda: self.action_requested.emit("browser"))
         self.verify_button.hide()
         footer.addWidget(self.verify_button)
@@ -260,7 +253,7 @@ class ReportBugDialog(QDialog):
         self.submit_button.setAutoDefault(False)
         footer.addWidget(self.submit_button)
         layout.addLayout(footer)
-        apply_dialog_theme(self)
+        self._apply_theme()
         self.set_draft(draft)
         self.set_state("editing", self.connection_notice())
 
@@ -274,7 +267,7 @@ class ReportBugDialog(QDialog):
     def connection_notice(self) -> str:
         if self.is_feature:
             return (
-                "Submitting opens a browser page for verification."
+                ""
                 if self.online else
                 "Online submission is not connected yet. You can copy or save this request."
             )
@@ -325,6 +318,11 @@ class ReportBugDialog(QDialog):
         self._draft = draft.model_copy(deep=True)
 
     def set_state(self, state: str, message: str) -> None:
+        if self._sent_animation is not None:
+            self._sent_animation.stop()
+            self._sent_animation.deleteLater()
+            self._sent_animation = None
+            self.submit_button.setGraphicsEffect(None)
         self._state = state
         frozen = state in ("loading", "verifying", "sending", "checking") or self._draft.locked
         for editor in self.fields.values():
@@ -337,11 +335,11 @@ class ReportBugDialog(QDialog):
         self.menu_actions["receipt"].setEnabled(self._draft.locked)
         self.menu_actions["new"].setEnabled(self._draft.delivery == "submitted")
         self.menu_actions["discard"].setEnabled(not frozen)
-        self.verify_button.setVisible(state == "verifying")
+        self.verify_button.setVisible(not self.is_feature and state == "verifying")
         self.cancel_button.setVisible(state in ("verifying", "sending", "checking"))
         self.submit_button.setVisible(state not in ("verifying", "sending", "checking"))
         self.submit_button.setText(
-            "Done"
+            ("Sent" if self.is_feature else "Done")
             if self._draft.delivery == "submitted"
             else "Check status"
             if self._draft.locked
@@ -352,6 +350,22 @@ class ReportBugDialog(QDialog):
         )
         self.status_label.setText(message)
         self._update_feature_limit()
+
+    def animate_request_sent(self) -> None:
+        if not self.isVisible() or not widget_animation_duration(self.submit_button, 300):
+            return
+        self.submit_button.setText("Sent")
+        self.submit_button.setEnabled(False)
+        effect = QGraphicsOpacityEffect(self.submit_button)
+        self.submit_button.setGraphicsEffect(effect)
+        animation = QPropertyAnimation(effect, b"opacity", self)
+        self._sent_animation = animation
+        animation.setDuration(300)
+        animation.setStartValue(0.72)
+        animation.setEndValue(1.0)
+        animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        animation.finished.connect(lambda: self.set_state("editing", self.status_label.text()))
+        animation.start()
 
     def _update_feature_limit(self) -> None:
         if not self.is_feature:
@@ -461,12 +475,18 @@ class ReportBugDialog(QDialog):
     def reject(self) -> None:
         self.close()
 
+    def _apply_theme(self) -> None:
+        apply_dialog_theme(self)
+        if getattr(self, "is_feature", False) and hasattr(self, "happened_edit"):
+            color = resolve_studio_theme(self.palette()).text_hint
+            self.happened_edit.setStyleSheet(f"placeholder-text-color: {color};")
+
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)
         if event.type() in (QEvent.Type.PaletteChange, QEvent.Type.ApplicationPaletteChange):
             if not getattr(self, "_refreshing_theme", False):
                 self._refreshing_theme = True
                 try:
-                    apply_dialog_theme(self)
+                    self._apply_theme()
                 finally:
                     self._refreshing_theme = False

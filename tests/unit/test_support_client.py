@@ -65,25 +65,28 @@ def intent():
     return Intent(intent_id="i" * 20, browser_token="b" * 43, desktop_token="d" * 43)
 
 
-def test_feature_submission_uses_shared_receipts_and_minimal_payload():
+def test_feature_submission_uses_direct_routes_shared_receipts_and_minimal_payload():
     report = Draft(report=Report(kind="feature", happened="Please add keyboard shortcuts"))
     calls = []
 
     def transport(method, url, data, headers):
-        calls.append(json.loads(data))
-        if url.endswith("/v1/intents"):
+        calls.append((url, json.loads(data)))
+        if url.endswith("/v1/feature-intents"):
             return intent().model_dump_json().encode()
         return json.dumps({"report_id": str(report.report.report_id), "state": "received"}).encode()
 
     client = ReportClient(SERVICE_ORIGIN, transport=transport)
     grant = client.create_intent(report, Event())
-    assert calls[0]["payload_sha256"] == report.report.digest()
+    assert calls[0][0] == SERVICE_ORIGIN + "/v1/feature-intents"
+    assert calls[0][1]["payload_sha256"] == report.report.digest()
     report.delivery = "uncertain"
     report.service_url = SERVICE_ORIGIN
     assert client.submit(report, grant, Event()).state == "received"
-    assert calls[1]["kind"] == "feature"
-    assert calls[1]["description"] == report.report.happened
-    assert "diagnostics" not in calls[1]
+    url, payload = calls[1]
+    assert url == f"{SERVICE_ORIGIN}/v1/feature-reports?intent_id={grant.intent_id}"
+    assert payload["kind"] == "feature"
+    assert payload["description"] == report.report.happened
+    assert "diagnostics" not in payload
 
 
 def test_manual_submission_keeps_large_reviewed_log_and_exact_intent_hash():

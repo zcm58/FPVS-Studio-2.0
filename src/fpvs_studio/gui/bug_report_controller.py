@@ -355,12 +355,19 @@ class BugReportController(QObject):
             self.store().save(draft)
             return self.client.create_intent(draft, cancel)
 
-        self._start(begin, self._intent_ready, "verifying", "Preparing browser verification…")
+        if self.kind == "feature":
+            self._start(begin, self._intent_ready, "sending", "Preparing your request…")
+        else:
+            self._start(begin, self._intent_ready, "verifying", "Preparing browser verification…")
 
     def _intent_ready(self, value: object) -> None:
         if self._closing:
             return
-        self._intent = cast(Intent, value)
+        intent = cast(Intent, value)
+        if self.kind == "feature":
+            self._send_reviewed(intent)
+            return
+        self._intent = intent
         self._verification_deadline = time.monotonic() + 120
         self._dialog().set_state(
             "verifying", "Complete verification in your browser to send the report."
@@ -397,27 +404,36 @@ class BugReportController(QObject):
             self._intent = None
             self._dialog().set_state("editing", "Verification expired. Submit again to resume.")
         else:
-            intent = self._intent
-            draft = self._dialog().snapshot()
-            draft.delivery = "uncertain"
-            self._dialog().set_delivery(draft)
-            self._dirty = False
+            self._send_reviewed(self._intent)
 
-            def send(cancel: Event) -> object:
-                try:
-                    self.store().save(draft)  # Durable identity BEFORE any upload bytes.
-                except (OSError, ValueError):
-                    raise _NotSent(
-                        "Nothing was sent: the local receipt could not be saved. "
-                        "Copy your report or save it to another location."
-                    ) from None
-                return self.client.submit(draft, intent, cancel)
+    def _send_reviewed(self, intent: Intent) -> None:
+        draft = self._dialog().snapshot()
+        draft.delivery = "uncertain"
+        self._dialog().set_delivery(draft)
+        self._dirty = False
 
-            self._start(send, self._receipt_result, "sending", "Sending the reviewed report…")
+        def send(cancel: Event) -> object:
+            try:
+                self.store().save(draft)  # Durable identity BEFORE any upload bytes.
+            except (OSError, ValueError):
+                raise _NotSent(
+                    "Nothing was sent: the local receipt could not be saved. "
+                    "Copy your report or save it to another location."
+                ) from None
+            return self.client.submit(draft, intent, cancel)
+
+        message = (
+            "Sending your request…" if self.kind == "feature" else "Sending the reviewed report…"
+        )
+        self._start(send, self._receipt_result, "sending", message)
 
     def _receipt_result(self, value: object) -> None:
         receipt = cast(Receipt, value)
         draft = self._dialog().snapshot()
+        newly_sent = (
+            self.kind == "feature" and draft.delivery == "uncertain"
+            and receipt.state in ("received", "submitted")
+        )
         draft.delivery = (
             "editing" if receipt.state == "not_received" else cast(Delivery, receipt.state)
         )
@@ -425,6 +441,8 @@ class BugReportController(QObject):
         self._intent = None
         self._dirty = True
         self._show_delivery(draft)
+        if newly_sent:
+            self._dialog().animate_request_sent()
 
     def _show_delivery(self, draft: Draft) -> None:
         messages = {
@@ -434,6 +452,11 @@ class BugReportController(QObject):
             "uncertain": "Delivery is uncertain. Check status before another submission.",
         }
         message = messages[draft.delivery]
+        if self.kind == "feature" and draft.delivery in ("received", "submitted"):
+            message = (
+                "Request sent. Delivery to the developer is pending."
+                if draft.delivery == "received" else "Request submitted."
+            )
         if draft.locked:
             message += f" Receipt: {draft.report.report_id}"
             if not self.client.enabled:

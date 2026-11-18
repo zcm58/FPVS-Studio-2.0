@@ -4,6 +4,15 @@ Status: Active
 
 Date: 2026-09-12
 
+## Browser-free feature requests (November 18, 2026)
+
+1. Use digest-bound desktop capabilities for feature requests and verify that the
+   separate service rejects bug payloads, invalid receipts and over-budget intake.
+2. Preserve draft recovery and confirm receipt in the dialog with a 300 ms button
+   transition. Verify placeholder rendering, reduced motion and ambiguous delivery.
+3. Commit and push the desktop and service changes. Staging and production
+   activation remain separate deployment acceptance.
+
 ## Automatic crash reporting follow-up (October 8, 2026)
 
 The user authorized automatic emails to the existing maintainer address from all
