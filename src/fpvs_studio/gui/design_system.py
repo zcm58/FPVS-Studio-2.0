@@ -34,7 +34,6 @@ CONTENT_MAX_WIDTHS: dict[str, int] = {
     "full": 16_777_215,
 }
 
-COLOR_MASTHEAD = "#222f3b"
 COLOR_SIGNAL = "#25b8c4"
 COLOR_PAGE_BACKGROUND = "#f3f6f8"
 COLOR_SURFACE = "#ffffff"

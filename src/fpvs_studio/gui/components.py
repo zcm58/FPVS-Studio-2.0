@@ -68,8 +68,6 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
-    COLOR_MASTHEAD,
-    COLOR_SIGNAL,
     FONT_SIZE_BODY,
     FONT_SIZE_CONTROL,
     FONT_SIZE_DIALOG_TITLE,
@@ -2675,9 +2673,8 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
         + _text_role_stylesheet(theme)
         + f"""
     QLabel#welcome_headline_label {{
-        color: {COLOR_SIGNAL};
-        background-color: {COLOR_MASTHEAD};
-        border-radius: 6px;
+        color: {theme.primary};
+        background: transparent;
         padding: 4px;
     }}
     QWidget#welcome_hero_container {{
