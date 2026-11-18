@@ -2316,7 +2316,7 @@ def test_open_existing_project_populates_gui_correctly(
     project_root_value = (
         controller.main_window.setup_dashboard_page.project_overview_editor.project_root_value
     )
-    assert project_root_value.text().endswith("opened-project")
+    assert Path(project_root_value.toolTip()) == scaffold.project_root
 
 
 def test_creation_manual_category_page_requires_explicit_category_and_hides_details(qtbot) -> None:
