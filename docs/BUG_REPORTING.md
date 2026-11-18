@@ -3,19 +3,21 @@
 ## Feature requests
 
 File > Request a Feature opens a single-column editor at minimum 620x440 and
-default 700x480. One required text box has a live 4,000-character counter (Unicode
-code points), with privacy and draft retention guidance below it. Copy Request and
-Save Request are available. Over-limit pasted text remains editable;
+default 700x480. The writing prompt appears inside the empty editor, with a live
+4,000-character counter (Unicode code points) below it. Copy Request and Save
+Request are available. Over-limit pasted text remains editable;
 Submit Request is disabled until shortened. Online submission remains disabled
 until service activation. Feature requests never collect logs or include OS,
 email, project or participant data.
 
 Feature drafts reuse atomic worker persistence and seven-day/five-draft retention
-in the separate app-local `support/feature-drafts/` directory. Bug drafts stay
-independent. Receipt locking, cancellation, browser verification and explicit
-status checks reuse the existing reporting protocol.
+in the separate app-local `support/feature-drafts/` directory. Submit Request
+uses feature-only intents and uploads without opening a browser. A confirmed service
+receipt triggers a 300 ms button transition when system motion is enabled, with
+delivery status available separately. Receipt locking, cancellation and status
+checks reuse the existing protocol. Bug reports retain browser verification.
 
-The `/v1/reports` endpoint accepts this feature payload variant:
+The `/v1/feature-reports` endpoint and the legacy verified route accept this feature payload:
 `schema_version: "1"`, `kind: "feature"`, `report_id`, `created_at`, `app_version`,
 and `description` (the text box). No other fields are sent. Bug payloads omit `kind`
 and retain their existing bytes. Intent hashes bind the exact payload and kind.
@@ -101,7 +103,7 @@ An explicitly disabled reporting origin pauses registration and uploads.
 The matching service source implements browser-free background registration, explicitly
 approved by the maintainer. Automatic intake remains disabled pending authenticated
 deployment acceptance. Live use requires that deployed backend and an updated desktop
-build; manual bug and feature reports retain their browser/Turnstile verification.
+build. Manual bug reports retain browser/Turnstile verification.
 
 After an unexpected exit, the next Studio startup recovers eligible app-owned
 session records in a background worker. The first launch persists a stable random
