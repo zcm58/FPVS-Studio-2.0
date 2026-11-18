@@ -36,33 +36,41 @@ feature parity.
 
 ## Planned safeguard for changes during collection
 
-Protect the project's experiment settings once its first research session has
-started, even if that session is interrupted. Use retained research history
-for existing projects. The safeguard survives restart and **Reopen Collection**.
-Setup and Test/Pilot runs alone leave the project in ordinary authoring mode.
+Authors can edit, save and restore protocol versions without collection warnings
+until a visit yields participant research data. A partial visit with collected
+data counts. Setup, Test/Pilot runs and a research launch that ends before
+collecting data leave the project in ordinary authoring mode. Use retained
+research history for existing projects, including after restart or **Reopen Collection**.
 
-Treat changes to experiment settings as exceptional. This includes replacing
-images in a condition (even under the same filename), changing, adding or
+Once a project holds research data, treat changes to experiment settings as
+exceptional. This includes replacing images in a condition (even under the
+same filename), changing, adding or
 removing conditions, base or oddball frequencies, timing, display, task,
 randomization, trigger, recording and scoring settings. Ordinary participant
 entry, project-title corrections that are purely descriptive, and saves with
 no experiment change use the usual workflow.
 
-Before a changed protocol can be saved as active or used for a research visit,
-show **two separate warning dialogs** for the proposed changes.
+Once participant data exists, recommend **Save as new study**. Applying a
+change to the collecting project requires **two separate warning dialogs**.
 
 1. **Review changes to this study.** Explain that collection has already
    started. Compare the saved and proposed settings, grouped by condition.
    For example, show the old base frequency of 6 Hz alongside the proposed
    7.5 Hz. For stimuli and conditions, identify additions, removals and
-   replacements. **I have reviewed these changes** opens the second warning.
+   replacements. **Save as new study** creates a separately named project
+   with the proposed settings and stimuli, a fresh study identity and an
+   empty roster. Keep visits, results and reporting enrollment with the
+   original. Only **Continue in this study** requires acknowledgement of
+   the reviewed changes and opens the second warning.
 2. **Confirm the risk to earlier data.** Explain that earlier participants
    experienced the previous protocol. Comparing or pooling their data with
    future visits may be invalid, and earlier data could be unusable for the
    intended analysis. Require an explicit acknowledgement of that risk, then
    **Apply to future visits**. Cancellation is the default in both dialogs.
 
-Confirm the exact change once per revision. Cancelling either dialog keeps
+Save the new study before switching to it. Cancelling creation or a failed
+save leaves the original study active and its protocol intact.
+Confirm an in-place change once per revision. Cancelling either dialog keeps
 the prior protocol active. A different proposal requires fresh confirmation.
 The confirmed revision applies only to visits that start afterward.
 Apply this rule to normal edits, bulk changes and in-place Library updates.
@@ -74,6 +82,32 @@ Verify with a study that already has research visits. Independently change a
 frequency, replace an image under the same filename, and add or remove a
 condition. Cancel at each step, then confirm a change and reopen the project.
 Only later visits should carry the new revision in the [study handoff](../PROJECT_CONFIG.md#planned-whole-study-handoff).
+
+### Local version history
+
+From the first saved protocol, automatically retain one local version for each
+save that changes the experiment. A version can have an optional name.
+Show the save time, what changed and which research visits, if any, used it.
+Opening a version for inspection leaves the active experiment alone. Version
+history works offline and requires no Library publication.
+
+Retain the settings and exact stimuli needed to restore a saved version,
+including an image later replaced under the same filename. Reuse unchanged
+assets across versions. If a historical asset is missing, name it and leave
+the current protocol active until the saved version can be restored exactly.
+
+From history, the author can **Save as new study** using that version or
+**Restore this version** inside the existing study. Restoring records a new
+current version, preserves the intervening versions and affects future visits.
+Use the same two warnings for an in-place restore that changes a protocol
+after participant data exists. Each earlier visit keeps its recorded version.
+
+Verify that a project with only Test/Pilot data can save and restore without
+collection warnings. After a partial research visit, verify that saving the
+edited experiment as a new study starts an empty roster and keeps the original
+active protocol and visits intact. In a separate check, collect under two
+versions and restore the first. Both earlier visits must still identify the
+version and stimulus contents each used.
 
 ## Planned collection workflow
 
