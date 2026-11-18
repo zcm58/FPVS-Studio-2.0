@@ -125,8 +125,8 @@ repair, interrupted-condition recovery, authenticated build inputs and public
 full/patch release acceptance. The
 [v2.4.6 release record](exec-plans/completed/release-2.4.6.md) tracks the electrode and
 participant reporting release. The
-[v2.4.5 release record](exec-plans/completed/release-2.4.5.md) tracks the published
-Studio/Toolbox completed handoff and shared-reporting release. The
+[v2.4.5 release record](exec-plans/completed/release-2.4.5.md) tracks Studio's
+release of completed-session exports for Toolbox and shared reporting. The
 [v2.4.4 release record](exec-plans/completed/release-2.4.4.md) tracks the lifecycle,
 reporting and upload fixes. The
 [v2.4.3 release record](exec-plans/completed/release-2.4.3.md) tracks the updater GUI

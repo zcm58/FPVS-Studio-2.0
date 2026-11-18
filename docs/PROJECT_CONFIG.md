@@ -40,11 +40,11 @@ feature-selected envelope numbers or silently ignore unknown scientific fields.
 Keep application release provenance separate from format compatibility. Paired
 Studio-producer/Toolbox-consumer fixtures establish source compatibility; tested
 installer releases and physical hardware acceptance remain separate evidence.
-Deploy compatible builds of both applications together: older Toolbox builds
-that accept only 1.x configs reject revision-2 exports. Updating Studio alone
-does not update Toolbox's importer. The producer application version is
-provenance, not a minimum Toolbox release; source tests do not establish a
-minimum published Toolbox version.
+For a handoff, check the export format against the separately installed Toolbox
+version. Toolbox builds that accept only 1.x configs reject revision-2 exports.
+Updating Studio leaves the Toolbox importer at its installed version. The
+producer version identifies the Studio build. Establishing the minimum compatible
+published Toolbox version requires testing its release.
 
 Internal project, RunSpec, SessionPlan, acquisition-evidence, hardware-profile
 and processing-method versions retain their own contracts. They are not aliases

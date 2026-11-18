@@ -36,6 +36,11 @@ feature parity.
 
 ## Role in OpenFPVS
 
+Studio and Toolbox are separate desktop products with their own installers and
+release schedules. A combined standalone OpenFPVS distribution is outside the
+current scope. A single launcher for both apps is a longer-term possibility
+without a committed implementation or release.
+
 Researchers can author and run local projects offline. OpenFPVS hosts the
 [Experiment Library](../EXPERIMENT_LIBRARY.md) and [enrolled study results](../DATA_SHARING.md).
 Toolbox owns EEG registration, processing and analysis. As the platform grows,
