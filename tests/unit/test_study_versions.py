@@ -1,10 +1,13 @@
 """Local authoring history and participant-data protection, using synthetic files."""
 
+import hashlib
 import json
 import os
+from pathlib import Path
 
 import pytest
 
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.study_lifecycle import get_study, read_study, set_collection_complete
 from fpvs_studio.core.study_versions import (
@@ -148,6 +151,115 @@ def test_same_size_image_replacement_with_original_timestamp_is_detected(
     image.write_bytes(b"BBBB")
     os.utime(image, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
     assert any(image.name in line for line in prepare_change(root, sample_project).changes)
+
+
+def _on_stimulus_read(monkeypatch, image, change, *, repeat=False):
+    original_open = Path.open
+    changed = False
+
+    def open_file(path, mode="r", *args, **kwargs):
+        stream = original_open(path, mode, *args, **kwargs)
+        if mode == "rb" and path in (image, filesystem_path(image)):
+            read = stream.read
+
+            def read_then_change(*args):
+                nonlocal changed
+                block = read(*args)
+                if block and (repeat or not changed):
+                    changed = True
+                    change()
+                return block
+
+            stream.read = read_then_change
+        return stream
+
+    monkeypatch.setattr(Path, "open", open_file)
+
+
+@pytest.mark.parametrize(("relative", "retime_access_only"), [
+    ("original-images/base/item.jpg", True), ("derived/base/gray/item.png", False),
+])
+def test_first_baseline_accepts_timestamp_change_when_stimulus_bytes_match(
+    sample_project_root, sample_project, monkeypatch, relative, retime_access_only
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    image = root / "stimuli" / relative
+    image.parent.mkdir(parents=True, exist_ok=True)
+    contents = b"same stimulus before and after the timestamp update"
+    image.write_bytes(contents)
+    stamp = image.stat()
+    modified = stamp.st_mtime_ns if retime_access_only else stamp.st_mtime_ns - 60_000_000_000
+    retimed = False
+
+    def update_timestamps():
+        nonlocal retimed
+        os.utime(image, ns=(stamp.st_atime_ns + 60_000_000_000, modified))
+        retimed = True
+
+    _on_stimulus_read(monkeypatch, image, update_timestamps)
+
+    draft = prepare_change(root, sample_project)
+
+    assert retimed and image.stat().st_mtime_ns == modified
+    assert not draft.changes
+    assert len(list_versions(root)) == 1
+    digest = hashlib.sha256(contents).hexdigest()
+    assert draft.assets[relative] == digest
+    assert (root / ".fpvs-study" / "objects" / digest).read_bytes() == contents
+
+
+def test_constant_metadata_activity_does_not_leave_a_reusable_digest(
+    sample_project_root, sample_project, monkeypatch
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    image = next((root / "stimuli").rglob("*.png"))
+    stamp = image.stat()
+    reads = 0
+
+    def retime():
+        nonlocal reads
+        reads += 1
+        os.utime(image, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + reads * 60_000_000_000))
+
+    _on_stimulus_read(monkeypatch, image, retime, repeat=True)
+    assert not prepare_change(root, sample_project).changes
+    before = reads
+    assert not prepare_change(root, sample_project).changes
+    assert reads > before > 0
+    assert len(list_versions(root)) == 1
+
+
+@pytest.mark.parametrize("stamp_available", [True, False])
+def test_first_baseline_rejects_mixed_stimulus_then_retries_cleanly(
+    sample_project_root, sample_project, monkeypatch, stamp_available
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    image = next((root / "stimuli").rglob("*.png"))
+    block = 1024 * 1024
+    image.write_bytes(b"A" * (2 * block))
+    stamp = image.stat()
+    replacement = b"B" * (2 * block)
+
+    def replace_contents():
+        image.write_bytes(replacement)
+        os.utime(image, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
+
+    if not stamp_available:
+        monkeypatch.setattr("fpvs_studio.core.study_versions._asset_stamp", lambda *_: None)
+    _on_stimulus_read(monkeypatch, image, replace_contents)
+    with pytest.raises(ValueError, match="Stimulus changed during review"):
+        prepare_change(root, sample_project)
+    assert current_version(root) is None
+    objects = root / ".fpvs-study" / "objects"
+    assert not (objects / hashlib.sha256(b"A" * block + b"B" * block).hexdigest()).exists()
+    assert not list(objects.glob("*.tmp"))
+
+    draft = prepare_change(root, sample_project)
+    digest = draft.assets[image.relative_to(root / "stimuli").as_posix()]
+    assert (objects / digest).read_bytes() == replacement
 
 
 def test_data_arriving_after_review_requires_a_reason(sample_project_root, sample_project):

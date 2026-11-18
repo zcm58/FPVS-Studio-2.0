@@ -181,6 +181,21 @@ def _asset_stamp(path: Path, info: os.stat_result) -> str | None:
     return f"{info.st_dev}:{info.st_ino}:{info.st_size}:{info.st_mtime_ns}:{change}"
 
 
+def _verify_asset_bytes(path: Path, relative: str, expected: str, size: int) -> os.stat_result:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+        current = _regular(path)
+        if (
+            digest.hexdigest() != expected
+            or current.st_size != size
+            or not os.path.samestat(current, os.fstat(source.fileno()))
+        ):
+            raise ValueError(f"Stimulus changed during review: {relative}")
+    return current
+
+
 def _capture_file(root: Path, path: Path, relative: str, db: sqlite3.Connection) -> str:
     info = _regular(path)
     if not stat.S_ISREG(info.st_mode):
@@ -200,20 +215,18 @@ def _capture_file(root: Path, path: Path, relative: str, db: sqlite3.Connection)
             for block in iter(lambda: source.read(1024 * 1024), b""):
                 digest.update(block)
                 target.write(block)
-        after = _regular(path)
-        if _asset_stamp(path, after) != stamp or (
-            info.st_size,
-            info.st_mtime_ns,
-            info.st_ino,
-            info.st_ctime_ns,
-        ) != (
-            after.st_size,
-            after.st_mtime_ns,
-            after.st_ino,
-            after.st_ctime_ns,
-        ):
-            raise ValueError(f"Stimulus changed during review: {relative}")
+            size = target.tell()
         key = digest.hexdigest()
+        after = _regular(path)
+        if not stat.S_ISREG(after.st_mode) or after.st_size != size:
+            raise ValueError(f"Stimulus changed during review: {relative}")
+        after_stamp = _asset_stamp(path, after)
+        if stamp is None or after_stamp != stamp or info.st_ctime_ns != after.st_ctime_ns:
+            # Reading a cloud-backed file can advance its Windows change time.
+            # Verify the captured bytes before using the new cache stamp.
+            verified = _verify_asset_bytes(path, relative, key, size)
+            final_stamp = _asset_stamp(path, verified)
+            stamp = final_stamp if final_stamp == after_stamp else None
         target_path = _object(root, key)
         if not target_path.exists():
             os.replace(temp, target_path)
