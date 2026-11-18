@@ -10,6 +10,8 @@ for Toolbox. Windows supports acquisition. macOS has experimental source support
   and focused verification. Use [architecture](ARCHITECTURE.md) for ownership.
 - Preserve unrelated edits, untracked files, retained output, formats and workflows.
   Maintain an [execution plan](docs/PLANS.md) for feature-sized or cross-layer work.
+- Use the [shared desktop guidance](docs/DESIGN.md#shared-openfpvs-desktop-experience)
+  for independent release planning, audience and interaction decisions.
 
 ## Contract Boundaries
 
@@ -26,8 +28,7 @@ for Toolbox. Windows supports acquisition. macOS has experimental source support
 
 ## GUI Acceptance
 
-- Use [shared OpenFPVS desktop guidance](docs/DESIGN.md#shared-openfpvs-desktop-experience)
-  for audience and interaction decisions. Use the [GUI package guide](src/fpvs_studio/gui/AGENTS.md)
+- Use the [GUI package guide](src/fpvs_studio/gui/AGENTS.md)
   for components, workflow contracts and registered Qt coverage.
 - Check for clipping at minimum/default size with realistic content and document
   a visible smoke path. Local Qt execution requires approval for a safe visible

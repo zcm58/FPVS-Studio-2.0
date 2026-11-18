@@ -17,6 +17,7 @@ fast returning-user launches, low-friction setup, and clear scientific/runtime s
 
 Maintainers can find the canonical desktop specification in the private OpenFPVS
 checkout at `../OpenFPVS/DESKTOP_EXPERIENCE.md`, relative to the Studio repository root.
+For release decisions, read [How to plan independent releases](https://github.com/zcm58/OpenFPVS-Website/blob/main/DESKTOP_EXPERIENCE.md#how-to-plan-independent-releases).
 Studio is the visual and interaction reference for Toolbox. Design for lab members
 doing routine work, with guidance beside unfamiliar choices and advanced settings
 within reach for expert users.
