@@ -127,9 +127,12 @@ def _read_project_management_entry(
 ) -> ProjectManagementEntry:
     """Read display metadata without consulting live document or widget state."""
 
+    from fpvs_studio.core.study_lifecycle import read_study
+
     is_current = project_root == current_root
     try:
         project = load_project_file(project_json_path(project_root))
+        state = read_study(project_root)
     except Exception:
         return ProjectManagementEntry(
             name=project_root.name,
@@ -153,6 +156,8 @@ def _read_project_management_entry(
         can_open=not is_current,
         can_delete=not is_current,
         can_rename=True,
+        collection_complete=bool(state and state.collection_complete),
+        archived=bool(state and state.archived),
     )
 
 
@@ -837,6 +842,12 @@ class StudioController(QObject):
         )
         dialog.open_requested.connect(lambda root: self._open_managed_project(dialog, root))
         dialog.delete_requested.connect(lambda root: self._delete_managed_project(dialog, root))
+        dialog.collection_requested.connect(
+            lambda root, value: self._change_managed_state(dialog, root, complete=value)
+        )
+        dialog.archive_requested.connect(
+            lambda root, value: self._change_managed_state(dialog, root, archived=value)
+        )
         dialog.rename_requested.connect(lambda root: self._rename_managed_project(dialog, root))
         dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
         dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -1285,6 +1296,7 @@ class StudioController(QObject):
             on_request_library=self.show_library,
             on_request_library_submission=self.show_library_submission,
             on_request_project_update=self.show_project_versions,
+            on_open_study_path=self.request_open_project,
             on_request_data_sharing=self.show_data_sharing,
             on_session_completed=lambda window: self._data_sharing().session_completed(window),
             on_session_started=lambda window, ready: self._data_sharing().session_started(
@@ -1781,6 +1793,28 @@ class StudioController(QObject):
     def _delete_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         self.delete_project(Path(project_root), parent=dialog)
         self._refresh_managed_projects(dialog)
+
+    def _change_managed_state(
+        self, dialog: ManageProjectsDialog, root: str, *,
+        complete: bool | None = None, archived: bool | None = None,
+    ) -> None:
+        from fpvs_studio.core.study_lifecycle import set_archived
+        from fpvs_studio.gui.study_collection import change_collection
+
+        current = self.main_window if self._current_project_root() == Path(root) else None
+        if current and (current.is_launch_busy() or not current.flush_pending_edits()):
+            return
+        try:
+            if archived is not None:
+                set_archived(Path(root), archived)
+            elif complete is not None and not change_collection(dialog, Path(root), complete):
+                return
+            if current:
+                current.refresh_study_state()
+        except Exception as error:
+            _show_error(dialog, "Project Status", error)
+            return
+        self._refresh_managed_projects(dialog, selected_root=root)
 
     def _rename_managed_project(self, dialog: ManageProjectsDialog, project_root: str) -> None:
         root = Path(project_root)

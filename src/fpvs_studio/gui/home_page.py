@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QSizePolicy,
     QVBoxLayout,
@@ -160,6 +161,9 @@ class HomePage(QWidget):
     ) -> None:
         super().__init__(parent)
         self._document = document
+        self.export_results_menu: QMenu | None = None
+        self._collection_complete = False
+        self._created_from = ""
         self._refresh_pending = False
         self._load_condition_template_profiles = load_condition_template_profiles
         self._edit_setup_action: Callable[[], None] | None = None
@@ -439,6 +443,7 @@ class HomePage(QWidget):
         import_project_bundle_action: QAction,
         open_project_action: QAction,
         launch_action: QAction,
+        review_results_action: QAction | None = None,
     ) -> None:
         self._bind_button_to_action(
             self.new_project_button,
@@ -455,10 +460,9 @@ class HomePage(QWidget):
             open_project_action,
             "Open Project",
         )
-        self._bind_button_to_action(
-            self.launch_button,
-            launch_action,
-            "Launch Experiment",
+        self.launch_button.clicked.connect(
+            lambda: (review_results_action if self._collection_complete and review_results_action
+                     else launch_action).trigger()
         )
         if launch_action.toolTip():
             self._launch_tooltip_text = launch_action.toolTip()
@@ -475,6 +479,14 @@ class HomePage(QWidget):
         self._edit_setup_action = edit_setup
         self._complete_setup_action = complete_setup or edit_setup
         self.edit_setup_button.clicked.connect(self._open_setup_from_home)
+
+    def set_collection_state(self, complete: bool, created_from: str | None) -> None:
+        self._collection_complete = complete
+        self._created_from = created_from or ""
+        self.refresh()
+
+    def set_export_menu(self, menu: QMenu) -> None:
+        self.export_results_menu = menu
 
     def set_project_update_notice(self, message: str) -> None:
         """Show library version news independently of experiment launch readiness."""
@@ -536,6 +548,9 @@ class HomePage(QWidget):
 
         self._refresh_project_title()
         description = " ".join(project.meta.description.split())
+        if self._created_from:
+            origin = f"Created from {self._created_from}"
+            description = f"{origin} · {description}" if description else origin
         self.current_project_subtitle.setToolTip(description)
         self.current_project_subtitle.setAccessibleName(description)
         self.current_project_subtitle.setVisible(bool(description))
@@ -658,6 +673,18 @@ class HomePage(QWidget):
         return float(preferred_refresh if preferred_refresh is not None else 60.0)
 
     def _set_status_indicator(self, report: LauncherReadinessReport) -> None:
+        if self._collection_complete:
+            self.launch_button.setText("Review results")
+            self.launch_button.setToolTip("Review task accuracy and response times")
+            self.launch_button.setStatusTip(self.launch_button.toolTip())
+            self.launch_button.setEnabled(True)
+            self.launch_status_label.set_state("ready", "Data Collection Complete")
+            self.launch_status_summary.hide()
+            self._set_setup_action_state(is_ready=True)
+            self.edit_setup_button.setText("Export results")
+            self._sync_launch_button_geometry()
+            return
+        self.launch_button.setText("Launch Experiment")
         self.launch_status_label.set_state(report.badge_state, report.status_label)
         is_ready = report.badge_state == "ready"
         local_display_check = report.status_label == "Check Local Display"
@@ -694,6 +721,11 @@ class HomePage(QWidget):
             mark_primary_action(self.edit_setup_button)
 
     def _open_setup_from_home(self) -> None:
+        if self._collection_complete:
+            if self.export_results_menu:
+                button = self.edit_setup_button
+                self.export_results_menu.popup(button.mapToGlobal(button.rect().bottomLeft()))
+            return
         report = self._status_report()
         is_ready = (
             report.badge_state == "ready" or report.status_label == "Check Local Display"

@@ -37,6 +37,7 @@ from fpvs_studio.data_sharing.storage import (
     save_settings,
     update_record,
 )
+from fpvs_studio.support.website_transfer import website_export
 
 
 @dataclass(frozen=True)
@@ -371,45 +372,46 @@ def sync_project(
             continue
         attempted = record.model_copy(update={"attempt_count": record.attempt_count + 1})
         update_record(root, attempted)
-        try:
-            receipt = transport.submit(
-                root,
-                profile,
-                read_payload(root, record.report_id),
-                cancel,
-                before_send=lambda: _may_send(root, profile, protocol_sha256, cancel),
-            )
-            update_record(
-                root,
-                attempted.model_copy(
-                    update={
-                        "state": "uploaded",
-                        "receipt": receipt,
-                        "last_error_code": None,
-                        "next_attempt_at": None,
-                    }
-                ),
-            )
-        except DataSharingCancelled:
-            # A later send reuses this identity; receipt loss cannot create a duplicate.
-            raise
-        except DataSharingError as error:
-            delay = min(3600, 30 * 2 ** min(attempted.attempt_count - 1, 7))
-            update_record(
-                root,
-                attempted.model_copy(
-                    update={
-                        "state": "pending" if error.retryable else "failed",
-                        "last_error_code": error.code,
-                        "next_attempt_at": now + timedelta(seconds=delay)
-                        if error.retryable
-                        else None,
-                    }
-                ),
-            )
-            failure = str(error)
-            # One inaccessible service/credential should not consume the entire outbox.
-            break
+        with website_export("session report"):
+            try:
+                receipt = transport.submit(
+                    root,
+                    profile,
+                    read_payload(root, record.report_id),
+                    cancel,
+                    before_send=lambda: _may_send(root, profile, protocol_sha256, cancel),
+                )
+                update_record(
+                    root,
+                    attempted.model_copy(
+                        update={
+                            "state": "uploaded",
+                            "receipt": receipt,
+                            "last_error_code": None,
+                            "next_attempt_at": None,
+                        }
+                    ),
+                )
+            except DataSharingCancelled:
+                # A later send reuses this identity; receipt loss cannot create a duplicate.
+                raise
+            except DataSharingError as error:
+                delay = min(3600, 30 * 2 ** min(attempted.attempt_count - 1, 7))
+                update_record(
+                    root,
+                    attempted.model_copy(
+                        update={
+                            "state": "pending" if error.retryable else "failed",
+                            "last_error_code": error.code,
+                            "next_attempt_at": now + timedelta(seconds=delay)
+                            if error.retryable
+                            else None,
+                        }
+                    ),
+                )
+                failure = str(error)
+                # One inaccessible service/credential should not consume the entire outbox.
+                break
         # The receipt is already durable. An archive failure must never enter the
         # upload-error handler or reclassify an accepted contribution.
         try:

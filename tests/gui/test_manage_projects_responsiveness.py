@@ -368,3 +368,35 @@ def test_copy_path_confirms_selected_project_at_minimum_size(
     dialog.set_loading()
     assert not button.isEnabled()
     assert button.text() == "Copy Path"
+
+
+def test_manage_project_groups_keep_collection_state_through_archive(
+    controller, qtbot, monkeypatch,
+):
+    from PySide6.QtWidgets import QMessageBox
+
+    from fpvs_studio.core.study_lifecycle import read_study
+
+    root = create_project(controller.load_fpvs_root_dir(), "Collection review").project_root
+    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    controller.show_manage_projects_dialog()
+    dialog = controller._manage_projects_dialog
+    qtbot.addWidget(dialog)
+
+    def group(name):
+        qtbot.waitUntil(lambda: controller._manage_projects_job is None)
+        assert dialog.groups.tabText(dialog.groups.currentIndex()) == name
+        assert dialog.project_list.currentItem().text() == "Collection review"
+
+    group("Active")
+    dialog.collection_button.click()
+    group("Completed")
+    dialog.archive_button.click()
+    group("Archived")
+    assert read_study(root).collection_complete
+    assert not dialog.collection_button.isVisible()
+    dialog.archive_button.click()
+    group("Completed")
+    dialog.collection_button.click()
+    group("Active")
+    assert not read_study(root).collection_complete

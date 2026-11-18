@@ -367,7 +367,8 @@ def test_startup_aggregates_project_issues_after_all_other_projects_continue(sta
         calls.append(root)
         if root.name == "study1":
             raise ValueError("Malformed local report; retained for review")
-        return SharingView(SharingSettings(), status="waiting_connection", pending_count=1)
+        return SharingView(SharingSettings(enabled=True, profile=_profile()),
+                           status="waiting_connection", pending_count=1)
 
     state.backend.sync_startup_project = startup
     state.controller.startup(state.root, ())
@@ -393,7 +394,9 @@ def test_startup_notice_distinguishes_same_named_project_folders(state):
     for root in (first, second):
         root.mkdir(parents=True)
         (root / "project.json").write_text("{}")
-    state.backend.view = SharingView(SharingSettings(), error="Review saved report identity.")
+    state.backend.view = SharingView(
+        SharingSettings(enabled=True, profile=_profile()), error="Review saved report identity.",
+    )
     notices = []
     state.controller._startup_notice = notices.append
     state.controller.startup(state.root, ())
@@ -408,7 +411,9 @@ def test_startup_pending_notice_retains_its_project_identity(state):
     project_root = state.root / "Pending study"
     project_root.mkdir()
     (project_root / "project.json").write_text("{}")
-    state.backend.view = SharingView(SharingSettings(), pending_count=2)
+    state.backend.view = SharingView(
+        SharingSettings(enabled=True, profile=_profile()), pending_count=2,
+    )
     notices = []
     state.controller._startup_notice = notices.append
     state.controller.startup(state.root, ())
@@ -416,6 +421,31 @@ def test_startup_pending_notice_retains_its_project_identity(state):
     assert notices == [(_StartupReportNotice(
         project_root, "Saved reports are pending. Studio will retry on its next launch.",
     ),)]
+
+
+def test_fresh_launch_reminds_until_acknowledged_and_respects_off_or_held(state):
+    root = state.root / "Saved study"
+    root.mkdir()
+    (root / "project.json").write_text("{}")
+    enabled = SharingSettings(enabled=True, profile=_profile())
+    notices = []
+    for settings, status, pending, held in (
+        (enabled, "waiting_connection", 1, 0), (enabled, "waiting_connection", 1, 0),
+        (enabled, "uploaded", 0, 0), (enabled, "ready", 0, 1),
+        (SharingSettings(profile=_profile()), "off", 1, 0),
+    ):
+        state.backend.view = SharingView(
+            settings, status=status, pending_count=pending, held_count=held,
+        )
+        controller = type(state.controller)(
+            None, current_window=lambda: None, backend=state.backend, startup_notice=notices.append,
+        )
+        controller.startup(state.root, ())
+        _finish_jobs(state)
+        controller.startup(state.root, ())
+        _finish_jobs(state)
+    assert len(notices) == 2
+    assert all(len(group) == 1 and group[0].project_root == root for group in notices)
 
 
 def test_startup_discovery_error_identifies_the_root_folder(state, monkeypatch):
@@ -442,7 +472,9 @@ def test_startup_notice_waits_until_canceled_project_resumes_after_presentation(
         project_root.mkdir()
         (project_root / "project.json").write_text("{}")
     state.controller._window = state.window
-    state.backend.view = SharingView(SharingSettings(), error="Saved report needs review.")
+    state.backend.view = SharingView(
+        SharingSettings(enabled=True, profile=_profile()), error="Saved report needs review.",
+    )
     notices = []
     state.controller._startup_notice = notices.append
     state.controller.startup(state.root, ())
@@ -1264,6 +1296,10 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
     sample_project, sample_project_root, edited_after_compilation,
 ):
     launches, hashed_projects = [], []
+    from fpvs_studio.core.serialization import save_project_file
+    from fpvs_studio.core.study_versions import prepare_change
+
+    save_project_file(sample_project, sample_project_root / "project.json")
 
     def sharing_hash(project, root):
         hashed_projects.append(project)
@@ -1291,6 +1327,7 @@ def test_launch_hash_belongs_to_current_compiled_plan_only(
         attentional_blink_pilot_mode_enabled=False, _session_export_mode="full",
         validate_recording_launch=lambda: None, refresh_participant_summary_if_stale=lambda: None,
         ensure_unused_session_seed_for_launch=lambda: None,
+        prepare_protocol_change=lambda project: prepare_change(sample_project_root, project),
         validation_report=lambda **_values: SimpleNamespace(is_valid=True),
         session_plan_changed=_Signal(), project_changed=_Signal(), _set_dirty=lambda _value: None,
         _randomization_signature=namespace["_randomization_signature"],

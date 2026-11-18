@@ -19,7 +19,7 @@ Maintainers can find the canonical desktop specification in the private OpenFPVS
 checkout at `../OpenFPVS/DESKTOP_EXPERIENCE.md`, relative to the Studio repository root.
 For release decisions, read [How to plan independent releases](https://github.com/zcm58/OpenFPVS-Website/blob/main/DESKTOP_EXPERIENCE.md#how-to-plan-independent-releases).
 Use Studio for desktop layout, action order, focus and navigation. Use the
-OpenFPVS and Toolbox Slate & Signal Teal palette for future Studio surfaces.
+OpenFPVS and Toolbox Slate & Signal Teal palette for Studio surfaces.
 Design for lab members doing routine work, with guidance beside unfamiliar choices
 and advanced settings within reach for expert users.
 
@@ -31,21 +31,20 @@ is appropriate for an outstanding [Results upload](DATA_SHARING.md#operator-work
 
 ## Colors
 
-The table describes the current Studio theme, with blue actions and focus.
-The [approved palette plan](exec-plans/planned/slate-and-signal-teal-appearance.md)
-defines the target colors and preserves scientific figure and stimulus colors.
+The Slate & Signal Teal theme applies to authoring controls. Scientific figures
+and participant stimuli keep their authored colors. The [palette acceptance plan](exec-plans/active/slate-and-signal-teal-appearance.md) covers native visual review.
 Implement desktop colors through [the theme definitions](../src/fpvs_studio/gui/design_system.py)
 and keep semantic status labels legible in Light and Dark.
 
 | Role | Light | Dark |
 | --- | --- | --- |
-| Workspace | `#F4F7FB` | `#202124` |
-| Surface | `#F8FAFC` | `#24272D` |
+| Workspace | `#F3F6F8` | `#202124` |
+| Surface | `#FFFFFF` | `#24272D` |
 | Elevated surface | `#FFFFFF` | `#30343B` |
-| Primary text | `#1F2F44` | `#F3F6FB` |
-| Muted text | `#455A72` | `#AEB8C7` |
-| Primary action | `#2563EB` | `#60A5FA` |
-| Focus | `#2563EB` | `#93C5FD` |
+| Primary text | `#1D2A34` | `#F3F6FB` |
+| Muted text | `#4D626D` | `#AEB8C7` |
+| Primary action | `#00646C` | `#25B8C4` |
+| Focus | `#805C23` | `#78D5DD` |
 
 ## Typography
 

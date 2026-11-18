@@ -120,7 +120,7 @@ def rename_project(project_root: Path, name: str) -> ProjectMeta:
 
 def save_project_recording_settings(
     project_root: Path, recording: ProjectRecordingSettings | None,
-    *, serial_port: str | None = None,
+    *, serial_port: str | None = None, reviewed_save: Callable[[ProjectFile], None] | None = None,
 ) -> None:
     """Save a device and optional BioSemi port together, preserving other project data."""
 
@@ -144,7 +144,11 @@ def save_project_recording_settings(
     )
     if serial_port is not None:
         payload["settings"].setdefault("triggers", {})["serial_port"] = serial_port
-    atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
+    if reviewed_save is not None:
+        from fpvs_studio.core.serialization import project_from_json
+        reviewed_save(project_from_json(json.dumps(payload)))
+    else:
+        atomic_text_write(path, json.dumps(payload, indent=2, ensure_ascii=False))
 
 
 def build_starter_project(
@@ -237,7 +241,9 @@ def create_project(
         experiment_category=experiment_category,
     )
     target_dir = project_dir(parent_dir, project.meta.project_id)
-    if (experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS and target_dir.exists()):
+    if project_json_path(target_dir).exists() or (
+        experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS and target_dir.exists()
+    ):
         raise FileExistsError(f"Project folder already exists: {target_dir}")
     for folder in (
         target_dir,
@@ -256,4 +262,6 @@ def create_project(
     else:
         write_stimulus_manifest(target_dir, create_empty_manifest(project.meta.project_id))
     save_project_file(project, project_json_path(target_dir))
+    from fpvs_studio.core.study_versions import prepare_change
+    prepare_change(target_dir, project)
     return ProjectScaffold(project_root=target_dir, project=project)

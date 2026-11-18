@@ -7,8 +7,10 @@ for OpenFPVS desktop decisions.
 
 ## Workflow and Ownership
 
-- Ready projects launch from Home. Incomplete projects open at the earliest incomplete
-  Setup step. Preserve staged edits, category-specific editors and keyboard navigation.
+- Active Home offers Launch or Complete Setup. Completed Home offers results and
+  export. See [collection workflow](../../../docs/product-specs/studio.md#collection-workflow)
+  for manager tabs, the local research gate and separate website authorization.
+  Preserve staged edits, category-specific editors and keyboard navigation.
   Use [Setup layout](../../../docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy),
   [order editing](../../../docs/GUI_WORKFLOW.md#choose-and-save-condition-order) or
   [categories](../../../docs/EXPERIMENT_CATEGORIES.md) for the affected workflow.

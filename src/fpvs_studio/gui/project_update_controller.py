@@ -10,7 +10,7 @@ from threading import Event
 from time import monotonic
 from typing import TYPE_CHECKING, cast
 
-from PySide6.QtCore import QObject, Qt, QTimer
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
@@ -32,11 +32,13 @@ from fpvs_studio.core.project_bundle_update import (
     capture_project_update_snapshot,
     update_project_bundle,
 )
+from fpvs_studio.core.study_versions import ProtocolDraft
 from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.project_updates import inspect_project_update_reporting
 from fpvs_studio.gui.library_controller import ImportCallback
 from fpvs_studio.gui.processing_page import ImportProcessingStage
 from fpvs_studio.gui.project_version_dialog import ProjectVersionDialog
+from fpvs_studio.gui.study_versions import ProtocolReviewCancelled
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateCallback,
@@ -83,6 +85,12 @@ class _Updated:
 class ProjectUpdateController(QObject):
     """A background check never changes the project or opens a participant-facing dialog."""
 
+    _review_requested = Signal(object)
+
+    @Slot(object)
+    def _review_on_main_thread(self, callback: Callable[[], None]) -> None:
+        callback()
+
     def __init__(
         self, app: QApplication, *,
         current_window: Callable[[], StudioMainWindow | None],
@@ -92,6 +100,9 @@ class ProjectUpdateController(QObject):
         client: LibraryClient | None = None,
     ) -> None:
         super().__init__(app)
+        self._review_requested.connect(
+            self._review_on_main_thread, Qt.ConnectionType.QueuedConnection,
+        )
         self.client = client or LibraryClient()
         self._current_window = current_window
         self._import_bundle = import_bundle
@@ -548,6 +559,8 @@ class ProjectUpdateController(QObject):
             self.dialog.status_label.setToolTip("")
             self.dialog.set_busy(True, "Preparing update…", show_progress=True)
 
+        forked: list[Path] = []
+
         def update(progress: ProgressReporter, cancel: Event) -> _Updated:
             ensure_project_update_recovery_ready(root, cancel_event=cancel)
             reporting = inspect_project_update_reporting(root, cancel_event=cancel)
@@ -564,11 +577,45 @@ class ProjectUpdateController(QObject):
                 ensure_project_update_recovery_ready(root, cancel_event=cancel)
                 reporting = inspect_project_update_reporting(root, cancel_event=cancel)
 
+            def review(draft: ProtocolDraft) -> str:
+                done = Event()
+                answer: list[str] = []
+                errors: list[Exception] = []
+
+                def ask() -> None:
+                    try:
+                        if (cancel.is_set() or not self._current(window)
+                                or generation != self._generation):
+                            return
+                        versions = window._study_versions
+                        def fork(candidate: ProtocolDraft) -> None:
+                            path = versions._copy(candidate, open_after=False)
+                            if path:
+                                forked.append(path)
+                        answer.append(versions.review(draft, on_fork=fork))
+                    except ProtocolReviewCancelled:
+                        pass
+                    except Exception as error:
+                        errors.append(error)
+                    finally:
+                        done.set()
+
+                self._review_requested.emit(ask)
+                while not done.wait(0.1):
+                    if cancel.is_set():
+                        raise ProjectBundleCancelled("Update cancelled.")
+                if errors:
+                    raise errors[0]
+                if not answer:
+                    raise ProjectBundleCancelled("The current protocol was kept.")
+                return answer[0]
+
             updated = update_project_bundle(
                 path, root, studio_root, library_origin=origin,
                 expected_snapshot=snapshot, cancel_event=cancel,
                 progress_callback=bridge.stage_changed.emit,
                 precommit_check=precommit,
+                review_protocol=review,
             )
             return _Updated(updated, reporting.reconnect_required)
 
@@ -655,6 +702,8 @@ class ProjectUpdateController(QObject):
                     self._update_bridge = None
                     bridge.deleteLater()
                     self._run_pending()
+                    if forked and current and window._study_versions.open_project:
+                        window._study_versions.open_project(forked[0])
 
         job.finished.connect(finished)
 

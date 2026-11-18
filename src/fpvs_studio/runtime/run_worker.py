@@ -330,6 +330,9 @@ class RuntimeWorker:
         runtime_options: Mapping[str, object] | None, relative_output_dir: str | None,
     ) -> SessionExecutionSummary:
         write_detailed_exports = _writes_detailed_exports(runtime_options)
+        version = (runtime_options or {}).get("studio_protocol_version_id")
+        if version is not None and not isinstance(version, str):
+            raise ValueError("Invalid Studio protocol version in session launch settings.")
         acquisition = AcquisitionEvidenceRecorder(
             project_root, [entry.run_spec for entry in session_plan.ordered_entries()],
             project_id=session_plan.project_id,
@@ -490,6 +493,7 @@ class RuntimeWorker:
             capture_participant_results(
                 project_root, session_plan, session_result(results, None), finalized=False,
                 journal_paths=journal_paths, execution_id=recovery.execution_id,
+                protocol_version_id=version,
             )
 
         execution_error: Exception | None = None
@@ -508,6 +512,7 @@ class RuntimeWorker:
             capture_participant_results(
                 project_root, session_plan, session_result([], None), finalized=False,
                 journal_paths=journal_paths, execution_id=recovery.execution_id,
+                protocol_version_id=version,
             )
             self._engine.open_session(runtime_options=runtime_options)
             session_open = True
@@ -962,6 +967,7 @@ class RuntimeWorker:
                 append_compact_task_responses(project_root, session_plan, session_summary)
             capture_participant_results(
                 project_root, session_plan, session_summary, journal_paths=journal_paths,
+                protocol_version_id=version,
                 execution_id=recovery.execution_id,
             )
             blink_recorder.finish(

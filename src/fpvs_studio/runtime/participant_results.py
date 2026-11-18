@@ -99,7 +99,7 @@ def _task_definitions(plan: SessionPlan) -> list[dict[str, Any]]:
 def capture_participant_results(
     project_root: Path, plan: SessionPlan, summary: SessionExecutionSummary,
     *, finalized: bool = True, journal_paths: Mapping[str, Path] | None = None,
-    execution_id: str | None = None,
+    execution_id: str | None = None, protocol_version_id: str | None = None,
 ) -> Path:
     """Atomically checkpoint original labels and accumulated answers for one visit.
 
@@ -117,6 +117,7 @@ def capture_participant_results(
     participant_metadata = summary.participant_metadata.model_dump(mode="json")
     payload = {
         "schema_version": 1, "project_id": summary.project_id, "execution_id": execution_id,
+        "protocol_version_id": protocol_version_id,
         "participant_number": summary.participant_number or "",
         "participant_session_number": summary.participant_session_number,
         "session_id": summary.session_id, "session_aborted": summary.aborted,
@@ -133,6 +134,7 @@ def capture_participant_results(
         "runs": [{
             "run_id": run.run_id, "condition_id": run.condition_id,
             "condition_name": run.condition_name, "aborted": run.aborted,
+            "completed_frames": run.completed_frames,
             "fixation_responses": [item.model_dump(mode="json") for item in run.fixation_responses],
             "response_log": [item.model_dump(mode="json") for item in run.response_log],
             "rt_scoring_source": (run.runtime_metadata.fixation_rt_scoring_source
@@ -262,7 +264,7 @@ def _legacy_full_records(
             runs.append({
                 **{key: run.get(key) for key in (
                     "run_id", "condition_id", "condition_name", "aborted",
-                    "fixation_responses", "response_log", "runtime_metadata",
+                    "completed_frames", "fixation_responses", "response_log", "runtime_metadata",
                 ) if key in run},
                 "responses": selected,
             })
@@ -433,6 +435,105 @@ def _merge_pending_journals(root: Path, record: dict[str, Any]) -> None:
             responses[index] = response
         run["responses"] = list(responses.values())
     record["runs"] = list(runs.values())
+
+
+def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
+    """Identify real data, including a partial visit, independently of upload status."""
+    rows = _csv(resolve_project_relative_path(project_root, "logs/session_condition_history.csv"))
+    visits: dict[str, set[str]] = {}
+    records = _records(project_root, rows)
+    accounted: set[str] = set()
+
+    def identity_of(record: Mapping[str, Any]) -> tuple[str, str, str]:
+        return (
+            str(record.get("participant_number") or ""),
+            str(record.get("session_id") or ""),
+            str(record.get("participant_session_number") or ""),
+        )
+
+    modes: dict[tuple[str, str, str], tuple[str, bool]] = {}
+    for record, _ in records:
+        identity = identity_of(record)
+        key, test = modes.get(identity, ("", False))
+        modes[identity] = (
+            str(record.get("protocol_version_id") or key),
+            test
+            or any(_boolean(record.get(field)) is True for field in ("test_mode", "pilot_mode")),
+        )
+    for row in rows:
+        identity = identity_of(row)
+        key, test = modes.get(identity, ("", False))
+        modes[identity] = (
+            key,
+            test or any(_boolean(row.get(field)) is True for field in ("test_mode", "pilot_mode")),
+        )
+    for record, _ in records:
+        number = str(record.get("participant_number") or "")
+        session = str(record.get("session_id") or "")
+        if not number:
+            continue
+        key, test = modes[identity_of(record)]
+        captured = any(
+            int(run.get("completed_frames") or 0) > 0
+            or run.get("fixation_responses")
+            or run.get("responses")
+            or run.get("response_log")
+            or (
+                "completed_frames" not in run
+                and run.get("aborted") is False
+                and record.get("finalized")
+            )
+            for run in record.get("runs", [])
+        ) or bool((record.get("participant_metadata") or {}).get("demographics_answers"))
+        if captured and not test:
+            if record.get("execution_id"):
+                accounted.add(str(record["execution_id"]))
+            visits.setdefault(key, set()).add(
+                f"{number} · {record.get('participant_session_number') or session}"
+            )
+    for row in rows:
+        number, session = row.get("participant_number", ""), row.get("session_id", "")
+        key, test = modes[identity_of(row)]
+        if number and not test and int(row.get("completed_frames") or 0) > 0:
+            visits.setdefault(key, set()).add(
+                f"{number} · {row.get('participant_session_number') or session}"
+            )
+    # Acquisition can outlive an interrupted or legacy workbook checkpoint.
+    directory = resolve_project_relative_path(project_root, "logs/acquisition")
+    for candidate in directory.glob("*.acquisition-v1.json"):
+        execution = candidate.name.removesuffix(".acquisition-v1.json")
+        if execution in accounted:
+            continue
+        evidence = _json(
+            resolve_project_relative_path(project_root, f"logs/acquisition/{candidate.name}")
+        )
+        number, session, ordinal = identity_of(evidence)
+        if (
+            not number
+            or number in {"0", "00"}
+            or (evidence.get("recording") or {}).get("effective_backend") == "null"
+        ):
+            continue
+        if not any(
+            int(run.get("completed_frames") or 0) > 0
+            or any(event.get("status") == "sent" for event in run.get("attempted_events", []))
+            for run in evidence.get("runs", [])
+        ):
+            continue
+        key, test = modes.get((number, session, ordinal), ("", False))
+        if not test:
+            snapshot = resolve_project_relative_path(
+                project_root, f"logs/acquisition/{execution}.study-run-v1.json"
+            )
+            if snapshot.exists():
+                run_settings = _json(snapshot)
+                if run_settings.get("execution_id") != execution or identity_of(
+                    run_settings
+                ) != identity_of(evidence):
+                    raise ValueError("Conflicting participant and protocol evidence.")
+                key = str(run_settings.get("protocol_version_id") or key)
+            visits.setdefault(key, set()).add(f"{number} · {ordinal or session}")
+    return visits
 
 
 def has_captured_participant_results(project_root: Path) -> bool:

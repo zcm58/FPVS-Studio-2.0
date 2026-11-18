@@ -21,7 +21,8 @@ from fpvs_studio.core.project_config import (
     ProjectConfigError,
     completed_toolbox_config,
     export_project_config,
-    read_project_config,
+    read_retained_session_config,
+    write_project_config,
 )
 from fpvs_studio.core.run_spec import TriggerEvent
 from fpvs_studio.core.serialization import read_json_file
@@ -1540,7 +1541,9 @@ def test_completed_handoff_automatically_retains_hardware_identity_and_event_evi
     assert not summary.aborted
     evidence = _evidence(root)
     path = root / "logs" / "acquisition" / f"{evidence.execution_id}-completed.fpvsconfig"
-    completed = read_project_config(path)
+    assert not path.exists()
+    receipt = path.with_name(f"{evidence.execution_id}.study-session-v1.json")
+    completed = read_retained_session_config(receipt, evidence.project_id)
     assert completed.format_version == 2
     assert completed.completed_session.ordering_policy == plan.ordering_policy
     assert completed.completed_session.randomization_mode == plan.randomization_mode
@@ -1602,8 +1605,12 @@ def test_completed_handoff_keeps_immutable_nullable_electrode_snapshot(
              toolbox_handoff_config=config.model_dump(mode="json"))
     evidence = _evidence(root)
     path = root / "logs" / "acquisition" / f"{evidence.execution_id}-completed.fpvsconfig"
-    completed = read_project_config(path)
-    assert json.loads(path.read_text(encoding="utf-8"))["completed_session"][
+    assert not path.exists()
+    receipt = path.with_name(f"{evidence.execution_id}.study-session-v1.json")
+    completed = read_retained_session_config(receipt, evidence.project_id)
+    manual_export = root / "manual.fpvsconfig"
+    write_project_config(manual_export, completed)
+    assert json.loads(manual_export.read_text(encoding="utf-8"))["completed_session"][
         "manual_removed_electrodes"
     ] == expected
     assert completed.completed_session.manual_removed_electrodes == expected

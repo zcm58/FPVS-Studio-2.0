@@ -79,6 +79,8 @@ class LaunchSettings:
     experiment_test_mode: bool = False
     sharing_protocol_sha256: str | None = None
     toolbox_handoff_config: dict[str, object] | None = None
+    studio_protocol_version_id: str | None = None
+    studio_protocol_change_reason: str | None = None
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
@@ -90,6 +92,9 @@ class LaunchSettings:
             options.pop("sharing_protocol_sha256")
         if self.toolbox_handoff_config is None:
             options.pop("toolbox_handoff_config")
+        for key in ("studio_protocol_version_id", "studio_protocol_change_reason"):
+            if options[key] is None:
+                options.pop(key)
         if resolve_recording_backend(options) == "serial":
             options["serial_port"] = resolve_serial_port(self.serial_port)
         engine_name = options["engine_name"]
@@ -307,6 +312,16 @@ def _validate_participant_metadata(
         raise LaunchSettingsError(str(exc)) from exc
 
 
+def check_research_collection_open(project_root: Path, *, local_testing: bool) -> None:
+    from fpvs_studio.core.study_lifecycle import read_study
+
+    if local_testing:
+        return
+    state = read_study(project_root)
+    if state and state.collection_complete:
+        raise LaunchSettingsError("Choose Reopen Collection before another research session.")
+
+
 def launch_run(
     project_root: Path,
     run_spec: RunSpec,
@@ -318,6 +333,9 @@ def launch_run(
     """Launch one compiled RunSpec into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
+    check_research_collection_open(
+        project_root, local_testing=settings.experiment_test_mode or settings.pilot_mode,
+    )
     _validate_macos_source_launch(settings, require_main_thread=True)
     _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)
@@ -357,6 +375,9 @@ def launch_session(
     """Launch an ordered session plan into the selected presentation engine."""
 
     settings = launch_settings or LaunchSettings()
+    check_research_collection_open(
+        project_root, local_testing=settings.experiment_test_mode or settings.pilot_mode,
+    )
     _validate_macos_source_launch(settings, require_main_thread=True)
     _check_recorder_before_launch(settings)
     _validate_launch_settings(settings)

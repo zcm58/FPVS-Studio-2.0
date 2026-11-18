@@ -46,6 +46,8 @@ flow, scoring, recovery and exports. Read the relevant section of
 - `acquisition_evidence.py` writes versioned selection and sent/error evidence outside
   the frame loop, plus completed Toolbox handoffs after finalization. Configuration,
   operator association, receiver integrity and physical timing remain separate evidence.
+  `study_handoff.py` freezes compact launch settings and exports the completed
+  cohort from retained evidence. See the [whole-study wire contract](../../../docs/PROJECT_CONFIG.md#whole-study-handoff).
 - Full exports write numbered visit folders under `runs/`; compact writes project logs
   without detailed run folders. Canonical filenames/schema compatibility are in the
   runtime contract. Raw task answers stay out of application logs and generic summary

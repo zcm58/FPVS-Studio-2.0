@@ -68,6 +68,8 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui.design_system import (
     CARD_CORNER_RADIUS,
+    COLOR_MASTHEAD,
+    COLOR_SIGNAL,
     FONT_SIZE_BODY,
     FONT_SIZE_CONTROL,
     FONT_SIZE_DIALOG_TITLE,
@@ -1405,8 +1407,8 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
         border-radius: 6px;
         padding: 3px 6px;
         font-size: {FONT_SIZE_CONTROL}px;
-        selection-background-color: {theme.primary};
-        selection-color: {theme.selected_text};
+        selection-background-color: {theme.surface_alt};
+        selection-color: {theme.text_primary};
     }}
     QLineEdit, QComboBox, QAbstractSpinBox {{
         min-height: 22px;
@@ -1435,8 +1437,8 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
     QComboBox QAbstractItemView {{
         color: {theme.text_primary};
         background-color: {theme.surface_elevated};
-        selection-background-color: {theme.primary};
-        selection-color: {theme.selected_text};
+        selection-background-color: {theme.surface_alt};
+        selection-color: {theme.text_primary};
         border: 1px solid {theme.border};
     }}
     QCheckBox, QRadioButton {{
@@ -2354,8 +2356,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         gridline-color: {color_border_soft};
-        selection-background-color: {color_primary};
-        selection-color: {theme.selected_text};
+        selection-background-color: {theme.surface_alt};
+        selection-color: {theme.text_primary};
         outline: none;
     }}
     QTableWidget#assets_table QHeaderView::section,
@@ -2672,6 +2674,12 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
         launch_surface_frame_stylesheet(theme)
         + _text_role_stylesheet(theme)
         + f"""
+    QLabel#welcome_headline_label {{
+        color: {COLOR_SIGNAL};
+        background-color: {COLOR_MASTHEAD};
+        border-radius: 6px;
+        padding: 4px;
+    }}
     QWidget#welcome_hero_container {{
         background: transparent;
     }}
@@ -2707,6 +2715,9 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     }}
     QPushButton:focus {{
         border: 2px solid {theme.focus_ring};
+    }}
+    QPushButton[welcomeRole="primary"]:focus {{
+        border-color: {theme.selected_text};
     }}
     QPushButton:disabled, QPushButton[welcomeRole="primary"]:disabled {{
         border-color: {theme.border_soft};

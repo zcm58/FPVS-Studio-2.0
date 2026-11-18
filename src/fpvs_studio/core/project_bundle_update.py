@@ -39,6 +39,7 @@ from fpvs_studio.core.project_bundle import (
 )
 from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.serialization import atomic_text_write, load_project_file, save_project_file
+from fpvs_studio.core.study_versions import ProtocolDraft, prepare_change, record_library_update
 from fpvs_studio.preprocessing.manifest import read_stimulus_manifest, write_stimulus_manifest
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -295,6 +296,7 @@ def update_project_bundle(
     cancel_event: Event | None = None,
     progress_callback: Callable[[str], None] | None = None,
     precommit_check: Callable[[], None] | None = None,
+    review_protocol: Callable[[ProtocolDraft], str] | None = None,
 ) -> ProjectBundleUpdateResult:
     """Replace explicitly reviewed authored files; preserve local data and exact old assets.
 
@@ -407,6 +409,20 @@ def update_project_bundle(
             raise ProjectBundleError(
                 "Project changed during download. Save and check the version again."
             )
+        from fpvs_studio.runtime.participant_results import research_visits_by_version
+
+        draft = None
+        reason = ""
+        if research_visits_by_version(root):
+            draft = prepare_change(root, updated, candidate_root=imported.project_root)
+            if draft.changes:
+                if review_protocol is None:
+                    raise ProjectBundleError(
+                        "Review the protocol changes in Studio before updating a collecting study."
+                    )
+                reason = review_protocol(draft).strip()
+                if not reason:
+                    raise ProjectBundleCancelled("The current protocol was kept.")
         backup_parent = _mkdirs(
             studio, (app_data_dir(studio).name, "project-backups", snapshot.project_id)
         )
@@ -455,6 +471,7 @@ def update_project_bundle(
                 moves.append((source, target))
             journal["status"] = "complete"
             atomic_text_write(backup / "update.json", json.dumps(journal, indent=2))
+            record_library_update(root, backup, draft, reason)
             committed = True
         except Exception as error:
             try:

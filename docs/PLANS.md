@@ -9,6 +9,7 @@ historical release draft does not authorize publishing an old version.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Shared authoring tokens implemented; native scaling and full Setup acceptance remain. |
 | [Desktop text hierarchy](exec-plans/active/desktop-text-hierarchy.md) | Welcome version and shared text roles implemented. Visible verification pending. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Visible checks passed. Physical discovery and reconnect acceptance pending. |
 | [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Show higher fixed refresh rates and link to Advanced display |
@@ -33,7 +34,6 @@ historical release draft does not authorize publishing an old version.
 Proposals are not implemented behavior. Start in `planned/` and move a plan to
 `active/` when implementation is authorized.
 
-- [Slate & Signal Teal desktop appearance](exec-plans/planned/slate-and-signal-teal-appearance.md)
 - [Image pool reset policy](exec-plans/planned/image-pool-reset-policy.md)
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md)
 - [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)

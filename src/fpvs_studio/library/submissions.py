@@ -19,6 +19,7 @@ from fpvs_studio.library.cache import check_cancel
 from fpvs_studio.library.client import METADATA_TOTAL_SECONDS, CredentialOwner, LibraryClient
 from fpvs_studio.library.credentials import CredentialStore, DeviceCredential, credential_store
 from fpvs_studio.library.errors import LibraryError
+from fpvs_studio.support.website_transfer import website_export
 
 MAX_SUBMISSION_BYTES = 64 * 1024 * 1024
 
@@ -240,39 +241,40 @@ def _submit(
         )
         endpoint = "/submissions/v1" if project_uploads else "/v2/submissions"
         credential_owner: CredentialOwner = "project_upload" if project_uploads else "library"
-        raw = client._json_request(
-            "POST",
-            endpoint,
-            token=token,
-            payload=metadata,
-            cancel_event=cancel_event,
-            credential_owner=credential_owner,
-        )
-        status = _receipt(raw)
-        if str(status.submission_id) != submission_id or status.sha256 != report.sha256:
-            raise LibraryError("OpenFPVS returned a receipt for a different submission.")
-        if status.status != "uploading":
-            return status
-        with client._response(
-            "PUT",
-            f"{endpoint}/{submission_id}/bundle",
-            token=token,
-            data=cast(BinaryIO, _UploadReader(source, cancel_event)),
-            content_length=report.size_bytes,
-            cancel_event=cancel_event,
-            credential_owner=credential_owner,
-        ) as response:
-            raw = json.loads(
-                b"".join(
-                    client._chunks(
-                        response,
-                        65536,
-                        time.monotonic() + METADATA_TOTAL_SECONDS,
-                        cancel_event,
+        with website_export("project bundle" if project_uploads else "condition bundle"):
+            raw = client._json_request(
+                "POST",
+                endpoint,
+                token=token,
+                payload=metadata,
+                cancel_event=cancel_event,
+                credential_owner=credential_owner,
+            )
+            status = _receipt(raw)
+            if str(status.submission_id) != submission_id or status.sha256 != report.sha256:
+                raise LibraryError("OpenFPVS returned a receipt for a different submission.")
+            if status.status != "uploading":
+                return status
+            with client._response(
+                "PUT",
+                f"{endpoint}/{submission_id}/bundle",
+                token=token,
+                data=cast(BinaryIO, _UploadReader(source, cancel_event)),
+                content_length=report.size_bytes,
+                cancel_event=cancel_event,
+                credential_owner=credential_owner,
+            ) as response:
+                raw = json.loads(
+                    b"".join(
+                        client._chunks(
+                            response,
+                            65536,
+                            time.monotonic() + METADATA_TOTAL_SECONDS,
+                            cancel_event,
+                        )
                     )
                 )
-            )
-        status = _receipt(raw)
-        if str(status.submission_id) != submission_id or status.sha256 != report.sha256:
-            raise LibraryError("OpenFPVS returned a receipt for a different submission.")
-        return status
+            status = _receipt(raw)
+            if str(status.submission_id) != submission_id or status.sha256 != report.sha256:
+                raise LibraryError("OpenFPVS returned a receipt for a different submission.")
+            return status

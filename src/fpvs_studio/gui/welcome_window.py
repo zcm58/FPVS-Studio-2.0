@@ -28,6 +28,7 @@ from fpvs_studio.gui.components import (
     mark_welcome_action,
     refresh_widget_style,
 )
+from fpvs_studio.gui.update_lifecycle import wait_for_website_export
 
 
 class WelcomeWindow(QWidget):
@@ -139,7 +140,7 @@ class WelcomeWindow(QWidget):
         self.manage_projects_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def dragEnterEvent(self, event: QDragEnterEvent) -> None:  # noqa: N802
-        if self._import_busy:
+        if self._import_busy or wait_for_website_export(self):
             event.ignore()
             return
         bundle_path = self._bundle_path_from_mime_data(event.mimeData())

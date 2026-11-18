@@ -33,7 +33,6 @@ from fpvs_studio.gui import update_dialog as dialog_module
 from fpvs_studio.gui import update_lifecycle as lifecycle_module
 from fpvs_studio.gui import updater_window as updater_module
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.main_window import _TUTORIALS_URL
 from fpvs_studio.gui.update_dialog import UpdateDialog
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateLifecycle
 from fpvs_studio.gui.updater_window import ApplyUpdateDialog, UpdaterWindow
@@ -96,9 +95,10 @@ def test_main_window_menus_separate_each_visible_action(
 
     menus = (
         (window.file_menu, [
-            "Manage Projects...", "Save", "Import", "Export", "Update Project Version...",
+            "Manage Projects...", "Data Collection Complete", "Save", "Import", "Export",
+            "Update Project Version...", "Experiment version history…",
             "Find Action...", "Settings...", "Check for Updates", "Report a Bug...",
-            "Request a Feature...", "About",
+            "Request a Feature...", "Tutorials", "About",
         ]),
         (window.view_menu, [
             "Experiment Library...", "Open Participant Results", "Fixation Task Accuracy...",
@@ -110,7 +110,7 @@ def test_main_window_menus_separate_each_visible_action(
         (window.import_menu, ["Project Bundle...", "Project Config..."]),
         (window.export_menu, [
             "Project Bundle...", "FPVS Toolbox Config...", "Completed Project Config...",
-            "Group Summary...", "Upload Project for Review...",
+            "Completed Study for Toolbox…", "Group Summary...", "Upload Project for Review...",
         ]),
     )
     for menu, labels in menus:
@@ -176,7 +176,7 @@ def test_main_window_exposes_file_about_action(
     assert "Neural Engineering Research Division, Mississippi State University" in messages[0][1]
 
 
-def test_main_window_hides_file_tutorials_action_but_preserves_link(
+def test_main_window_offers_openfpvs_studio_tutorial(
     controller,
     qtbot,
     tmp_path: Path,
@@ -195,12 +195,12 @@ def test_main_window_hides_file_tutorials_action_but_preserves_link(
     ]
     assert window.tutorials_action.text() == "Tutorials"
     assert window.tutorials_action in window.file_menu.actions()
-    assert not window.tutorials_action.isVisible()
-    assert "Tutorials" not in visible_actions
+    assert window.tutorials_action.isVisible()
+    assert "Tutorials" in visible_actions
 
     window.tutorials_action.trigger()
 
-    assert opened_urls == [_TUTORIALS_URL]
+    assert opened_urls == ["https://openfpvs.com/software/studio/getting-started"]
 
 
 def test_startup_update_check_prompts_only_when_update_available(

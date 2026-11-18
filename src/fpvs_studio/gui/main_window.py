@@ -82,7 +82,7 @@ from fpvs_studio.gui.run_page import (
 from fpvs_studio.gui.setup_wizard_page import SetupWizardPage
 from fpvs_studio.gui.trigger_tester import TriggerTesterDialog
 from fpvs_studio.gui.update_dialog import UpdateDialog
-from fpvs_studio.gui.update_lifecycle import update_lifecycle
+from fpvs_studio.gui.update_lifecycle import update_lifecycle, wait_for_website_export
 from fpvs_studio.gui.window_helpers import (
     _LAUNCH_INTERSTITIAL_DURATION_MS,
     _coerce_exception,
@@ -118,7 +118,7 @@ _COMPACT_SETUP_DEFAULT_SIZE = (1120, 820)
 _UTILITY_MINIMUM_SIZE = (960, 640)
 _UTILITY_DEFAULT_SIZE = (1120, 720)
 _AUTO_WORKSPACE_SIZE_TOLERANCE = 16
-_TUTORIALS_URL = "https://zcm58.github.io/FPVS-Studio-2.0/"
+_TUTORIALS_URL = "https://openfpvs.com/software/studio/getting-started"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -168,6 +168,7 @@ class StudioMainWindow(QMainWindow):
         on_request_library_publish: Callable[[], None] | None = None,
         on_request_library_submission: Callable[[], None] | None = None,
         on_request_project_update: Callable[[], None] | None = None,
+        on_open_study_path: Callable[[Path], object] | None = None,
         on_request_data_sharing: Callable[[], None] | None = None,
         on_session_completed: Callable[[StudioMainWindow], None] | None = None,
         on_session_started: Callable[[StudioMainWindow, Callable[[], None]], None] | None = None,
@@ -175,6 +176,9 @@ class StudioMainWindow(QMainWindow):
         super().__init__()
         self.setObjectName("studio_main_window")
         self.document = document
+        from fpvs_studio.gui.study_versions import StudyVersionController
+        self._study_versions = StudyVersionController(self, on_open_study_path)
+        self.document.protocol_save_handler = self._study_versions.save
         self._on_request_new_project = on_request_new_project
         self._on_request_open_project = on_request_open_project
         self._on_request_manage_projects = on_request_manage_projects
@@ -263,6 +267,7 @@ class StudioMainWindow(QMainWindow):
             import_project_bundle_action=self.import_project_bundle_action,
             open_project_action=self.open_project_action,
             launch_action=self.launch_action,
+            review_results_action=self.fixation_cross_data_action,
         )
         self.home_page.bind_navigation_actions(
             edit_setup=lambda: self.show_setup_wizard(allow_step_jumps=True),
@@ -283,6 +288,11 @@ class StudioMainWindow(QMainWindow):
         )
         self.home_page.project_update_button.setEnabled(self.project_update_action.isEnabled())
         self._create_menu_and_toolbar()
+        completed_exports = QMenu(self)
+        completed_exports.addAction(self.export_group_summary_action)
+        completed_exports.addAction(self.export_study_action)
+        self.home_page.set_export_menu(completed_exports)
+        self.refresh_study_state()
         self._wire_document()
         self._update_window_title()
         self._show_initial_workflow_surface()
@@ -692,6 +702,13 @@ class StudioMainWindow(QMainWindow):
         self.export_completed_project_config_action.triggered.connect(
             self.export_completed_project_config
         )
+        self.collection_action = QAction("Data Collection Complete", self)
+        self.collection_action.triggered.connect(self.change_study_collection)
+        self.linked_collection_action = QAction("Linked OpenFPVS Study…", self)
+        self.linked_collection_action.triggered.connect(self.show_linked_study)
+        self.export_study_action = QAction("Completed Study for Toolbox…", self)
+        self.export_study_action.triggered.connect(self.export_study)
+        self._study_export_task: ProgressTask | None = None
         self.export_group_summary_action = QAction("Group Summary...", self)
         self.export_group_summary_action.setObjectName("export_group_summary_action")
         self.export_group_summary_action.triggered.connect(self.export_group_summary)
@@ -737,7 +754,6 @@ class StudioMainWindow(QMainWindow):
         self.tutorials_action = QAction("Tutorials", self)
         self.tutorials_action.setObjectName("tutorials_action")
         self.tutorials_action.triggered.connect(self.open_tutorials)
-        self.tutorials_action.setVisible(False)
         self.about_action = QAction("About", self)
         self.about_action.setObjectName("about_action")
         self.about_action.triggered.connect(self.show_about_dialog)
@@ -795,6 +811,9 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.settings_action, "File", "preferences recording test pilot root"),
             ActionEntry(self.new_project_action, "Home", "create new experiment"),
             ActionEntry(self.open_project_action, "Home", "open existing experiment"),
+            ActionEntry(self.collection_action, "File", "complete reopen collection"),
+            ActionEntry(self.linked_collection_action, "File", "collection status roster OpenFPVS"),
+            ActionEntry(self.export_study_action, "File / Export", "whole study toolbox handoff"),
             ActionEntry(self.manage_projects_action, "File", "rename projects"),
             ActionEntry(self.import_project_bundle_action, "File / Import", "import fpvsbundle"),
             ActionEntry(self.import_project_config_action, "File / Import", "import fpvsconfig"),
@@ -822,6 +841,7 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi"),
             ActionEntry(self.condition_figure_action, "Tools", "fpvs sequence image 600 dpi png"),
             ActionEntry(self.check_updates_action, "File", "software version update"),
+            ActionEntry(self.tutorials_action, "File", "help tutorials getting started"),
             ActionEntry(self.report_bug_action, "File", "help bug support issue"),
             ActionEntry(self.request_feature_action, "File", "help suggestion feedback"),
             ActionEntry(self.about_action, "File", "version information"),
@@ -877,7 +897,10 @@ class StudioMainWindow(QMainWindow):
         self.view_menu = self.menuBar().addMenu("View")
         self.tools_menu = self.menuBar().addMenu("Tools")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.file_menu.aboutToShow.connect(self._refresh_linked_study_action)
         self.file_menu.addAction(self.manage_projects_action)
+        self.file_menu.addAction(self.collection_action)
+        self.file_menu.addAction(self.linked_collection_action)
         self.file_menu.addAction(self.save_project_action)
         self.save_state_label = StatusBadgeLabel(parent=self.menuBar())
         self.save_state_label.setObjectName("project_save_state")
@@ -894,12 +917,14 @@ class StudioMainWindow(QMainWindow):
         self.export_menu.addAction(self.export_project_bundle_action)
         self.export_menu.addAction(self.export_project_config_action)
         self.export_menu.addAction(self.export_completed_project_config_action)
+        self.export_menu.addAction(self.export_study_action)
         self.export_menu.addAction(self.export_group_summary_action)
         self.export_menu.addAction(self.submit_library_action)
         if self.publish_library_action is not None:
             self.export_menu.addAction(self.publish_library_action)
         self.file_menu.addMenu(self.export_menu)
         self.file_menu.addAction(self.project_update_action)
+        self.file_menu.addAction("Experiment version history…", self._study_versions.show_history)
         self.file_menu.addAction(self.find_action_action)
         self.file_menu.addAction(self.settings_action)
         self.file_menu.addAction(self.check_updates_action)
@@ -1110,6 +1135,9 @@ class StudioMainWindow(QMainWindow):
         try:
             self.document.save()
         except Exception as error:
+            from fpvs_studio.gui.study_versions import ProtocolReviewCancelled
+            if isinstance(error, ProtocolReviewCancelled):
+                return False
             self._set_save_feedback(
                 "error", "Save failed",
                 "Your edits are still open. " + describe_error("Save Error", error),
@@ -1124,6 +1152,7 @@ class StudioMainWindow(QMainWindow):
         if self.is_launch_busy() or self._trigger_tester is not None:
             return
         try:
+            self.document.check_collection_open()
             if not configure_brainproducts_for_launch(self, self.document):
                 return
             self.document.validate_recording_launch()
@@ -1318,6 +1347,7 @@ class StudioMainWindow(QMainWindow):
                     "Enable Allow repeat participant sessions in Setup > Project to save "
                     "the re-run as a new visit. The interrupted visit will be preserved."
                 )
+            self.document.check_collection_open()
             if not configure_brainproducts_for_launch(self, self.document):
                 return
             backend = self.document.validate_recording_launch()
@@ -1735,6 +1765,9 @@ class StudioMainWindow(QMainWindow):
             self.new_project_action,
             self.open_project_action,
             self.manage_projects_action,
+            self.collection_action,
+            self.linked_collection_action,
+            self.export_study_action,
             self.import_project_bundle_action,
             self.import_project_config_action,
             self.export_project_bundle_action,
@@ -1757,6 +1790,8 @@ class StudioMainWindow(QMainWindow):
         )
         for action in actions:
             action.setEnabled(not busy)
+        if not busy:
+            self.refresh_study_state()
         if self.publish_library_action is not None:
             self.publish_library_action.setEnabled(not busy)
         self.project_update_action.setEnabled(
@@ -1855,6 +1890,99 @@ class StudioMainWindow(QMainWindow):
             self.main_stack.setCurrentWidget(self._image_resizer_page)
             return
         self.show_home()
+
+    def refresh_study_state(self) -> None:
+        from fpvs_studio.core.study_lifecycle import read_study
+        root = self.document.project_root
+        state = read_study(root)
+        complete = bool(state and state.collection_complete)
+        label = "Reopen Collection" if complete else "Data Collection Complete"
+        self.collection_action.setText(label)
+        archived = bool(state and state.archived)
+        self.collection_action.setEnabled(not archived)
+        self.collection_action.setToolTip(
+            "Restore this project in Manage Projects to change collection state."
+            if archived else label
+        )
+        self.export_study_action.setEnabled(complete and self._study_export_task is None)
+        self._refresh_linked_study_action()
+        self.home_page.set_collection_state(complete, state.created_from if state else None)
+
+    def _refresh_linked_study_action(self) -> None:
+        from fpvs_studio.data_sharing.storage import load_settings
+
+        try:
+            profile = load_settings(self.document.project_root).profile
+        except Exception as error:
+            LOGGER.warning("Could not read linked study settings: %s", error)
+            profile = None
+        self.linked_collection_action.setVisible(bool(profile and profile.project_id))
+
+    def change_study_collection(self) -> None:
+        from fpvs_studio.core.study_lifecycle import read_study
+        from fpvs_studio.gui.study_collection import change_collection
+
+        if self.is_launch_busy() or not self.flush_pending_edits():
+            return
+        try:
+            state = read_study(self.document.project_root)
+            if state and state.archived:
+                return
+            complete = not (state and state.collection_complete)
+            if change_collection(self, self.document.project_root, complete):
+                self.refresh_study_state()
+                if self.linked_collection_action.isVisible():
+                    self.statusBar().showMessage(
+                        "Local status saved. See File > Linked OpenFPVS Study for website status.",
+                        8000,
+                    )
+        except Exception as error:
+            _show_error_dialog(self, "Project Status", error)
+
+    def show_linked_study(self) -> None:
+        from fpvs_studio.gui.study_collection import LinkedStudyDialog
+
+        if self.is_launch_busy():
+            return
+        try:
+            dialog = LinkedStudyDialog(self.document.project_root, self)
+        except Exception as error:
+            _show_error_dialog(self, "Linked OpenFPVS Study", error)
+            return
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        dialog.open()
+
+    def export_study(self) -> None:
+        from fpvs_studio.runtime.study_handoff import export_study_handoff
+
+        if self._study_export_task is not None or not self.flush_pending_edits():
+            return
+        root = self.document.project_root
+        selected, _ = QFileDialog.getSaveFileName(
+            self, "Export Completed Study for Toolbox",
+            str(root / f"{root.name}-completed-study.fpvsconfig"), "FPVS Study (*.fpvsconfig)",
+        )
+        if not selected:
+            return
+        destination = _ensure_config_suffix(Path(selected))
+        task = ProgressTask(
+            parent_widget=self, label="Preparing completed study…", window_title="Study Export",
+            callback=lambda: export_study_handoff(root, destination),
+        )
+        self._study_export_task = task
+        self.export_study_action.setEnabled(False)
+        task.succeeded.connect(
+            lambda path: self.statusBar().showMessage(f"Study exported to {path}", 8000)
+        )
+        task.failed.connect(
+            lambda error: _show_error_dialog(self, "Study Export", _coerce_exception(error))
+        )
+        task.finished.connect(self._finish_study_export)
+        task.start()
+
+    def _finish_study_export(self) -> None:
+        self._study_export_task = None
+        self.refresh_study_state()
 
     def export_group_summary(self) -> bool:
         if not self.flush_pending_edits():
@@ -1998,6 +2126,13 @@ class StudioMainWindow(QMainWindow):
         return False
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if not self._closing_for_handoff and wait_for_website_export(self):
+            event.ignore()
+            return
+        if self._study_export_task is not None:
+            self.statusBar().showMessage("Wait for the completed study export to finish.", 4000)
+            event.ignore()
+            return
         if self._project_update_reload_failed:
             self._condition_recovery.deactivate()
             event.accept()

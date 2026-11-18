@@ -16,6 +16,10 @@ project services. It must import without Qt, PsychoPy or hardware dependencies.
   owns the [Toolbox exchange format](../../../docs/PROJECT_CONFIG.md). `project_bundle.py`
   owns runnable Studio archives. `project_bundle_update.py` owns reviewed same-folder
   replacement, backup and rollback. Ordinary imports create separate projects.
+- `study_lifecycle.py` owns offline study identity and collection state.
+  `study_versions.py` owns local protocol history and deduplicated stimulus bytes.
+  Route authoring saves and Library replacements through the reviewed version
+  contract. Visit evidence and upload receipts have separate owners.
 - `recording_hardware.py`: versioned hardware declarations, never measured qualification.
 - `data_sharing.py`: strict neutral wire models and read-only protocol fingerprints;
   consent, credentials and outbox I/O belong outside core.

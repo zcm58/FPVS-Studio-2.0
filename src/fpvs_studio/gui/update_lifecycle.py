@@ -13,10 +13,28 @@ from threading import Event
 from typing import cast
 
 from PySide6.QtCore import QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox, QWidget
 
 from fpvs_studio.gui.thread_completion import ThreadCompletion
+from fpvs_studio.support.website_transfer import active_website_exports
 from fpvs_studio.updates.models import UpdateCancelled, UpdatePhase
+
+
+def wait_for_website_export(parent: QWidget | None) -> bool:
+    transfers = active_website_exports()
+    if not transfers:
+        return False
+    if parent and not parent.findChild(QMessageBox, "website_export_close_notice"):
+        notice = QMessageBox(parent)
+        notice.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        notice.setObjectName("website_export_close_notice")
+        notice.setWindowTitle("Website export in progress")
+        labels = ", ".join(transfers)
+        notice.setText(f"Uploading to OpenFPVS: {labels}. Wait for completion, then close Studio.")
+        notice.setStandardButtons(QMessageBox.StandardButton.Ok)
+        notice.open()
+    return True
+
 
 ProgressReporter = Callable[[int | UpdatePhase, int | None], None]
 UpdateCallback = Callable[[ProgressReporter, Event], object]
@@ -274,6 +292,8 @@ class UpdateLifecycle(QObject):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if watched is self._app and event.type() == QEvent.Type.Quit:
+            if wait_for_website_export(self._app.activeWindow()):
+                return True
             if self.has_active_jobs and not self._allow_quit:
                 self.request_shutdown()
                 return True

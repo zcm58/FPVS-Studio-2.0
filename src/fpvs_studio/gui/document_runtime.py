@@ -115,6 +115,8 @@ class DocumentRuntimeMixin:
     """Validation, compilation, preflight, and launch methods for `ProjectDocument`."""
 
     if TYPE_CHECKING:
+        from fpvs_studio.core.study_versions import ProtocolDraft
+
         _project: ProjectFile
         _project_root: Path
         _session_export_mode: str
@@ -133,6 +135,8 @@ class DocumentRuntimeMixin:
         def uses_default_recording_configuration(self) -> bool: ...
 
         def ensure_unused_session_seed_for_launch(self) -> int: ...
+        def prepare_protocol_change(self, project: ProjectFile) -> ProtocolDraft: ...
+        def _save_protocol(self, project: ProjectFile) -> None: ...
         def refresh_participant_summary_if_stale(self) -> Path | None: ...
         def prepare_participant_randomization(
             self, participant_number: str, participant_session_number: int | None,
@@ -338,6 +342,11 @@ class DocumentRuntimeMixin:
         except Exception as exc:
             raise DocumentError(str(exc)) from exc
 
+    def check_collection_open(self) -> None:
+        from fpvs_studio.runtime.launcher import check_research_collection_open
+
+        check_research_collection_open(self._project_root, local_testing=self.local_testing_enabled)
+
     def launch_compiled_session(
         self,
         session_plan: SessionPlan,
@@ -367,6 +376,20 @@ class DocumentRuntimeMixin:
                     )
                 participant_session_number = 1
             self.validate_recording_launch()
+            revision = None
+            if not self.local_testing_enabled and session_plan is self._last_session_plan:
+                from fpvs_studio.core.study_versions import current_version
+                if not (self._project_root / "project.json").is_file():
+                    self._save_protocol(self._project)
+                draft = self.prepare_protocol_change(self._project)
+                if draft.changes:
+                    raise DocumentError(
+                        "The protocol or stimuli changed. Review and save the experiment "
+                        "before collecting data."
+                    )
+                revision = current_version(self._project_root)
+                if revision is None or revision.version_id != draft.previous:
+                    raise DocumentError("The study changed during launch. Review and launch again.")
             recording_configuration = self.recording_configuration
             trigger_settings = self._project.settings.triggers
             sharing_protocol = (
@@ -425,6 +448,8 @@ class DocumentRuntimeMixin:
                     completion_screen_seconds=0.5,
                     export_mode=self._session_export_mode,
                     sharing_protocol_sha256=sharing_protocol,
+                    studio_protocol_version_id=revision.version_id if revision else None,
+                    studio_protocol_change_reason=revision.reason if revision else None,
                     toolbox_handoff_config=(
                         _toolbox_handoff_config(
                             self._project,

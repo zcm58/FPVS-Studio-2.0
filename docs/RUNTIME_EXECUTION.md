@@ -962,8 +962,10 @@ sample integrity, native sampling and timing checks remain Toolbox responsibilit
 
 For current native GUI session launches, the launch worker exports a neutral
 prelaunch config snapshot. After successful local research finalization, runtime
-atomically writes `logs/acquisition/<execution_id>-completed.fpvsconfig`, in both full
-and compact modes. `completed_session` retains the realized plan/order/seeds, explicit
+atomically writes `logs/acquisition/<execution_id>.study-session-v1.json`, in both full
+and compact modes. This completion receipt refers to a shared setup by SHA-256 and
+joins the exact execution evidence when a handoff is requested. Historical
+`*-completed.fpvsconfig` snapshots remain readable. `completed_session` retains the realized plan/order/seeds, explicit
 execution/participant/visit/session identity and the complete `acquisition_evidence`
 with actual `sent`/`error` attempts and clock semantics. Its `source_run_dir` points
 to `logs/acquisition`; compact mode does not invent a detailed run directory.

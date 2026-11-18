@@ -1066,7 +1066,8 @@ def find_latest_completed_toolbox_config(project_root: Path) -> ProjectConfigFil
 
     try:
         root = resolve_project_relative_path(project_root, "logs/acquisition")
-        candidates = [path for path in root.glob("*-completed.fpvsconfig") if path.is_file()]
+        candidates = [path for pattern in ("*-completed.fpvsconfig", "*.study-session-v1.json")
+                      for path in root.glob(pattern) if path.is_file()]
         if not candidates:
             if any(path.is_file() for path in root.glob("*.acquisition-v1.json")):
                 raise ProjectConfigError(
@@ -1081,13 +1082,19 @@ def find_latest_completed_toolbox_config(project_root: Path) -> ProjectConfigFil
         project = load_project_file(project_json_path(project_root))
     except (OSError, ValueError) as exc:
         raise ProjectConfigError(str(exc)) from exc
-    config = read_project_config(path)
+    return read_retained_session_config(path, project.meta.project_id)
+
+
+def read_retained_session_config(path: Path, project_id: str) -> ProjectConfigFile:
+    """Validate one captured session against its source project and recording."""
+    config = (_read_session_snapshot(path) if path.name.endswith(".study-session-v1.json")
+              else read_project_config(path))
     completed = config.completed_session
     evidence = completed.acquisition_evidence if completed is not None else None
     if completed is None or evidence is None:
         raise ProjectConfigError("Retained completed handoff is missing captured session evidence.")
-    if config.project.project_id != project.meta.project_id or (
-        evidence.project_id != project.meta.project_id
+    if config.project.project_id != project_id or (
+        evidence.project_id != project_id
     ):
         raise ProjectConfigError("Retained completed handoff belongs to a different project.")
     if (
@@ -1113,6 +1120,59 @@ def find_latest_completed_toolbox_config(project_root: Path) -> ProjectConfigFil
     ):
         raise ProjectConfigError("Retained completed handoff recording identity does not match.")
     return config
+
+
+def retain_session_snapshot(root: Path, config: ProjectConfigFile) -> Path:
+    """Store the deduplicated authoring snapshot and a small completion receipt."""
+    completed = config.completed_session
+    if completed is None or completed.acquisition_evidence is None or not completed.execution_id:
+        raise ProjectConfigError("A completed research execution is required.")
+    setup = config.model_dump(mode="json", exclude_none=True, exclude={"completed_session"})
+    setup["kind"] = "setup"
+    exported_at = setup["producer"].pop("exported_at", None)
+    serialized = json.dumps(setup, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    fingerprint = hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+    blob = resolve_project_relative_path(root, f"logs/acquisition/setups/{fingerprint}.json")
+    if not blob.exists():
+        atomic_text_write(blob, serialized)
+    receipt = {
+        "format_version": 1, "setup_sha256": fingerprint, "exported_at": exported_at,
+        "completed": completed.model_dump(
+            mode="json", exclude_none=True, exclude={"acquisition_evidence"},
+        ),
+    }
+    path = resolve_project_relative_path(
+        root, f"logs/acquisition/{completed.execution_id}.study-session-v1.json",
+    )
+    atomic_text_write(path, json.dumps(receipt, ensure_ascii=False, separators=(",", ":")))
+    return path
+
+
+def _read_session_snapshot(path: Path) -> ProjectConfigFile:
+    root = path.parent.parent.parent
+    try:
+        row = json.loads(path.read_text(encoding="utf-8"))
+        key = path.name.removesuffix(".study-session-v1.json")
+        digest = row["setup_sha256"]
+        if (row["format_version"] != 1 or not re.fullmatch(r"[0-9a-f]{64}", digest)
+                or row["completed"]["execution_id"] != key):
+            raise ValueError("Invalid stored study completion receipt.")
+        setup = resolve_project_relative_path(root, f"logs/acquisition/setups/{digest}.json")
+        blob = setup.read_bytes()
+        if hashlib.sha256(blob).hexdigest() != digest:
+            raise ValueError("Stored as-run setup fingerprint does not match.")
+        data = json.loads(blob)
+        data["producer"]["exported_at"] = row["exported_at"]
+        data["kind"] = "completed_session"
+        data["completed_session"] = row["completed"]
+        evidence_path = resolve_project_relative_path(
+            root, f"logs/acquisition/{key}.acquisition-v1.json",
+        )
+        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        data["completed_session"]["acquisition_evidence"] = evidence
+        return ProjectConfigFile.model_validate(data)
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise ProjectConfigError(f"Cannot reconstruct recorded session {path.name}: {exc}") from exc
 
 
 def find_latest_completed_session_dir(project_root: Path) -> Path | None:

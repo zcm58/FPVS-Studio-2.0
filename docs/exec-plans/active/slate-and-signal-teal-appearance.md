@@ -1,13 +1,12 @@
 # Slate & Signal Teal desktop appearance
 
-Status: Planned
+Status: Active
 
 ## Decision and scope
 
-The user selected Slate & Signal Teal for a future FPVS Studio desktop appearance
-update. Preserve Studio's icons, typography, layouts and workflows. This plan
-records the design decision. Move it to `active/` when the user selects the
-desktop implementation as the next task.
+Studio's authoring surfaces use Slate & Signal Teal. Shared theme roles and the
+Welcome masthead are implemented. Native Light/Dark/Auto checks and compact
+Home passed on Windows; scaling and all nine Setup pages remain acceptance work.
 
 Studio already offers **Settings > Appearance > Light / Dark / Auto**. Keep the
 existing immediate application, per-computer `appearance/theme_mode` preference

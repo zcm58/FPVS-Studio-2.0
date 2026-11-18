@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPushButton,
     QSizePolicy,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -46,6 +47,14 @@ class ProjectManagementEntry:
     can_delete: bool
     guidance_text: str = ""
     can_rename: bool = False
+    collection_complete: bool = False
+    archived: bool = False
+
+    @property
+    def group(self) -> str:
+        if self.archived:
+            return "Archived"
+        return "Completed" if self.collection_complete else "Active"
 
 
 class ManageProjectsDialog(QDialog):
@@ -55,6 +64,8 @@ class ManageProjectsDialog(QDialog):
     delete_requested = Signal(str)
     rename_requested = Signal(str)
     retry_requested = Signal()
+    collection_requested = Signal(str, bool)
+    archive_requested = Signal(str, bool)
 
     def __init__(
         self,
@@ -87,6 +98,12 @@ class ManageProjectsDialog(QDialog):
         list_layout.setSpacing(8)
         body.addWidget(list_panel, 1)
 
+        self.groups = QTabBar(list_panel)
+        self.groups.setAccessibleName("Project collection groups")
+        for group in ("Active", "Completed", "Archived"):
+            self.groups.addTab(group)
+        self.groups.currentChanged.connect(self._apply_filter)
+        list_layout.addWidget(self.groups)
         self.filter_edit = QLineEdit(list_panel)
         self.filter_edit.setObjectName("manage_projects_filter_edit")
         self.filter_edit.setPlaceholderText("Search projects…")
@@ -146,6 +163,13 @@ class ManageProjectsDialog(QDialog):
         self.retry_button.clicked.connect(self.retry_requested.emit)
         self.retry_button.hide()
         detail_layout.addWidget(self.retry_button, 0, Qt.AlignmentFlag.AlignLeft)
+        self.collection_button = QPushButton(detail_panel)
+        self.collection_button.clicked.connect(self._change_collection)
+        self.archive_button = QPushButton(detail_panel)
+        self.archive_button.clicked.connect(self._change_archive)
+        for button in (self.collection_button, self.archive_button):
+            mark_secondary_action(button)
+            detail_layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
         detail_layout.addStretch(1)
 
         action_row = QHBoxLayout()
@@ -208,6 +232,10 @@ class ManageProjectsDialog(QDialog):
             item.setData(Qt.ItemDataRole.UserRole, root_key)
             item.setToolTip(root_key)
             self._items_by_root[root_key] = item
+        if selected_root in self._entries_by_root:
+            group = self._entries_by_root[selected_root].group
+            with QSignalBlocker(self.groups):
+                self.groups.setCurrentIndex(("Active", "Completed", "Archived").index(group))
         self._apply_filter()
         if selected_root is not None:
             selected_item = self._items_by_root.get(selected_root)
@@ -245,12 +273,13 @@ class ManageProjectsDialog(QDialog):
         self._sync_selection(self.project_list.currentRow())
 
     def _filtered_entries(self, filter_text: str) -> list[ProjectManagementEntry]:
-        if not filter_text:
-            return self._entries
+        group = self.groups.tabText(self.groups.currentIndex())
         return [
             entry
             for entry in self._entries
-            if filter_text in entry.name.casefold() or filter_text in str(entry.root).casefold()
+            if entry.group == group and (
+                filter_text in entry.name.casefold() or filter_text in str(entry.root).casefold()
+            )
         ]
 
     def _selected_entry(self) -> ProjectManagementEntry | None:
@@ -296,9 +325,15 @@ class ManageProjectsDialog(QDialog):
         self.copy_path_button.setEnabled(has_entry)
         self.rename_button.setEnabled(entry.can_rename if entry else False)
 
+        valid = bool(entry and entry.can_rename)
+        self.archive_button.setVisible(valid)
+        self.collection_button.setVisible(bool(valid and entry and not entry.archived))
         if entry is None:
             return
-
+        self.archive_button.setText("Restore" if entry.archived else "Archive")
+        self.collection_button.setText(
+            "Reopen Collection" if entry.collection_complete else "Data Collection Complete"
+        )
         self.status_badge.set_state(entry.status_state, entry.status_text)
         self.name_label.setText(entry.name)
         self.path_label.set_path_text(str(entry.root), max_length=84)
@@ -318,6 +353,16 @@ class ManageProjectsDialog(QDialog):
             self.guidance_label.text(),
         )
         self.guidance_label.setMinimumHeight(wrapped_bounds.height())
+
+    def _change_collection(self) -> None:
+        entry = self._selected_entry()
+        if entry and entry.can_rename and not entry.archived:
+            self.collection_requested.emit(str(entry.root), not entry.collection_complete)
+
+    def _change_archive(self) -> None:
+        entry = self._selected_entry()
+        if entry and entry.can_rename:
+            self.archive_requested.emit(str(entry.root), not entry.archived)
 
     def _request_open(self) -> None:
         entry = self._selected_entry()

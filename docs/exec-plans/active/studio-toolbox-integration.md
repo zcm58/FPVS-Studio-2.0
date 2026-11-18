@@ -6,11 +6,12 @@ Date: 2026-10-12
 
 ## Approved outcome
 
-Studio declares the selected recording hardware, exports completed-session marker
-evidence, and prepares a Toolbox config automatically. Toolbox owns raw recording
-ingestion, channel validation, analysis and spectral contribution delivery. OpenFPVS
-owns private shared-study grants and fixed reporting endpoints. Neither desktop
-imports the other application's implementation.
+Studio retains each visit's acquisition evidence and exports one completed study
+on request. Toolbox reviews its roster against one EEG folder, prepares the
+reviewed recordings, and can publish a lab-specific output snapshot. OpenFPVS
+owns study permissions, collection status and separate lab results. Both
+desktops ship independently. The [Studio product spec](../../product-specs/studio.md)
+and [exchange contract](../../PROJECT_CONFIG.md) govern the current workflow.
 
 First successful results enrollment shares newly completed eligible sessions by
 default; every saved off choice survives enrollment/reconnection. Existing research
@@ -19,7 +20,7 @@ remains offline and HTTP is excluded from presentation.
 
 ## Studio work and verification
 
-### Shared exchange format, authorized 2026-11-10
+### Earlier setup and completed-session exchange format, authorized 2026-11-10
 
 This slice replaces feature-selected config envelope revisions with one shared
 Studio–Toolbox handoff format. Setup and completed-session exports use document

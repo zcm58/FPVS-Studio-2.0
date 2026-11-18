@@ -1115,3 +1115,103 @@ def test_configured_demographics_reach_both_launch_surfaces(qtbot, tmp_path, mon
         details = surface._collect_launch_participant_details()
         assert details.participant_number == "0042"
         assert details.participant_metadata.demographics_answers[0].answer == "Polish"
+
+
+def test_completed_home_offers_results_and_reopens(controller, qtbot, tmp_path, monkeypatch):
+    from fpvs_studio.core.study_lifecycle import read_study
+    from fpvs_studio.support.website_transfer import website_export
+
+    document, window = _open_created_project(controller, qtbot, tmp_path)
+    home = window.home_page
+    window.resize(760, 520)
+    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    window.collection_action.trigger()
+    assert read_study(document.project_root).collection_complete
+    assert home.launch_button.text() == "Review results"
+    assert home.edit_setup_button.text() == "Export results"
+    home.edit_setup_button.click()
+    assert home.export_results_menu.isVisible()
+    assert window.export_study_action in home.export_results_menu.actions()
+    assert window.export_group_summary_action in home.export_results_menu.actions()
+    home.export_results_menu.hide()
+    assert window.export_study_action.isEnabled()
+    QApplication.processEvents()
+    _assert_visible_children_within_parent(home)
+    opened = []
+    monkeypatch.setattr(window, "show_fixation_cross_data", lambda: opened.append("fixation"))
+    home.launch_button.click()
+    assert opened == ["fixation"]
+    import json
+
+    records = document.project_root / "logs" / ".participant-results"
+    records.mkdir(exist_ok=True)
+    (records / "synthetic.json").write_text(json.dumps({
+        "schema_version": 1, "project_id": document.project.meta.project_id,
+        "participant_number": "001", "participant_session_number": 1,
+        "session_id": "synthetic-visit", "session_aborted": True,
+    }), encoding="utf-8")
+    destination = tmp_path / "closed-study.fpvsconfig"
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window.QFileDialog.getSaveFileName",
+        lambda *_: (str(destination), ""),
+    )
+    monkeypatch.setattr("fpvs_studio.gui.main_window.ProgressTask", _ImmediateProgressTask)
+    window.export_study_action.trigger()
+    assert destination.is_file()
+    with website_export("session report"):
+        assert not window.close()
+        notice = window.findChild(QMessageBox, "website_export_close_notice")
+        assert notice and "session report" in notice.text()
+        notice.accept()
+    window.collection_action.trigger()
+    assert not read_study(document.project_root).collection_complete
+    assert home.launch_button.text() == "Launch Experiment"
+    assert not home.export_results_menu.isVisible()
+    assert not window.export_study_action.isEnabled()
+
+
+def test_linked_study_status_and_manual_roster_consent(
+    controller, qtbot, tmp_path, monkeypatch,
+):
+    from uuid import uuid4
+
+    from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings
+    from fpvs_studio.core.study_lifecycle import set_collection_complete
+    from fpvs_studio.data_sharing.storage import save_settings
+    from fpvs_studio.gui import study_collection
+
+    document, window = _open_created_project(controller, qtbot, tmp_path)
+    root = document.project_root
+    scope = str(uuid4())
+    profile = SharingProfile(
+        experiment_id="study", experiment_version="1", protocol_sha256="a" * 64,
+        title="Linked lab study", device_id="device", project_id=scope,
+    )
+    set_collection_complete(root, True)
+    save_settings(root, SharingSettings(enabled=True, profile=profile))
+    dialog = study_collection.LinkedStudyDialog(root, window)
+    qtbot.addWidget(dialog)
+    dialog.show()
+    assert "unconfirmed" in dialog.confirmed.text()
+    monkeypatch.setattr(study_collection, "refresh_collection_status", lambda *_: "complete")
+    dialog.refresh.click()
+    qtbot.waitUntil(lambda: "confirmed." in dialog.notice.text())
+    assert dialog.confirmed.text().endswith("complete")
+    calls = []
+    monkeypatch.setattr("fpvs_studio.data_sharing.roster.share_study_roster",
+                        lambda root, _cancel: calls.append(root) or "a" * 64)
+    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Cancel)
+    dialog.share.click()
+    assert not calls
+    monkeypatch.setattr(QMessageBox, "question", lambda *_: QMessageBox.StandardButton.Yes)
+    dialog.share.click()
+    qtbot.waitUntil(lambda: "accepted" in dialog.notice.text())
+    assert calls == [root]
+    urls = []
+    monkeypatch.setattr(study_collection.QDesktopServices, "openUrl",
+                        lambda url: urls.append(url.toString()) or True)
+    monkeypatch.setenv("FPVS_DATA_SHARING_SERVICE_URL", "https://openfpvs.example")
+    dialog.website.click()
+    qtbot.waitUntil(lambda: bool(urls))
+    assert urls == [f"https://openfpvs.example/projects/{scope}#collection"]
+    dialog.close()

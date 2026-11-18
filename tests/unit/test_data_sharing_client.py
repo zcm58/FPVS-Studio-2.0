@@ -213,6 +213,66 @@ def credential():
     )
 
 
+def test_explicit_roster_shares_only_opaque_visits_and_never_overwrites_a_newer_head(
+    tmp_path, monkeypatch
+):
+    from fpvs_studio.data_sharing import roster
+    from fpvs_studio.support.website_transfer import active_website_exports
+
+    source, project = str(uuid4()), str(uuid4())
+    settings = SharingSettings(
+        enabled=True, profile=profile().model_copy(update={"project_id": project})
+    )
+    save_settings(tmp_path, settings)
+    handoff = {
+        "study_id": source,
+        "visits": [{"visit_id": "execution-314", "participant_number": "001"}],
+        "roster_revision": HASH,
+    }
+    monkeypatch.setattr(roster, "build_study_handoff", lambda _root: handoff)
+    head = None
+    writes = []
+
+    def transport(method, url, body, headers, _cancel):
+        nonlocal head
+        assert active_website_exports() == ("study roster",)
+        assert url == f"{ORIGIN}/results/v1/device/roster/{source}"
+        assert headers["Authorization"] == f"Bearer {credential().token}"
+        if method == "POST":
+            data = json.loads(body)
+            assert data["parent_roster_revision"] == head
+            assert data["visits"] == [
+                hashlib.sha256(f"openfpvs-visit-v1\n{source}\nexecution-314".encode()).hexdigest()
+            ]
+            assert set(data) == {
+                "visits",
+                "parent_roster_revision",
+                "roster_revision",
+                "schema_version",
+            }
+            writes.append(data)
+            head = data["roster_revision"]
+        return json.dumps(
+            {"source_study_id": source, "schema_version": "1.0", "roster_revision": head}
+        ).encode()
+
+    client = DataSharingClient(
+        ORIGIN, transport=transport, store_factory=lambda *_args: Store(credential())
+    )
+    monkeypatch.setattr(roster.DataSharingClient, "configured", lambda: client)
+    assert roster.share_study_roster(tmp_path, Event()) == HASH
+    assert roster.share_study_roster(tmp_path, Event()) == HASH and len(writes) == 1
+    handoff["roster_revision"] = "b" * 64
+    assert roster.share_study_roster(tmp_path, Event()) == "b" * 64
+    head = "c" * 64
+    with pytest.raises(DataSharingError, match="Another roster revision"):
+        roster.share_study_roster(tmp_path, Event())
+    save_settings(tmp_path, settings.model_copy(update={"enabled": False}))
+    with pytest.raises(DataSharingError, match="enable sharing"):
+        roster.share_study_roster(tmp_path, Event())
+    assert len(writes) == 2 and active_website_exports() == ()
+
+
 def receipt_bytes(payload, **changes):
     body = json.loads(payload)
     response = {

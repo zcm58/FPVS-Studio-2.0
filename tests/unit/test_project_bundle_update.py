@@ -144,6 +144,33 @@ def _update(case, **kwargs):
     )
 
 
+def test_collected_study_reviews_library_changes_before_install(update_case):
+    from fpvs_studio.core.study_versions import current_version
+
+    case = update_case
+    directory = case.root / "logs/.participant-results"
+    directory.mkdir()
+    (directory / "partial.json").write_text(json.dumps({
+        "schema_version": 1, "participant_number": "001", "session_id": "synthetic",
+        "runs": [{"run_id": "r", "completed_frames": 1, "aborted": True}],
+    }))
+    original = (case.root / "project.json").read_bytes()
+    with pytest.raises(ProjectBundleError) as denied:
+        _update(case)
+    assert "Review the protocol" in str(denied.value), repr(denied.value.__cause__)
+    with pytest.raises(ProjectBundleCancelled):
+        _update(case, review_protocol=lambda _: "")
+    assert (case.root / "project.json").read_bytes() == original
+    seen = []
+    def approve(draft):
+        seen.extend(draft.changes)
+        return "Future visits use the revised instructions"
+    _update(case, review_protocol=approve)
+    assert any("Stimulus replaced" in change for change in seen)
+    assert any("New authored condition" in change for change in seen)
+    assert current_version(case.root).reason == "Future visits use the revised instructions"
+
+
 @pytest.mark.parametrize("scope", ["lab", "public"])
 def test_update_replaces_authored_files_and_preserves_local_identity_evidence_and_backup(
     update_case, scope,

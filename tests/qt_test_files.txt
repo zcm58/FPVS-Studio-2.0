@@ -59,6 +59,7 @@ tests/gui/test_setup_experiment_display.py
 tests/gui/test_setup_project_details.py
 tests/gui/test_setup_review.py
 tests/gui/test_setup_wizard_shell.py
+tests/gui/test_study_versions.py
 tests/gui/test_theme_preferences.py
 tests/gui/test_trigger_tester.py
 tests/gui/test_update_dialog.py

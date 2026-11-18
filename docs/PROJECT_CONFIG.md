@@ -75,7 +75,8 @@ Use **File > Export** and choose the artifact for the next operator.
 | --- | --- |
 | Reopen and run the experiment in Studio | **Project Bundle…** writes a portable `.fpvsbundle` with the project and stimulus assets. Import it into Studio and review local setup before launch. |
 | Set up a Toolbox analysis project | **FPVS Toolbox Config…** writes a setup `.fpvsconfig` with the authored protocol and recording declarations. |
-| Review a participant visit in Toolbox | **Completed Project Config…** exports the latest retained completed-session snapshot. A completed native research session with recording enabled also writes `logs/acquisition/<execution_id>-completed.fpvsconfig` automatically. Test/Pilot and interrupted runs do not produce that handoff. [Runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff) |
+| Review a participant visit in Toolbox | **Completed Project Config…** exports the latest finalized research session on demand. Full and compact sessions retain their setup and completion receipts locally. [Runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff) |
+| Review the completed study in Toolbox | On the completed Home, choose **Export results** and the whole-study Toolbox handoff. **File > Export** offers the same action. [Whole-study format](#whole-study-handoff) |
 
 In Toolbox, **Import FPVS Studio Config…** creates a local project for a supported
 design. The operator confirms hardware and registers the external EEG recordings.
@@ -83,10 +84,10 @@ Import copies neither raw EEG nor stimulus or task media. Completed evidence
 starts unbound. Matching participant labels or Studio's trigger-send logs alone
 cannot identify a recording or establish EEG sample timing.
 
-Saving a reviewed link between a Studio session and its Toolbox recording is
-planned. See `../FPVS-Toolbox/docs/agent/architecture/project-io.md` from the
-Studio checkout for current support and the adjacent `hardware-pipeline-studio-roadmap.md`
-for planned protocol coverage.
+For whole-study files, Toolbox stores the confirmed links from visits to
+external recordings and reuses them when the same study sends a revised
+roster. See `../FPVS-Toolbox/docs/agent/architecture/project-io.md` from this
+checkout for the supported protocol subset and review rules.
 
 Studio config import creates a new project shell under the configured Studio
 root. FPVS stimulus image libraries remain separate; hashed modular-task media
@@ -120,7 +121,21 @@ analysis target. At the same frame count, a nominal 120-second run is about
 40 ms shorter at 60.02 Hz. Studio's software timing tests ended 36–38 ms earlier
 than 120 s. The handoff leaves the recorded markers and sample clock intact.
 
-## Planned whole-study handoff
+<a id="planned-whole-study-handoff"></a>
+
+## Whole-study handoff
+
+The whole-study writer uses `format="fpvs-study-handoff"`, integer
+`format_version=1`, and the same `.fpvsconfig` extension. The study UUID
+identifies the collecting project. `roster_revision` is the SHA-256 digest
+of the ordered visits serialized as compact sorted-key UTF-8 JSON.
+`roster_sequence` orders revised exports locally. Re-exporting unchanged
+evidence preserves both values. `visits` links each execution to an
+as-run protocol version when known and to its scientific setup in `setups`.
+Retained numbered participant or session history without acquisition evidence
+appears in the roster with explicit issues. The file contains recording
+declarations and local marker attempts. EEG, participant answers and stimulus
+assets stay in the lab's source files.
 
 After all participants finish, the operator marks **Data Collection Complete**
 in Studio and exports one study handoff. The Toolbox analyst opens
@@ -162,11 +177,10 @@ Acquisition evidence, recovery and authorized session reporting keep their own
 lifecycles. The export must work offline and must preserve the protocol used
 for each visit even if the operator later edits the experiment.
 
-Introduce a versioned study format understood by the producer and reader.
-Keep supported historical setup and completed-session files readable. Retire
-automatic per-session distributable exports only after a compatible Toolbox
-reader has verified a whole study and compact output has retained the evidence
-needed to reconstruct it. Verify a study with multiple participants, a repeat
+Historical setup and completed-session files remain readable. New sessions retain
+a content-addressed setup, the recording evidence and a private completion receipt.
+The operator can export the completed session or the entire study later.
+Verify a study with multiple participants, a repeat
 visit, a mid-study protocol change, a Test/Pilot run, an unfinished research
 execution and an ambiguous EEG match. The analyst must be able to identify the
 included visits, see the unfinished execution as an exception and resolve the

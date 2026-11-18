@@ -897,8 +897,14 @@ class RunPage(QWidget):
         )
 
     def launch_session(self) -> None:
-        if not self.is_launch_busy():
-            choose_experiment_display(self, self._check_launch_display_refresh)
+        if self.is_launch_busy():
+            return
+        try:
+            self._document.check_collection_open()
+        except Exception as error:
+            _show_runtime_error_dialog(self, "Launch Blocked", error)
+            return
+        choose_experiment_display(self, self._check_launch_display_refresh)
 
     def _check_launch_display_refresh(self, display_device_name: str | None) -> None:
         check_windows_refresh(

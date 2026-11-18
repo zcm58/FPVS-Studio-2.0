@@ -34,7 +34,9 @@ feature parity.
    experiment to another Studio workstation or a protocol or completed-session config
    to the Toolbox analyst. [Export choices and limits](../PROJECT_CONFIG.md#user-workflow-and-limits)
 
-## Planned safeguard for changes during collection
+<a id="planned-safeguard-for-changes-during-collection"></a>
+
+## Safeguard for changes during collection
 
 Authors can edit, save and restore protocol versions without collection warnings
 until a visit yields participant research data. A partial visit with collected
@@ -113,27 +115,28 @@ active protocol and visits intact. In a separate check, collect under two
 versions and restore the first. Both earlier visits must still identify the
 version and stimulus contents each used.
 
-## Planned collection workflow
+## Collection workflow
 
 Once collection ends, the operator can explicitly mark the Studio project
 **Data Collection Complete** and prepare one handoff covering the whole study.
 The analyst opens it in Toolbox, selects the EEG folder once and reviews the
-batch before processing. [Study export and compatibility](../PROJECT_CONFIG.md#planned-whole-study-handoff)
+batch before processing. The paired source implementations preserve repeated
+visits, recorded versions, historical evidence gaps and previously confirmed
+recording matches when the roster changes. [Study export and compatibility](../PROJECT_CONFIG.md#whole-study-handoff)
 
-Welcome's **Open Project** and **Manage Projects** share the same project list.
-Today it lists projects together. The planned manager has **Active**, **Completed**
-and **Archived** tabs. Marking collection complete moves a project from Active
-to Completed. Give **Review results** primary emphasis on the completed Home.
-Open the existing fixation cross results, including accuracy and hit-weighted
-mean reaction time, and keep **Export results** directly accessible. Use the
-existing results calculations and units. To run another research session,
+Welcome’s **Open Project** and **File > Manage Projects** share **Active**,
+**Completed** and **Archived** tabs. Marking collection complete moves a project from Active
+to Completed. On the completed Home, **Review results** opens fixation accuracy
+and hit-weighted mean reaction time for FPVS, or recall accuracy for attentional
+blink. **Export results** offers the group summary workbook and the whole-study
+Toolbox handoff. Both exports are also in **File > Export**. To run another research session,
 choose **Reopen Collection**, which returns the project to Active.
 **Archive** moves it to the Archived tab and preserves its files and collection
 state. **Restore** returns it to Active or Completed according to that saved state.
 
 Local completion and study export work offline, including for unlinked projects.
 For a linked project, show its local state and the last collection status
-confirmed by OpenFPVS. Only an OpenFPVS administrator or a designated lead
+confirmed by OpenFPVS under **File > Linked OpenFPVS Study**. Only an OpenFPVS administrator or a designated lead
 explicitly authorized to close collection for that study can close it study-wide.
 Reopening collection on OpenFPVS requires service authorization as the OpenFPVS
 administrator or a PI of the lab that owns the study.
@@ -159,7 +162,7 @@ Maintainers track cross-app work in the private umbrella checkout's `INTEGRATION
 
 ### Learning and development priorities
 
-Direct operators to the OpenFPVS website for workflow tutorials. Link YouTube
+**File > Tutorials** opens the OpenFPVS getting-started guide. Link YouTube
 tutorials from the site as they become available. Keep the immediate instruction
 needed to complete an action in Studio so ordinary local work remains usable offline.
 

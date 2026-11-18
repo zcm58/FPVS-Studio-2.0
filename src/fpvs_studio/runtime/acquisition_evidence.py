@@ -21,12 +21,13 @@ from fpvs_studio.core.project_config import (
     ProjectConfigError,
     ProjectConfigFile,
     completed_toolbox_config,
-    write_project_config,
+    retain_session_snapshot,
 )
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.serialization import write_json_file
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.runtime.recording import recording_snapshot
+from fpvs_studio.runtime.study_handoff import capture_study_run
 
 
 class AcquisitionEvidenceRecorder:
@@ -91,6 +92,10 @@ class AcquisitionEvidenceRecorder:
             ],
         )
         self._write()
+        capture_study_run(
+            project_root, self.evidence, run_specs, self._config, runtime_options or {},
+            self._manual_removed_electrodes,
+        )
 
     def write_completed_handoff(self, session_plan: SessionPlan) -> Path | None:
         """Write only after research finalization; aborted/test evidence stays separate."""
@@ -105,11 +110,7 @@ class AcquisitionEvidenceRecorder:
             self._config, self._project_root, session_plan, evidence,
             manual_removed_electrodes=self._manual_removed_electrodes,
         )
-        path = resolve_project_relative_path(
-            self._project_root, f"logs/acquisition/{evidence.execution_id}-completed.fpvsconfig",
-        )
-        write_project_config(path, config)
-        return path
+        return retain_session_snapshot(self._project_root, config)
 
     def _write(self) -> None:
         if self.evidence is not None and self.path is not None:

@@ -1,0 +1,138 @@
+import json
+from pathlib import Path
+from uuid import uuid4
+
+import pytest
+
+from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.project_config import (
+    create_project_from_config,
+    read_project_config,
+    write_project_config,
+)
+from fpvs_studio.core.serialization import write_json_file
+from fpvs_studio.core.study_lifecycle import get_study, set_collection_complete
+from fpvs_studio.runtime.study_handoff import (
+    build_study_handoff,
+    capture_study_run,
+    export_study_handoff,
+)
+
+FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "studio_handoff"
+
+
+def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
+    setup = read_project_config(FIXTURES / "v2-setup.fpvsconfig")
+    scaffold = create_project_from_config(tmp_path, setup)
+    root = scaffold.project_root
+    folder = root / "logs" / "acquisition"
+    folder.mkdir()
+    version_1, version_2 = str(uuid4()), str(uuid4())
+    identity = get_study(root).study_id
+    for name, pid, number, version in [
+        ("biosemi", "007", 1, version_1),
+        ("unicorn", "007", 2, version_1),
+        ("unicorn-60-02", "008", 1, version_2),
+    ]:
+        config = read_project_config(FIXTURES / f"v2-completed-{name}.fpvsconfig")
+        completed = config.completed_session
+        evidence = completed.acquisition_evidence
+        completed.participant_number = evidence.participant_number = pid
+        completed.participant_session_number = evidence.participant_session_number = number
+        key = evidence.execution_id
+        plan = compile_session_plan(
+            scaffold.project,
+            project_root=root,
+            refresh_hz=completed.refresh_hz,
+            session_id=completed.session_id,
+        )
+        specs = [item.run_spec for item in plan.ordered_entries()]
+        for spec, run in zip(specs, evidence.runs, strict=True):
+            spec.run_id = run.run_id
+        capture_study_run(
+            root,
+            evidence,
+            specs,
+            config,
+            {
+                "studio_study_id": identity,
+                "studio_protocol_version_id": version,
+                "studio_protocol_change_reason": "Updated length" if version == version_2 else "",
+            },
+            ("P9", "P10"),
+        )
+        write_json_file(folder / f"{key}.acquisition-v1.json", evidence)
+        write_project_config(folder / f"{key}-completed.fpvsconfig", config)
+
+    records = root / "logs" / ".participant-results"
+    records.mkdir()
+    for pid, mode in [("009", False), ("010", True)]:
+        (records / f"{pid}.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "participant_number": pid,
+                    "project_id": setup.project.project_id,
+                    "participant_session_number": 1,
+                    "execution_id": f"saved-{pid}",
+                    "session_id": "older",
+                    "session_aborted": True,
+                    "test_mode": mode,
+                    "participant_metadata": {"age": 27},
+                    "responses": ["private answer"],
+                }
+            ),
+            encoding="utf-8",
+        )
+    destination = tmp_path / "cohort.fpvsconfig"
+    with pytest.raises(ValueError, match="Mark collection complete"):
+        export_study_handoff(root, destination)
+    set_collection_complete(root, True)
+    export_study_handoff(root, destination)
+    first = destination.read_bytes()
+    payload = json.loads(first)
+    assert payload["study_id"] == identity
+    visits = payload["visits"]
+    assert len(visits) == 4
+    assert [
+        v["participant_session_number"] for v in visits if v["participant_number"] == "007"
+    ] == [1, 2]
+    assert (
+        len(
+            {
+                v["recording"]["selected_backend"]
+                for v in visits
+                if v["protocol_version_id"] == version_1
+            }
+        )
+        == 2
+    )
+    (updated,) = [v for v in visits if v["protocol_version_id"] == version_2]
+    assert updated["compiled_refresh_hz"] == 60.02
+    assert updated["protocol_change_reason"] == "Updated length"
+    assert not updated["issues"]
+    historical = visits[-1]
+    assert historical["issues"] and historical["setup_id"] is None
+    assert b"private answer" not in first and b"task_assets" not in first
+    export_study_handoff(root, destination)
+    assert destination.read_bytes() == first
+    (records / "009.json").unlink()
+    assert build_study_handoff(root)["roster_revision"] != payload["roster_revision"]
+
+
+def test_older_session_is_readable_and_mismatched_local_evidence_blocks_export(tmp_path):
+    config = read_project_config(FIXTURES / "v2-completed-biosemi.fpvsconfig")
+    root = create_project_from_config(tmp_path, config).project_root
+    folder = root / "logs" / "acquisition"
+    folder.mkdir()
+    evidence = config.completed_session.acquisition_evidence
+    key = evidence.execution_id
+    write_project_config(folder / f"{key}-completed.fpvsconfig", config)
+    (visit,) = build_study_handoff(root)["visits"]
+    assert visit["protocol_version_id"] is None and visit["setup_id"]
+    assert visit["issues"] == ["missing_as_run_protocol"]
+    assert visit["manual_removed_electrodes"] == ["P9", "P10"]
+    evidence.participant_number = "unrelated"
+    write_json_file(folder / f"{key}.acquisition-v1.json", evidence)
+    with pytest.raises(ValueError, match="conflicts"):
+        build_study_handoff(root)

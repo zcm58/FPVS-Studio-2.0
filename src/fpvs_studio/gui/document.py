@@ -6,6 +6,7 @@ coordination, not widget layout and not runtime playback or engine implementatio
 from __future__ import annotations
 
 import random
+from collections.abc import Callable
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Signal
@@ -52,6 +53,13 @@ from fpvs_studio.core.randomization import (
 )
 from fpvs_studio.core.serialization import load_project_file, save_project_file
 from fpvs_studio.core.session_plan import SessionPlan
+from fpvs_studio.core.study_lifecycle import database_path, read_study
+from fpvs_studio.core.study_versions import (
+    ProtocolDraft,
+    commit_change,
+    current_version,
+    prepare_change,
+)
 from fpvs_studio.core.validation import validate_condition_repeat_cycle_consistency
 from fpvs_studio.engines.registry import create_engine
 from fpvs_studio.gui.document_conditions import DocumentConditionMixin
@@ -154,6 +162,8 @@ class ProjectDocument(
     ) -> None:
         super().__init__()
         self._project_root = Path(project_root)
+        self._automatic_session_seed: int | None = None
+        self.protocol_save_handler: Callable[[ProjectFile], None] | None = None
         self._project = project
         self._manifest = manifest
         self._dirty = False
@@ -226,6 +236,9 @@ class ProjectDocument(
             read_stimulus_manifest(project_root)
             if filesystem_path(manifest_path).is_file() else None
         )
+        # Establish a legacy baseline before the stimulus editor can touch the files.
+        if current_version(project_root) is None:
+            prepare_change(project_root, project)
         return project_root, project, manifest
 
     @property
@@ -239,6 +252,10 @@ class ProjectDocument(
         """Return the current project root path."""
 
         return self._project_root
+
+    def study_lineage(self) -> str | None:
+        state = read_study(self.project_root)
+        return state.created_from if state else None
 
     @property
     def project_file_path(self) -> Path:
@@ -661,10 +678,8 @@ class ProjectDocument(
             triggers = _validated_copy(triggers, serial_port=serial_port)
         settings = _validated_copy(self._project.settings, recording=recording, triggers=triggers)
         project = _validated_copy(self._project, settings=settings)
-        if serial_port is None:
-            save_project_recording_settings(self.project_root, recording)
-        else:
-            save_project_recording_settings(self.project_root, recording, serial_port=serial_port)
+        save_project_recording_settings(self.project_root, recording, serial_port=serial_port,
+                                        reviewed_save=self._save_protocol)
         self._project = project
         self.project_changed.emit()
 
@@ -673,7 +688,7 @@ class ProjectDocument(
 
         if self.uses_default_recording_configuration:
             return
-        save_project_recording_settings(self.project_root, None)
+        save_project_recording_settings(self.project_root, None, reviewed_save=self._save_protocol)
         settings = _validated_copy(self._project.settings, recording=None)
         self._project = _validated_copy(self._project, settings=settings)
         self.project_changed.emit()
@@ -725,6 +740,7 @@ class ProjectDocument(
             raise DocumentError(str(exc)) from exc
 
     def _replace_session_seed_without_dirty(self, seed: int) -> None:
+        self._automatic_session_seed = seed
         session = _validated_copy(self._project.settings.session, session_seed=seed)
         settings = _validated_copy(self._project.settings, session=session)
         self._project = _validated_copy(self._project, settings=settings)
@@ -763,8 +779,33 @@ class ProjectDocument(
 
         meta = _validated_copy(project.meta, updated_at=utc_now())
         project = _validated_copy(project, meta=meta)
-        save_project_file(project, self.project_file_path)
+        self._save_protocol(project)
         return project
+
+    def _save_protocol(self, project: ProjectFile) -> None:
+        from fpvs_studio.runtime.participant_results import research_visits_by_version
+
+        if not self.project_file_path.exists():
+            if (database_path(self.project_root).exists()
+                    or research_visits_by_version(self.project_root)):
+                raise DocumentError("Restore the saved project file before collecting data.")
+            save_project_file(project, self.project_file_path)
+            prepare_change(self.project_root, project)
+            return
+        if self.protocol_save_handler is not None:
+            self.protocol_save_handler(project)
+            return
+
+        draft = self.prepare_protocol_change(project)
+        if draft.changes and research_visits_by_version(self.project_root):
+            raise DocumentError(
+                "Review the proposed changes in Studio before saving this collecting study."
+            )
+        commit_change(self.project_root, project, draft, "")
+
+    def prepare_protocol_change(self, project: ProjectFile) -> ProtocolDraft:
+        transient = self._automatic_session_seed == project.settings.session.session_seed
+        return prepare_change(self.project_root, project, transient_session_seed=transient)
 
     def _persist_project_update(self, project: ProjectFile) -> None:
         project = self._persist_project_candidate(project)

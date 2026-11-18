@@ -172,6 +172,8 @@ class DataSharingController(QObject):
         job.finished.connect(finished)
 
     def _report_startup_view(self, root: Path, view: SharingView) -> None:
+        if not view.settings.enabled:
+            return
         if view.status == "waiting_connection":
             self._startup_notices[root] = StartupReportNotice(
                 root, "Waiting for connection. Studio will retry on its next launch.",

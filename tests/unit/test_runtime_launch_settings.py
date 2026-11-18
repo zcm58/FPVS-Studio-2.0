@@ -525,3 +525,18 @@ def test_launch_session_rejects_invalid_participant_metadata_before_engine_creat
         unregister_engine("stub-bad-participant-metadata")
 
     assert captures == {}
+
+
+def test_completed_collection_blocks_research_before_any_recording(tmp_path):
+    from fpvs_studio.core.project_service import create_project
+    from fpvs_studio.core.study_lifecycle import set_collection_complete
+    from fpvs_studio.runtime.launcher import check_research_collection_open
+
+    root = create_project(tmp_path, "Closed study").project_root
+    set_collection_complete(root, True)
+    for launch in (launch_run, launch_session):
+        with pytest.raises(LaunchSettingsError, match="Reopen Collection"):
+            launch(root, None, participant_number=PARTICIPANT_NUMBER)
+    check_research_collection_open(root, local_testing=True)
+    set_collection_complete(root, False)
+    check_research_collection_open(root, local_testing=False)

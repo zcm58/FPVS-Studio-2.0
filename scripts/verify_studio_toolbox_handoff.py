@@ -34,7 +34,8 @@ from fpvs_studio.core.models import (  # noqa: E402
 )
 from fpvs_studio.core.project_config import (  # noqa: E402
     export_project_config,
-    read_project_config,
+    find_latest_completed_toolbox_config,
+    write_project_config,
 )
 from fpvs_studio.core.serialization import atomic_text_write, save_project_file  # noqa: E402
 from fpvs_studio.runtime.data_sharing import CaptureIntent, build_session_report  # noqa: E402
@@ -133,16 +134,17 @@ def create_acceptance_artifacts(output_base: Path) -> dict[str, object]:
         report = build_session_report(plan, summary, intent)
         report_path = root / "logs" / "synthetic-session-report.json"
         atomic_text_write(report_path, report.model_dump_json())
-        handoffs = list((root / "logs" / "acquisition").glob("*-completed.fpvsconfig"))
-        if len(handoffs) != 1:
-            raise RuntimeError("Expected one completed handoff per synthetic recording choice.")
-        completed = read_project_config(handoffs[0])
+        completed = find_latest_completed_toolbox_config(root)
+        if completed is None:
+            raise RuntimeError("Expected a finalized synthetic research session.")
+        handoff = root / "synthetic-completed.fpvsconfig"
+        write_project_config(handoff, completed)
         evidence = completed.completed_session.acquisition_evidence
         if any(len(run.attempted_events) != run.planned_event_count for run in evidence.runs):
             raise RuntimeError("Completed handoff lost actual marker attempt evidence.")
         results.append({
             "recording_backend": backend, "project_root": str(root),
-            "handoff_path": str(handoffs[0]), "session_id": plan.session_id,
+            "handoff_path": str(handoff), "session_id": plan.session_id,
             "execution_id": evidence.execution_id, "protocol_sha256": fingerprint,
             "planned_event_count": sum(run.planned_event_count for run in evidence.runs),
             "report_path": str(report_path),

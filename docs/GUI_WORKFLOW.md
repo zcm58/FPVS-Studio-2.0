@@ -1696,16 +1696,16 @@ the latest completed session's order, seeds, trigger schedule, display geometry,
 stimulus-manifest provenance. Both actions use the same revision-2
 [Studio–Toolbox config format](PROJECT_CONFIG.md), with distinct document kinds;
 optional features no longer select a different envelope revision. Historical
-configs remain readable. A completed export covers one captured session and does
-not include raw EEG or automatically register it in Toolbox.
+configs remain readable. The legacy completed-session export covers one capture. After collection closes,
+**File > Export > Completed Study for Toolbox** covers the research roster.
+[Collection and project management](product-specs/studio.md#collection-workflow)
 The default setup export filename is the compact project
 title in lowercase with spaces and punctuation removed, such as
 `semanticcategories.fpvsconfig` for `Semantic Categories`; completed exports append
 `-completed`. `Export > Group
 Summary...` manually writes an Excel workbook from the current participant summary rows,
 with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
-remaining visible underneath for filtering/audit. The wired `Tutorials` action remains
-available internally but is hidden from the File menu. Settings shows the current app
+remaining visible underneath for filtering/audit. **File > Tutorials** opens the OpenFPVS Studio getting-started guide. Settings shows the current app
 version from `pyproject.toml` during source-tree runs and from package metadata in
 bundled installs, and exposes the app-level run export mode. Compact mode is the default
 for fresh GUI preferences, skips detailed run folders and writes the participant results
@@ -1812,7 +1812,7 @@ preprocessing services but must not silently mutate the active project.
   `src/fpvs_studio/gui/components.py`.
 - Welcome and Home use the shared `LaunchSurfaceFrame` helper for the full-window
   launch card, border styling, and first-paint background.
-  Welcome places Open Project first, styles it as the primary blue action,
+  Welcome places Open Project first, styles it as the primary teal action,
   and gives it initial focus/default Enter activation. Create, Import and Root Folder
   remain secondary; compact layouts preserve the same order.
 - Shared Setup Wizard presentation components include the connected progress stepper,

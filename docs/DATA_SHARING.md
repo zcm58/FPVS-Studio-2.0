@@ -112,11 +112,18 @@ uninterrupted. Dismissal preserves saved sharing choices, retry backoff and any
 explicit hold. This reminder concerns queued session reports. The completed-study
 handoff and raw EEG remain local.
 
-**Planned application close behavior.** While Studio is actively exporting to
-the website, keep the application open and show which transfer is running. Allow
-closing once the active transfer finishes or fails and its outcome is recorded.
+Studio keeps the application open during an active session report, study roster
+or reviewed project/condition upload, and names it when the operator tries to
+quit. Closing is available after the transfer finishes or fails.
 A queued offline report, retry backoff or an explicit hold leaves closing available.
 On the next launch, eligible pending reports follow the startup policy above.
+
+**File > Linked OpenFPVS Study** shows local collection and the last confirmed
+website status. **Check website status** refreshes a receipt for this enrolled
+study. **Manage collection on OpenFPVS** shows outstanding local reports before
+opening the signed-in website. After completion, **Share study roster** asks for
+consent to send the study ID, revision and per-visit one-way identifiers to compare
+dataset coverage. It requires enabled sharing. Local export always works offline.
 
 Failed delivery with local `network`/`timeout` codes shows **Waiting for connection**
 and retains the exact report and original completion time. Startup permits a prompt
