@@ -196,6 +196,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plain-language randomization](exec-plans/completed/plain-language-randomization.md):
   independent participant reuse choices and seed-free Session/Review; source checks
   passed, visible Qt acceptance remains manual.
+- [Sequential stimulus order](exec-plans/completed/sequential-stimulus-order.md):
+  filename and word-list order, plus the shuffled image pool refill guard.
 - [Studio 2.5.8 release](exec-plans/completed/release-2.5.8.md): measured participant
   instruction layout, Birth Control overlap repair, full installer and public updater checks.
 - [Studio 2.5.7 release](exec-plans/completed/release-2.5.7.md): shared mouse-selection

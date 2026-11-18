@@ -502,7 +502,8 @@ def test_recovery_preserves_frozen_seeds_or_builds_explicit_current_setup_replac
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize(
-    "state", ["fixed", "new", "mixed", "invalid", "saved", "inactive", "combined_errors"],
+    "state",
+    ["fixed", "new", "mixed", "sequential", "invalid", "saved", "inactive", "combined_errors"],
 )
 def test_plain_language_choices_fit_session_and_review(
     qtbot, monkeypatch, tmp_path, background, state,
@@ -545,6 +546,15 @@ def test_plain_language_choices_fit_session_and_review(
     wizard.show()
     wizard.open_wizard(step_key="session", allow_step_jumps=True)
     editor = wizard.session_structure_editor.randomization_editor
+    if state == "sequential":
+        combo = editor.mode_combos["stimulus"]
+        combo.setCurrentIndex(combo.findData("sequential"))
+        assert "filename order" in combo.toolTip()
+        assert all(editor.mode_combos[domain].findData("sequential") == -1
+                   for domain in ("condition_order", "fixation"))
+        document.save()
+        reopened = ProjectDocument.open_existing(document.project_root)
+        assert reopened.project.settings.session.randomization_modes.stimulus == "sequential"
     if state == "combined_errors":
         wizard.runtime_settings_editor._on_refresh_detection_failed(RuntimeError(
             "The display's configured refresh rate could not be confirmed because stable "
@@ -598,6 +608,8 @@ def test_plain_language_choices_fit_session_and_review(
         for title in ("Image / word order:", "Condition order:",
                       "Fixation cross color change timing:"):
             assert title in text
+        if state == "sequential":
+            assert "sequential (filename or list order)" in text
         assert "seed" not in text.lower()
 
 

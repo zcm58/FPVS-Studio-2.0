@@ -90,17 +90,19 @@ def _scenario(project: ProjectFile, root: Path, kind: str) -> ProjectFile:
 # Native AB retains its pre-refactor baseline from 2026-09-18. Ordinary FPVS
 # baselines now record SessionPlan 1.7 independent randomization. Every serialized field,
 # including schedules, task orders, answer keys and seeds, contributes to the digest.
+# The image-pool refill guard changes only image_path and stimulus_id in the image,
+# counting and memory stimulus sequences.
 _BASELINE_DIGESTS = {
-    ("image", 42): "52e6c7b35bd0b6f5e0acd318c9d693e59ac1e80ba69db5abba1efa85e8b75951",
-    ("image", 83): "215623f3b2f04d7c340bcc40e306a610a5fd56d8fdc71823257ac94a1b056328",
+    ("image", 42): "21d7e80bb1f741be5d085f692f9bb529151dbb4cca1cff34061483d5495870b4",
+    ("image", 83): "06d587baff3b0d6a406738b332ce310d97a19df44aaa14a5d9377ed8f686b559",
     ("word", 42): "6d1dccc74a744ad2be48fca53353ee43ddb11447a70640c4265fe6d461577c2d",
     ("word", 83): "a831870b141e96379ce128c09d47034f7b84e60678acc8bf55afa81579c4a6ae",
     ("ab", 42): "fe6618028685e8267b3a057153baf5f55e88560bd10c8ff8fb18f0c887136301",
     ("ab", 83): "221d8dcbc373e3055e0b2b91dabd7a6e6eed2d28f4e4b0b01f35238e8a13cba3",
-    ("counting", 42): "bb5891f9e60bc838cb954a3aa7544c964235a33a10d2698b5f445646d92d0a37",
-    ("counting", 83): "9e3fafdf6549c6689a7cda109be308c593953fd02883cabef275d177de9cdb1c",
-    ("memory", 42): "d17f677285f03a5918cc1e6d78ca4bf2ff7171726ef6805d3524f1942631011f",
-    ("memory", 83): "5a2b757b4ea1dfa61f41d994977708973818e24dea80fb416dab3d44ef1d6d62",
+    ("counting", 42): "8e9f654dae483695c973774830497e97d04cc836a53086205f30c96913fd3a39",
+    ("counting", 83): "bd94354fe0eaef764cf189b525e54d8157eda00bfb454c63841180e2d055c406",
+    ("memory", 42): "dbc4e585f2e154d81c406f8dec8ae7f36f7c9d68a64d8dd47335be49cfa7889b",
+    ("memory", 83): "6cdeee5ea2391bb3d17ed9f0dcd967fb716d49ecb75e5ac5b926d21d763a1111",
 }
 
 

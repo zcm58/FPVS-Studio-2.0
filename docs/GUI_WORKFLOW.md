@@ -2271,14 +2271,20 @@ count drafts, and masking/AB managed states.
 
 Session has three independent choices: **Image / word display order**, **Condition
 order**, and **Fixation cross color change timing**. Each offers **Randomized — new for each
-participant** or **Pseudorandom — same for every participant**. Each uses a compact semibold
+participant** or **Pseudorandom — same for every participant**. **Image / word display
+order** also offers **Sequential — filename or list order**. It follows the
+[ordered pool rules](RUNSPEC.md#v1-scheduling-policy). Each field uses a compact semibold
 field heading above its dropdown under the Session column heading; optional explanation stays in the tooltip and
 accessible description. Condition-order actions sit in that section, with a concise
 status shown only for a saved arrangement (in use or inactive). Numeric seeds and
 launch seed values are not shown. Pseudorandom
 reuses a stored random pattern for corresponding condition presentations while inputs
 stay unchanged; different image pools, condition durations and repeat numbers retain
-independently valid schedules. Both choices preserve existing balancing/timing rules.
+independently valid schedules. All choices preserve cadence and timing.
+
+Visible acceptance at 1120x820 in both themes: select Sequential in Display & Session,
+check that Review shows the same policy, then save and reopen the project. The
+registered `test_randomization_controls.py` covers selection, persistence and layout.
 
 Fixation's **Number of color changes** control chooses **Same number per condition**
 or **Vary within a range**. It controls counts, not participant timing reuse. Both count

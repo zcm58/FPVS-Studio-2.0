@@ -657,12 +657,12 @@ class RandomizationModes(FPVSBaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     condition_order: Literal["fixed", "new"]
-    stimulus: Literal["fixed", "new"]
+    stimulus: Literal["fixed", "new", "sequential"]
     fixation: Literal["fixed", "new"]
 
     @property
     def aggregate(self) -> Literal["fixed", "new"]:
-        return "fixed" if all(value == "fixed" for value in self.model_dump().values()) else "new"
+        return "new" if "new" in (self.condition_order, self.stimulus, self.fixation) else "fixed"
 
 
 class SessionSettings(FPVSBaseModel):

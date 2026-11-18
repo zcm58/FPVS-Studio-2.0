@@ -211,6 +211,44 @@ def test_chronological_namespaces_ignore_global_position_and_other_conditions(
     assert _schedules(subset) == {
         key: value for key, value in _schedules(first).items() if key[0] in selected
     }
+
+
+def test_sequential_images_follow_source_filename_order_for_each_role(
+    sample_project, sample_project_root,
+):
+    project = sample_project
+    project.settings.fixation_task.enabled = False
+    modes = RandomizationModes(condition_order="new", stimulus="sequential", fixation="new")
+    project.settings.session = SessionSettings.model_validate({
+        **project.settings.session.model_dump(), "randomization_mode": modes.aggregate,
+        "randomization_modes": modes, "stimulus_seed": 17, "fixation_seed": 22,
+    })
+    project.conditions[0].oddball_cycle_repeats_per_sequence = 8
+    filenames = ["face-03.png", "Face-01.png", "face-02.png"]
+    for pool in project.stimulus_sets:
+        assert pool.source_dir is not None
+        root = sample_project_root / pool.source_dir
+        for index, name in enumerate(filenames, start=1):
+            (root / f"{pool.set_id}-{index:02d}.png").rename(root / name)
+
+    sequences = []
+    fingerprints = []
+    for root_seed in (17, 93):
+        project.settings.session.stimulus_seed = root_seed
+        plan = compile_session_plan(project, refresh_hz=60, project_root=sample_project_root)
+        run = plan.ordered_entries()[0].run_spec
+        assert run.randomization.modes.stimulus == "sequential"
+        sequences.append(run.stimulus_sequence)
+        fingerprints.append(protocol_fingerprint(project, sample_project_root))
+    assert sequences[0] == sequences[1]
+    assert fingerprints[0] == fingerprints[1]
+    sorted_names = sorted(filenames, key=str.lower)
+    for role, expected_count in (("base", 32), ("oddball", 8)):
+        paths = [event.image_path for event in sequences[0] if event.role == role]
+        assert None not in paths
+        assert [path.rsplit("/", 1)[1] for path in paths] == [
+            sorted_names[index % len(sorted_names)] for index in range(expected_count)
+        ]
     assert derive_schedule_seed(202, domain="stimulus-order", condition_id="a-b",
                                 presentation_index=1) != derive_schedule_seed(
         202, domain="stimulus-order", condition_id="a", presentation_index=1,

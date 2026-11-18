@@ -61,7 +61,7 @@ def participant_randomization_seeds(
     configured = configured_randomization_seeds(project)
     modes = effective_randomization_modes(project)
     return RandomizationSeeds(**{
-        field: getattr(configured if getattr(modes, domain) == "fixed" else fresh, field)
+        field: getattr(fresh if getattr(modes, domain) == "new" else configured, field)
         for domain, field in (("condition_order", "condition_order_seed"),
                               ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed"))
     })
@@ -131,7 +131,7 @@ def resolve_randomization_seeds(
     modes = effective_randomization_modes(project)
     for domain, field in (("condition_order", "condition_order_seed"),
                           ("stimulus", "stimulus_seed"), ("fixation", "fixation_seed")):
-        if (getattr(modes, domain) == "fixed"
+        if (getattr(modes, domain) != "new"
                 and getattr(resolved, field) != getattr(configured, field)):
             raise CompileError("Fixed randomization must use the configured seed for each domain.")
     return resolved
@@ -176,10 +176,10 @@ def randomization_protocol_identity(project: ProjectFile) -> dict[str, object] |
     identity: dict[str, object] = {
         "mode": mode, "algorithm_version": RANDOMIZATION_ALGORITHM_VERSION,
     }
-    if mode == "fixed":
+    modes = effective_randomization_modes(project)
+    if mode == "fixed" and modes.stimulus == "fixed":
         identity["seeds"] = configured_randomization_seeds(project).model_dump()
-    elif "fixed" in effective_randomization_modes(project).model_dump().values():
-        modes = effective_randomization_modes(project)
+    elif modes.stimulus == "sequential" or "fixed" in modes.model_dump().values():
         identity["modes"] = modes.model_dump()
         seeds = configured_randomization_seeds(project)
         identity["seeds"] = {

@@ -243,6 +243,8 @@ def _compile_prepared_run(
             base_stimuli=base_stimuli, oddball_stimuli=oddball_stimuli,
             oddball_every_n=protocol.oddball_every_n, random_seed=random_seed,
             text_height_values_by_role=text_height_values_by_role,
+            sequential=(randomization is not None and randomization.modes is not None
+                        and randomization.modes.stimulus == "sequential"),
         )
 
     fixation_settings = project.settings.fixation_task

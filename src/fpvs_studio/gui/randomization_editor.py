@@ -57,6 +57,8 @@ class RandomizationEditor(QWidget):
             combo.setAccessibleName(title)
             combo.addItem("Randomized — new for each participant", "new")
             combo.addItem("Pseudorandom — same for every participant", "fixed")
+            if domain == "stimulus":
+                combo.addItem("Sequential — filename or list order", "sequential")
             label.setBuddy(combo)
             self.mode_combos[domain] = combo
             self.heading_labels[domain] = label
@@ -198,6 +200,14 @@ class RandomizationEditor(QWidget):
     def _refresh_choice_details(self) -> None:
         saved = self._document.project.settings.session.saved_condition_order is not None
         for domain, combo in self.mode_combos.items():
+            if combo.currentData() == "sequential":
+                detail = (
+                    "Images follow filename order and words follow the order in their list. "
+                    "The base and oddball pools each start over at the end."
+                )
+                combo.setToolTip(detail)
+                combo.setAccessibleDescription(detail)
+                continue
             fixed = combo.currentData() == "fixed"
             if domain == "stimulus":
                 text = ("Every participant receives the same image / word order for each "

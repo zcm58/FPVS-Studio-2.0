@@ -1378,10 +1378,13 @@ class SetupWizardPage(QWidget):
         seed_summary: tuple[str, ...] = ()
         if supports_independent_randomization(project):
             reuse_modes = effective_randomization_modes(project)
+            order_descriptions = {
+                "fixed": "same for every participant",
+                "new": "new for each participant",
+                "sequential": "sequential (filename or list order)",
+            }
             seed_summary = tuple(
-                f"{label}: " + ("same for every participant"
-                               if getattr(reuse_modes, domain) == "fixed" else
-                               "new for each participant")
+                f"{label}: {order_descriptions[getattr(reuse_modes, domain)]}"
                 for domain, label in (("stimulus", "Image / word order"),
                                       ("condition_order", "Condition order"),
                                       ("fixation", "Fixation cross color change timing"))

@@ -361,12 +361,18 @@ For ordinary FPVS Oddball Paradigm, the compiler emits a seed-deterministic sche
 
 - oddball every project-selected Nth normal slot (every 5th by default)
 - manifest-backed variant resolution when available
-- sorted image paths or authored word-list order before scheduling
-- independently seeded role bags so every authored base entry and every authored
-  oddball entry is shown once per role cycle before that role's pool is reshuffled;
+- Sequential uses case-insensitive alphabetical order of source filenames (including
+  for generated variants) or authored word-list order. Base and Oddball advance
+  independently and return to the start of their respective lists after each pass.
+  Use zero-padded numbers in filenames when the order is numeric.
+- Randomized and Pseudorandom use independently seeded role bags. Each authored entry
+  is shown once per role cycle before that role's pool is reshuffled;
   immediate repeated display values are avoided within bags, across bag refills, and
   across Base/Oddball boundaries whenever the remaining authored multiplicities make
   an alternative possible
+- A shuffled image pool with more than one distinct file starts each new pass with
+  a different file from the one that ended its previous pass, even when a presentation
+  from the other role intervenes. This guard compares resolved paths.
 - fresh Base/Oddball pools at the start of each condition run, including later runs of
   the same condition; within-run cycle repetitions continue consuming those pools.
   Optional carryover between runs is [planned future work](exec-plans/planned/image-pool-reset-policy.md),

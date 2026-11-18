@@ -261,8 +261,10 @@ condition-order, stimulus-order and fixation roots. `SessionSettings.session_see
 remains the configured condition-order seed; optional `stimulus_seed`, `fixation_seed`
 and `randomization_mode` add the other roots and the historical overall fixed/new policy.
 Optional `randomization_modes` records independent `condition_order`, `stimulus` and
-`fixation` choices. Absent category choices inherit the overall mode. The overall mode
-is fixed only when all categories are fixed; otherwise it is new.
+`fixation` choices. Absent category choices inherit the overall mode. Stimulus also
+accepts `sequential`, which follows [pool order](RUNSPEC.md#v1-scheduling-policy) without
+using the stimulus seed. The overall mode is new if any category is new, and fixed
+otherwise.
 Legacy null settings resolve compatibly without rewriting the source project on load.
 Explicit settings use Project 1.14 and require the complete validated triplet.
 Historical configs added them in 1.12; current configs retain them in revision 2.
@@ -278,9 +280,9 @@ that conflict with a seeded schedule are reported, not repaired by rerolling.
 
 Fixed mode reuses configured roots across participants and rejects inconsistent supplied
 snapshots for each fixed category. A confirmed participant launch resolves fresh roots
-only for new categories and preserves configured roots for fixed categories; preview
-compilation uses configured values and performs no entropy generation. Pending retries
-reuse their resolved snapshot. Concrete compiled schedules remain authoritative during
+only for new categories and preserves configured roots for fixed and sequential
+categories. Preview compilation uses configured values and performs no entropy generation.
+Pending retries reuse their resolved snapshot. Concrete compiled schedules remain authoritative during
 recovery. Native AB, specialized masking and pre/post-task randomness retain their prior
 contracts and are outside these three controls.
 

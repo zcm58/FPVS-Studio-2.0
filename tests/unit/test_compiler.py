@@ -552,6 +552,34 @@ def test_compiler_image_schedule_has_no_immediate_displayed_repeats(
     ]
 
 
+@pytest.mark.parametrize("shared_paths", [False, True])
+def test_shuffled_images_do_not_repeat_across_role_pool_refills(shared_paths: bool) -> None:
+    base = [
+        StimulusScheduleItem(StimulusModality.IMAGE, f"base-{index}", f"base/{index}.png")
+        for index in range(4)
+    ]
+    oddball = [
+        StimulusScheduleItem(
+            StimulusModality.IMAGE, f"oddball-{index}",
+            f"{'base' if shared_paths else 'oddball'}/{index}.png",
+        )
+        for index in range(2)
+    ]
+    events = build_stimulus_sequence(
+        total_stimuli=43, frames_per_stimulus_value=10, on_frames=10, off_frames=0,
+        base_stimuli=base, oddball_stimuli=oddball, oddball_every_n=5, random_seed=0,
+    )
+    for role, pool in (("base", base), ("oddball", oddball)):
+        paths = [event.image_path for event in events if event.role == role]
+        size = len(pool)
+        for start in range(0, len(paths), size):
+            bag = paths[start : start + size]
+            assert len(set(bag)) == len(bag)
+            if start:
+                assert paths[start - 1] != paths[start]
+    assert all(a.image_path != b.image_path for a, b in zip(events, events[1:], strict=False))
+
+
 def test_compiler_schedules_word_stimuli_with_identical_timing(
     sample_project,
 ) -> None:

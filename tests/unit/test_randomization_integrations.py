@@ -87,13 +87,14 @@ def _rows(path):
 
 
 @pytest.mark.parametrize("export_mode", ["full", "compact"])
+@pytest.mark.parametrize("stimulus_mode", ["new", "sequential"])
 def test_mixed_policy_saved_order_survives_interchange_execution_and_recovery(
-    sample_project, sample_project_root, tmp_path, export_mode,
+    sample_project, sample_project_root, tmp_path, export_mode, stimulus_mode,
 ):
     project = _fixed_project(sample_project, modality="word")
-    modes = RandomizationModes(condition_order="fixed", stimulus="new", fixation="fixed")
+    modes = RandomizationModes(condition_order="fixed", stimulus=stimulus_mode, fixation="fixed")
     project.settings.session = SessionSettings.model_validate({
-        **project.settings.session.model_dump(), "randomization_mode": "new",
+        **project.settings.session.model_dump(), "randomization_mode": modes.aggregate,
         "randomization_modes": modes,
         "saved_condition_order": [project.conditions[0].condition_id, "second",
                                   project.conditions[0].condition_id],
@@ -113,10 +114,17 @@ def test_mixed_policy_saved_order_survives_interchange_execution_and_recovery(
     plan = compile_session_plan(project, refresh_hz=60, project_root=sample_project_root,
                                 resolved_seeds=seeds)
     assert plan.randomization_seeds == RandomizationSeeds(
-        condition_order_seed=31, stimulus_seed=902, fixation_seed=109,
+        condition_order_seed=31, stimulus_seed=902 if stimulus_mode == "new" else 72,
+        fixation_seed=109,
     )
     assert plan.ordering_policy == "saved_no_adjacent"
     selected = plan.ordered_entries()[-1]
+    if stimulus_mode == "sequential":
+        for role in ("base", "oddball"):
+            words = [
+                event.text for event in selected.run_spec.stimulus_sequence if event.role == role
+            ]
+            assert words == [f"{role}-set-{index % 7}" for index in range(len(words))]
     recorder = ConditionRecoveryRecorder(
         sample_project_root, plan, participant_number="009", participant_session_number=1,
     )
@@ -144,7 +152,7 @@ def test_mixed_policy_saved_order_survives_interchange_execution_and_recovery(
     assert SessionExecutionSummary.model_validate_json(result.model_dump_json()) == result
     rows = _rows(sample_project_root / "logs/session_condition_history.csv")
     assert all(row["condition_order_randomization_mode"] == "fixed" for row in rows)
-    assert all(row["stimulus_randomization_mode"] == "new" for row in rows)
+    assert all(row["stimulus_randomization_mode"] == stimulus_mode for row in rows)
     assert all(row["fixation_randomization_mode"] == "fixed" for row in rows)
     completed = sample_project_root / "runs" / "snapshot"
     write_json_file(completed / "session_plan.json", plan)

@@ -124,6 +124,7 @@ class _ActiveBalancedBag(Generic[ItemT, KeyT]):
         next_forced_key: KeyT | None,
         draws_before_forced: int,
         global_remaining: _RemainingKeyCounts[KeyT] | None = None,
+        previous_pool_key: KeyT | None = None,
     ) -> ItemT:
         """Match ``pop_preferred_bag_item`` without rebuilding O(n) intermediates."""
 
@@ -133,7 +134,7 @@ class _ActiveBalancedBag(Generic[ItemT, KeyT]):
         first_candidate: int | None = None
         first_feasible: int | None = None
         first_next_safe: int | None = None
-        for candidate_index in self._candidate_indices(previous_key):
+        for candidate_index in self._candidate_indices(previous_key, previous_pool_key):
             if first_candidate is None:
                 first_candidate = candidate_index
             candidate_key = self._keys[candidate_index]
@@ -180,11 +181,21 @@ class _ActiveBalancedBag(Generic[ItemT, KeyT]):
             selected_index = self._next_indices[selected_index]
         raise CompileError("Balanced stimulus bag is missing its preplanned display key.")
 
-    def _candidate_indices(self, previous_key: KeyT | None) -> Iterator[int]:
-        skip_previous = any(item_key != previous_key for item_key in self._remaining.counts)
+    def _candidate_indices(
+        self, previous_key: KeyT | None, previous_pool_key: KeyT | None,
+    ) -> Iterator[int]:
+        if self._remaining.distinct_count == 1:
+            previous_pool_key = None
+        skip_previous = any(
+            item_key != previous_key and item_key != previous_pool_key
+            for item_key in self._remaining.counts
+        )
         candidate_index = self._head
         while candidate_index is not None:
-            if not skip_previous or self._keys[candidate_index] != previous_key:
+            candidate_key = self._keys[candidate_index]
+            if candidate_key != previous_pool_key and (
+                not skip_previous or candidate_key != previous_key
+            ):
                 yield candidate_index
             candidate_index = self._next_indices[candidate_index]
 
@@ -247,15 +258,69 @@ def build_stimulus_sequence(
     oddball_every_n: int,
     random_seed: int,
     text_height_values_by_role: Mapping[StimulusRole, Sequence[float]] | None = None,
+    sequential: bool = False,
 ) -> list[StimulusEvent]:
-    """Build the base/oddball schedule with seeded per-role stimulus shuffles."""
+    """Assign each scheduled role its next ordered or shuffled stimulus."""
 
-    role_counts: Counter[str] = Counter()
-    sequence: list[StimulusEvent] = []
     source_pools: dict[StimulusRole, list[StimulusScheduleItem]] = {
         "base": base_stimuli,
         "oddball": oddball_stimuli,
     }
+    for role, pool in source_pools.items():
+        if not pool:
+            raise CompileError(f"The {role} stimulus pool requires at least one item.")
+    shuffled = None if sequential else iter(_shuffled_stimuli(
+        source_pools, total_stimuli=total_stimuli, oddball_every_n=oddball_every_n,
+        random_seed=random_seed,
+        avoid_pool_boundary_repeats=base_stimuli[0].stimulus_modality == StimulusModality.IMAGE,
+    ))
+    role_counts: Counter[StimulusRole] = Counter()
+    sequence: list[StimulusEvent] = []
+    for index in range(total_stimuli):
+        check_compilation_cancelled(index)
+        role = _role_for_index(index, oddball_every_n)
+        pool = source_pools[role]
+        role_index = role_counts[role]
+        stimulus = pool[role_index % len(pool)] if shuffled is None else next(shuffled)
+        text_height_value = None
+        if stimulus.stimulus_modality == StimulusModality.WORD:
+            role_heights = (
+                text_height_values_by_role.get(role)
+                if text_height_values_by_role is not None
+                else None
+            )
+            if role_heights is not None:
+                if role_index >= len(role_heights):
+                    raise CompileError(
+                        f"Compiled {role} text-height schedule is shorter than its events."
+                    )
+                text_height_value = role_heights[role_index]
+        role_counts[role] += 1
+        sequence.append(
+            StimulusEvent(
+                sequence_index=index,
+                role=role,
+                stimulus_modality=stimulus.stimulus_modality,
+                stimulus_id=stimulus.stimulus_id,
+                image_path=stimulus.image_path,
+                text=stimulus.text,
+                text_height_value=text_height_value,
+                on_start_frame=index * frames_per_stimulus_value,
+                on_frames=on_frames,
+                off_frames=off_frames,
+            )
+        )
+    return sequence
+
+
+def _shuffled_stimuli(
+    source_pools: Mapping[StimulusRole, Sequence[StimulusScheduleItem]],
+    *,
+    total_stimuli: int,
+    oddball_every_n: int,
+    random_seed: int,
+    avoid_pool_boundary_repeats: bool,
+) -> list[StimulusScheduleItem]:
     active_pools: dict[
         StimulusRole,
         _ActiveBalancedBag[StimulusScheduleItem, tuple[StimulusModality, str]] | None,
@@ -282,16 +347,20 @@ def build_stimulus_sequence(
         random_seed=random_seed,
         random_namespace="stimulus-pool",
         key=_stimulus_display_key,
+        avoid_pool_boundary_repeats=avoid_pool_boundary_repeats,
     )
     previous_display_key: tuple[StimulusModality, str] | None = None
+    previous_role_keys: dict[StimulusRole, tuple[StimulusModality, str]] = {}
     selected_stimuli: list[StimulusScheduleItem] = []
     selected_display_keys: list[tuple[StimulusModality, str]] = []
-    selected_text_heights: list[float | None] = []
 
     for index in range(total_stimuli):
         check_compilation_cancelled(index)
-        role: StimulusRole = "oddball" if (index + 1) % oddball_every_n == 0 else "base"
+        role = _role_for_index(index, oddball_every_n)
+        previous_pool_key = None
         if not active_pools[role]:
+            if avoid_pool_boundary_repeats:
+                previous_pool_key = previous_role_keys.get(role)
             active_pools[role] = _ActiveBalancedBag(
                 boundary_aware_shuffled_bag(
                     source_pools[role],
@@ -330,54 +399,22 @@ def build_stimulus_sequence(
                     next_role_change_index - index - 1 if next_role_change_index is not None else 0
                 ),
                 global_remaining=global_remaining,
+                previous_pool_key=previous_pool_key,
             )
-        text_height_value = None
-        if stimulus.stimulus_modality == StimulusModality.WORD:
-            role_heights = (
-                text_height_values_by_role.get(role)
-                if text_height_values_by_role is not None
-                else None
-            )
-            if role_heights is not None:
-                if role_counts[role] >= len(role_heights):
-                    raise CompileError(
-                        f"Compiled {role} text-height schedule is shorter than its events."
-                    )
-                text_height_value = role_heights[role_counts[role]]
-        role_counts[role] += 1
         previous_display_key = _stimulus_display_key(stimulus)
+        previous_role_keys[role] = previous_display_key
         if global_remaining is not None:
             global_remaining.remove(previous_display_key)
         selected_stimuli.append(stimulus)
         selected_display_keys.append(previous_display_key)
-        selected_text_heights.append(text_height_value)
 
-    repaired_stimuli = repair_no_repeat_role_bag_sequence(
+    return repair_no_repeat_role_bag_sequence(
         selected_stimuli,
         selected_display_keys,
         bag_sizes={role: len(pool) for role, pool in source_pools.items()},
         oddball_every_n=oddball_every_n,
+        preserve_pool_boundaries=avoid_pool_boundary_repeats,
     )
-    for index, (stimulus, text_height_value) in enumerate(
-        zip(repaired_stimuli, selected_text_heights, strict=True)
-    ):
-        check_compilation_cancelled(index)
-        role = _role_for_index(index, oddball_every_n)
-        sequence.append(
-            StimulusEvent(
-                sequence_index=index,
-                role=role,
-                stimulus_modality=stimulus.stimulus_modality,
-                stimulus_id=stimulus.stimulus_id,
-                image_path=stimulus.image_path,
-                text=stimulus.text,
-                text_height_value=text_height_value,
-                on_start_frame=index * frames_per_stimulus_value,
-                on_frames=on_frames,
-                off_frames=off_frames,
-            )
-        )
-    return sequence
 
 
 def repair_no_repeat_role_bag_sequence(
@@ -386,6 +423,7 @@ def repair_no_repeat_role_bag_sequence(
     *,
     bag_sizes: Mapping[StimulusRole, int],
     oddball_every_n: int,
+    preserve_pool_boundaries: bool = False,
 ) -> list[ItemT]:
     """Repair fallback schedule conflicts using only within-role, within-bag reorderings."""
 
@@ -403,6 +441,17 @@ def repair_no_repeat_role_bag_sequence(
         for bag_id, member_indices in bag_members.items()
         for member_index in member_indices
     }
+    boundary_partners: dict[int, int] = {}
+    if preserve_pool_boundaries:
+        for (role, bag_index), members in bag_members.items():
+            check_compilation_cancelled(bag_index)
+            if bag_index == 0 or bag_sizes[role] == 1:
+                continue
+            previous_end = bag_members[role, bag_index - 1][-1]
+            start = members[0]
+            if start - previous_end > 1 and repaired_keys[previous_end] != repaired_keys[start]:
+                boundary_partners[previous_end] = start
+                boundary_partners[start] = previous_end
 
     search_start = 1
     while True:
@@ -428,6 +477,7 @@ def repair_no_repeat_role_bag_sequence(
                     repaired_keys,
                     target_index,
                     candidate_index,
+                    boundary_partners,
                 ):
                     continue
                 _swap_parallel(
@@ -444,6 +494,7 @@ def repair_no_repeat_role_bag_sequence(
                 repaired_items,
                 repaired_keys,
                 member_indices,
+                boundary_partners,
             ):
                 repaired = True
                 break
@@ -474,13 +525,24 @@ def _role_bag_members(
     return members
 
 
-def _swap_is_repeat_free(keys: Sequence[KeyT], left_index: int, right_index: int) -> bool:
-    affected_edges = {
-        left_index - 1,
-        left_index,
-        right_index - 1,
-        right_index,
+def _affected_repeat_edges(
+    indices: Sequence[int], length: int, boundary_partners: Mapping[int, int],
+) -> set[tuple[int, int]]:
+    edges = {
+        (index, neighbor)
+        for index in indices
+        for neighbor in (index - 1, index + 1)
+        if 0 <= neighbor < length
     }
+    edges.update(
+        (index, boundary_partners[index]) for index in indices if index in boundary_partners
+    )
+    return edges
+
+
+def _swap_is_repeat_free(
+    keys: Sequence[KeyT], left_index: int, right_index: int, boundary_partners: Mapping[int, int],
+) -> bool:
 
     def key_after_swap(index: int) -> KeyT:
         if index == left_index:
@@ -490,9 +552,10 @@ def _swap_is_repeat_free(keys: Sequence[KeyT], left_index: int, right_index: int
         return keys[index]
 
     return all(
-        key_after_swap(edge_index) != key_after_swap(edge_index + 1)
-        for edge_index in affected_edges
-        if 0 <= edge_index < len(keys) - 1
+        key_after_swap(left) != key_after_swap(right)
+        for left, right in _affected_repeat_edges(
+            (left_index, right_index), len(keys), boundary_partners,
+        )
     )
 
 
@@ -510,26 +573,22 @@ def _apply_safe_bag_rotation(
     items: list[ItemT],
     keys: list[KeyT],
     member_indices: Sequence[int],
+    boundary_partners: Mapping[int, int],
 ) -> bool:
     if len(member_indices) < 2:
         return False
     original_items = [items[index] for index in member_indices]
     original_keys = [keys[index] for index in member_indices]
-    affected_edges = {
-        edge_index
-        for member_index in member_indices
-        for edge_index in (member_index - 1, member_index)
-        if 0 <= edge_index < len(keys) - 1
-    }
+    affected_edges = _affected_repeat_edges(member_indices, len(keys), boundary_partners)
     for candidate_keys, candidate_items in _bag_rotation_candidates(
         original_keys,
         original_items,
     ):
         candidate_key_by_index = dict(zip(member_indices, candidate_keys, strict=True))
         if not all(
-            candidate_key_by_index.get(edge_index, keys[edge_index])
-            != candidate_key_by_index.get(edge_index + 1, keys[edge_index + 1])
-            for edge_index in affected_edges
+            candidate_key_by_index.get(left, keys[left])
+            != candidate_key_by_index.get(right, keys[right])
+            for left, right in affected_edges
         ):
             continue
         for index, candidate_key, candidate_item in zip(
@@ -786,6 +845,7 @@ def plan_no_repeat_role_bag_keys(
     random_seed: int,
     random_namespace: str,
     key: Callable[[ItemT], KeyT],
+    avoid_pool_boundary_repeats: bool = False,
 ) -> list[KeyT] | None:
     """Plan a globally no-repeat sequence while preserving every role bag.
 
@@ -808,6 +868,7 @@ def plan_no_repeat_role_bag_keys(
             *(count + 1 for count in role_bag_counts["base"].values()),
             *(count + 1 for count in role_bag_counts["oddball"].values()),
             max(1, len(all_keys)),
+            *(len(role_bag_counts[role]) + 1 for role in roles if avoid_pool_boundary_repeats),
         ),
         cap=_MAX_EXACT_ROLE_BAG_STATE_ESTIMATE,
     )
@@ -840,10 +901,12 @@ def plan_no_repeat_role_bag_keys(
                 {item_index: priority for priority, item_index in enumerate(shuffled_indices)}
             )
 
-    ScheduleState = tuple[tuple[int, ...], tuple[int, ...], int]
+    ScheduleState = tuple[tuple[int, ...], tuple[int, ...], int, int, int]
     initial_state: ScheduleState = (
         authored_bag_counts["base"],
         authored_bag_counts["oddball"],
+        -1,
+        -1,
         -1,
     )
     current_states: dict[ScheduleState, None] = {initial_state: None}
@@ -859,14 +922,17 @@ def plan_no_repeat_role_bag_keys(
         next_states: dict[ScheduleState, tuple[ScheduleState, int]] = {}
         for state_index, state in enumerate(current_states):
             check_compilation_cancelled(state_index)
-            remaining_base, remaining_oddball, previous_index = state
+            remaining_base, remaining_oddball, previous_index, last_base, last_oddball = state
             remaining = remaining_base if role == "base" else remaining_oddball
+            previous_pool_index = -1
             if not any(remaining):
                 remaining = authored_bag_counts[role]
+                if avoid_pool_boundary_repeats and len(role_bag_counts[role]) > 1:
+                    previous_pool_index = last_base if role == "base" else last_oddball
             candidate_indices = [
                 item_index
                 for item_index, count in enumerate(remaining)
-                if count and item_index != previous_index
+                if count and item_index != previous_index and item_index != previous_pool_index
             ]
             candidate_indices.sort(
                 key=lambda item_index: (
@@ -882,6 +948,9 @@ def plan_no_repeat_role_bag_keys(
                     tuple(updated) if role == "base" else remaining_base,
                     tuple(updated) if role == "oddball" else remaining_oddball,
                     item_index,
+                    item_index if avoid_pool_boundary_repeats and role == "base" else last_base,
+                    (item_index if avoid_pool_boundary_repeats and role == "oddball"
+                     else last_oddball),
                 )
                 next_states.setdefault(next_state, (state, item_index))
         if not next_states:
