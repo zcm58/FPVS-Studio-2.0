@@ -112,6 +112,12 @@ uninterrupted. Dismissal preserves saved sharing choices, retry backoff and any
 explicit hold. This reminder concerns queued session reports. The completed-study
 handoff and raw EEG remain local.
 
+**Planned application close behavior.** While Studio is actively exporting to
+the website, keep the application open and show which transfer is running. Allow
+closing once the active transfer finishes or fails and its outcome is recorded.
+A queued offline report, retry backoff or an explicit hold leaves closing available.
+On the next launch, eligible pending reports follow the startup policy above.
+
 Failed delivery with local `network`/`timeout` codes shows **Waiting for connection**
 and retains the exact report and original completion time. Startup permits a prompt
 retry of that connectivity-delayed work; throttling/service backoff remains in place.

@@ -142,9 +142,11 @@ fingerprint and export timestamp alone cannot establish that relationship.
 
 The file covers the study's completed research visits, including repeat visits.
 Each execution refers to the protocol revision used at launch. Include each
-revision's common protocol information once. The OpenFPVS protocol fingerprint
-excludes recording hardware and display geometry. For every execution, retain
-the effective hardware, display settings and compiled refresh rate even when the
+revision's common protocol information once. For an in-place change after
+research data exists, carry the author's short reason with the revision so
+the Toolbox analyst can read it when reviewing the affected visits. The OpenFPVS
+protocol fingerprint excludes recording hardware and display geometry. For every
+execution, retain the effective hardware, display settings and compiled refresh rate even when the
 fingerprint matches another visit. Preserve the execution and visit identifiers,
 condition order, randomization, planned marker frames, actual trigger attempts
 and operator-reviewed electrode exclusions. Keep unknown exclusions distinct

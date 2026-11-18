@@ -59,14 +59,18 @@ change to the collecting project requires **two separate warning dialogs**.
    7.5 Hz. For stimuli and conditions, identify additions, removals and
    replacements. **Save as new study** creates a separately named project
    with the proposed settings and stimuli, a fresh study identity and an
-   empty roster. Keep visits, results and reporting enrollment with the
-   original. Only **Continue in this study** requires acknowledgement of
-   the reviewed changes and opens the second warning.
+   empty roster. Show **Created from [study], version [name/date]** in the
+   new study, using the saved version date when it has no name. Keep visits,
+   results and reporting enrollment with the original. Only **Continue in this
+   study** requires acknowledgement of the reviewed changes and opens the second
+   warning.
 2. **Confirm the risk to earlier data.** Explain that earlier participants
    experienced the previous protocol. Comparing or pooling their data with
    future visits may be invalid, and earlier data could be unusable for the
-   intended analysis. Require an explicit acknowledgement of that risk, then
-   **Apply to future visits**. Cancellation is the default in both dialogs.
+   intended analysis. Require a short reason for the in-place change and explicit
+   acknowledgement of that risk before **Apply to future visits**. Store the reason
+   with the saved revision and include it in the handoff for the Toolbox analyst.
+   Cancellation is the default in both dialogs.
 
 Save the new study before switching to it. Cancelling creation or a failed
 save leaves the original study active and its protocol intact.
@@ -119,8 +123,11 @@ batch before processing. [Study export and compatibility](../PROJECT_CONFIG.md#p
 Welcome's **Open Project** and **Manage Projects** share the same project list.
 Today it lists projects together. The planned manager has **Active**, **Completed**
 and **Archived** tabs. Marking collection complete moves a project from Active
-to Completed. Review and export remain available. To run another research
-session, choose **Reopen Collection**, which returns the project to Active.
+to Completed. Give **Review results** primary emphasis on the completed Home.
+Open the existing fixation cross results, including accuracy and hit-weighted
+mean reaction time, and keep **Export results** directly accessible. Use the
+existing results calculations and units. To run another research session,
+choose **Reopen Collection**, which returns the project to Active.
 **Archive** moves it to the Archived tab and preserves its files and collection
 state. **Restore** returns it to Active or Completed according to that saved state.
 
@@ -128,7 +135,8 @@ Local completion and study export work offline, including for unlinked projects.
 For a linked project, show its local state and the last collection status
 confirmed by OpenFPVS. Only an OpenFPVS administrator or a designated lead
 explicitly authorized to close collection for that study can close it study-wide.
-Reopening collection on OpenFPVS requires a separately authorized transition.
+Reopening collection on OpenFPVS requires service authorization as the OpenFPVS
+administrator or a PI of the lab that owns the study.
 A closed study stops accepting new Studio reports and still accepts authorized
 Toolbox results.
 Account for pending reports before closing intake. Cross-app lifecycle decisions
@@ -148,6 +156,16 @@ Researchers can author and run local projects offline. OpenFPVS hosts the
 Toolbox owns EEG registration, processing and analysis. As the platform grows,
 preserve local work, explicit sharing choices and the provenance of each handoff.
 Maintainers track cross-app work in the private umbrella checkout's `INTEGRATION_PLAN.md`.
+
+### Learning and development priorities
+
+Direct operators to the OpenFPVS website for workflow tutorials. Link YouTube
+tutorials from the site as they become available. Keep the immediate instruction
+needed to complete an action in Studio so ordinary local work remains usable offline.
+
+Deliver and verify the Studio workflow before its Toolbox counterpart. Retain
+workflow qualification, broader hardware or paradigm support, and additional tools
+as future candidates. Scope and verify each separately before advertising support.
 
 ## Current scope and boundaries
 
