@@ -34,6 +34,33 @@ feature parity.
    experiment to another Studio workstation or a protocol or completed-session config
    to the Toolbox analyst. [Export choices and limits](../PROJECT_CONFIG.md#user-workflow-and-limits)
 
+## Planned collection workflow
+
+Once collection ends, the operator can explicitly mark the Studio project
+**Data Collection Complete** and prepare one handoff covering the whole study.
+The analyst opens it in Toolbox, selects the EEG folder once and reviews the
+batch before processing. [Study export and compatibility](../PROJECT_CONFIG.md#planned-whole-study-handoff)
+
+Welcome's **Open Project** and **Manage Projects** share the same project list.
+Today it lists projects together. The planned manager has **Active**, **Completed**
+and **Archived** tabs. Marking collection complete moves a project from Active
+to Completed. Review and export remain available. To run another research
+session, choose **Reopen Collection**, which returns the project to Active.
+**Archive** moves it to the Archived tab and preserves its files and collection
+state. **Restore** returns it to Active or Completed according to that saved state.
+
+Local completion and study export work offline, including for unlinked projects.
+For a linked project, show its local state and the last collection status
+confirmed by OpenFPVS. Only an OpenFPVS administrator or a designated lead
+explicitly authorized to close collection for that study can close it study-wide.
+Reopening collection on OpenFPVS requires a separately authorized transition.
+A closed study stops accepting new Studio reports and still accepts authorized
+Toolbox results.
+Account for pending reports before closing intake. Cross-app lifecycle decisions
+live in `DESKTOP_EXPERIENCE.md#completing-and-archiving-a-study` in the private
+OpenFPVS checkout.
+[Shared spec locator](../DESIGN.md#shared-openfpvs-desktop-experience) · [Existing reporting policy](../DATA_SHARING.md#private-openfpvs-project-reporting)
+
 ## Role in OpenFPVS
 
 Studio and Toolbox are separate desktop products with their own installers and

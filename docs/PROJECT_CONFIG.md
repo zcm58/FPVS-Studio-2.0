@@ -119,3 +119,43 @@ design, Toolbox keeps the requested frequencies for its standard FFT. The
 analysis target. At the same frame count, a nominal 120-second run is about
 40 ms shorter at 60.02 Hz. Studio's software timing tests ended 36–38 ms earlier
 than 120 s. The handoff leaves the recorded markers and sample clock intact.
+
+## Planned whole-study handoff
+
+After all participants finish, the operator marks **Data Collection Complete**
+in Studio and exports one study handoff. The Toolbox analyst opens
+that file once and selects the study's EEG folder once. Toolbox inventories the
+recordings, presents unresolved or ambiguous visit matches for review, and runs
+the supported batch after the analyst resolves the required checks. Raw EEG stays in the
+lab's recording files.
+
+The file covers the study's completed research visits, including repeat visits.
+Each execution refers to the protocol revision used at launch. Include each
+revision's common protocol information once. The OpenFPVS protocol fingerprint
+excludes recording hardware and display geometry. For every execution, retain
+the effective hardware, display settings and compiled refresh rate even when the
+fingerprint matches another visit. Preserve the execution and visit identifiers,
+condition order, randomization, planned marker frames, actual trigger attempts
+and operator-reviewed electrode exclusions. Keep unknown exclusions distinct
+from a reviewed empty list. The cohort review lists known unfinished research
+executions, including interrupted or aborted visits, as exceptions with their
+recorded status. Exclude them from the completed visit count and processing
+batch. Retain Test/Pilot evidence locally and exclude those runs from the
+research cohort.
+
+Store the visit facts required for the final export in both compact and full
+output modes. Build and write the distributable file at explicit study export.
+Acquisition evidence, recovery and authorized session reporting keep their own
+lifecycles. The export must work offline and must preserve the protocol used
+for each visit even if the operator later edits the experiment.
+
+Introduce a versioned study format understood by the producer and reader.
+Keep supported historical setup and completed-session files readable. Retire
+automatic per-session distributable exports only after a compatible Toolbox
+reader has verified a whole study and compact output has retained the evidence
+needed to reconstruct it. Verify a study with multiple participants, a repeat
+visit, a mid-study protocol change, a Test/Pilot run, an unfinished research
+execution and an ambiguous EEG match. The analyst must be able to identify the
+included visits, see the unfinished execution as an exception and resolve the
+recording match before batch processing. Also verify that two visits sharing a
+protocol fingerprint retain their different hardware or display settings.
