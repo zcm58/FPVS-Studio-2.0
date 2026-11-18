@@ -22,6 +22,7 @@ from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingErr
 from fpvs_studio.library.errors import LibraryCancelled, LibraryError
 from fpvs_studio.library.models import LibraryItem
 from fpvs_studio.library.project_updates import ProjectUpdateResult
+from fpvs_studio.runtime.participant_results import research_visits_by_version
 from fpvs_studio.support.error_explanations import describe_error
 
 
@@ -156,6 +157,7 @@ def update_job(tmp_path):
         applied.append(value)
 
     def commit(*_args, **_kwargs):
+        assert _kwargs["research_visits"] is research_visits_by_version
         _kwargs["progress_callback"]("verify")
         _kwargs["precommit_check"]()
         _kwargs["progress_callback"]("commit")
@@ -181,6 +183,7 @@ def update_job(tmp_path):
         "ProjectBundleRecoveryError": ProjectBundleRecoveryError,
         "DataSharingError": DataSharingError, "DataSharingCancelled": DataSharingCancelled,
         "inspect_project_update_reporting": reporting,
+        "research_visits_by_version": research_visits_by_version,
         "ensure_project_update_recovery_ready": lambda *_args, **_kwargs: None,
         "Qt": SimpleNamespace(ConnectionType=SimpleNamespace(QueuedConnection=1)),
         "ProjectUpdateResult": ProjectUpdateResult, "ProgressSignalBridge": Bridge,
