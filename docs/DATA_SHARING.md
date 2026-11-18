@@ -93,8 +93,8 @@ so a canceled reporting job can release the launch gate promptly.
 On Studio startup, one sequential background pass discovers projects beneath the
 configured root and checks remembered existing project paths. It retries eligible
 pending deliveries without reopening projects or retrieving their comparison
-snapshots. Projects without pending/recoverable work skip hashing and HTTP. Saved
-the enabled preference, Library scope, authored protocol and OS credentials are rechecked before
+snapshots. Projects without pending/recoverable work skip hashing and HTTP. The
+saved sharing preference, Library scope, authored protocol and OS credentials are rechecked before
 delivery. Held reports still require explicit Retry. Missing/moved projects are
 skipped; malformed metadata remains intact and is logged. After the pass finishes,
 one dismissible modal lists affected project folders, full paths and report issues,
@@ -103,6 +103,14 @@ and window close leave all reports and sharing settings unchanged; the dialog do
 not recur during that startup pass. Startup shares the same job ownership
 and launch/shutdown gate as project-open and after-run work, and resumes interrupted
 projects after the presentation cycle.
+
+Keep the startup reminder limited to one dismissible notice per app launch for
+outstanding authorized Results uploads across projects. Show it again on the
+next launch if any of those reports still await upload. Once the service
+acknowledges delivery, stop reminding for that report. Keep participant playback
+uninterrupted. Dismissal preserves saved sharing choices, retry backoff and any
+explicit hold. This reminder concerns queued session reports. The completed-study
+handoff and raw EEG remain local.
 
 Failed delivery with local `network`/`timeout` codes shows **Waiting for connection**
 and retains the exact report and original completion time. Startup permits a prompt

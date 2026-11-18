@@ -175,7 +175,8 @@ one of those groups.
   schedule/timing, while Response handles accuracy tracking, response key/window,
   appearance, and preview.
 - Open Project is the Welcome entry point for Manage Projects
-  and the first, primary blue action with initial focus and Enter activation.
+  and the first, primary action with initial focus and Enter activation. Use the
+  [desktop palette](DESIGN.md#colors) for its color.
   Create Project, Import Project Bundle and Change Root Folder remain secondary actions.
   Manage Projects opens known projects or moves project folders to the Windows Recycle Bin with
   confirmation. Import Project Bundle uses the same reviewed `.fpvsbundle` import workflow

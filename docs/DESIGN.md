@@ -18,16 +18,24 @@ fast returning-user launches, low-friction setup, and clear scientific/runtime s
 Maintainers can find the canonical desktop specification in the private OpenFPVS
 checkout at `../OpenFPVS/DESKTOP_EXPERIENCE.md`, relative to the Studio repository root.
 For release decisions, read [How to plan independent releases](https://github.com/zcm58/OpenFPVS-Website/blob/main/DESKTOP_EXPERIENCE.md#how-to-plan-independent-releases).
-Studio is the visual and interaction reference for Toolbox. Design for lab members
-doing routine work, with guidance beside unfamiliar choices and advanced settings
-within reach for expert users.
+Use Studio for desktop layout, action order, focus and navigation. Use the
+OpenFPVS and Toolbox Slate & Signal Teal palette for future Studio surfaces.
+Design for lab members doing routine work, with guidance beside unfamiliar choices
+and advanced settings within reach for expert users.
+
+For future changes, keep the path to the next participant quiet. Use inline or nonmodal notices
+for optional account setup, updates and background status. Interrupt when the
+current task requires a decision to proceed or continuing would put data or
+scientific interpretation at risk. One dismissible reminder per Studio launch
+is appropriate for an outstanding [Results upload](DATA_SHARING.md#operator-workflow).
 
 ## Colors
 
-The authoring interface uses cool gray workspaces in Light and charcoal workspaces
-in Dark. Blue identifies primary actions and keyboard focus. Use the semantic
-success, warning, information, pending and error roles with a text label.
-[The theme definitions](../src/fpvs_studio/gui/design_system.py) own the values.
+The table describes the current Studio theme, with blue actions and focus.
+The [approved palette plan](exec-plans/planned/slate-and-signal-teal-appearance.md)
+defines the target colors and preserves scientific figure and stimulus colors.
+Implement desktop colors through [the theme definitions](../src/fpvs_studio/gui/design_system.py)
+and keep semantic status labels legible in Light and Dark.
 
 | Role | Light | Dark |
 | --- | --- | --- |
