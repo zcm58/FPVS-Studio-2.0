@@ -4,6 +4,17 @@ Status: Active
 
 Date: 2026-10-08
 
+## November 18 platform specification
+
+The [platform automatic error and crash reporting contract](../../BUG_REPORTING.md#platform-automatic-error-and-crash-reporting)
+defines the target for Studio and Toolbox. It expands eligible incidents to
+unexpected application errors and adds bounded hardware context, running software
+versions and a short error summary to the Mac repair-style maintainer email.
+The earlier source checks below cover the narrower Studio crash client and its
+historical service work. The current Feedback service ships Mac workflow intake.
+The platform specification leaves desktop implementation and service activation
+as future work.
+
 ## Authorized workflow
 
 The user requested automatic crash reports emailed to their existing maintainer address
@@ -97,10 +108,9 @@ The desktop source now ships in the public
 inactive: no new Cloudflare authentication, migration, deployment or live email test
 was performed during that release. Its rollout remains the open item in this plan.
 
-The earlier opt-in desktop and independent service source were implemented in their
-working trees. Desktop and service source now implement the requested opt-out workflow,
-including browser-free automatic registration.
-Neither the installed executable nor the live service has been changed.
+The original desktop and service working-tree edits prepared opt-out and
+browser-free automatic registration. Those edits did not replace the local
+installed executable or change the live service.
 `wrangler whoami` found no authenticated session. A restricted device sign-in was
 offered to the user and expired after five minutes without authorization; no migrations,
 deployments, live reports or emails were performed. Automatic intake stays false in

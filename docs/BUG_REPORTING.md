@@ -33,6 +33,93 @@ both drafts, and check light/dark layouts at both documented sizes. Registered
 Qt tests cover loading, verification, sending, receipts and independent draft
 persistence. Local Qt execution remains opt-in; no live service is used.
 
+## Platform automatic error and crash reporting
+
+This is the target contract for FPVS Studio and FPVS Toolbox. The automatic
+Mac repair completion report is the reference for environment detail and email
+format. Studio first shipped narrower crash capture and recovery in 2.4.2.
+Mac repair workflow intake is live. Expanded desktop capture and automatic crash
+intake require implementation and deployment acceptance.
+
+### Which incidents are reported
+
+- Report unexpected internal application errors that interrupt an action, including
+  failures handled at an app or worker boundary. Expected validation, routine
+  warnings, ordinary connection problems and user cancellation stay local.
+- Recover eligible native faults and unexpected exits on the next launch. Record
+  **Unclean shutdown** when there is insufficient evidence to identify a crash.
+  Clean exits, healthy processes and reporting-service failures stay out of intake.
+- An error and a later fatal exit produce one report when the app can correlate
+  them to the same incident. Use the strongest evidence before queueing. After
+  queueing, preserve the report ID and exact payload, including during recovery,
+  retries and receipt checks. Distinct incidents may be reported within the budget.
+
+### Machine context and error summary
+
+Capture allowlisted facts from the affected app and session. Use bounded OS queries
+and installed version metadata outside the UI, acquisition and fault-handler paths.
+Cache these facts for crash recovery so a later app or OS update cannot change the
+reported environment. Omit optional facts that cannot be read reliably. A missing
+GPU model or other optional field never blocks the report.
+
+| Field | Contents |
+| --- | --- |
+| App | FPVS Studio or FPVS Toolbox and the actual running version. Include the build when available. |
+| Operating system | OS family and full OS-reported version, for example macOS 27.0. Include the OS build when available. |
+| Computer | Non-unique hardware family or model, such as MacBook Pro, when available. |
+| CPU | CPU architecture and non-unique vendor/model when available. Include process architecture or translation mode when it helps explain a mismatch. |
+| GPU | Model names of adapters reported by the OS when available. Use the OS inventory without creating a graphics context or loading a driver to probe it. |
+| Memory | Total installed RAM in GiB, rounded to the nearest whole GiB, when available. |
+| Relevant software | Allowlisted version pairs for implicated dependencies such as Python, Qt, PsychoPy, NumPy or SciPy. Use the versions the app is running with when known. |
+| Incident | Random report UUID, failure category, failed operation from an app-defined list, and a short redacted error summary. Record the UTC occurrence time when known. Otherwise label the recovery time as such. Include a bounded excerpt of sanitized package-relative module/function/line locations when available. |
+
+Build the summary from an allowlisted failure type, operation and safe diagnostic
+facts. Include at most 40 sanitized frames and replace external source locations
+with `<external>`. Omit any detail that cannot be safely extracted. Exclude raw
+exception messages, full logs, dumps, attachments, absolute paths, hostnames,
+usernames, email addresses, serial numbers, unique hardware or network identifiers,
+credentials, environment dumps and participant, project, stimulus and EEG data.
+Cap the complete UTF-8 upload envelope at 32 KiB, including receipt metadata.
+
+### Preference, delivery and receipt
+
+- Settings > Diagnostics is app-local. Automatic error and crash reporting defaults
+  on for fresh installs. Preserve saved off choices across upgrades, disclose the
+  expanded fields before the first expanded capture, and recheck the active
+  preference generation before capture and delivery. Opt-out stops new automatic
+  report capture, discards unsent reports and queues revocation of the scoped grant.
+  Sessions created while off and historical sessions from before eligible capture
+  stay local.
+- Register and send in an app-owned worker using a revocable, random installation
+  capability scoped to automatic reports. Use the fixed approved HTTPS Feedback
+  origin. Browser verification and OpenFPVS sign-in are unnecessary for this flow.
+  Keep report files and retry state in protected app-local support storage, with
+  the existing seven-day expiry and ten-report outbox limit. Retry with the same
+  immutable payload using 15-minute to 24-hour backoff and at most three attempts
+  per worker pass. Keep capture and receipt recovery responsive during network
+  failures.
+- The independent FPVS Studio Feedback service validates versioned payloads,
+  deduplicates by report identity and exact content, and enforces the shared
+  storage and retention limits. Allow at most three new automatic reports per
+  installation per UTC day within the existing 100/day global acceptance cap.
+  Use the existing queue for a private GitHub issue with the sanitized facts and an email to the
+  configured maintainer (`zmurphy@abe.msstate.edu`). Keep installation and receipt
+  capabilities out of the issue and email. OpenFPVS documents the flow. Report data
+  stays in the Feedback service and its delivery destinations.
+- Match the Mac repair email's compact format. Put the app and failure category in
+  the subject. In at most 20 lines and 8 KiB of UTF-8 email body, place the app/OS
+  versions and hardware snapshot above the error summary, followed by a short
+  stack excerpt if available and the private issue link. Prioritize the summary
+  and link when space runs out. A service receipt records acceptance. Issue
+  creation and email delivery have their own outcomes. If an email acknowledgment
+  is lost, the existing queue can retry the notification using the same issue.
+
+Verify both apps with synthetic incidents and fake delivery. Cover exact app and OS
+versions, absent GPU or RAM data, opt-out and offline recovery, error-to-crash
+deduplication, payload redaction and bounds, quota enforcement and one private
+issue with its maintainer email. Verify the actual desktop builds and the Feedback
+service in staging before enabling automatic intake in production.
+
 ## Desktop scope
 
 ### macOS source repair reports
@@ -75,7 +162,7 @@ The service accepts `kind: workflow` at `/v1/workflow-reports` after browser-fre
 registration at `/v1/workflow-installations`. Installation capability authentication,
 strict 16-KiB envelopes, per-installation/global quotas and immutable report/receipt
 identities bound delivery. The existing service queue creates the private issue and
-maintainer email. An accepted receipt means submitted, not confirmed email delivery.
+maintainer email. Acceptance, issue creation and email delivery are separate outcomes.
 Email calls the resulting record a **GitHub report**, including successful workflows.
 
 Private `support/automatic-workflows/` storage owns registration and a bounded
@@ -87,10 +174,10 @@ disabled. The local repair also retains `completion.json` and `completion.txt`.
 
 Service source/deployment is owned by `../FPVS-Studio-Feedback`; its deployment
 record is authoritative for migration `0006_workflow_reporting.sql` and the separate
-`WORKFLOW_REPORTS_ENABLED` switch. The older automatic-crash design below does not
-establish that its endpoints exist in the current live service.
+`WORKFLOW_REPORTS_ENABLED` switch. Workflow completion and desktop crash intake
+have separate routes and installation capabilities.
 
-### Automatic crash reports
+### Existing Studio crash capture and recovery
 
 Settings > Diagnostics offers **Automatically send crash reports**, on by default
 in desktop source. A saved off choice remains off across upgrades and restarts.
@@ -100,10 +187,10 @@ Stale network/load results cannot restore an earlier preference. Registration ha
 without opening a browser, and closing Settings preserves the preference.
 An explicitly disabled reporting origin pauses registration and uploads.
 
-The matching service source implements browser-free background registration, explicitly
-approved by the maintainer. Automatic intake remains disabled pending authenticated
-deployment acceptance. Live use requires that deployed backend and an updated desktop
-build. Manual bug reports retain browser/Turnstile verification.
+Studio's client is prepared for browser-free background registration. The current
+Feedback service provides the Mac workflow route. Desktop crash intake still
+requires service implementation and deployment acceptance. Manual bug reports
+retain browser/Turnstile verification.
 
 After an unexpected exit, the next Studio startup recovers eligible app-owned
 session records in a background worker. The first launch persists a stable random
@@ -121,10 +208,10 @@ without guessing a failure category.
 Automatic payloads contain Studio/OS versions, timestamp, failure category and at
 most 40 sanitized stack locations. Only package-relative Studio source paths,
 function names and line numbers survive; external paths/names become `<external>`.
-No exception messages, full logs, environment, hostname, hardware identifier,
-project/stimulus data, participant records or attachments are collected. The service
-emails `zmurphy@abe.msstate.edu` a summary, up to 8 KiB of sanitized stack locations
-and a private issue link. Manual report contents retain their existing review rules.
+The current schema excludes exception messages, hardware metadata, full logs,
+environment, hostnames, project/stimulus data, participant records and attachments.
+See the [platform contract](#platform-automatic-error-and-crash-reporting) for the
+proposed expanded schema and maintainer email.
 
 The account-local `support/automatic-crashes/` directory owns consent and a random
 installation capability, session snapshots and queued payloads/receipt capabilities.
@@ -148,9 +235,10 @@ Exhausting the log budget or losing the log sink leaves the running session snap
 active until Studio actually closes. A later unexpected exit can still recover as
 an unclean shutdown even when bounded native/log capture has stopped.
 
-The separate feedback service needs additive migration `0005_crash_reporting.sql`
-and `CRASH_REPORTS_ENABLED=true` after deployment acceptance. Its scoped grant lasts
-one year and can be revoked. Expired/missing grants are registered again with the
+The desktop protocol expects a revocable scoped grant. Future service work requires
+an additive migration against the current Feedback schema and a separate activation
+switch after deployment acceptance. The scoped grant design uses a one-year lifetime.
+Expired/missing grants are registered again with the
 same capability after a failed upload, preserving queued identities and retry backoff.
 Registration shares the 1,000/day intent budget and a
 10,000-installation metadata cap. Accepted automatic reports are limited transactionally
@@ -158,7 +246,7 @@ to three per installation/day and share the existing 100/day global report/stora
 limits. Duplicate acceptance cannot create another issue or completed notification.
 Ambiguous email delivery can still repeat a notification through the existing queue.
 
-Opt-out protocol: POST `/v1/crash-installations` uses the random installation
+The existing desktop client uses POST `/v1/crash-installations` with the random installation
 bearer token and exactly `{schema_version: "1", installation_id}` to register a UUID.
 Only its capability hash is stored by the service. Registration retries reuse the
 same identity/token; mismatched tokens and revoked identities cannot register.
@@ -168,7 +256,8 @@ the report fields are `schema_version: "1"`, `kind: "crash"`, `report_id`, `crea
 `app_version`, `os_version`, `crash_type`, and `stack`. Each stack frame has exactly
 `module`, `function`, and `line`; the complete envelope is capped at 32 KiB.
 POST `/v1/crash-installations/{id}/revoke` revokes that installation. Installation and
-receipt capabilities cannot authorize manual reports, which retain browser verification.
+receipt capabilities are scoped to crash reporting. Manual bug reports use browser
+verification, and feature requests have their own intake.
 This unattended registration flow permits more automated abuse than a browser check;
 fixed-origin validation, IP limits, transactional registration/storage/report quotas
 remain in the service. Registration retries and renewals do not consume another
@@ -176,8 +265,7 @@ registration quota. Never ship a shared service secret as a substitute.
 
 Source implementation and rollout evidence are tracked in
 [the automatic-crash plan](exec-plans/active/automatic-crash-reporting.md).
-Existing installed executables require an updated build; source edits alone do not
-enable this preference in shipped installations.
+The expanded platform payload requires updated desktop builds and compatible service intake.
 
 ### Manual bug reports
 
