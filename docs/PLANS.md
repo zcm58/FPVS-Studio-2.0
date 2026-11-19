@@ -14,6 +14,7 @@ historical release draft does not authorize publishing an old version.
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Visible checks passed. Physical discovery and reconnect acceptance pending. |
 | [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Show higher fixed refresh rates and link to Advanced display |
 | [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
+| [Studio 3.1.0 release](exec-plans/active/release-3.1.0.md) | Windows build, installer acceptance, and publication |
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [Fit task screens](exec-plans/active/task-screen-fit.md) | Use the realized viewport for pre- and post-condition screens in Test/Pilot and recording |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
