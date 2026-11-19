@@ -78,8 +78,21 @@ class TaskCursor:
         # Pyglet exposes a public setter but no corresponding cursor getter.
         self._previous_cursor = self._handle._mouse_cursor
         try:
+            gl = import_module("pyglet.gl")
             image_module = import_module("pyglet.image")
-            window_module = import_module("pyglet.window")
+            cursor_type: Any = import_module("pyglet.window").ImageMouseCursor
+
+            class ResponseMouseCursor(cursor_type):
+                def draw(self, x: int, y: int) -> None:
+                    # PsychoPy's ShapeStim can leave texture unit 1 active.
+                    # Pyglet's cursor blit uses texture coordinates for unit 0.
+                    gl.glPushAttrib(gl.GL_TEXTURE_BIT)
+                    try:
+                        gl.glActiveTexture(gl.GL_TEXTURE0)
+                        super().draw(x, y)
+                    finally:
+                        gl.glPopAttrib()
+
             image = image_module.ImageData(
                 _CURSOR_SIZE, _CURSOR_SIZE, "RGBA", _cursor_rgba(), pitch=-_CURSOR_SIZE * 4,
             )
@@ -96,7 +109,7 @@ class TaskCursor:
                 ))
             ):
                 raise RuntimeError("Pyglet's owned response-cursor texture is unsupported.")
-            cursor = window_module.ImageMouseCursor(
+            cursor = ResponseMouseCursor(
                 image, hot_x=_CURSOR_HOTSPOT[0], hot_y=_CURSOR_HOTSPOT[1],
             )
             if not cursor.drawable or cursor.texture is not self._texture:

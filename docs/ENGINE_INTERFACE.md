@@ -279,6 +279,9 @@ and remote viewers without depending on a hardware cursor overlay. Pyglet retain
 ownership of pointer coordinates, motion, scaling, focus/leave handling and native
 cursor bookkeeping; click capture and hit testing are unchanged. Other platform and
 backend paths retain their native pointer behavior. Projects store no cursor setting.
+Pyglet draws the pointer on texture unit 0 and restores the preceding texture state.
+This keeps the pointer visible after PsychoPy draws shapes, including the Colors
+identification choices in Masking. This repair is included in Studio 3.1.1 source.
 
 Each response screen restores its previous cursor and visibility on completion,
 Escape, rendering errors and input-setup failures. The pointer's owned texture is

@@ -49,13 +49,40 @@ class _CursorHarness:
             self.image_properties = (width, height, image_format, data, kwargs)
             return SimpleNamespace(get_texture=lambda: self.texture)
 
-        def image_cursor(image, hot_x=0, hot_y=0):
-            self.hotspot = (hot_x, hot_y)
-            return SimpleNamespace(drawable=True, texture=image.get_texture())
+        harness = self
+
+        class ImageMouseCursor:
+            drawable = True
+
+            def __init__(self, image, hot_x=0, hot_y=0):
+                harness.hotspot = (hot_x, hot_y)
+                self.texture = image.get_texture()
+
+            def draw(self, x, y):
+                harness.draw_calls.append((x, y, harness.active_texture))
+                harness.bindings[harness.active_texture] = self.texture.id
+
+        self.gl = SimpleNamespace(GL_TEXTURE0=0, GL_TEXTURE1=1, GL_TEXTURE_BIT=2)
+        self.active_texture = self.gl.GL_TEXTURE0
+        self.bindings = [0, 0]
+        self.draw_calls = []
+        saved_textures = []
+
+        def push_attrib(mask):
+            assert mask == self.gl.GL_TEXTURE_BIT
+            saved_textures.append((self.active_texture, self.bindings.copy()))
+
+        def pop_attrib():
+            self.active_texture, self.bindings = saved_textures.pop()
+
+        self.gl.glPushAttrib = push_attrib
+        self.gl.glActiveTexture = lambda unit: setattr(self, "active_texture", unit)
+        self.gl.glPopAttrib = pop_attrib
 
         modules = {
             "pyglet.image": SimpleNamespace(ImageData=image_data),
-            "pyglet.window": SimpleNamespace(ImageMouseCursor=image_cursor),
+            "pyglet.window": SimpleNamespace(ImageMouseCursor=ImageMouseCursor),
+            "pyglet.gl": self.gl,
         }
 
         def import_module(name):
@@ -83,7 +110,7 @@ def test_task_cursor_is_an_opaque_high_contrast_arrow_in_the_framebuffer(monkeyp
     assert harness.hotspot == (1, 30)
     assert data[(width + 1) * 4:(width + 1) * 4 + 4] == b"\x00\x00\x00\xff"
     assert image_options["pitch"] == -width * 4
-    assert set(harness.imports) == {"pyglet.image", "pyglet.window"}
+    assert set(harness.imports) == {"pyglet.image", "pyglet.window", "pyglet.gl"}
 
     cursor.close()
 
@@ -94,6 +121,22 @@ def test_task_cursor_is_an_opaque_high_contrast_arrow_in_the_framebuffer(monkeyp
     assert harness.texture.id == 0
     cursor.close()
     assert harness.operations.count(("delete", 41)) == 1
+
+
+def test_task_cursor_draws_after_a_shape_leaves_texture_unit_one_active(monkeypatch):
+    harness = _CursorHarness(monkeypatch)
+    cursor = cursor_module.create_task_cursor(harness.window)
+    try:
+        # PsychoPy's ShapeStim changes the active texture while drawing the choices.
+        harness.active_texture = harness.gl.GL_TEXTURE1
+        harness.bindings = [7, 0]
+        harness.handle._mouse_cursor.draw(104, 231)
+
+        assert harness.draw_calls == [(104, 231, harness.gl.GL_TEXTURE0)]
+        assert harness.active_texture == harness.gl.GL_TEXTURE1
+        assert harness.bindings == [7, 0]
+    finally:
+        cursor.close()
 
 
 @pytest.mark.parametrize("initially_visible", [False, True])
