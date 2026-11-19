@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 from tests.gui.helpers import assert_visible_children_within_parent, select_settings_category
 
-from fpvs_studio.gui.components import SectionCard
+from fpvs_studio.gui.components import SectionCard, apply_studio_reduce_motion
 from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
@@ -32,7 +32,7 @@ def _assert_visible_settings_text_fits(dialog: AppSettingsDialog) -> None:
             assert label.height() >= label.heightForWidth(label.width()), context
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text()), context
-        if label.property("settingsSectionTitle") == "true":
+        if label.property("studioTextRole") in ("sectionTitle", "subsectionTitle"):
             assert label.alignment() & Qt.AlignmentFlag.AlignLeft, context
     for control_type in (QCheckBox, QPushButton):
         for control in dialog.findChildren(control_type):
@@ -104,6 +104,8 @@ def test_account_opens_the_studio_connection_dialog(qtbot, tmp_path, background,
     QApplication.processEvents()
     _assert_visible_settings_text_fits(dialog)
     browser, connection = dialog.manage_account_button, dialog.account_connection_button
+    assert browser.size() == connection.size()
+    assert connection.text() == "Manage Studio Connection"
     assert browser.mapTo(dialog, browser.rect().topRight()).x() == (
         connection.mapTo(dialog, connection.rect().topRight()).x()
     )
@@ -195,7 +197,7 @@ def test_settings_categories_fit_minimum_and_default_sizes(
     QApplication.processEvents()
 
     assert [dialog.navigation.item(index).text() for index in range(dialog.navigation.count())] == [
-        "General", "Recording", "Appearance", "Workspace", "Account", "Advanced", "Diagnostics",
+        "General", "Recording", "Appearance", "Workspace", "Advanced", "Diagnostics", "Account",
     ]
     assert dialog.navigation.currentRow() == dialog.pages.currentIndex() == 0
     assert dialog.page_title.text() == "General"
@@ -237,18 +239,22 @@ def test_settings_categories_fit_minimum_and_default_sizes(
         assert page.horizontalScrollBar().maximum() == 0, category
         titles = [
             label for label in page.findChildren(QLabel)
-            if label.isVisible() and label.property("settingsSectionTitle") == "true"
+            if label.isVisible() and label.property("studioTextRole") == "sectionTitle"
         ]
+        if category != "Diagnostics":
+            assert titles, category
+            assert dialog.page_title.font().pixelSize() > titles[0].font().pixelSize()
+        for label in page.findChildren(QLabel):
+            if label.isVisible() and label.property("studioTextRole") == "subsectionTitle":
+                assert label.font().pixelSize() < titles[0].font().pixelSize()
         if category == "Workspace":
             assert [label.text() for label in titles] == ["FPVS Studio Root Folder"]
             assert dialog.root_folder_value.isVisible()
             assert dialog.library_button.isVisible() is library
             assert dialog.library_button.text() == "Manage Library Access…"
         if category == "Diagnostics":
-            assert not titles
+            assert not page.findChildren(QLabel)
             assert dialog.crash_reports_checkbox.isVisible()
-        elif category != "Recording":
-            assert titles, category
         title_left_edges = {label.mapTo(page, label.rect().topLeft()).x() for label in titles}
         assert len(title_left_edges) <= 1, category
         page.verticalScrollBar().setValue(page.verticalScrollBar().maximum())
@@ -321,6 +327,7 @@ def test_theme_save_failure_restores_selection_and_can_retry(
     assert dialog.theme_buttons["auto"].isChecked()
     assert not dialog.theme_buttons["dark"].isChecked()
     assert dialog.theme_status.isVisible()
+    assert dialog.theme_selector._position == 2
     assert "Try again" in dialog.theme_status.text()
     QApplication.processEvents()
     assert dialog.size().toTuple() == (1000, 680)
@@ -332,6 +339,38 @@ def test_theme_save_failure_restores_selection_and_can_retry(
     assert dialog.theme_buttons["dark"].isChecked()
     assert not dialog.theme_buttons["auto"].isChecked()
     assert not dialog.theme_status.isVisible()
+
+
+def test_theme_selector_glides_retargets_and_respects_reduce_motion(
+    qtbot, qapp, tmp_path, monkeypatch,
+) -> None:
+    monkeypatch.setattr("fpvs_studio.gui.components._system_motion_enabled", lambda: True)
+    previous = qapp.property("studioReduceMotion")
+    apply_studio_reduce_motion(qapp, False)
+    dialog = AppSettingsDialog(fpvs_root_dir=tmp_path, initial_category="Appearance")
+    qtbot.addWidget(dialog)
+    dialog.show()
+    selector = dialog.theme_selector
+    animation = selector._animation
+    try:
+        assert selector._position == 2
+        dialog.theme_buttons["light"].click()
+        assert dialog.theme_buttons["light"].isChecked()
+        assert animation.state() == QAbstractAnimation.State.Running
+        animation.pause()
+        animation.setCurrentTime(animation.duration() // 8)
+        current = selector._position
+        assert 0 < current < 2
+        dialog.theme_buttons["dark"].click()
+        assert animation.startValue() == pytest.approx(current)
+        apply_studio_reduce_motion(qapp, True)
+        assert animation.state() == QAbstractAnimation.State.Stopped
+        assert selector._position == 1
+        dialog.theme_buttons["auto"].click()
+        assert selector._position == 2
+        assert animation.state() == QAbstractAnimation.State.Stopped
+    finally:
+        qapp.setProperty("studioReduceMotion", previous)
 
 
 def test_settings_changes_are_immediate_and_close_keeps_them(qtbot, tmp_path) -> None:
@@ -365,6 +404,22 @@ def test_settings_root_details_follow_new_root_selection(qtbot, tmp_path) -> Non
     qtbot.mouseClick(dialog.root_folder_setup_button, Qt.MouseButton.LeftButton)
     assert dialog.root_folder_value.text().endswith(updated_root.name)
     assert str(updated_root) in dialog.root_folder_value.accessibleName()
+
+
+def test_reduce_motion_restores_checkbox_when_preference_cannot_be_saved(qtbot, tmp_path):
+    def save(enabled: bool) -> None:
+        if enabled:
+            raise OSError("Could not save the preference")
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=tmp_path, initial_category="Appearance", on_reduce_motion_changed=save,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.reduce_motion_checkbox.click()
+    assert not dialog.reduce_motion_checkbox.isChecked()
+    assert dialog.motion_status.isVisible()
+    assert "could not be saved" in dialog.motion_status.text()
 
 
 def test_settings_navigation_supports_mouse_keyboard_and_keeps_saved_choices(qtbot, tmp_path):
@@ -424,7 +479,9 @@ def test_settings_category_indicator_can_reverse_and_stops_on_close(
     animation = navigation._indicator_animation
     _assert_category_indicator_aligned(dialog)
     start = navigation._indicator_rect().center().y()
-    diagnostics_row = navigation.count() - 1
+    diagnostics_row = navigation.row(
+        navigation.findItems("Diagnostics", Qt.MatchFlag.MatchExactly)[0],
+    )
     navigation.setCurrentRow(diagnostics_row)
     assert dialog.pages.currentIndex() == diagnostics_row
     assert dialog.page_title.text() == "Diagnostics"
@@ -455,23 +512,19 @@ def test_settings_category_indicator_can_reverse_and_stops_on_close(
 def test_settings_long_page_scrolls_with_wheel_while_navigation_and_close_stay_fixed(
     qtbot, tmp_path, background,
 ):
-    dialog = AppSettingsDialog(
-        fpvs_root_dir=tmp_path,
-        automatic_crash_reports_status="\n".join(
-            f"Attempt {index}: The report is waiting for a connection and will be retried."
-            for index in range(1, 31)
-        ),
-    )
+    dialog = AppSettingsDialog(fpvs_root_dir=tmp_path)
     qtbot.addWidget(dialog)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
     dialog.resize(860, 560)
-    select_settings_category(dialog, "Diagnostics")
-    dialog.show()
-    QApplication.processEvents()
+    select_settings_category(dialog, "General")
     page = dialog.pages.currentWidget()
     assert isinstance(page, QScrollArea)
+    note = QLabel("\n".join(f"Example note {index}" for index in range(30)), page.widget())
+    page.widget().layout().addWidget(note)
+    dialog.show()
+    QApplication.processEvents()
     scrollbar = page.verticalScrollBar()
     assert scrollbar.maximum() > 0
     assert page.horizontalScrollBar().maximum() == 0
@@ -491,11 +544,9 @@ def test_settings_long_page_scrolls_with_wheel_while_navigation_and_close_stay_f
     qtbot.waitUntil(lambda: scrollbar.value() > 0)
     scrollbar.setValue(scrollbar.maximum())
     QApplication.processEvents()
-    status_bottom = dialog.crash_reports_status.mapTo(
-        viewport, dialog.crash_reports_status.rect().bottomRight(),
-    )
+    status_bottom = note.mapTo(viewport, note.rect().bottomRight())
     assert 0 <= status_bottom.y() < viewport.height()
-    assert dialog.page_title.text() == dialog.navigation.currentItem().text() == "Diagnostics"
+    assert dialog.page_title.text() == dialog.navigation.currentItem().text() == "General"
     assert [widget.geometry() for widget in fixed_widgets] == fixed_geometry
     for widget in fixed_widgets:
         assert widget.isVisible()
@@ -503,8 +554,8 @@ def test_settings_long_page_scrolls_with_wheel_while_navigation_and_close_stay_f
         assert dialog.rect().contains(widget.mapTo(dialog, widget.rect().bottomRight()))
     assert_visible_children_within_parent(sidebar)
     assert_visible_children_within_parent(dialog.button_box)
-    select_settings_category(dialog, "General")
     select_settings_category(dialog, "Diagnostics")
+    select_settings_category(dialog, "General")
     assert scrollbar.value() == scrollbar.maximum()
     qtbot.mouseClick(close_button, Qt.MouseButton.LeftButton)
     assert not dialog.isVisible()

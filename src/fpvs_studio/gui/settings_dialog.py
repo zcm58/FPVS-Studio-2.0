@@ -7,8 +7,8 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QRectF, Qt, QUrl, QVariantAnimation
-from PySide6.QtGui import QColor, QDesktopServices, QHideEvent, QPainter, QPaintEvent
+from PySide6.QtCore import QEasingCurve, QRectF, QSignalBlocker, QSize, Qt, QUrl, QVariantAnimation
+from PySide6.QtGui import QColor, QDesktopServices, QHideEvent, QPainter, QPaintEvent, QPen
 from PySide6.QtWidgets import (
     QButtonGroup,
     QCheckBox,
@@ -23,7 +23,6 @@ from PySide6.QtWidgets import (
     QScrollArea,
     QSizePolicy,
     QStackedWidget,
-    QToolButton,
     QVBoxLayout,
     QWidget,
 )
@@ -52,10 +51,17 @@ from fpvs_studio.gui.window_helpers import _show_error_dialog
 _LOGGER = logging.getLogger(__name__)
 
 
-def _section_title(text: str, parent: QWidget) -> QLabel:
+def _section_title(text: str, parent: QWidget, *, subsection: bool = False) -> QLabel:
     title = QLabel(text, parent)
-    title.setProperty("settingsSectionTitle", "true")
+    mark_text_role(title, "subsectionTitle" if subsection else "sectionTitle")
     return title
+
+
+def _supporting_text(text: str, parent: QWidget) -> QLabel:
+    label = QLabel(text, parent)
+    label.setWordWrap(True)
+    mark_text_role(label, "supporting")
+    return label
 
 
 def _account_action_row(
@@ -65,10 +71,7 @@ def _account_action_row(
     copy = QVBoxLayout()
     copy.setSpacing(4)
     copy.addWidget(_section_title(title, row))
-    detail = QLabel(description, row)
-    detail.setWordWrap(True)
-    mark_text_role(detail, "supporting")
-    copy.addWidget(detail)
+    copy.addWidget(_supporting_text(description, row))
 
     layout = QHBoxLayout(row)
     layout.setContentsMargins(0, 0, 0, 0)
@@ -150,6 +153,56 @@ class _SettingsNavigation(QListWidget):
         super().hideEvent(event)
 
 
+class _ThemeSelector(QWidget):
+    """Paint one selection that travels behind the three native buttons."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._position = 0.0
+        self._target = 0.0
+        self._animation = QVariantAnimation(self)
+        self._animation.setEasingCurve(QEasingCurve.Type.OutExpo)
+        self._animation.valueChanged.connect(self._set_position)
+
+    def select(self, index: int) -> None:
+        self._animation.stop()
+        self._target = float(index)
+        duration = widget_animation_duration(self, 180) if self.isVisible() else 0
+        if not duration or self._target == self._position:
+            self._set_position(self._target)
+            return
+        self._animation.setStartValue(self._position)
+        self._animation.setEndValue(self._target)
+        self._animation.setDuration(duration)
+        self._animation.start()
+
+    def _set_position(self, value: float) -> None:
+        self._position = value
+        self.update()
+
+    def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
+        super().paintEvent(event)
+        theme = resolve_studio_theme(self.window().palette())
+        track = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
+        segment_width = self.width() / 3
+        selection = QRectF(
+            segment_width * self._position + 2, 2, segment_width - 4, self.height() - 4,
+        )
+        with QPainter(self) as painter:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            painter.setPen(QColor(theme.border))
+            painter.setBrush(QColor(theme.surface_alt))
+            painter.drawRoundedRect(track, 6, 6)
+            painter.setPen(QPen(QColor(theme.primary), 1.5))
+            painter.setBrush(QColor(theme.surface_elevated))
+            painter.drawRoundedRect(selection, 4, 4)
+
+    def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
+        self._animation.stop()
+        self._set_position(self._target)
+        super().hideEvent(event)
+
+
 class AppSettingsDialog(QDialog):
     """Expose computer defaults and project recording overrides."""
 
@@ -160,6 +213,8 @@ class AppSettingsDialog(QDialog):
         initial_category: str = "General",
         theme_mode: str = "auto",
         on_theme_mode_changed: Callable[[str], None] | None = None,
+        reduce_motion: bool = False,
+        on_reduce_motion_changed: Callable[[bool], None] | None = None,
         default_recording_configuration: dict[str, object] | None = None,
         on_default_recording_configuration_changed: Callable[[dict[str, object]], None]
         | None = None,
@@ -202,6 +257,7 @@ class AppSettingsDialog(QDialog):
 
         self._developer_mode_active = developer_mode_active
         self._on_theme_mode_changed = on_theme_mode_changed
+        self._on_reduce_motion_changed = on_reduce_motion_changed
         self._theme_mode = theme_mode if theme_mode in ("light", "dark", "auto") else "auto"
         self._on_automatic_crash_reports_changed = on_automatic_crash_reports_changed
         self._default_recording_configuration = dict(default_recording_configuration or {
@@ -246,16 +302,15 @@ class AppSettingsDialog(QDialog):
         self.pages.setObjectName("settings_pages")
         self.page_title = QLabel(self)
         self.page_title.setObjectName("settings_page_title")
-        self.page_title.setProperty("settingsPageTitle", "true")
+        mark_text_role(self.page_title, "pageTitle")
         appearance = QWidget(self)
         appearance.setObjectName("settings_appearance_section")
         appearance_layout = QVBoxLayout(appearance)
         appearance_layout.setContentsMargins(0, 0, 0, 0)
         appearance_layout.setSpacing(8)
-        appearance_row = QHBoxLayout()
-        appearance_row.addWidget(_section_title("Color theme", appearance))
-        appearance_row.addStretch(1)
-        theme_toggle = QWidget(appearance)
+        appearance_layout.addWidget(_section_title("Color theme", appearance))
+        theme_toggle = _ThemeSelector(appearance)
+        self.theme_selector = theme_toggle
         theme_toggle.setAccessibleName("Color theme")
         theme_toggle_layout = QHBoxLayout(theme_toggle)
         theme_toggle_layout.setContentsMargins(0, 0, 0, 0)
@@ -263,34 +318,49 @@ class AppSettingsDialog(QDialog):
         self.theme_button_group = QButtonGroup(self)
         self.theme_button_group.setExclusive(True)
         self.theme_buttons: dict[str, QPushButton] = {}
-        for mode, title, position in (
-            ("light", "Light", "first"),
-            ("dark", "Dark", "middle"),
-            ("auto", "Auto", "last"),
+        for mode, title in (
+            ("light", "Light"),
+            ("dark", "Dark"),
+            ("auto", "Auto"),
         ):
             button = QPushButton(title, theme_toggle)
             button.setObjectName(f"settings_theme_{mode}")
             button.setCheckable(True)
             button.setAutoDefault(False)
             button.setProperty("settingsThemeOption", "true")
-            button.setProperty("settingsThemePosition", position)
             button.setMinimumWidth(78)
             button.setToolTip(
                 "Follow the system theme." if mode == "auto" else f"Use the {mode} theme."
             )
             self.theme_button_group.addButton(button)
             self.theme_buttons[mode] = button
-            theme_toggle_layout.addWidget(button)
+            theme_toggle_layout.addWidget(button, 1)
             button.clicked.connect(lambda _checked=False, value=mode: self._set_theme_mode(value))
         self.theme_buttons[self._theme_mode].setChecked(True)
-        appearance_row.addWidget(theme_toggle)
-        appearance_layout.addLayout(appearance_row)
+        theme_toggle.select(tuple(self.theme_buttons).index(self._theme_mode))
+        appearance_layout.addWidget(theme_toggle, alignment=Qt.AlignmentFlag.AlignLeft)
         self.theme_status = QLabel(appearance)
         self.theme_status.setObjectName("settings_theme_status")
         self.theme_status.setWordWrap(True)
         mark_error_text(self.theme_status)
         self.theme_status.hide()
         appearance_layout.addWidget(self.theme_status)
+        appearance_layout.addSpacing(12)
+        appearance_layout.addWidget(_section_title("Motion", appearance))
+        self.reduce_motion_checkbox = QCheckBox("Reduce motion", appearance)
+        self.reduce_motion_checkbox.setObjectName("settings_reduce_motion")
+        self.reduce_motion_checkbox.setChecked(reduce_motion)
+        self.reduce_motion_checkbox.setEnabled(on_reduce_motion_changed is not None)
+        self.reduce_motion_checkbox.toggled.connect(self._set_reduce_motion)
+        appearance_layout.addWidget(self.reduce_motion_checkbox)
+        motion_help = "Turn off interface animations throughout Studio."
+        self.reduce_motion_checkbox.setAccessibleDescription(motion_help)
+        appearance_layout.addWidget(_supporting_text(motion_help, appearance))
+        self.motion_status = _supporting_text("", appearance)
+        self.motion_status.setObjectName("settings_motion_status")
+        mark_error_text(self.motion_status)
+        self.motion_status.hide()
+        appearance_layout.addWidget(self.motion_status)
 
         workspace = QWidget(self)
         workspace.setObjectName("settings_workspace_section")
@@ -340,6 +410,7 @@ class AppSettingsDialog(QDialog):
         participant_layout.setContentsMargins(0, 0, 0, 0)
         participant_layout.setSpacing(8)
         participant_layout.addWidget(_section_title("Participant runs", participant))
+        participant_layout.addWidget(_section_title("Run exports", participant, subsection=True))
         self.detailed_run_exports_checkbox = QCheckBox(
             "Save detailed timing and trigger CSVs",
             self,
@@ -355,6 +426,10 @@ class AppSettingsDialog(QDialog):
             self._set_detailed_run_exports_enabled
         )
         participant_layout.addWidget(self.detailed_run_exports_checkbox)
+        participant_layout.addSpacing(4)
+        participant_layout.addWidget(
+            _section_title("Recording reminders", participant, subsection=True),
+        )
         self.sophia_mode_checkbox = QCheckBox(
             "Enable Recording Reminder",
             self,
@@ -447,7 +522,8 @@ class AppSettingsDialog(QDialog):
 
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
-        mark_secondary_action(self.button_box.button(QDialogButtonBox.StandardButton.Close))
+        self._close_button = self.button_box.button(QDialogButtonBox.StandardButton.Close)
+        mark_secondary_action(self._close_button)
         self.button_box.rejected.connect(self.reject)
 
         self.version_value = QLabel(f"FPVS Studio version {__version__}", sidebar)
@@ -468,16 +544,26 @@ class AppSettingsDialog(QDialog):
         recording.setObjectName("settings_recording_page")
         recording_layout = QVBoxLayout(recording)
         recording_layout.setContentsMargins(0, 0, 0, 0)
-        recording_layout.setSpacing(12)
-        self.recording_summary = QLabel(recording_preference_summary(
-            self._recording_configuration,
-        ), recording)
+        recording_layout.setSpacing(20)
+        saved_recording = QVBoxLayout()
+        saved_recording.setSpacing(6)
+        saved_recording.addWidget(_section_title("Saved recording settings", recording))
+        self.recording_summary = QLabel(recording)
         self.recording_summary.setObjectName("settings_recording_summary")
         self.recording_summary.setWordWrap(True)
-        recording_layout.addWidget(self.recording_summary)
+        mark_text_role(self.recording_summary, "supporting")
+        saved_recording.addWidget(self.recording_summary)
+        self.default_recording_summary = QLabel(recording)
+        self.default_recording_summary.setWordWrap(True)
+        self.default_recording_summary.setObjectName("settings_default_recording_summary")
+        mark_text_role(self.default_recording_summary, "supporting")
+        saved_recording.addWidget(self.default_recording_summary)
+        recording_layout.addLayout(saved_recording)
         self._recording_editor_host = QWidget(recording)
         self._recording_editor_layout = QVBoxLayout(self._recording_editor_host)
         self._recording_editor_layout.setContentsMargins(0, 0, 0, 0)
+        self._recording_editor_layout.setSpacing(8)
+        self._recording_editor_layout.addWidget(_section_title("Device setup", recording))
         self.recording_editor = self._create_recording_editor()
         self._recording_editor_layout.addWidget(self.recording_editor)
         recording_layout.addWidget(self._recording_editor_host)
@@ -504,11 +590,6 @@ class AppSettingsDialog(QDialog):
         self.recording_editor.draft_changed.connect(
             self.save_default_recording_button.reset_confirmation,
         )
-        save_recording_row = QHBoxLayout()
-        save_recording_row.addWidget(self.apply_recording_button)
-        save_recording_row.addWidget(self.save_default_recording_button)
-        save_recording_row.addStretch(1)
-        recording_layout.addLayout(save_recording_row)
         self.use_default_recording_button = QPushButton("Use Computer Default", recording)
         self.use_default_recording_button.setObjectName("settings_use_default_recording")
         self.use_default_recording_button.setAutoDefault(False)
@@ -519,13 +600,17 @@ class AppSettingsDialog(QDialog):
             "the computer default. The project's BioSemi serial port is preserved."
         )
         self.use_default_recording_button.clicked.connect(self._use_default_recording_setup)
-        recording_layout.addWidget(
-            self.use_default_recording_button, 0, Qt.AlignmentFlag.AlignLeft,
+        self._recording_save_buttons = (
+            self.apply_recording_button,
+            self.save_default_recording_button,
+            self.use_default_recording_button,
         )
-        self.default_recording_summary = QLabel(recording)
-        self.default_recording_summary.setWordWrap(True)
-        self.default_recording_summary.setObjectName("settings_default_recording_summary")
-        recording_layout.addWidget(self.default_recording_summary)
+        save_recording_row = QHBoxLayout()
+        save_recording_row.setSpacing(8)
+        for button in self._recording_save_buttons:
+            save_recording_row.addWidget(button)
+        save_recording_row.addStretch(1)
+        recording_layout.addLayout(save_recording_row)
         self._refresh_recording_summaries()
         self.finished.connect(lambda _result: self.recording_editor.cancel())
         recording_layout.addStretch(1)
@@ -584,56 +669,10 @@ class AppSettingsDialog(QDialog):
         self.crash_reports_checkbox.setObjectName("automatic_crash_reports_checkbox")
         self.crash_reports_checkbox.setChecked(automatic_crash_reports_enabled)
         self.crash_reports_checkbox.setEnabled(on_automatic_crash_reports_changed is not None)
+        self.crash_reports_checkbox.setToolTip(automatic_crash_reports_status)
+        self.crash_reports_checkbox.setAccessibleDescription(automatic_crash_reports_status)
         self.crash_reports_checkbox.toggled.connect(self._configure_crash_reports)
         diagnostics_layout.addWidget(self.crash_reports_checkbox)
-        crash_help = QLabel(
-            "Studio reports unexpected errors and recovers crash reports on the next launch.",
-            diagnostics,
-        )
-        crash_help.setWordWrap(True)
-        mark_text_role(crash_help, "supporting")
-        diagnostics_layout.addWidget(crash_help)
-        self.crash_reports_status = QLabel(automatic_crash_reports_status, diagnostics)
-        self.crash_reports_status.setObjectName("automatic_crash_reports_status")
-        self.crash_reports_status.setWordWrap(True)
-        mark_text_role(self.crash_reports_status, "supporting")
-        self.crash_reports_status.setVisible(bool(automatic_crash_reports_status))
-        diagnostics_layout.addWidget(self.crash_reports_status)
-
-        self.crash_report_details_button = QToolButton(diagnostics)
-        self.crash_report_details_button.setObjectName("settings_crash_report_details")
-        self.crash_report_details_button.setText("Report contents and privacy")
-        self.crash_report_details_button.setToolButtonStyle(
-            Qt.ToolButtonStyle.ToolButtonTextBesideIcon
-        )
-        self.crash_report_details_button.setArrowType(Qt.ArrowType.RightArrow)
-        self.crash_report_details_button.setCheckable(True)
-        self.crash_report_details_button.setAutoRaise(True)
-        self.crash_report_details_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        details = QLabel(
-            "The Studio maintainer receives the app and OS versions, hardware and selected "
-            "software details, the failed operation, and sanitized stack locations when "
-            "available. Reports exclude error messages, full logs, projects, stimuli, and "
-            "participant records.\n\n"
-            "Turning this off discards queued reports for this installation and revokes "
-            "reporting access when connected. Reports already sent or in transit "
-            "cannot be recalled.",
-            diagnostics,
-        )
-        details.setObjectName("settings_crash_report_privacy")
-        details.setWordWrap(True)
-        mark_text_role(details, "supporting")
-        details.hide()
-        self.crash_report_details_button.toggled.connect(details.setVisible)
-        self.crash_report_details_button.toggled.connect(
-            lambda expanded: self.crash_report_details_button.setArrowType(
-                Qt.ArrowType.DownArrow if expanded else Qt.ArrowType.RightArrow
-            )
-        )
-        diagnostics_layout.addWidget(
-            self.crash_report_details_button, alignment=Qt.AlignmentFlag.AlignLeft
-        )
-        diagnostics_layout.addWidget(details)
         diagnostics_layout.addStretch(1)
         self._refresh_developer_status()
 
@@ -668,7 +707,7 @@ class AppSettingsDialog(QDialog):
         connection_divider.setFixedHeight(1)
         connection_divider.setVisible(on_show_library is not None)
         account_layout.addWidget(connection_divider)
-        self.account_connection_button = QPushButton("Manage Studio connection…", account)
+        self.account_connection_button = QPushButton("Manage Studio Connection", account)
         self.account_connection_button.setObjectName("settings_account_connection")
         self.account_connection_button.setAutoDefault(False)
         mark_secondary_action(self.account_connection_button)
@@ -689,18 +728,18 @@ class AppSettingsDialog(QDialog):
             self.recording_editor.backend_combo,
             self.theme_buttons["light"],
             self.root_folder_setup_button,
-            self.manage_account_button,
             self.developer_mode_checkbox,
             self.crash_reports_checkbox,
+            self.manage_account_button,
         ]
         for name, page in (
             ("General", general),
             ("Recording", recording),
             ("Appearance", appearance),
             ("Workspace", workspace),
-            ("Account", account),
             ("Advanced", advanced),
             ("Diagnostics", diagnostics),
+            ("Account", account),
         ):
             # A page keeps its controls and scroll position when categories change.
             scroll = QScrollArea(self.pages)
@@ -740,25 +779,35 @@ class AppSettingsDialog(QDialog):
         layout.addWidget(content, 1)
         for checkbox in self.findChildren(QCheckBox):
             checkbox.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
+        apply_dialog_theme(self)
+        self._size_recording_actions()
+        self.manage_account_button.ensurePolished()
+        self.account_connection_button.ensurePolished()
+        account_action_size = self.manage_account_button.sizeHint().expandedTo(
+            self.account_connection_button.sizeHint(),
+        )
+        self.manage_account_button.setFixedSize(account_action_size)
+        self.account_connection_button.setFixedSize(account_action_size)
         self.navigation.currentRowChanged.connect(self._select_category)
         matches = self.navigation.findItems(initial_category, Qt.MatchFlag.MatchExactly)
         if not matches:
             raise ValueError(f"Unknown Settings category: {initial_category!r}")
         self.navigation.setCurrentItem(matches[0])
-        apply_dialog_theme(self)
 
     def _select_category(self, index: int) -> None:
         if index < 0:
             return
         self.pages.setCurrentIndex(index)
-        self.page_title.setText(self.navigation.item(index).text())
+        category = self.navigation.item(index).text()
+        self.page_title.setText(category)
+        self._close_button.setMinimumSize(
+            self._recording_action_size if category == "Recording" else QSize(0, 0),
+        )
         first_control = self._category_focus_controls[index]
         QWidget.setTabOrder(self.navigation, first_control)
         if first_control is self.manage_account_button:
             QWidget.setTabOrder(self.manage_account_button, self.account_status)
             QWidget.setTabOrder(self.account_status, self.account_connection_button)
-        elif first_control is self.crash_reports_checkbox:
-            QWidget.setTabOrder(self.crash_reports_checkbox, self.crash_report_details_button)
 
     def _set_theme_mode(self, mode: str) -> None:
         if mode == self._theme_mode:
@@ -773,7 +822,21 @@ class AppSettingsDialog(QDialog):
             self.theme_status.show()
             return
         self._theme_mode = mode
+        self.theme_selector.select(tuple(self.theme_buttons).index(mode))
         self.theme_status.hide()
+
+    def _set_reduce_motion(self, enabled: bool) -> None:
+        try:
+            if self._on_reduce_motion_changed is not None:
+                self._on_reduce_motion_changed(enabled)
+        except OSError:
+            _LOGGER.exception("Could not save Reduce motion preference")
+            with QSignalBlocker(self.reduce_motion_checkbox):
+                self.reduce_motion_checkbox.setChecked(not enabled)
+            self.motion_status.setText("Reduce motion could not be saved. Try again.")
+            self.motion_status.show()
+            return
+        self.motion_status.hide()
 
     def _configure_crash_reports(self, enabled: bool) -> None:
         if self._on_automatic_crash_reports_changed is not None:
@@ -793,8 +856,8 @@ class AppSettingsDialog(QDialog):
         self.crash_reports_checkbox.setEnabled(
             self._on_automatic_crash_reports_changed is not None,
         )
-        self.crash_reports_status.setText(status)
-        self.crash_reports_status.setVisible(bool(status))
+        self.crash_reports_checkbox.setToolTip(status)
+        self.crash_reports_checkbox.setAccessibleDescription(status)
 
     def _create_recording_editor(self) -> RecordingSetupEditor:
         project_open = self._on_recording_configuration_changed is not None
@@ -805,7 +868,31 @@ class AppSettingsDialog(QDialog):
             computer_default=not project_open,
             biosemi_serial_port=self._biosemi_serial_port,
             biosemi_serial_baudrate=self._biosemi_serial_baudrate,
+            in_settings=True,
         )
+
+    def _size_recording_actions(self) -> None:
+        editor = self.recording_editor
+        buttons = (
+            *self._recording_save_buttons,
+            editor.biosemi_port_selector.refresh_button,
+            editor.biosemi_port_selector.check_button,
+            editor.detect_ports_button,
+            editor.detect_parallel_ports_button,
+        )
+        size = QSize(0, 0)
+        for button in (*buttons, self._close_button):
+            button.ensurePolished()
+            size = size.expandedTo(button.sizeHint())
+        for button in buttons:
+            button.setFixedSize(size)
+        for port_row in (
+            editor.biosemi_port_selector,
+            editor.brainproducts_port_row,
+            editor.parallel_port_selector,
+        ):
+            port_row.setMinimumHeight(size.height())
+        self._recording_action_size = size
 
     def _reload_recording_editor(self) -> None:
         self.save_default_recording_button.reset_confirmation()
@@ -819,6 +906,8 @@ class AppSettingsDialog(QDialog):
             self.save_default_recording_button.reset_confirmation,
         )
         self._recording_editor_layout.addWidget(self.recording_editor)
+        self._size_recording_actions()
+        self._close_button.setMinimumSize(self._recording_action_size)
         self._category_focus_controls[1] = self.recording_editor.backend_combo
         if self.navigation.currentRow() == 1:
             QWidget.setTabOrder(self.navigation, self.recording_editor.backend_combo)
@@ -857,6 +946,7 @@ class AppSettingsDialog(QDialog):
             "Choose EEG hardware",
         )
         self.default_recording_summary.setText(f"Computer default: {label}")
+        self.recording_summary.setVisible(self._on_recording_configuration_changed is not None)
         if self._on_recording_configuration_changed is None:
             text = "Settings for this computer"
         else:

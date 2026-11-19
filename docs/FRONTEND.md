@@ -76,6 +76,7 @@ one of those groups.
 | `pageTitle` | The page's one task or identity heading |
 | `dialogTitle` | A dialog's in-content heading |
 | `sectionTitle` | A named group of controls, data or workflow steps |
+| `subsectionTitle` | A smaller heading for a group within a section |
 | `body` | Primary instructions, authored content and data summaries |
 | `supporting` | Scope, interpretation or a recovery step placed beside the related content |
 | `metadata` | Compact contextual facts such as the Setup step count |
@@ -186,7 +187,7 @@ one of those groups.
   can assign a distinct project name to the portable copy without changing the open
   project, and imports always target the configured absolute FPVS Studio Root Folder.
 - Settings uses a left category column and a right content page with a category heading
-  and plain sections. General, Recording, Appearance, Workspace, Advanced and Diagnostics
+  and plain sections. General, Recording, Appearance, Workspace, Advanced, Diagnostics and Account
   support mouse and keyboard navigation. The content scrolls vertically when needed
   while navigation and Close remain reachable. Its exclusive Light/Dark/Auto toggle
   on Appearance applies a persisted computer preference immediately.

@@ -60,6 +60,7 @@ from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportProgressDialog,
     BundleImportReviewDialog,
 )
+from fpvs_studio.gui.components import apply_studio_reduce_motion
 from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
@@ -76,6 +77,7 @@ from fpvs_studio.gui.update_lifecycle import (
     UpdateTaskResult,
     update_lifecycle,
 )
+from fpvs_studio.gui.update_progress import UpdateProgressBar
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 from fpvs_studio.gui.window_helpers import (
     _coerce_exception,
@@ -112,6 +114,7 @@ _DEFAULT_RECORDING_CONFIGURATION_KEY = "recording/default_configuration"
 _RECENT_PROJECT_ROOTS_KEY = "projects/recent_project_roots"
 _RUN_EXPORT_MODE_KEY = "exports/run_export_mode"
 _THEME_MODE_KEY = "appearance/theme_mode"
+_REDUCE_MOTION_KEY = "appearance/reduce_motion"
 _THEME_MODES = frozenset({"light", "dark", "auto"})
 _BIOSEMI_RECORDING_CONFIRMATION_KEY = "launch/require_biosemi_recording_confirmation"
 _SOPHIA_MODE_TICKER_KEY = "launch/show_sophia_mode_ticker"
@@ -228,6 +231,7 @@ class StudioController(QObject):
         self._settings.remove(_LEGACY_LINUX_DEVELOPMENT_TEST_MODE_KEY)
         self._settings.sync()
         self._apply_theme_mode(self.load_theme_mode())
+        apply_studio_reduce_motion(self._app, self.load_reduce_motion())
         self._developer_mode = DeveloperMode(self._settings)
         self._fpvs_root_dir: Path | None = None
         self._projects_parent_dir = Path.cwd()
@@ -505,17 +509,27 @@ class StudioController(QObject):
         """Persist and immediately apply an app-only appearance choice."""
         if not isinstance(theme_mode, str) or theme_mode not in _THEME_MODES:
             raise ValueError("Appearance must be Light, Dark or Auto.")
-        previous = self._settings.value(_THEME_MODE_KEY)
-        self._settings.setValue(_THEME_MODE_KEY, theme_mode)
+        self._save_appearance_preference(_THEME_MODE_KEY, theme_mode)
+        self._apply_theme_mode(theme_mode)
+
+    def load_reduce_motion(self) -> bool:
+        return bool(self._settings.value(_REDUCE_MOTION_KEY, False, type=bool))
+
+    def set_reduce_motion(self, enabled: bool) -> None:
+        self._save_appearance_preference(_REDUCE_MOTION_KEY, enabled)
+        apply_studio_reduce_motion(self._app, enabled)
+
+    def _save_appearance_preference(self, key: str, value: str | bool) -> None:
+        previous = self._settings.value(key)
+        self._settings.setValue(key, value)
         self._settings.sync()
         if self._settings.status() != QSettings.Status.NoError:
             if previous is None:
-                self._settings.remove(_THEME_MODE_KEY)
+                self._settings.remove(key)
             else:
-                self._settings.setValue(_THEME_MODE_KEY, previous)
+                self._settings.setValue(key, previous)
             self._settings.sync()
             raise OSError("Could not save appearance. Check Settings access and retry.")
-        self._apply_theme_mode(theme_mode)
 
     def load_run_export_mode(self) -> str:
         """Load the saved export choice, using compact output for a fresh preference."""
@@ -984,6 +998,8 @@ class StudioController(QObject):
         dialog = QProgressDialog(
             "Reading project settings and stimulus manifest…", "Cancel", 0, 0, parent,
         )
+        dialog.setBar(UpdateProgressBar(dialog))
+        dialog.setRange(0, 0)
         dialog.setWindowTitle("Open Project")
         dialog.setWindowModality(Qt.WindowModality.ApplicationModal)
         dialog.setMinimumDuration(350)
@@ -1051,6 +1067,8 @@ class StudioController(QObject):
             initial_category=initial_category,
             theme_mode=self.load_theme_mode(),
             on_theme_mode_changed=self.set_theme_mode,
+            reduce_motion=self.load_reduce_motion(),
+            on_reduce_motion_changed=self.set_reduce_motion,
             default_recording_configuration=self.load_default_recording_configuration(),
             on_default_recording_configuration_changed=self.save_default_recording_configuration,
             recording_configuration=self.load_recording_configuration(),

@@ -9,7 +9,7 @@ from threading import Event
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QDesktopServices, QPalette
-from PySide6.QtWidgets import QApplication, QLabel
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel
 from tests.gui.helpers import assert_visible_children_within_parent, select_settings_category
 
 from fpvs_studio.gui import crash_report_controller as module
@@ -94,33 +94,20 @@ def test_settings_diagnostics_fit_and_bind(
     dialog.show()
     QApplication.processEvents()
     assert dialog.size().toTuple() == size
-    assert dialog.crash_reports_status.isVisible() == bool(message)
-    assert dialog.crash_reports_status.text() == message
+    assert dialog.crash_reports_checkbox.toolTip() == message
+    assert dialog.crash_reports_checkbox.accessibleDescription() == message
     assert dialog.crash_reports_checkbox.isChecked() == enabled
     assert dialog.crash_reports_checkbox.isEnabled()  # Opt-out never waits for HTTP.
     assert not changes
 
-    details = dialog.findChild(QLabel, "settings_crash_report_privacy")
-    assert not details.isVisible()
+    page = dialog.pages.currentWidget()
+    assert page.findChildren(QCheckBox) == [dialog.crash_reports_checkbox]
+    assert not page.findChildren(QLabel)
     dialog.navigation.setFocus()
     qtbot.keyClick(dialog.navigation, Qt.Key.Key_Tab)
     assert dialog.focusWidget() is dialog.crash_reports_checkbox
-    qtbot.keyClick(dialog.crash_reports_checkbox, Qt.Key.Key_Tab)
-    assert dialog.focusWidget() is dialog.crash_report_details_button
-    qtbot.keyClick(dialog.crash_report_details_button, Qt.Key.Key_Space)
-    assert details.isVisible()
-    assert dialog.crash_report_details_button.width() >= (
-        dialog.crash_report_details_button.sizeHint().width()
-    )
-    assert "participant records" in details.text()
-    assert "discards queued reports" in details.text()
     assert_visible_children_within_parent(dialog)
-    for label in dialog.pages.currentWidget().findChildren(QLabel):
-        if label.isVisible():
-            assert label.height() >= label.heightForWidth(label.width())
-    assert dialog.pages.currentWidget().verticalScrollBar().maximum() == 0
-    qtbot.keyClick(dialog.crash_report_details_button, Qt.Key.Key_Space)
-    assert not details.isVisible()
+    assert page.verticalScrollBar().maximum() == 0
     dialog.crash_reports_checkbox.click()
     assert changes == [not enabled]
 

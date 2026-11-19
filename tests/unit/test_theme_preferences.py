@@ -40,7 +40,9 @@ def controller(settings=None):
     tree = ast.parse(source.read_text(encoding="utf-8"))
     owner = next(node for node in tree.body if isinstance(node, ast.ClassDef)
                  and node.name == "StudioController")
-    names = {"load_theme_mode", "set_theme_mode", "_apply_theme_mode"}
+    names = {
+        "load_theme_mode", "set_theme_mode", "_apply_theme_mode", "_save_appearance_preference",
+    }
     methods = [node for node in owner.body if isinstance(node, ast.FunctionDef)
                and node.name in names]
     assert len(methods) == len(names)

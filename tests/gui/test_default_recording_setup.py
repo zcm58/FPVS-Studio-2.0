@@ -20,6 +20,7 @@ from tests.gui.helpers import (
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui import settings_dialog as settings_dialog_module
+from fpvs_studio.gui.biosemi_port_selector import BioSemiPortSelector
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError
@@ -43,6 +44,7 @@ def _no_hardware_discovery(monkeypatch):
     """Preference tests never need to enumerate hardware."""
     monkeypatch.setattr(RecordingSetupEditor, "_maybe_detect_ports", lambda _self: None)
     monkeypatch.setattr(ParallelPortSelector, "detect_ports", lambda _self: None)
+    monkeypatch.setattr(BioSemiPortSelector, "refresh_ports", lambda _self: None)
 
 
 def _configuration(backend: str, **values: object) -> dict[str, object]:
@@ -597,9 +599,17 @@ def test_recording_settings_fit_sidebar_sizes(
     QApplication.processEvents()
     assert dialog.size().toTuple() == size
     assert_visible_children_within_parent(dialog, allow_scroll_content=True)
-    for button in dialog.findChildren(QPushButton):
-        if button.isVisible():
-            assert button.width() >= button.sizeHint().width()
+    buttons = [button for button in dialog.findChildren(QPushButton) if button.isVisible()]
+    assert len(buttons) == 6
+    assert len({button.size().toTuple() for button in buttons}) == 1
+    for button in buttons:
+        assert button.width() >= button.sizeHint().width()
+        assert button.height() >= button.sizeHint().height()
+    editor = dialog.recording_editor
+    assert "ActiView" not in editor.guidance_label.text()
+    assert "Test and Pilot" in editor.guidance_label.text()
+    assert dialog.recording_summary.y() < dialog.default_recording_summary.y()
+    assert dialog.default_recording_summary.y() < editor.parentWidget().y()
     for label in dialog.findChildren(QLabel):
         if not label.isVisible():
             continue
@@ -608,6 +618,15 @@ def test_recording_settings_fit_sidebar_sizes(
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     assert dialog.use_default_recording_button.isEnabled() == (not uses_default)
+    for backend, action in (
+        ("brainproducts_triggerbox", editor.detect_ports_button),
+        ("brainproducts_parallel", editor.detect_parallel_ports_button),
+    ):
+        editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
+        QApplication.processEvents()
+        assert action.isVisible()
+        assert action.size() == dialog.apply_recording_button.size()
+        assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     if not uses_default:
         dialog.use_default_recording_button.click()
         assert resets == [True]

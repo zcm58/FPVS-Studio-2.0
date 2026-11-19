@@ -24,7 +24,7 @@ retain their original eligibility.
 
 Visible Studio path at `860x560` and `1000x680`: launch with a clean isolated profile,
 review the disclosure before enabling capture, open Settings > Diagnostics in both
-themes, and check keyboard navigation to **Report contents and privacy**. Simulate
+themes, and check keyboard navigation to the reporting checkbox. Simulate
 offline delivery and opt out while the worker remains busy. Confirm the preference
 on restart and that no queued reports or credentials were sent by the synthetic run.
 The approved internal-display run passed 48 visible Windows tests. The GUI-focused

@@ -8,6 +8,7 @@ from typing import Literal
 
 from PySide6.QtCore import (
     QEasingCurve,
+    QEvent,
     QPointF,
     QRectF,
     QSize,
@@ -42,6 +43,7 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.project_bundle import BundleExportStage, BundleImportStage
 from fpvs_studio.gui.components import (
+    STUDIO_MOTION_CHANGE,
     PathValueLabel,
     mark_primary_action,
     mark_secondary_action,
@@ -97,6 +99,7 @@ class SpinnerWidget(QWidget):
         self.setObjectName("processing_spinner")
         self.setFixedSize(44, 44)
         self._angle = 0
+        self._spinning = False
         self._timer = QTimer(self)
         self._timer.setInterval(45)
         self._timer.timeout.connect(self._advance)
@@ -105,13 +108,26 @@ class SpinnerWidget(QWidget):
         return QSize(44, 44)
 
     def start(self) -> None:
-        if not self._timer.isActive():
-            self._timer.start()
-        self.update()
+        self._spinning = True
+        self._sync_motion()
 
     def stop(self) -> None:
-        self._timer.stop()
+        self._spinning = False
+        self._sync_motion()
+
+    def _sync_motion(self) -> None:
+        if self._spinning and widget_animation_duration(self, 1):
+            if not self._timer.isActive():
+                self._timer.start()
+        else:
+            self._timer.stop()
+            self._angle = 0
         self.update()
+
+    def event(self, event: QEvent) -> bool:
+        if event.type() == STUDIO_MOTION_CHANGE:
+            self._sync_motion()
+        return super().event(event)
 
     def _advance(self) -> None:
         self._angle = (self._angle + 18) % 360
@@ -901,6 +917,7 @@ class _ProcessingStep(QWidget):
         self.setMinimumHeight(42)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self._pulse_on = False
+        self._pulse_requested = False
         self._pulse_timer = QTimer(self)
         self._pulse_timer.setInterval(520)
         self._pulse_timer.timeout.connect(self._toggle_pulse)
@@ -928,18 +945,25 @@ class _ProcessingStep(QWidget):
         self.set_state("pending")
 
     def set_state(self, state: _StepState) -> None:
-        self._pulse_on = False
-        if state == "active":
-            self._pulse_timer.start()
-        else:
-            self._pulse_timer.stop()
+        self._pulse_requested = state == "active"
         self._set_step_property("processingStepState", state)
-        self._set_step_property("processingStepPulse", "off")
+        self._sync_motion()
 
     def stop_animation(self) -> None:
+        self._pulse_requested = False
+        self._sync_motion()
+
+    def _sync_motion(self) -> None:
         self._pulse_timer.stop()
         self._pulse_on = False
         self._set_step_property("processingStepPulse", "off")
+        if self._pulse_requested and widget_animation_duration(self, 1):
+            self._pulse_timer.start()
+
+    def event(self, event: QEvent) -> bool:
+        if event.type() == STUDIO_MOTION_CHANGE:
+            self._sync_motion()
+        return super().event(event)
 
     def _toggle_pulse(self) -> None:
         self._pulse_on = not self._pulse_on

@@ -1,14 +1,12 @@
 # GUI Workflow
 
 Settings > Diagnostics exposes default-on automatic error and crash reporting at the shared
-`860x560` minimum and `1000x680` default sizes. The checkbox shows the preference.
-Inline notices report loading, connection, pending revocation, and failures. On the
-first eligible launch, the startup notice shows the expanded contents before capture
-and offers **Keep enabled** and **Turn off**.
-**Report contents and privacy** expands the data and opt-out details. In a visible
-smoke test, tab from Diagnostics to the checkbox and disclosure, then open and close
-the disclosure in both themes at both sizes. During a simulated delivery failure,
-check that the retry notice fits and the checkbox still works. Network and storage
+`860x560` minimum and `1000x680` default sizes. The checkbox shows the preference
+and carries the current status in its tooltip and accessible description. On the
+first eligible launch, the startup notice describes the report before capture
+and offers **Keep enabled** and **Turn off**. In a visible smoke test, tab from
+Diagnostics to the checkbox in both themes at both sizes. Simulate a delivery
+failure and verify that the status is available and the checkbox still works. Network and storage
 run through the application-owned crash controller. See
 [Bug reporting](BUG_REPORTING.md) for preferences, wire contracts and activation status.
 
@@ -347,7 +345,7 @@ project actions. Open Project remains the default action.
 ### Experiment Library
 
 **View > Experiment Library...** and **Create Project > Download from library** open
-the same whole-project browser. **Settings > Account > Manage Studio connection…**
+the same whole-project browser. **Settings > Account > Manage Studio Connection**
 and **Settings > Workspace > Manage Library Access…** open its connection controls.
 To move an existing lab-code connection to a personal account, disconnect it and
 select **Sign in to OpenFPVS**. Search/select an experiment, then
@@ -518,32 +516,38 @@ pull changes from the remote repository and rerun the source setup helper.
 ## Settings appearance and layout
 
 Settings uses a left navigation column with General, Recording, Appearance, Workspace,
-Account, Advanced and Diagnostics selections. A native `QListWidget` supports mouse and keyboard
+Advanced, Diagnostics and Account selections. A native `QListWidget` supports mouse and keyboard
 selection, and the current category heading appears above its controls on the right.
 The sidebar's Settings heading and the selected category title establish the hierarchy.
-Plain section widgets use the shared dialog styles and theme tokens.
+Page titles, section headings and subsection headings use the shared text hierarchy.
 The sidebar marker moves to the newly selected row in up to 150 ms. The selected
 background, page and keyboard navigation update immediately. Rapid selections
 retarget the marker from its current position. The marker snaps into place when
 Windows Animation effects are off or macOS Reduce motion is on.
 
 General contains Participant runs and eligible Local experiment testing controls.
-Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle. Workspace shows
-the active root folder and offers root-folder setup, condition templates and eligible
+Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle and **Reduce motion**.
+Workspace shows the active root folder and offers root-folder setup, condition templates and eligible
 Experiment Library access. The root path remains available in full through its tooltip
 and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
+Saved project and computer settings are grouped above the editable controls. Port
+actions and save actions share the same button dimensions as Close on this page.
+For a visible smoke check at both Settings sizes, open Recording with a project and
+without one, switch devices, and check that the saved summaries and port feedback wrap.
 Account is available from Welcome and an open project. In **OpenFPVS account**,
 **Manage Account** opens `https://openfpvs.com/account` in the default browser.
 If the browser fails to open, the page shows a selectable address. The separate
 **Experiment Library** row explains offline access and opens the Studio Library
-dialog through **Manage Studio connection…** when available. In a visible smoke
+dialog through **Manage Studio Connection** when available. Its button matches
+the size of **Manage Account**. In a visible smoke
 test, check both rows and their Tab order at `860x560` and `1000x680` in light and
 dark themes. Follow the computer-code prompt, then try **Continue offline** from
 the startup dialog.
 Advanced contains `Developer tools`. Existing control identities, eligibility,
 callbacks and immediate-save behavior carry through category changes. Page selection
 preserves entered values and inline error or status information.
+Diagnostics shows only the automatic reporting checkbox below its category title.
 
 The content uses a stacked page area with vertical scrolling when its content needs
 additional space. Navigation and Close stay reachable while the selected page scrolls.
@@ -559,6 +563,14 @@ current OS theme. Auto releases the native `QStyleHints` color-scheme override w
 `Qt.ColorScheme.Unknown`; existing palette observers restyle open windows/dialogs.
 The preference stays outside project/config/bundle/compiled contracts and does not edit
 the experiment's authored display background or scientific settings.
+The theme selector slides to the saved choice in up to 180 ms and retargets on
+subsequent selections. It snaps into place when interface motion is disabled.
+
+Reduce motion applies immediately and persists for this computer in
+`appearance/reduce_motion`. It stops Studio interface transitions and repeating effects,
+including the reminder ticker and progress indicators. The reminder and progress state
+remain visible. With the option off, Studio still honors system motion preferences.
+This setting does not affect experiment presentation, stimulus timing or previews.
 
 If the theme callback fails, Settings restores the previous selected button and shows
 `Theme could not be saved. Try again.` inline. Successful selection clears that error;

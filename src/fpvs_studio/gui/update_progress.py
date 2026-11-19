@@ -1,6 +1,6 @@
 """Shared progress rail for Studio and Library updates."""
 
-from PySide6.QtCore import QAbstractAnimation, QRectF, Qt, QVariantAnimation, Slot
+from PySide6.QtCore import QAbstractAnimation, QEvent, QRectF, Qt, QVariantAnimation, Slot
 from PySide6.QtGui import (
     QColor,
     QHideEvent,
@@ -11,7 +11,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QProgressBar, QWidget
 
-from fpvs_studio.gui.components import widget_animation_duration
+from fpvs_studio.gui.components import STUDIO_MOTION_CHANGE, widget_animation_duration
 from fpvs_studio.gui.design_system import resolve_studio_theme
 
 PROGRESS_MAXIMUM = 1000
@@ -24,7 +24,6 @@ class UpdateProgressBar(QProgressBar):
         super().__init__(parent)
         self.setMinimumHeight(22)
         self._animate_download = animate_download
-        self._motion_enabled = False
         self._animation = QVariantAnimation(self)
         self._animation.setStartValue(0.0)
         self._animation.setEndValue(1.0)
@@ -48,21 +47,28 @@ class UpdateProgressBar(QProgressBar):
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
-        self._motion_enabled = bool(widget_animation_duration(self, 160))
         self._sync_animation()
 
     def hideEvent(self, event: QHideEvent) -> None:  # noqa: N802
         self._animation.stop()
         super().hideEvent(event)
 
+    def event(self, event: QEvent) -> bool:
+        if event.type() == STUDIO_MOTION_CHANGE:
+            self._sync_animation()
+        return super().event(event)
+
     @Slot()
     def _sync_animation(self) -> None:
-        should_move = self._motion_enabled and self.isVisible() and (
+        should_move = self.isVisible() and (
             self.maximum() == 0
             or (self._animate_download and self.minimum() < self.value() < self.maximum())
         )
         if should_move:
-            if self._animation.state() != QAbstractAnimation.State.Running:
+            if (
+                self._animation.state() != QAbstractAnimation.State.Running
+                and widget_animation_duration(self, 160)
+            ):
                 self._animation.start()
         else:
             self._animation.stop()

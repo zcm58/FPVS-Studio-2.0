@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QProgressDialog, QWidget
 from shiboken6 import isValid
 
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
+from fpvs_studio.gui.update_progress import UpdateProgressBar
 from fpvs_studio.support.diagnostics import record_internal_error
 
 ProgressDialogFactory = Callable[[str, str, int, int, QWidget], QProgressDialog]
@@ -177,6 +178,9 @@ class ProgressTask(QObject):
             self._label, "Cancel" if self._cancel_callback is not None else "",
             0, 0, self._parent_widget,
         )
+        if isinstance(dialog, QProgressDialog):
+            dialog.setBar(UpdateProgressBar(dialog))
+            dialog.setRange(0, 0)
         if self._window_title is not None:
             dialog.setWindowTitle(self._window_title)
         if self._cancel_callback is None:

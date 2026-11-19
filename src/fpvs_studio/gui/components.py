@@ -19,6 +19,7 @@ from math import isfinite
 from typing import Any, Literal
 
 from PySide6.QtCore import (
+    QAbstractAnimation,
     QEasingCurve,
     QEvent,
     QObject,
@@ -98,6 +99,7 @@ __all__ = [
     "PathValueLabel",
     "ResultFeedbackLabel",
     "SectionCard",
+    "STUDIO_MOTION_CHANGE",
     "SetupMetricStrip",
     "SetupProgressStepper",
     "SetupSourceCard",
@@ -147,6 +149,7 @@ __all__ = [
     "studio_theme_stylesheet",
     "welcome_window_stylesheet",
     "widget_animation_duration",
+    "apply_studio_reduce_motion",
 ]
 
 
@@ -421,9 +424,36 @@ def _system_motion_enabled() -> bool:
 
 
 def widget_animation_duration(widget: QWidget, maximum_ms: int) -> int:
-    """Limit motion to the Qt style duration and the OS accessibility preference."""
+    """Honor Studio and OS motion preferences before starting an animation."""
+    app = QApplication.instance()
+    if app is not None and app.property("studioReduceMotion"):
+        return 0
     duration = widget.style().styleHint(QStyle.StyleHint.SH_Widget_Animation_Duration, None, widget)
     return min(duration, maximum_ms) if duration > 0 and _system_motion_enabled() else 0
+
+
+STUDIO_MOTION_CHANGE = QEvent.Type(QEvent.registerEventType())
+
+
+def apply_studio_reduce_motion(app: QApplication, enabled: bool) -> None:
+    """Stop ongoing decorative motion and preserve the completed visual state."""
+    if app.property("studioReduceMotion") == enabled:
+        return
+    app.setProperty("studioReduceMotion", enabled)
+    for widget in app.allWidgets():
+        if enabled:
+            animations = widget.findChildren(
+                QAbstractAnimation, options=Qt.FindChildOption.FindDirectChildrenOnly,
+            )
+            for animation in animations:
+                if animation.state() == QAbstractAnimation.State.Stopped:
+                    continue
+                if animation.totalDuration() >= 0:
+                    animation.setCurrentTime(animation.totalDuration())
+                if animation.state() != QAbstractAnimation.State.Stopped:
+                    animation.stop()
+                widget.update()
+        QApplication.sendEvent(widget, QEvent(STUDIO_MOTION_CHANGE))
 
 
 def _create_accent_animation(
@@ -1275,7 +1305,9 @@ def mark_error_text(label: QLabel) -> None:
     apply_error_text_style(label)
 
 
-TextRole = Literal["pageTitle", "dialogTitle", "sectionTitle", "body", "supporting", "metadata"]
+TextRole = Literal[
+    "pageTitle", "dialogTitle", "sectionTitle", "subsectionTitle", "body", "supporting", "metadata",
+]
 
 
 def mark_text_role(label: QLabel, role: TextRole) -> None:
@@ -1300,6 +1332,11 @@ def _text_role_stylesheet(theme: StudioTheme) -> str:
         color: {theme.text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
         font-weight: 700;
+    }}
+    QLabel[studioTextRole="subsectionTitle"] {{
+        color: {theme.text_primary};
+        font-size: {FONT_SIZE_BODY + 1}px;
+        font-weight: 600;
     }}
     QLabel[studioTextRole="body"] {{
         color: {theme.text_primary};
@@ -1415,6 +1452,9 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
     QTextEdit:hover, QPlainTextEdit:hover {{
         border-color: {theme.text_hint};
     }}
+    QPlainTextEdit[featureRequestEditor="true"] {{
+        placeholder-text-color: {theme.text_hint};
+    }}
     QLineEdit:focus, QComboBox:focus, QAbstractSpinBox:focus,
     QTextEdit:focus, QPlainTextEdit:focus {{
         border-color: {theme.focus_ring};
@@ -1525,11 +1565,6 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QWidget#settings_page_viewport {{
         background-color: transparent;
     }}
-    QLabel[settingsPageTitle="true"] {{
-        color: {theme.text_primary};
-        font-size: {FONT_SIZE_PAGE_TITLE}px;
-        font-weight: 700;
-    }}
     QLabel[settingsSectionTitle="true"] {{
         color: {theme.text_primary};
         font-size: {FONT_SIZE_SECTION_TITLE}px;
@@ -1538,55 +1573,23 @@ def dialog_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QFrame#settings_account_divider {{
         background-color: {theme.border};
     }}
-    QToolButton#settings_crash_report_details {{
+    QPushButton[settingsThemeOption="true"] {{
         color: {theme.text_primary};
         background-color: transparent;
-        border: 1px solid transparent;
-        border-radius: 4px;
-        padding: 3px 5px;
-    }}
-    QToolButton#settings_crash_report_details:hover,
-    QToolButton#settings_crash_report_details:checked {{
-        background-color: {theme.surface_alt};
-    }}
-    QToolButton#settings_crash_report_details:focus {{
-        border-color: {theme.focus_ring};
-    }}
-    QPushButton[settingsThemeOption="true"] {{
-        color: {theme.text_secondary};
-        background-color: {theme.surface_alt};
-        border: 1px solid {theme.border};
-        border-radius: 0;
-        padding: 7px 12px;
+        border: 2px solid transparent;
+        border-radius: 6px;
+        padding: 6px 11px;
         min-height: 20px;
     }}
-    QPushButton[settingsThemePosition="first"] {{
-        border-top-left-radius: 6px;
-        border-bottom-left-radius: 6px;
-    }}
-    QPushButton[settingsThemePosition="last"] {{
-        border-top-right-radius: 6px;
-        border-bottom-right-radius: 6px;
+    QPushButton[settingsThemeOption="true"]:checked {{
+        font-weight: 700;
     }}
     QPushButton[settingsThemeOption="true"]:hover {{
-        color: {theme.text_primary};
-        background-color: {theme.surface_elevated};
+        border-color: {theme.border_soft};
     }}
-    QPushButton[settingsThemeOption="true"]:checked {{
-        color: {theme.selected_text};
-        background-color: {theme.primary};
-        border-color: {theme.primary_border};
-    }}
-    QPushButton[settingsThemeOption="true"]:focus {{
-        border: 2px solid {theme.focus_ring};
-        padding: 6px 11px;
-    }}
-    QPushButton[settingsThemeOption="true"]:pressed:!checked {{
-        background-color: {theme.surface};
+    QPushButton[settingsThemeOption="true"]:focus,
+    QPushButton[settingsThemeOption="true"]:pressed {{
         border-color: {theme.focus_ring};
-    }}
-    QPushButton[settingsThemeOption="true"]:checked:focus {{
-        border-color: {theme.selected_text};
     }}
     """
 

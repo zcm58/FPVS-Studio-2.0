@@ -72,6 +72,12 @@ class _Dialog:
     def setMinimumDuration(self, _value):  # noqa: N802
         pass
 
+    def setBar(self, _bar):  # noqa: N802
+        pass
+
+    def setRange(self, _minimum, _maximum):  # noqa: N802
+        pass
+
     def show(self):
         pass
 
@@ -105,6 +111,7 @@ class _Harness:
                 WindowModality=SimpleNamespace(WindowModal="modal"),
             ),
             "update_lifecycle": lambda: self.lifecycle, "isValid": lambda _worker: True,
+            "UpdateProgressBar": lambda _dialog: object(),
             "record_internal_error": (
                 lambda error, operation: self.reported_errors.append((str(error), operation))
             ),

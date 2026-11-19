@@ -26,6 +26,7 @@ from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.session_ordering import session_presentation_count
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
+    STUDIO_MOTION_CHANGE,
     LaunchSurfaceFrame,
     StatusBadgeLabel,
     apply_home_page_theme,
@@ -35,6 +36,7 @@ from fpvs_studio.gui.components import (
     mark_secondary_action,
     mark_text_role,
     set_action_link_text,
+    widget_animation_duration,
 )
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.window_helpers import (
@@ -99,9 +101,21 @@ class SophiaModeTicker(QWidget):
         self.setVisible(True)
         self.setProperty("sophiaModeTickerActive", "true")
         self._sync_scroll_offset()
+        self._sync_motion()
+
+    def _sync_motion(self) -> None:
+        if self.property("sophiaModeTickerActive") == "true" and widget_animation_duration(self, 1):
+            if not self._timer.isActive():
+                self._timer.start()
+        else:
+            self._timer.stop()
+            self._offset = 0
         self.update()
-        if not self._timer.isActive():
-            self._timer.start()
+
+    def event(self, event: QEvent) -> bool:
+        if event.type() == STUDIO_MOTION_CHANGE:
+            self._sync_motion()
+        return super().event(event)
 
     def paintEvent(self, event: QPaintEvent) -> None:  # noqa: N802
         super().paintEvent(event)

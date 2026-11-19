@@ -30,7 +30,6 @@ from fpvs_studio.gui.components import (
     mark_text_role,
     widget_animation_duration,
 )
-from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.support.diagnostics import combine_diagnostics
 from fpvs_studio.support.models import MAX_FEATURE_CHARACTERS, MAX_LOG_BYTES, Draft
 
@@ -126,6 +125,7 @@ class ReportBugDialog(QDialog):
             editor_layout.addWidget(feature_label)
 
             self.happened_edit.setAccessibleName("Feature request")
+            self.happened_edit.setProperty("featureRequestEditor", "true")
             self.happened_edit.setPlaceholderText(
                 "Describe the feature and how it would help your work."
             )
@@ -478,9 +478,6 @@ class ReportBugDialog(QDialog):
 
     def _apply_theme(self) -> None:
         apply_dialog_theme(self)
-        if getattr(self, "is_feature", False) and hasattr(self, "happened_edit"):
-            color = resolve_studio_theme(self.palette()).text_hint
-            self.happened_edit.setStyleSheet(f"placeholder-text-color: {color};")
 
     def changeEvent(self, event: QEvent) -> None:  # noqa: N802
         super().changeEvent(event)

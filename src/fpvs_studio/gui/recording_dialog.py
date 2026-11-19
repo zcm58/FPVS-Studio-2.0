@@ -33,6 +33,7 @@ from fpvs_studio.gui.components import (
     mark_form_field_action,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
 )
 from fpvs_studio.gui.parallel_port_selector import ParallelPortSelector
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
@@ -149,11 +150,12 @@ class RecordingSetupEditor(QWidget):
     def __init__(
         self, configuration: dict[str, object], parent: QWidget | None = None,
         *, computer_default: bool = False, biosemi_serial_port: str | None = "COM3",
-        biosemi_serial_baudrate: int = 115200,
+        biosemi_serial_baudrate: int = 115200, in_settings: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("recording_setup_editor")
         self._computer_default = computer_default
+        self._in_settings = in_settings
         self._port_detection_job: UpdateJob | None = None
         self._detection_started = False
         self._discovery_dismissed = False
@@ -327,6 +329,8 @@ class RecordingSetupEditor(QWidget):
         self.guidance_label.setWordWrap(True)
         self.guidance_label.setTextFormat(Qt.TextFormat.PlainText)
         self.guidance_label.setObjectName("recording_setup_guidance")
+        if in_settings:
+            mark_text_role(self.guidance_label, "supporting")
         layout.addWidget(self.guidance_label)
         self.backend_combo.currentIndexChanged.connect(self._backend_changed)
         self.port_edit.textChanged.connect(self._refresh)
@@ -753,12 +757,15 @@ class RecordingSetupEditor(QWidget):
                 "timing correction; verify physical timing on your equipment."
             )
         else:
-            guidance = (
-                "Configure the trigger-interface port in each project's Recording Setup. "
-                if self._computer_default else
-                "Start recording in ActiView before launch; keep it recording. "
-            )
+            guidance = ""
+            if self._computer_default:
+                guidance = (
+                    "Configure the trigger-interface port in each project's Recording Setup. "
+                )
+            elif not self._in_settings:
+                guidance = "Start recording in ActiView before launch; keep it recording. "
             guidance += (
+                "Close other apps using the trigger port. " if self._in_settings else
                 "Fully exit serial test tools or other Studio windows using the trigger port. "
             )
             guidance += "Test and Pilot modes never send markers."

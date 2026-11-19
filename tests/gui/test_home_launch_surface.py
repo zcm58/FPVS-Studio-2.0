@@ -718,7 +718,11 @@ def test_home_sophia_mode_ticker_follows_launch_safety_setting(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
+    monkeypatch.setattr(
+        "fpvs_studio.gui.home_page.widget_animation_duration", lambda _widget, maximum: maximum,
+    )
     _, window = _open_created_project(controller, qtbot, tmp_path, "Sophia Mode Project")
 
     ticker = window.home_page.findChild(QWidget, "sophia_mode_ticker")

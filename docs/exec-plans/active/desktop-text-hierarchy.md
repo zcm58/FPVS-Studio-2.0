@@ -20,6 +20,13 @@ visible Windows verification is deferred.
 | Run's centered title and full-width readiness badge competed with its workspace and launch action. | Align the title with the bounded workspace and use the same inline readiness treatment as Home. |
 | Setup Review and page/dialog headings expressed common purposes through local selectors. | Apply shared roles for titles, section labels, body text, supporting text and metadata. |
 | Condition Modifiers and Presentation Settings mixed interpretation and routine guidance into loose text. | Group recorded data under its own heading and retain the presentation inheritance rule. |
+| Settings used a shared category title with inconsistent grouping inside each page. | Use shared page, section and subsection roles. Place Account last and present reporting as a single Diagnostics checkbox. |
+
+Settings acceptance covers all categories at 860 × 560 and 1000 × 680 in both
+themes. In Appearance, toggle Reduce motion while an interface effect is active
+and reopen Settings to verify persistence. Confirm active progress and reminder
+text remain readable with motion reduced. Check keyboard access to the Diagnostics
+checkbox and the theme selector in both motion modes.
 
 The shared foreground and inline status tokens were checked against the page and
 surface backgrounds in source. The lowest calculated ratio was 6.64:1 in Light

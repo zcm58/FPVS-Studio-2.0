@@ -295,18 +295,23 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
     """Exercise compiled Settings pages and native wheel scrolling with isolated data."""
     from PySide6.QtCore import QPoint, QPointF, Qt
     from PySide6.QtGui import QWheelEvent
-    from PySide6.QtWidgets import QApplication, QDialogButtonBox
+    from PySide6.QtWidgets import QApplication, QDialogButtonBox, QLabel
 
-    categories = ["General", "Recording", "Appearance", "Workspace", "Advanced", "Diagnostics"]
+    categories = [
+        "General", "Recording", "Appearance", "Workspace", "Advanced", "Diagnostics", "Account",
+    ]
     actual_categories = [settings.navigation.item(index).text()
                          for index in range(settings.navigation.count())]
     screenshots = smoke_root / "settings-layout"
     screenshots.mkdir(parents=True, exist_ok=True)
     pages = []
     scrolling = []
-    original_status = settings.crash_reports_status.text()
-    crash_reporting_enabled = settings.crash_reports_checkbox.isChecked()
     original_palette = app.palette()
+    general = settings.pages.widget(categories.index("General")).widget()
+    long_note = QLabel("\n".join(f"Example note {index}" for index in range(30)), general)
+    long_note.setWordWrap(True)
+    general.layout().insertWidget(general.layout().count() - 1, long_note)
+    long_note.hide()
     try:
         for theme, dark in (("light", False), ("dark", True)):
             app.setPalette(_verification_palette(dark=dark))
@@ -333,12 +338,8 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
                     })
 
             settings.resize(860, 560)
-            settings.navigation.setCurrentRow(categories.index("Diagnostics"))
-            overflow_status = "\n".join(
-                f"Attempt {index}: The report is waiting for a connection and will be retried."
-                for index in range(1, 31)
-            )
-            settings.set_crash_reporting_state(crash_reporting_enabled, overflow_status, False)
+            settings.navigation.setCurrentRow(categories.index("General"))
+            long_note.show()
             app.processEvents()
             page = settings.pages.currentWidget()
             viewport = page.viewport()
@@ -360,9 +361,7 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
             wheel_moved = _wait_for_positive_scroll_value(scrollbar.value)
             scrollbar.setValue(scrollbar.maximum())
             app.processEvents()
-            bottom = settings.crash_reports_status.mapTo(
-                viewport, settings.crash_reports_status.rect().bottomRight(),
-            )
+            bottom = long_note.mapTo(viewport, long_note.rect().bottomRight())
             checks = {
                 "vertical_overflow": overflow_ready,
                 "no_horizontal_scroll": page.horizontalScrollBar().maximum() == 0,
@@ -379,17 +378,19 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
                     for widget in fixed_widgets
                 ),
             }
-            settings.navigation.setCurrentRow(categories.index("General"))
             settings.navigation.setCurrentRow(categories.index("Diagnostics"))
+            settings.navigation.setCurrentRow(categories.index("General"))
             app.processEvents()
             checks["scroll_position_retained"] = scrollbar.value() == scrollbar.maximum()
-            screenshot = screenshots / f"{theme}-diagnostics-scrolled-860x560.png"
+            screenshot = screenshots / f"{theme}-general-scrolled-860x560.png"
             saved = settings.grab().save(str(screenshot))
             scrolling.append({"theme": theme, "checks": checks, "screenshot": str(screenshot),
                               "ok": saved and all(checks.values())})
-            settings.set_crash_reporting_state(crash_reporting_enabled, original_status, False)
+            long_note.hide()
             app.processEvents()
     finally:
+        general.layout().removeWidget(long_note)
+        long_note.deleteLater()
         app.setPalette(original_palette)
         app.processEvents()
     return {

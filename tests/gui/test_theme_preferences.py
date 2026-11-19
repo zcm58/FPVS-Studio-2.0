@@ -6,16 +6,20 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import QEvent, QSettings, Qt
+from PySide6.QtCore import QAbstractAnimation, QEvent, QSettings, Qt
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QWidget
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui import crash_report_controller as crash_module
-from fpvs_studio.gui.components import welcome_window_stylesheet
+from fpvs_studio.gui.components import ActionFeedbackButton, welcome_window_stylesheet
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import StudioColorScheme, resolve_studio_theme
+from fpvs_studio.gui.home_page import SophiaModeTicker
+from fpvs_studio.gui.processing_page import SpinnerWidget, _ProcessingStep
+from fpvs_studio.gui.settings_dialog import AppSettingsDialog
+from fpvs_studio.gui.update_progress import UpdateProgressBar
 from fpvs_studio.gui.welcome_window import WelcomeWindow
 
 
@@ -23,6 +27,7 @@ from fpvs_studio.gui.welcome_window import WelcomeWindow
 def isolated_theme(qapp, monkeypatch, tmp_path):
     hints = qapp.styleHints()
     original_mode = qapp.property("studioThemeMode")
+    original_motion = qapp.property("studioReduceMotion")
     original_palette = QPalette(qapp.palette())
     file = tmp_path / "appearance.ini"
 
@@ -46,6 +51,7 @@ def isolated_theme(qapp, monkeypatch, tmp_path):
     }.get(original_mode, Qt.ColorScheme.Unknown))
     qapp.setPalette(original_palette)
     qapp.setProperty("studioThemeMode", original_mode)
+    qapp.setProperty("studioReduceMotion", original_motion)
     QApplication.processEvents()
 
 
@@ -129,3 +135,51 @@ def test_settings_controller_binds_current_theme_and_persists_callback(
     assert control.load_theme_mode() == "light"
     assert qapp.property("studioThemeMode") == "light"
     assert create().load_theme_mode() == "light"
+
+
+def test_reduce_motion_stops_active_effects_and_persists(qtbot, qapp, isolated_theme, monkeypatch):
+    monkeypatch.setattr("fpvs_studio.gui.components._system_motion_enabled", lambda: True)
+    create, settings_factory = isolated_theme
+    control = create()
+    assert control.load_reduce_motion() is False
+    panel = QWidget()
+    qtbot.addWidget(panel)
+    ticker = SophiaModeTicker(panel)
+    spinner = SpinnerWidget(parent=panel)
+    step = _ProcessingStep("test", "1", "Working", parent=panel)
+    progress = UpdateProgressBar(panel)
+    button = ActionFeedbackButton("Save", "Saved", panel)
+    panel.show()
+    ticker.set_sophia_mode_enabled(True)
+    spinner.start()
+    step.set_state("active")
+    progress.setRange(0, 0)
+    button.confirm()
+    timers = (ticker._timer, spinner._timer, step._pulse_timer)
+    assert all(timer.isActive() for timer in timers)
+    assert progress._animation.state() == QAbstractAnimation.State.Running
+    assert button._accent_animation.state() == QAbstractAnimation.State.Running
+
+    dialog = AppSettingsDialog(
+        fpvs_root_dir=control._projects_parent_dir, initial_category="Appearance",
+        reduce_motion=control.load_reduce_motion(),
+        on_reduce_motion_changed=control.set_reduce_motion,
+    )
+    qtbot.addWidget(dialog)
+    dialog.show()
+    dialog.reduce_motion_checkbox.click()
+    assert qapp.property("studioReduceMotion") is True
+    assert settings_factory().value("appearance/reduce_motion", type=bool) is True
+    assert not any(timer.isActive() for timer in timers)
+    assert ticker.isVisible()
+    assert step.property("processingStepState") == "active"
+    assert progress._animation.state() == QAbstractAnimation.State.Stopped
+    assert button._accent_animation.state() == QAbstractAnimation.State.Stopped
+    assert button.text() == "Saved"
+    dialog.navigation.setCurrentRow(0)
+    assert dialog.navigation._indicator_animation.state() == QAbstractAnimation.State.Stopped
+    assert create().load_reduce_motion() is True
+    dialog.reduce_motion_checkbox.click()
+    assert qapp.property("studioReduceMotion") is False
+    assert all(timer.isActive() for timer in timers)
+    assert progress._animation.state() == QAbstractAnimation.State.Running
