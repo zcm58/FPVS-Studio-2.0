@@ -33,6 +33,7 @@ from fpvs_studio.updates.models import (
     UpdateCancelled,
     UpdateCheckResult,
     UpdateError,
+    UpdatePhase,
 )
 
 
@@ -896,10 +897,18 @@ raise SystemExit(helper_service.serve_stdio())
 """
     client = helper_client.HelperClient(lambda *args: python_child_command(script))
     cancel = Event()
-    started = time.monotonic()
+    cancelled_at: float | None = None
+
+    def request_cancel(_phase: UpdatePhase) -> None:
+        nonlocal cancelled_at
+        # Time cancellation after the helper has started and reported its phase.
+        cancelled_at = time.monotonic()
+        cancel.set()
+
     with pytest.raises(UpdateCancelled):
-        client.check("1.2.3", cancel_event=cancel, phase_callback=lambda _: cancel.set())
-    assert time.monotonic() - started < 5
+        client.check("1.2.3", cancel_event=cancel, phase_callback=request_cancel)
+    assert cancelled_at is not None
+    assert time.monotonic() - cancelled_at < 5
 
 
 @pytest.mark.parametrize("graceful_exit", [False, True])

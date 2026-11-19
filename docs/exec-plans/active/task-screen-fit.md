@@ -35,6 +35,9 @@ In a follow-up at 100% on the office display, eight synthetic choice targets
 accepted the expected select, deselect and Submit sequence in a native window
 with images and in fullscreen with shapes. The affected laptop's copied
 Creatine Test/Pilot runs remain open.
+The native PsychoPy open/close and timed-condition integration probes both
+passed after the tiny-run fixture selected Experiment Test Mode explicitly
+for its log-only marker backend.
 
 November 19 follow-up on the Studio 3.1.0 feature branch passed 648 focused
 engine tests, including the Creatine image grid at simulated 100%, 125% and

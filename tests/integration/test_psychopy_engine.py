@@ -64,6 +64,7 @@ def test_psychopy_engine_can_execute_tiny_runspec(
             runtime_options={
                 "fullscreen": False,
                 "display_index": 0,
+                "experiment_test_mode": True,
                 "strict_timing": False,
                 "strict_timing_warmup": False,
             },

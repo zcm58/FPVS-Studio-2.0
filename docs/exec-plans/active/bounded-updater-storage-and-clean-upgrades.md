@@ -49,11 +49,13 @@ The updater source run recorded 383 passes, four Windows symlink-privilege
 skips, and one elapsed-time failure. Its real-child cancellation test received
 the expected cancellation, but took 6.64 seconds against the five-second
 assertion. The packaging run recorded 214 passes and a 15-second timeout
-during the PyInstaller PATH save/restore subprocess. The timing cases failed
-again in a narrower selection, with other Windows verification still running.
-The updater and packaging implementation and these two tests match the
-branch's mainline baseline. Disposable managed upgrades, historical upgrades,
-and native recovery and cache cases remain open.
+during the PyInstaller PATH save/restore subprocess. Both timings repeated in
+a narrower selection during concurrent Windows verification. The helper test
+started its clock before spawning Python. It now measures from the request to
+cancel and retains its five-second limit. That test and both immediate cleanup
+cases passed after the change. The packaging subprocess still reached 15 seconds.
+Disposable managed upgrades, historical upgrades, and native recovery and
+cache cases remain open.
 
 ## Combined download and install follow-up (October 30, 2026)
 
