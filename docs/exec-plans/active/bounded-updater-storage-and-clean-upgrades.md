@@ -34,8 +34,26 @@ settings, project and unrelated-file sentinels.
 
 Close when the retained evidence covers the remaining cases or names an explicit,
 approved deferral. Use the existing updater, GUI, and packaging tests for any
-source changes found necessary by those checks. The dated entries below record
-previous work and the evidence available at the time.
+source changes found necessary by those checks.
+
+## Unattended verification (November 19, 2026)
+
+The 41 selected visible Windows Qt cases passed. Controlled callbacks covered
+download-to-install handoff, cancellation and retry, close and Save
+interruption, standalone repair, and recovery after failure. The retained
+3.1.0 updater executable passed its built-in visible smoke and reported
+standalone repair and repair after a synthetic failure. The smoke used neither
+network nor an installer.
+
+The updater source run recorded 383 passes, four Windows symlink-privilege
+skips, and one elapsed-time failure. Its real-child cancellation test received
+the expected cancellation, but took 6.64 seconds against the five-second
+assertion. The packaging run recorded 214 passes and a 15-second timeout
+during the PyInstaller PATH save/restore subprocess. The timing cases failed
+again in a narrower selection, with other Windows verification still running.
+The updater and packaging implementation and these two tests match the
+branch's mainline baseline. Disposable managed upgrades, historical upgrades,
+and native recovery and cache cases remain open.
 
 ## Combined download and install follow-up (October 30, 2026)
 
