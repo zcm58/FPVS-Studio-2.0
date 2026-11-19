@@ -32,8 +32,9 @@ runtime checks also exercised project overrides and inherited defaults in
 acquisition and handoff evidence. A broader launcher run and a targeted retry
 hit the 30 s and 120 s test watchdogs in the existing repeated-participant
 session check while resolving paths and writing temporary run exports. That
-case remains unverified on this run. Named profile persistence, selection and
-two-profile hardware acceptance are pending implementation.
+same case passed in 24.80 seconds in the final branch-wide run. Named profile
+persistence, selection and two-profile hardware acceptance are pending
+implementation.
 
 ## Profile workflow
 

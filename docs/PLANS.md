@@ -6,6 +6,27 @@ plan may track external acceptance after the source ships. The active and planne
 scopes below were reviewed against Studio 3.1.0 and its integration baseline on
 2026-11-19.
 
+## Unattended verification on November 19, 2026
+
+The linked plans record the Windows source, visible desktop, packaged updater,
+and local Toolbox, OpenFPVS and Feedback results for this pass. The visible
+Windows selections passed 141 Qt cases with two expected refresh-mode skips.
+The native PsychoPy probes passed window lifecycle, a short compiled condition
+and synthetic image/shape responses. The 15 active plans retain their physical,
+installed, or live-service acceptance gates. The three planned features have
+current baseline results and still require implementation.
+
+The branch-wide precommit run passed Windows type checking (303 files),
+Darwin type checking (nine files), repository audits, and 6,571 unit tests
+with 41 platform or permission skips and 24 passing subtests. The unit run
+used a 120-second default watchdog and left the separately run 1,500-session
+archive fixture out. That fixture reached its own 600-second watchdog twice.
+The previously timed-out packaging PATH and repeated-participant cases passed
+in the branch-wide run. Verification corrected two test fixtures to use
+explicit Experiment Test Mode and to measure updater cancellation from the
+request. See [Results reporting](exec-plans/active/remote-experiment-results-reporting.md)
+for archive-volume follow-up.
+
 ## Active Work and Acceptance
 
 | Plan | Current scope or remaining gate |

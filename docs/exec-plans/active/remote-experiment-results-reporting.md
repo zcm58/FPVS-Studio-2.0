@@ -26,7 +26,9 @@ and fake transport. The initial run reached the default 30-second watchdog while
 flushing local participant results in the capacity and archive runtime case. That
 case passed on rerun with a 120-second watchdog. The separate 1,500-session storage
 fixture reached its 600-second watchdog during shared filesystem load. The last
-progress check observed 434 archived sessions.
+progress check observed 434 archived sessions. The same fixture reached its
+watchdog again in the macOS-focused Windows run. The full-volume result remains
+unverified.
 
 OpenFPVS `03fa4f3` passed 82 synthetic Results tests across reporting scope,
 intake, dashboard, session status and summary, with zero failures or skips.
@@ -39,6 +41,8 @@ layout, long content, and tabs across the registered sizes and states.
 
 ## Remaining acceptance
 
+- [ ] Complete the local synthetic 1,500-session archive-retention check under
+  its configured timeout and confirm that exact receipt history is preserved.
 - [ ] In an authorized isolated OpenFPVS study, separately enroll and approve two
   installed Studio 3.1.0 clients. Run controlled ordinary presentations with
   synthetic participant data and compare each client's local fixation metrics

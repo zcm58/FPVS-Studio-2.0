@@ -55,7 +55,8 @@ started its clock before spawning Python. It now measures from the request to
 cancel and retains its five-second limit. That test and both immediate cleanup
 cases passed after the change. The packaging subprocess still reached 15 seconds.
 An isolated diagnostic with a longer subprocess allowance completed all of the
-same PATH assertions in about 15 seconds.
+same PATH assertions in about 15 seconds. The final branch-wide run passed
+the packaging test at its original 15-second subprocess limit.
 Disposable managed upgrades, historical upgrades, and native recovery and
 cache cases remain open.
 
