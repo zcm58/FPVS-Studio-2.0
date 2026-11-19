@@ -4,6 +4,8 @@ Status: Planned
 
 Date: 2026-10-03
 
+Baseline reviewed: Studio 3.1.0 (2026-11-19)
+
 ## User Decision And Scope
 
 The user selected the existing behavior: reset image pools at the start of each
@@ -12,21 +14,28 @@ future execution plan for an optional carryover policy with visible explanations
 both approaches; implementation has not been requested. Move this plan to `active/`
 when implementation is selected.
 
-Initial scope is ordinary FPVS Oddball image conditions. Both policies sample the
-Base and Oddball pools separately without replacement until their respective pool
-is exhausted, then reshuffle that pool. The choice controls whether an unfinished
-pool survives a boundary between repeated runs of the same condition.
+Initial scope is ordinary FPVS Oddball image conditions using Shuffle. Both
+policies sample Base and Oddball pools separately without replacement until
+their respective pool is exhausted, then reshuffle that pool. The choice
+controls whether an unfinished pool survives a boundary between repeated runs
+of the same condition. Keep Sequential on its existing behavior and confirm
+whether it needs a separate policy before exposing the control there.
 
 ## Current Evidence
 
 - [Scheduling](../../../src/fpvs_studio/core/compiler_schedules.py),
   `build_stimulus_sequence`, owns separate seeded Base/Oddball bags. Refills happen
-  only when empty; repeat repairs preserve membership of each role's pool cycle.
+  only when empty. In 3.1.0 Shuffle avoids repeating the last image of a role at
+  that role's next refill when another valid entry is available, even if the other
+  role presented in between. Repeat repairs preserve each pool cycle's membership.
 - [Compilation](../../../src/fpvs_studio/core/compiler.py), `compile_session_plan`,
   assigns each condition occurrence a run seed and creates fresh bags. Within-run
   `sequence_count` multiplies the continuous stream length; it is not a pool reset.
 - The [RunSpec contract](../../RUNSPEC.md) owns current selection semantics.
   Runtime/engines play compiled events without making new random image selections.
+- [Sequential stimulus order](../completed/sequential-stimulus-order.md) records
+  the authored order option and the Shuffle regression coverage. No per-condition
+  setting presently carries an unfinished bag across separate runs.
 - October 3 investigation: 100 seeds with 730 presentations, seven Base images and
   three Oddball images, preserved every complete pool, unique partial pools, and
   per-role counts differing by at most one. Compiler focused verification passed
@@ -82,11 +91,11 @@ Describe counts as planned exposure until actual playback evidence establishes d
   in separate files remain separate entries; do not silently deduplicate research data.
   Define duplicate references to the same canonical path explicitly: preserve authored
   multiplicity or reject malformed inventories, rather than silently deduplicating them.
-- Preserve the current on-screen adjacency rule. Prohibiting the same Oddball at the
-  end of one pool and the start of the next, despite intervening Base images, is a
-  separate feature and is not implied by this option. Singleton pools necessarily repeat.
-  Repeat repair may reorder eligible entries, but must never discard leftovers or
-  rebuild an unfinished pool to avoid a boundary repeat.
+- Preserve the current on-screen adjacency and same-role refill rules in both
+  policies. Carryover retains any remaining entries and the role history the
+  existing repeat repair needs. A run boundary may interrupt an unfinished bag
+  or coincide with a refill. Test both cases, including intervening Base images and
+  singleton pools. Repeat repair may reorder eligible entries within a bag.
 - Resolve abort, skip and retry semantics before implementation. A compiled selection
   is not proof that an image appeared. Define whether a resumed workflow reuses its
   saved plan or starts a new session; never claim actual exposure balance for incomplete
@@ -94,8 +103,9 @@ Describe counts as planned exposure until actual playback evidence establishes d
 
 ## Ownership And Implementation Steps
 
-1. Finalize the authored field, applicable condition types, UI placement, interchange
-   compatibility, and interrupted-session semantics. Capture fixed-seed legacy fixtures.
+1. Finalize the authored field, control applicability, interchange compatibility and
+   interrupted-session semantics. Capture fixed-seed 3.1.0 Shuffle and Sequential
+   fixtures with multiple occurrences of the same condition.
 2. Extend the existing core scheduler and session compiler with compilation-local pool
    state for the optional policy. Keep standalone run compilation meaningful and
    deterministic, and retain `RunSpec` as a single-condition contract. Reuse existing
@@ -137,10 +147,6 @@ compilation limits and cancellation behavior for both policies.
 
 ## Related Plans And Exclusions
 
-Coordinate presentation and seed compatibility with
-[Explicit session-design controls](explicit-session-design-controls.md); condition
-order and image-pool reset are separate choices and need not ship together.
-[Stimulus comparison](stimulus-comparison-and-preprocessing-previews.md) owns proposed
-duplicate-file reporting. This plan does not change Masking target reuse or Base/mask
-sampling, native AB character streams, word scheduling, image transformations, image
-bytes, participant scoring, or scientific preprocessing.
+Keep condition order, per-occurrence seeding and provenance under the
+[SessionPlan contract](../../SESSION_PLAN.md). Scope the implementation to
+Shuffle image selection across repeated ordinary FPVS Oddball condition runs.

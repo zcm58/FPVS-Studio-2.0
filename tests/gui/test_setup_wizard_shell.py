@@ -165,11 +165,23 @@ def test_setup_cards_follow_application_theme_after_creation(
                 QApplication.processEvents()
                 assert wizard._current_step_key() == step
                 assert panel.isVisible()
-                assert panel.grab().toImage().pixelColor(5, panel.height() // 2).name() == expected
+                image = panel.grab().toImage()
+                scale = image.devicePixelRatio()
+                assert image.pixelColor(
+                    round(5 * scale), round((panel.height() // 2) * scale),
+                ).name() == expected
             wizard.open_wizard(step_key="review", allow_step_jumps=True)
             QApplication.processEvents()
             panel = wizard._review_summary_widgets[0].section
-            assert panel.grab().toImage().pixelColor(5, panel.height() // 2).name() == expected
+            assert wizard._current_step_key() == "review"
+            assert panel.isVisible()
+            # The frameless summary uses the page background under its top divider.
+            point = panel.mapTo(wizard, QPoint(5, 4))
+            image = wizard.grab().toImage()
+            scale = image.devicePixelRatio()
+            assert image.pixelColor(
+                round(point.x() * scale), round(point.y() * scale),
+            ).name() == theme.page_background
     finally:
         qapp.setPalette(original_palette)
         QApplication.processEvents()

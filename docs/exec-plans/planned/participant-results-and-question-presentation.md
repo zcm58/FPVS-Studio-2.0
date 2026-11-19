@@ -2,13 +2,24 @@
 
 Status: Planned
 
-Proposal only. Not implemented and not approved as part of the current release.
-This proposal is separate from the completed Masking event-marker release.
+Baseline reviewed: Studio 3.1.0 (2026-11-19)
 
-The completed [participant output consolidation](../completed/output-consolidation.md)
-implements a shared workbook/access workflow for demographics, fixation
-and original before/after answers. The filtered in-app response viewer, specialized
-Masking summaries and opt-in participant question styling below remain proposed.
+## Current baseline
+
+- **View > Open Participant Results** regenerates and opens
+  `logs/participant_summary.xlsx` through the existing summary workflow. The
+  workbook includes demographics, visit and fixation information and a **Task
+  Answers** sheet with original question and option text where available.
+  See [participant output consolidation](../completed/output-consolidation.md)
+  and the [menu action](../../../src/fpvs_studio/gui/main_window.py).
+- [Participant results](../../../src/fpvs_studio/runtime/participant_results.py)
+  already reads compact and full records, resolves visit and answer identities,
+  checks conflicting evidence and recovers retained question labels. Reuse these
+  paths where their input and deduplication semantics match the viewer.
+- [Masking reporting](../../../src/fpvs_studio/runtime/masking_report.py)
+  records versioned trial rows and archived scene plans. Specialized aggregate
+  Masking views, a filtered response viewer and an explicit export of its loaded
+  selection are proposed. Optional participant question styling is a separate slice.
 
 ## Outcome and workflow
 
@@ -53,8 +64,9 @@ become Masking summaries. Keep existing fixation and AB reporting intact.
   fields so separate responses remain distinct. Match a numbered finalized record
   to its checkpoint only with complete identity; report conflicting payloads.
   Do not collapse legacy unnumbered executions using session/run IDs alone.
-- Raw task records do not snapshot question wording or option labels. Resolve
-  these only when an archived plan is available; otherwise display recorded IDs
+- Recover original question wording and option labels from retained participant
+  result definitions or archived plans wherever available. Raw task records
+  carry IDs. When the original wording is unavailable, display the recorded IDs
   with an explicit unavailable-label note. Masking frequency is joined from the
   `masking-frequency` answer; PAS/identity and catch outcomes already have joined
   v2 fields. No new research measurements are proposed.
@@ -87,13 +99,12 @@ become Masking summaries. Keep existing fixation and AB reporting intact.
 
 ## Ownership and reusable paths
 
-- New `runtime/task_report.py`: typed, read-only task result loading and explicit
-  workbook export; no Qt. Extend `runtime/masking_report.py` or a focused companion
-  with Masking joins/summaries rather than scoring in widgets.
-- New GUI result dialog and `gui/main_window.py` entry point. Reuse the
-  `attentional_blink_data_dialog.py` worker, loading/error/empty states and
-  busy-close pattern, plus `SectionCard`, `StatusBadgeLabel`, `PathValueLabel`
-  and theme helpers from `gui/components.py`. No broad dialog refactor.
+- Keep typed, read-only task loading and explicit workbook export in runtime.
+  Reuse the existing identity, provenance and contained-path logic from
+  `participant_results.py` where compatible. Keep Masking joins and summary rules
+  alongside the runtime reporting code and expose typed results to the GUI.
+- Add a result dialog and `gui/main_window.py` entry point. Follow the loading,
+  error, empty and busy-close patterns in `attentional_blink_data_dialog.py`.
 - Question presentation stays in `engines/psychopy_tasks.py`, through an explicit
   shared task presentation setting if the existing task layout cannot express it.
   Runtime/core continue to own task resolution, validation and scoring.
@@ -107,10 +118,13 @@ after reviewing a concrete preview.
 
 ## Implementation sequence and verification
 
-1. Implement typed loading/joins and summaries. Test full/compact equivalence,
+1. Audit representative 3.1.0 and legacy projects for the fields and identity
+   needed by each view and export. Implement typed read-only loading and joins;
+   define how unavailable fields appear. Test full/compact equivalence,
    numbered visits, unnumbered ambiguity, finalized/checkpoint deduplication,
    truncated journals, v1/v2 data, missing plans and labels, and contained paths.
-2. Test denominators with missing/invalid answers, catches, partial exposure and
+2. Implement and test summaries and explicit workbook export before binding the
+   viewer. Cover denominators with missing/invalid answers, catches, partial exposure and
    later aborts. Assert 40 flashes produce one answer; repeated visits do not
    multiply participant weight; no catch identity score is invented. Verify
    known workbook values and that reads leave all source hashes unchanged.
@@ -118,10 +132,11 @@ after reviewing a concrete preview.
    filters, export cancellation/failure, busy-close guards, no-data/error states,
    and accessible long values at minimum/default size. Use existing AB/fixation
    dialog tests as patterns; keep their behavior unchanged.
-4. Preview opt-in question styling, then verify identical selected IDs, ratings,
-   scoring and submission behavior with fake-engine tests in the existing modular
-   task suite. Cover longest labels, all three Masking identity grids, and legacy
-   rendering unchanged. Document visible participant-screen acceptance separately.
+4. Review a concrete preview as a separate styling slice. If selected, use
+   fake-engine tests in the modular task suite to verify identical selected IDs,
+   ratings, scoring and submission behavior. Cover the longest labels, all three
+   Masking identity grids and existing project rendering. Record visible
+   participant-screen acceptance separately.
 
 Run the narrow runtime/GUI/engine verification routes for changed owners, then
 repo precommit for shared changes. No Qt execution without an approved safe

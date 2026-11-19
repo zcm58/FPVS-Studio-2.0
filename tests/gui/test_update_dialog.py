@@ -79,12 +79,18 @@ def _available_update(_cancel_event: Event | None = None) -> UpdateCheckResult:
 
 
 @pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
+@pytest.mark.parametrize("theme_mode", ["light", "dark"])
 def test_main_window_menu_groups_fit(
     controller,
     qtbot,
     tmp_path: Path,
     size: tuple[int, int],
+    theme_mode: str,
+    request,
 ) -> None:
+    original_mode = controller.load_theme_mode()
+    request.addfinalizer(lambda: controller.set_theme_mode(original_mode))
+    controller.set_theme_mode(theme_mode)
     _document, window = open_created_project(controller, qtbot, tmp_path)
     window.resize(*size)
     window.show()
@@ -140,6 +146,12 @@ def test_main_window_menu_groups_fit(
                     assert rect.width() >= menu.fontMetrics().horizontalAdvance(action.text())
             for (_, above), (_, below) in zip(rows, rows[1:], strict=False):
                 assert above.bottom() < below.top()
+            first_enabled = next(
+                action for action, _rect in rows if action.isEnabled() and not action.isSeparator()
+            )
+            menu.setActiveAction(first_enabled)
+            assert menu.activeAction() is first_enabled
+            assert menu.rect().contains(menu.actionGeometry(first_enabled))
         finally:
             menu.hide()
 

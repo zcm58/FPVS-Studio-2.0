@@ -1,172 +1,80 @@
-# Lab-Independent Recording Setup
+# Named Local Recording Profiles
 
 Status: Planned
 
-## Decision And Purpose
+Baseline reviewed: Studio 3.1.0 (2026-11-19)
 
-The user accepted this future direction on 2026-09-05. Named profiles and selected-display
-verification have not started.
-This document records a separate future project; it does not authorize changing the
-current setup redesign or weakening existing recording checks. Move it to `active/`
-when implementation becomes the selected task.
+The user accepted this future direction on 2026-09-05. The remaining goal is
+to let an operator choose a named, reusable recording configuration on the
+current computer and see the effective configuration before launching.
 
-The separately authorized [computer default EEG hardware work](../completed/default-eeg-hardware.md)
-implements first-time hardware selection and project inheritance only. It does not
-implement the named profiles or display identity work below. The evidence below
-records the remaining profile/display proposal; current recording behavior is in
-`docs/GUI_WORKFLOW.md`. The separately authorized Recording Reminder wording/token
-update on 2026-11-02 does not implement named profiles or selected-display verification.
+## Current baseline
 
-The narrower [Unicorn recording plan](../active/unicorn-hybrid-black-support.md) now
-implements a local BioSemi/Unicorn transport choice through the existing preferences.
-Normal launches send markers after Recorder readiness passes; full receiver and timing
-validation remain pending. Reuse that selection and validation
-owner when implementing profiles; named profiles and display identity work described
-here remain unimplemented.
+- **Settings > Recording** already supports a computer default and a project
+  override. With no explicit profile, keep the existing effective Recording
+  settings and save actions. See [inline Recording settings](../completed/inline-recording-settings.md)
+  and [default EEG hardware](../completed/default-eeg-hardware.md).
+- Studio already lets operators choose the participant monitor for a launch.
+  [Refresh verification](../../../src/fpvs_studio/runtime/display_refresh.py)
+  queries the selected device and the engine resolves the playback screen.
+  See [Windows monitor selection](../completed/experiment-monitor-selection.md)
+  and [Mac monitor selection](../completed/macos-monitor-selection.md).
+- The current [launch flow](../../GUI_WORKFLOW.md#launch) already supports the
+  generic Recording Reminder for eligible BioSemi runs and a separate
+  BrainVision reminder. Physical Unicorn receiver and timing acceptance have
+  their own [recording plan](../active/unicorn-hybrid-black-support.md).
 
-Give researchers named recording profiles for this computer: participant display,
-supported trigger output and serial port, and recording-reminder policy. Reuse the
-current generic Recording Reminder and existing preference values; a lab-branded
-preset is not part of the current wording/token change.
+## Profile workflow
 
-## Problem, Alternative, And Benefit
+1. In the existing Recording page, create or select a named local profile
+   containing a participant display identity, a supported recording device
+   and its transport settings, and the Recording Reminder policy.
+2. Show the selected profile and effective display, transport/port and reminder
+   before launch. Use the existing per-launch display chooser and show a clear
+   way to select a device again when a saved match is missing or ambiguous.
+3. Resolve the selected display to the current OS device and engine screen.
+   Reuse the current refresh and hardware preflight for the resolved settings.
+   Saving a profile supplies inputs to preflight. Verification evidence is
+   tied to the resolved device, configured mode and applicable launch inputs.
 
-The application assumes an enabled serial connection on COM3, verifies the primary
-display, and launches on the default display. Settings exposes the default-on
-`Enable Recording Reminder` preference for the existing eligible BioSemi launches.
-Its generic EEG reminder requires trimmed, case-insensitive `Confirmed`; the optional
-Home ticker reads `RECORDING REMINDER ENABLED`. Named profiles and selected-display
-verification remain the separate unmet needs addressed by this plan.
+## Decisions and implementation
 
-Replace those implicit assumptions with a concise Recording setup editor and a visible
-selected-profile summary before launch. Researchers select an identified participant
-monitor and a supported output configuration, then verify that exact configuration.
+1. Define a versioned local record and stable profile identifier in application
+   preferences. Decide whether the active selection applies computer-wide or
+   can be associated locally with a project. Document how an explicitly chosen
+   profile interacts with an existing project override. Preserve existing
+   settings and precedence when a profile has never been chosen. An explicitly
+   referenced missing or deleted profile requires a new choice.
+2. Check which device identities are stable enough to persist on each supported
+   platform. Store identity outside the portable project, `RunSpec` and
+   `SessionPlan`; resolve the current screen index at launch. Handle reorder,
+   reconnect, duplicate identities and mode changes explicitly. Decide whether
+   the existing chooser needs an Identify action based on an operator walkthrough.
+3. Add the smallest profile editor to Settings > Recording using its existing
+   fields. Pass the resolved settings through the existing launch/preflight
+   owners and expose applicable errors and repair actions. Carry forward reminder
+   eligibility and `Confirmed` handling, Test/Pilot behavior and effective trigger
+   checks. A missing device or failed configured trigger requires explicit
+   resolution before a recording launch.
+4. Update the [GUI workflow](../../GUI_WORKFLOW.md) and owning runtime and
+   architecture guidance once the workflow is implemented.
 
-This makes the machine configuration understandable without editing project files.
-Named profiles support different acquisition arrangements on one computer, while local
-ownership prevents a transferred experiment from silently inheriting another lab's port
-or monitor. The expected benefit is fewer setup mistakes and easier adoption across FPVS
-labs; it remains a design hypothesis pending operator walkthroughs.
+## Verification and acceptance
 
-## Current Evidence And Reuse
+- Test local persistence, legacy defaults and precedence, missing profile
+  references, device resolution and inactive/eligible reminder behavior. Cover
+  monitor reorder and disconnect, mode change, ambiguous device identities,
+  and failed trigger readiness using the existing launcher and verification tests.
+- Verify save/reopen and transfer of a portable project without changing compiled
+  timing, scientific event codes or the existing project format. Check the
+  chosen preflight inputs and the actual engine screen in a fake-engine run.
+- Register visible Qt coverage for profile selection and editing, legacy and
+  unresolved states, keyboard access and clipping at the documented Settings
+  minimum/default sizes. Run focused GUI/runtime/trigger routes and precommit.
+- In an approved hardware session, use two profiles on one computer. Confirm
+  the intended physical monitor and configured serial/receiver path, then
+  demonstrate actionable failures for a disconnected display and unavailable
+  transport. Record which combinations were exercised.
 
-- [TriggerSettings](../../../src/fpvs_studio/core/models.py) stores SERIAL, enabled,
-  COM3, baudrate, pulse and reset settings in the editable project today.
-- [LaunchSettings](../../../src/fpvs_studio/runtime/launcher.py) already accepts a
-  display index and serial options; this is an existing runtime capability.
-- [document_runtime.py](../../../src/fpvs_studio/gui/document_runtime.py) composes
-  project trigger settings into runtime launch options.
-- [run_page.py](../../../src/fpvs_studio/gui/run_page.py) launches with
-  `display_index=None` and fullscreen enabled, and owns the current recording prompt.
-- [display_refresh.py](../../../src/fpvs_studio/runtime/display_refresh.py) verifies
-  the primary display through native mode queries and engine measurement; simply
-  exposing an engine display index would not make selected-monitor verification work.
-- [controller.py](../../../src/fpvs_studio/gui/controller.py) persists the default-on
-  Recording Reminder gate and separate ticker preference under their existing keys;
-  [settings_dialog.py](../../../src/fpvs_studio/gui/settings_dialog.py) presents them. [triggers](../../../src/fpvs_studio/triggers) supplies serial and null
-  adapters. Named profiles, monitor identity reconciliation, and migration UX are new.
-
-## Proposed User Workflow
-
-1. Open Recording setup from Settings; create or choose a clearly named local profile.
-2. Choose the participant display from identifiable connected devices. Show a concise
-   name, resolution, configured refresh and an explicit Identify display action.
-3. Configure supported output: serial device/port and applicable communication values,
-   or an explicitly chosen no-output configuration whose launch meaning is visible.
-4. Choose the recording-reminder policy for the profile, retaining the current generic
-   `Recording Reminder` text and trimmed, case-insensitive `Confirmed` token. Preserve
-   existing preference values and backend/Test/Pilot eligibility until an explicit
-   profile-policy change is approved.
-5. Review and apply the profile, then verify the selected monitor. Applying edits
-   invalidates affected verification; saving a profile does not prove hardware readiness.
-6. Before launch, show profile, participant monitor, output configuration and verification
-   status. Missing devices or unresolved profile selection lead back to Recording setup.
-
-Use shared components, semantic status colors, wrapping, and one clear Apply action.
-Target `760x620` minimum/default for the editor and the existing `1120x720` main window;
-confirm this budget with long device/profile names and every error state before coding.
-Full device identities must be accessible through details even when summaries elide.
-
-## Decisions To Resolve Before Implementation
-
-- Define a versioned, per-user local profile store behind the app-preference service.
-  Specify its neutral data contract, validation, stable profile identifiers and backup
-  behavior before choosing the serializer; GUI widgets must not own persistence rules.
-- Decide whether profile selection is global or locally associated with a project.
-  Either choice stays outside portable experiment and compiled timing contracts.
-- Define the supported Windows display-identity key and the mapping from native device
-  identity to the engine's current screen index. Document duplicate/ambiguous identities,
-  adapter replacement and unsupported platform behavior explicitly.
-- Decide the smallest first-release trigger editor and no-output labeling. No-output
-  selection must not imply that timing checks passed.
-
-## Display Identity And Verification Contract
-
-Selection, native refresh query, fullscreen verification, and participant playback must
-refer to the same physical display. Resolve a persisted OS identity to current devices
-and to the engine index at verification and launch; never persist an index as identity.
-Record the resolved identity and mode with verification evidence, alongside relevant
-profile values. Reordering monitors must not redirect playback to a different monitor.
-
-Disconnect, ambiguous identity, resolution/refresh change, profile edit, or a changed
-identity-to-engine mapping invalidates the relevant evidence and blocks production
-launch until resolved. Preserve existing exact refresh handling, stability checks,
-VRR rejection, fullscreen requirements and timing QC. Do not silently use the primary
-monitor, nearest display, unverified mode, or a null trigger after a configured failure.
-
-## Legacy Resolution And Migration
-
-Inventory existing project trigger fields and persisted Recording Reminder preferences
-first, retaining the historical preference keys and saved values.
-Present their effective values when offering a local profile; do not invent a successful
-hardware match from a legacy COM port or default display index.
-
-Define and test precedence explicitly: a user-selected valid local profile supplies
-machine launch values; existing projects without that selection retain a clearly labeled
-legacy configuration until the user reviews and adopts a profile. Resolve and verify
-that legacy configuration before production launch rather than silently substituting it
-when a named profile is missing. A missing/deleted profile requires explicit selection.
-
-Keep legacy project fields readable and round-trippable in the first delivery. Do not
-silently rewrite project JSON or remove fields; any later schema cleanup needs its own
-migration decision. Preserve scientific trigger codes, event order and timing unchanged.
-
-## Implementation Phases And Owners
-
-1. Define profile storage, precedence, migration cases and selected-display identity
-   contract. GUI/controller owns preference editing; runtime owns neutral launch resolution.
-2. Extend runtime platform display adapters and verification to the chosen identity.
-   Engines translate resolved runtime display choices into presentation operations;
-   PsychoPy imports remain lazy and confined to `engines/`.
-3. Implement profile editing, selection, full-value details and verification invalidation.
-   Runtime remains responsible for preflight and exporting actual launch evidence;
-   `triggers/` remains responsible only for supported device communication.
-4. Connect launch summaries and explicit repair actions, exercise legacy migration, and
-   update architecture, GUI workflow, runtime guidance and agent verification routes.
-
-Machine identifiers, ports and profile state must remain outside `RunSpec` and
-`SessionPlan`. Preserve core compilation, session scheduling and export formats unless
-an explicit compatible extension is required to record runtime configuration evidence.
-
-## Verification And Acceptance
-
-- Unit-test profile validation/round trips, migration precedence, missing/deleted profiles,
-  serial errors, explicit no-output selection and Recording Reminder preference/token
-  preservation with fakes.
-- Test display reorder, duplicate identities, disconnect/reconnect, mode changes and
-  mismatched native/engine mappings; unresolved or stale verification must block launch.
-- Add registered pytest-qt coverage for Apply/Cancel, keyboard navigation, busy/error
-  states, profile changes, full identities and no clipping at the documented sizes.
-- Run focused `gui`, `runtime`, and `triggers` scopes as implicated, then repo precommit.
-  Do not run Qt locally without a user-approved safe visible environment; never use
-  offscreen execution. Ordinary checks must not open hardware or transmit triggers.
-- In an approved visible hardware session, identify two monitors, verify and launch on
-  the chosen one, then disconnect/reorder it and confirm blocking or correct remapping.
-  Check busy/missing serial devices and unchanged Recording Reminder eligibility;
-  send test markers only with
-  explicit authorization and a known receiving setup. Report untested hardware cases.
-
-Done means the selected physical display is the verified presentation display, effective
-output configuration is visible, migration is explicit, and failures remain actionable.
-Arbitrary EEG drivers, participant-intake redesign, automatic trigger fallback, and changes
-to FPVS scheduling, fixation scoring or participant-task semantics are outside this plan.
+Done means operators can reuse named local setups, see their effective settings,
+and safely resolve stale hardware choices using the existing launch checks.

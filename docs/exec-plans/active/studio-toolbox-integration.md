@@ -4,21 +4,67 @@ Status: Active
 
 Date: 2026-10-12
 
-## Approved outcome
+## Current baseline on November 19, 2026
 
-Studio retains each visit's acquisition evidence and exports one completed study
-on request. Toolbox reviews its roster against one EEG folder, prepares the
-reviewed recordings, and can publish a lab-specific output snapshot. OpenFPVS
-owns study permissions, collection status and separate lab results. Both
-desktops ship independently. The [Studio product spec](../../product-specs/studio.md)
-and [exchange contract](../../PROJECT_CONFIG.md) govern the current workflow.
+[Studio 3.1.0](../completed/release-3.1.0.md) ships the whole-study handoff and
+the local collection workflow. Studio retains each visit's acquisition evidence
+and exports a completed study on request. Setup and completed-session exports
+remain supported. The matching Toolbox source reviews the roster against one EEG
+folder, applies revisions to the same study, prepares reviewed recordings, and
+can publish a lab-specific output snapshot. The installed Toolbox build needs
+its own compatibility check. OpenFPVS owns study permissions, collection status
+and separate lab results. The desktop releases and the website deploy
+independently. See the [Studio exchange contract](../../PROJECT_CONFIG.md) and
+[Toolbox cohort implementation](https://github.com/zcm58/FPVS-Toolbox/commit/c77086df).
 
 First successful results enrollment shares newly completed eligible sessions by
-default; every saved off choice survives enrollment/reconnection. Existing research
+default. Every saved off choice survives enrollment and reconnection. Existing research
 records are never backfilled. Server approval is still required. Local recording
 remains offline and HTTP is excluded from presentation.
 
-## Studio work and verification
+The November 19 production D1 check for Worker `fpvs-studio-library` found both
+collection migrations absent from the applied migration history and neither
+`study_rosters` nor `study_collection_leads` in the schema. The October synthetic
+report and snapshot acceptance below predates the collection/roster workflow.
+The sibling `OpenFPVS/INTEGRATION_PLAN.md` owns its deployment and live acceptance.
+
+## Remaining work and acceptance
+
+1. **Verify the installed Studio–Toolbox pair.** Record the exact builds and
+   verify Studio's completed-project review and export, same-study identity across
+   reopen and in-place protocol change with a recorded reason, and a new study
+   identity for a separate copy. Check that quit during an active website export
+   preserves local results. In Toolbox, import a synthetic roster, select the EEG
+   folder once, and confirm the proposed matches. Resolve one ambiguous recording
+   among 30, defer a missing visit, and run an accepted batch. Cancel and then apply
+   a revised roster and reopen it after restart. Verify unchanged matches and prior
+   outputs are retained, an omitted reviewed visit requires explicit resolution,
+   replaying the same revision adds nothing, and scientific incompatibility blocks
+   the batch. Check setup and single-session import on the same Toolbox build.
+2. **Roll out the website changes in the owning repository.** Under the separate
+   website release workflow, apply `0035_study_collection.sql` and
+   `0036_collection_lead_revocation.sql`, deploy the matching Worker, then verify
+   the live schema, permitted routes and denied access. Record the migration and
+   Worker versions in the OpenFPVS plan.
+3. **Run a synthetic three-product study in production.** Verify close by the
+   administrator or an authorized lead, reopen by the administrator or a
+   participating lab PI, and denial for a revoked lead or unrelated lab. Exercise
+   held reports, offline/reconnect, duplicate submission and a concurrent reopen.
+   Check sharing default-on and saved-off behavior. Grow the cohort from 20 to 21
+   and confirm the existing lab snapshot remains readable during collection and
+   after closure while the site shows **Analysis needs updating**. Publish an
+   eligible revised Toolbox result, then verify **Analysis complete**, the expected
+   coverage and separate lab results and downloads. Keep versioned receipts with
+   the synthetic study and record cleanup of its temporary credentials.
+
+The workflow closes when the installed pair passes the supported local transfers
+and a deployed synthetic study passes the linked permissions, roster revision and
+snapshot checks. Record physical acquisition evidence separately for each supported
+device, including actual montage/reference, marker order and sample alignment, and
+independent timing where required. The [Unicorn plan](unicorn-hybrid-black-support.md)
+tracks Recorder and native 250 Hz qualification.
+
+## Implementation and historical verification
 
 ### Earlier setup and completed-session exchange format, authorized 2026-11-10
 
@@ -142,13 +188,15 @@ six exact downloads; pending access, exact retries, unapproved-lab 404 and anony
 401 were verified. All test codes, native devices and browser credentials were revoked
 and the synthetic study was completed afterward. No real researcher data was used.
 
-## Acceptance boundaries
+## Acquisition scope
 
-The 2026-10-16 ActiveThree/Brain Products extension adds selectable trigger routes
-without adding Toolbox profile IDs. Their completed configs retain exact hardware
-selection and marker evidence with an absent acquisition profile; actual montage,
-decoder and Toolbox acceptance remain to be implemented/qualified separately.
-See the canonical [runtime contract](../../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox).
+The 2026-10-16 ActiveThree/Brain Products Studio extension retains the hardware
+selection and marker evidence in completed configs without declaring a versioned
+Toolbox profile. Current Toolbox source has explicit acquisition routes for
+ActiveThree and Brain Products. Verify the actual device, reference, montage and
+decoder through a reviewed recording for each route. See the
+[Studio runtime contract](../../RUNTIME_EXECUTION.md#biosemi-activethree-and-brain-products-triggerbox)
+and the Toolbox project I/O contract in the sibling checkout.
 
 Synthetic tests cover selected-profile config round trips, exact event ordering and
 session association in both export modes, abort retention, legacy reads and sharing
@@ -156,11 +204,5 @@ preference races. They do not qualify Recorder/BDF+ receiver behavior, EEG acqui
 actual electrode wiring or physical timing. Factory mapping is a declaration.
 Unicorn remains native 250 Hz in Toolbox, without resampling or interpolation.
 
-Studio adds no new Cognitive Load preset/category. The published desktop release
-is tracked separately in [Studio 2.4.5](../completed/release-2.4.5.md); this integration plan
-retains the manual workflow and hardware qualification items. Existing native
-authoring, runtime timing and participant visit ownership remain authoritative.
-
-Visible acceptance remains manual: select each existing Recording choice, launch
-a synthetic current session, inspect its completed config, and open it in Toolbox.
-Exercise sharing default-on and saved off/reconnection states. Qt is not run here.
+The original release is recorded in [Studio 2.4.5](../completed/release-2.4.5.md).
+The current acceptance sequence above covers the expanded whole-study workflow.

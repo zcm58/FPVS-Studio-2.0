@@ -1,6 +1,11 @@
 # Clear Error Messages And Studio 2.2.5
 
-Status: Active
+Status: Archived
+
+This proposal preserves the original implementation and verification record.
+[Studio 2.2.5](../../exec-plans/completed/release-2.2.5.md) records the subsequent
+build and publication. [Bug reporting](../../BUG_REPORTING.md) describes the current
+workflow.
 
 ## Authorized scope
 
@@ -48,6 +53,7 @@ are preserved. The report action never submits automatically.
 - The final popup-dismissal guard passed refreshed safe GUI/type checks. Final
   packaging must include this source revision and pass embedded source parity.
 
-Build and publication are pending. Visible Qt tests and packaged GUI smoke were
-skipped at the user's request. No clean-PC installation, installed-update test,
-live report submission, or physical experiment/EEG test is part of this release.
+Build and publication were pending at this proposal's last update. Visible Qt
+tests and packaged GUI smoke were skipped at the user's request. Clean-PC
+installation, installed-update testing, live report submission and physical
+experiment/EEG testing were outside this proposal's scope.

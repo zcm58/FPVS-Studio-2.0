@@ -81,6 +81,7 @@ class StudioTheme:
     surface_elevated: str
     border: str
     border_soft: str
+    control_border: str
     text_primary: str
     text_secondary: str
     text_muted: str
@@ -120,17 +121,18 @@ LIGHT_STUDIO_THEME = StudioTheme(
     surface_elevated=COLOR_SURFACE_ELEVATED,
     border=COLOR_BORDER,
     border_soft=COLOR_BORDER_SOFT,
+    control_border=COLOR_BORDER,
     text_primary=COLOR_TEXT_PRIMARY,
     text_secondary=COLOR_TEXT_SECONDARY,
     text_muted=COLOR_TEXT_MUTED,
     text_hint=COLOR_TEXT_HINT,
-    disabled_text="#8a97a8",
+    disabled_text="#596a77",
     primary=COLOR_PRIMARY,
     primary_hover=COLOR_PRIMARY_HOVER,
     primary_pressed=COLOR_PRIMARY_PRESSED,
     primary_border=COLOR_PRIMARY_BORDER,
     primary_disabled_bg="#cadbdc",
-    primary_disabled_text="#56676a",
+    primary_disabled_text="#4e5f63",
     focus_ring="#805c23",
     success_bg=COLOR_SUCCESS_BG,
     success_border=COLOR_SUCCESS_BORDER,
@@ -160,17 +162,18 @@ DARK_STUDIO_THEME = StudioTheme(
     surface_elevated="#30343b",
     border="#566170",
     border_soft="#3f4854",
+    control_border="#798697",
     text_primary="#f3f6fb",
     text_secondary="#cbd5e1",
     text_muted="#aeb8c7",
     text_hint="#94a3b8",
-    disabled_text="#727d8c",
+    disabled_text="#939eac",
     primary=COLOR_SIGNAL,
     primary_hover="#78d5dd",
     primary_pressed="#21a9b3",
     primary_border="#78d5dd",
     primary_disabled_bg="#233e45",
-    primary_disabled_text="#93a4ba",
+    primary_disabled_text="#95a7bc",
     focus_ring="#78d5dd",
     success_bg="#123524",
     success_border="#2e7d4f",

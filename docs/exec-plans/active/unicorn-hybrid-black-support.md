@@ -4,378 +4,139 @@ Status: Active
 
 Created: 2026-09-25
 
-Implementation selected on 2026-09-28, initially with production validation pending.
-After the retained 426-marker Recorder test, the user requested normal FPVS Studio
-launches to perform real hardware tests. That decision supersedes the initial blanket
-receiver-qualification launch gate: normal Unicorn launches now send real markers after
-configuration and automatic Recorder readiness checks pass. Full receiver, BDF+/Toolbox
-and physical timing qualification remain pending; exports retain that evidence state.
-Automated verification uses fakes. Hardware and timing acceptance remain separate from
-software checks.
-
-Trigger Tester can submit individual UDP event markers on the effective project
-port using the same adapter as normal launches. The dialog reports local submission
-and leaves receipt verification to Recorder. The 2026-11-12 Windows bench run verified
-the [visible smoke path](../../GUI_WORKFLOW.md#trigger-tester) and a normal Studio launch
-against the same saved raw BDF from a connected headset.
-
-The 2026-10-12 [Studio/Toolbox integration decision](studio-toolbox-integration.md)
-adds a core-owned built-in hardware declaration registry and automatic completed-session
-config handoffs for both existing recording choices. This supersedes the earlier
-registry exclusion only for metadata declarations; Recorder still owns EEG acquisition.
-The declared factory montage does not qualify measured wiring or physical timing.
-
-## Outcome And User Decisions
-
-Allow the existing Unicorn Hybrid Black headset to record experiments presented by
-FPVS Studio, with Unicorn Recorder saving raw EEG and event markers to BDF+ for FPVS
-Toolbox. Preserve the familiar operator workflow and existing BioSemi behavior.
-
-The user confirmed these constraints on 2026-09-25:
-
-- No additional purchases: no paid Python API, SDK, subscriptions, or new equipment.
-- Studio sends event messages to Unicorn Recorder; Recorder owns EEG acquisition.
-- Raw BDF+ is the first supported interchange format.
-- Toolbox uses the actual eight-electrode montage, native 250 Hz, no resampling in
-  either direction, and no electrode interpolation for the Unicorn profile.
-- Shared FFT, baseline-corrected amplitude, and SNR methods stay unchanged except for
-  explicit acquisition-specific inputs and capability checks in Toolbox.
-- Bluetooth timing must be characterized honestly; an assumed delay is not a calibration.
-
-The later 2026-09-28 launch decision enables the existing normal workflow, without a
-new test mode, bypass preference or manual approval. Experiment Test Mode and Pilot
-Study Mode remain no-output workflows. The synthetic fixture verifies classic BDF
-and CSV marker retention; it does not resolve the original BDF+ interchange requirement
-or qualify participant data, Toolbox processing or physical timing.
-
-Companion plan in the FPVS Toolbox Repo repository:
-`docs/agent/exec-plans/future/unicorn-hybrid-black-support.md`.
-Studio owns transport and presentation evidence; Toolbox owns acquisition normalization,
-sample integrity, analysis alignment, montage, referencing, QC, and analysis provenance.
-Neither repository imports the other application as a dependency.
-
-## Scope And Non-Goals
-
-First delivery targets Windows with Studio and Recorder running on the same computer.
-The EEG travels over the existing Bluetooth connection; UDP markers stay on loopback.
-
-```text
-Hybrid Black -- Bluetooth EEG --> Unicorn Recorder -- raw BDF+ --> FPVS Toolbox
-FPVS Studio  -- local UDP code --> Unicorn Recorder
-```
-
-Use Python's standard-library socket support. Do not embed vendor binaries, install
-an SDK, create a custom recorder, or make internet access a run-time dependency of the
-Studio adapter. Vendor software installation/licensing behavior remains vendor-owned.
-
-Out of scope: remote-computer networking, simultaneous BioSemi and Unicorn output,
-LSL/XDF, general EEG-driver registries, automatic Recorder start/stop, a signal viewer,
-automatic acquisition recovery, experiment redesign, and a complete monitor-settings
-redesign. A limitation discovered in validation does not authorize changing transport,
-buying hardware, or expanding these boundaries automatically.
-
-## Evidence And Unknowns
-
-Source checkout inspected: Studio `master`, commit `6c95178`, on 2026-09-25.
-Recheck source owners and the companion plan before implementation; these are evidence
-pointers, not permission to overwrite intervening work.
-
-Vendor sources accessed 2026-09-25:
-
-- [Recorder manual](https://github.com/unicorn-bi/Unicorn-Recorder-Hybrid-Black/blob/main/README.md):
-  raw BDF+/CSV logging, UDP ASCII trigger input, and optional diagnostic signals.
-  Its example uses loopback port 1000; raw logging is separate from display processing.
-- [Vendor FAQ](https://www.gtec.at/unicorn-faq/): Suite 1.24.00 introduced BDF+ support
-  and made Recorder available without its previous separate license. Confirm the
-  installed build; do not purchase the separately described Python API for this route.
-- [Hardware manual](https://github.com/unicorn-bi/Unicorn-Suite-Hybrid-Black-User-Manual/blob/main/UnicornHybridBlack.md):
-  stock cap positions are Fz, C3, Cz, C4, Pz, PO7, Oz, PO8. Confirm actual wiring.
-- [PsychoPy timing guidance](https://psychopy.org/general/timing/millisecondPrecision.html):
-  software flip timing and physical stimulus appearance require separate validation.
-
-The Recorder documentation does not establish exact supported trigger ranges,
-repeated-code/reset behavior, same-sample collision handling, status-channel scaling,
-or the acquisition sample to which a received message is assigned. Built-in Bluetooth
-delay compensation is not established. These are Phase 0 questions, not assumed facts.
-
-## Current Owners And Required Seams
-
-| Existing owner | Current behavior and planned responsibility |
-| --- | --- |
-| `gui/document_runtime.py` | Forces serial for ordinary runs. Resolve the selected local recording configuration before building launch settings. |
-| `gui/controller.py`, `gui/settings_dialog.py` | Existing preference ownership and settings surface. Persist/edit the narrow local transport choice here rather than in experiment timing contracts. |
-| `runtime/launcher.py` | `LaunchSettings` and validation assume serial outside Test/Pilot modes. Validate the selected production transport explicitly. |
-| `triggers/base.py`, `triggers/serial_backend.py` | Adapter contract and unchanged BioSemi byte-writing behavior. Add one focused Unicorn UDP adapter under `triggers/`. |
-| `runtime/triggers.py` | Factory and logged wrapper currently allow serial/null identities only. Add truthful Unicorn transport identity and logging. |
-| `engines/psychopy_engine.py`, `engines/psychopy_triggers.py` | Existing `callOnFlip` emission seam and run-relative callback clock. Preserve frame scheduling and warmup exclusion. |
-| `runtime/run_worker.py` | Open before presentation, abort/error handling, cleanup; replace COM-specific error assumptions only where the selected backend requires it. |
-| `core/execution.py`, `runtime/session_export.py` | Neutral result fields and export ownership. Retain actual marker attempts, profile, and clock provenance. |
-| `gui/run_page.py` | Current BioSemi recording prompt. Present device-appropriate readiness instructions and honest confirmation status. |
-| `core/library_publish.py` | Legacy portable serial fields are normalized to COM3. A local Unicorn choice must not be overwritten by project/library settings. |
-| `core/compiler_schedules.py` | Existing condition/oddball schedule and one-marker-per-frame rule; scientific scheduling remains unchanged. |
-
-The existing [lab-independent recording setup plan](../planned/lab-independent-recording-setup.md)
-owns the broader profile/display direction. Reuse its local-settings and migration
-precedence rather than creating a competing profile store. If it lands first, extend it.
-Otherwise implement only the two transport choices needed here using existing preference
-services; named custom profiles and display-identity changes are not prerequisites.
-
-## Proposed Behavior
-
-### Local Setup And Compatibility
-
-1. Offer BioSemi serial and Unicorn Recorder UDP as explicit recording choices.
-2. Use loopback `127.0.0.1`; expose a validated UDP port matching Recorder, initially
-   1000. No remote host selection in this first delivery.
-3. Keep endpoint/device details outside portable `ProjectFile` timing settings,
-   `RunSpec`, and `SessionPlan`. Keep existing project trigger fields readable and
-   round-trippable; do not silently migrate or rewrite old projects.
-4. An explicitly selected local configuration takes precedence over legacy serial
-   fields. With no selection, retain the existing BioSemi behavior. An invalid saved
-   selection is an actionable error, never a reason to switch to serial or null.
-5. Show the effective choice before launch. Preserve the existing BioSemi Recording Reminder
-   behavior for that choice and preserve display/timing preflight requirements.
-6. Test/Pilot remains an explicit no-output workflow. Selecting Unicorn must not turn
-   test sessions into real transmissions or bypass existing production safeguards.
-
-### Adapter And Event Semantics
-
-Prepare the socket and encoded payloads before timed presentation. Convert an approved
-numeric code to decimal ASCII: proposed code 55 becomes `b"55"`, not a single raw
-byte with numeric value 55. Exact payload framing must match the tested Recorder build.
-
-At the existing flip callback, make one nonblocking datagram submission for each
-compiled marker. Do not add sleeps, waits for replies, unbounded worker queues,
-retries, or guessed Bluetooth compensation to the frame loop. A would-block or socket
-error propagates through the existing failed-run path with exportable evidence.
-Opening a UDP socket does not prove that Recorder is listening or saving to disk.
-
-Preserve normal codes 1-255, the existing oddball-55 policy, event order, actual
-compiled frames, and one-marker-per-frame validation. Verify Recorder accepts the
-range and rates in retained receiver tests and qualify the recording before accepting
-study data. Normal launch output remains available for these recording tests. Do not
-silently remap codes, split colliding markers, or add automatic reset messages. Code
-zero remains an explicit reset only if the receiver semantics are proven compatible.
-If repeated codes require a different wire protocol, resolve that explicitly before
-enabling support; no hidden pulse schedule is introduced into the compiler.
-
-Update the base capability, production gate, factory, and logged wrapper together.
-The existing `emits_hardware_triggers` and serial/null name assumptions must not force
-UDP to impersonate serial. Use a narrowly scoped capability meaning external marker
-output, preserving rejection of log-only output in production. No backend capability
-or success status may imply a marker reached an EEG sample or disk.
-
-### Operator Workflow
-
-1. Pair the existing headset using the vendor-supported setup and open Recorder.
-2. Select raw BDF+ recording and the tested diagnostic-channel configuration. Confirm
-   the acquisition source is real electrodes rather than the vendor test signal.
-3. Enable Recorder's UDP trigger input on the same port selected in Studio.
-4. Start recording under the intended participant/session association before launching.
-5. After Launch Experiment, Studio's launch worker automatically checks that Recorder
-   is open and writing raw BDF before presentation. No manual recording checkbox is
-   required. This does not establish correct participant association, electrode mode,
-   received markers, data integrity, or receiver/physical-timing qualification.
-6. Run the unchanged experiment. Recorder remains responsible for continuous acquisition.
-7. Stop Recorder manually, register its BDF+ in Toolbox, and reconcile recorded markers
-   with Studio's event evidence before treating the recording as accepted data.
-
-The launch check is scoped to the Recorder process and fresh writes to its configured
-raw file; unreadable/ambiguous states fail closed. Do not infer headset connection,
-electrode mode, ongoing recording after launch, or UDP receipt from that observation.
-An optional operator-invoked marker test must be clearly identified and
-outside participant data; final marker verification reads the saved recording.
-
-### Cross-Application Evidence Contract
-
-Freeze one versioned semantic handoff with the Toolbox plan in Phase 0. Reuse current
-session/run identifiers and export owners. Final serialization and filename belong in
-the canonical runtime contract when implemented; no schema described here exists yet.
-
-| Evidence | Owner and meaning |
-| --- | --- |
-| Contract/Studio version; participant, session and run identities | Studio; explicit association, never inferred from time proximity alone. |
-| Recording association and condition/oddball code map | Explicit operator/project mapping; BDF remains the EEG authority. |
-| Ordered actual event attempts: code, label, run, frame, callback timestamp, send status | Studio runtime; distinguish compiled intent from attempted/failed emission. |
-| Clock origin and units for each time field | Studio; callback time is run-relative, not an EEG sample index or synchronized headset clock. |
-| Effective transport/port and Recorder/raw-logging confirmation | Runtime snapshot; vendor version/device information is observed or explicitly unknown. |
-| Recorded event samples, integrity findings, montage, reference and any alignment correction | Toolbox; preserve original values and record derived analysis values separately. |
-
-Keep the evidence available in both full and compact export modes. Reuse existing
-full-mode trigger/event exports. Current compact mode has no durable trigger log and
-deletes successful recovery checkpoints after report export; those checkpoints cannot
-satisfy this requirement. Add a small runtime-owned acquisition/event sidecar for
-Unicorn compact sessions rather than globally enabling detailed exports. Place artifacts
-under the active project using existing run/log ownership; support reserved visits,
-aborts, cancellation, and partial
-failure. Do not write into vendor installation directories or overwrite the raw BDF.
-
-The BDF is self-contained for EEG and recorded markers. The handoff supports audit and
-session association; Toolbox's explicit reviewed-protocol import remains the route
-for recordings without a Studio handoff. Do not manufacture a Studio reconciliation
-result when that evidence is absent.
-
-## Bluetooth Delay And Acceptance Levels
-
-An event message reaches Recorder locally while the arriving EEG may have been
-buffered by the device, Bluetooth stack, or acquisition software. Depending on
-Recorder's assignment rule, a marker can precede or follow its correct EEG sample.
-Do not hard-code a 20 ms, 40 ms, or literature-derived shift, or delay Studio messages
-to compensate. The correction sign is a measured property of the complete setup.
-
-Separate four levels of evidence:
-
-1. Configuration valid: local selection and socket setup passed.
-2. Operator confirmed recording: a human confirmed the selected vendor workflow.
-3. Recorded-marker integrity verified: Toolbox found the expected events in the BDF.
-4. Physical timing characterized: measured onset-to-event offset, variability, and
-   drift are within a predeclared bound for the intended experiment/harmonics.
-
-No level implies the next. Packet counters and reception intervals can support
-continuity checks but cannot alone measure absolute acquisition-to-PC latency.
-Screen-flip timestamps are not measurements of monitor pixel onset.
-
-When existing suitable lab equipment is available, measure known physical onsets
-through an appropriate recording arrangement; do not require buying sensors or
-improvise electrical connections to the headset. Include the beginning, middle, and
-end of a representative long session under expected load. Record offset sign, median,
-spread/tails, drift, lost markers, sample gaps, and display frame failures. Choose
-acceptance bounds before qualification, based on the intended analysis and highest
-retained harmonic; do not choose a passing threshold after seeing results.
-
-A constant measured offset may later be applied by Toolbox to analysis event indices
-with rounding/residual error and calibration provenance. Studio sends promptly and
-keeps its raw timestamps. Uncalibrated/unknown and measured zero must be distinguishable.
-A constant shift does not repair jitter, drift, or dropped samples. If no suitable
-existing measurement setup or trustworthy vendor characterization is available, software
-development can proceed, but physical timing qualification remains explicitly pending.
-
-## Implementation Phases
-
-### Phase 0 - Prove The Receiver Contract And Freeze The Handoff
-
-- [ ] Record installed Suite/Recorder build, headset identity, Windows/Bluetooth setup,
-  raw logger configuration, and actual electrode mapping without publishing identifiers.
-- [ ] Capture a small permission-cleared raw BDF+ fixture and parallel raw CSV for
-  validation only; CSV import is not a new shipping feature in this plan.
-- [ ] Test known condition markers, repeated 55, boundary values, adjacent-frame rates,
-  first/last events, and an aborted session. Verify wire framing, reset behavior,
-  recorded counts/order, sample placement, status units, and loss indicators.
-- [ ] Determine whether BDF diagnostics preserve detectable dropped/invalid samples.
-  Document omissions rather than inventing continuous data.
-- [ ] Freeze the shared semantic evidence contract and supported Recorder configuration
-  with Toolbox. Archive source/build references and fixture hashes alongside tests/docs.
-- [ ] Identify remaining physical timing uncertainty and a no-purchase validation route.
-
-Qualification criterion: known recorded-marker semantics and a usable raw-file contract.
-Fakes can support parallel adapter development, but do not establish qualification.
-This criterion does not block the normal launch workflow used to collect real test
-evidence. Unsupported firmware/software or undiscoverable loss must be reported explicitly.
-
-### Phase 1 - Runtime Selection And UDP Adapter
-
-- [x] Add the narrow local configuration, legacy precedence, and validation.
-- [x] Implement a focused `triggers/` adapter using standard-library sockets only.
-- [x] Update factory, capability checks, transport labels, and backend-specific errors.
-- [x] Preserve BioSemi single-byte output and test/pilot null behavior.
-- [x] Exercise failures with fakes; no automated test opens real hardware or sends
-  network markers to a potentially active Recorder.
-
-Gate: exact encoded output, one submission per scheduled event, and deterministic
-failure/cleanup behavior with unchanged scientific schedules.
-
-### Phase 2 - Recording Workflow And Durable Evidence
-
-- [x] Add shared-component settings/run controls and appropriate Recorder instructions.
-- [x] Capture runtime configuration snapshots; retain optional explicit operator
-  metadata without treating automatic readiness as human confirmation.
-- [x] Export handoff evidence in full and compact modes, including partial/aborted runs.
-- [x] Preserve cancellation, participant visit reservations, path invariants, and
-  historical export readability; version any additive acquisition metadata.
-- [x] Add registered GUI coverage and document visible acceptance at the existing
-  main-window/settings minimum sizes; if Setup changes, all eight steps still fit 1120x820.
-- [x] Register any new adapter test file in the explicit triggers verification route;
-  run the harness configuration check if `.agents/verification.toml` changes.
-
-Gate: an operator can prepare, run, abort, and identify the correct recording without
-editing project files, and exported evidence never overstates acquisition readiness.
-
-Software paths above are covered with fake output. The automatic Recorder readiness
-check runs in the launch worker before visit reservation and presentation. A valid
-configuration and passed readiness check allow the normal Unicorn launch to emit
-markers, with qualification still recorded as pending. GUI layout acceptance remains
-separate; checked implementation tasks do not establish those acceptance results.
-
-### Phase 3 - Toolbox Integration And Timing Qualification
-
-Use the [offline Unicorn timing report](../../RUNTIME_EXECUTION.md#unicorn-recorder-timing-report)
-to compare a run's finalized raw BDF and Studio acquisition evidence. Keep those
-inputs intact and retain the report with local bench evidence. The comparison
-checks marker integrity and drift relative to Studio callbacks. Physical timing
-qualification requires the independent measurements above.
-
-- [ ] Run a full recording through the companion Toolbox plan: native 250 Hz,
-  interpolation off, explicit reference/ROI/QC policy, event reconciliation and spectra.
-- [ ] Reconcile the expected and actually recorded code sequence across all conditions
-  and runs; missing or extra markers must be surfaced, not reconstructed silently.
-- [ ] Exercise Recorder absent/not recording, wrong port, vendor disconnect, missing
-  samples, and interrupted sessions using controlled test data/setup.
-- [x] Explicitly defer physical timing qualification; no measurement evidence is available.
-- [ ] Verify the packaged Studio works without UnicornPy/vendor DLL bundling or added
-  purchases; test BioSemi installation/workflows for regressions.
-
-Gate: complete normal-workflow integration plus an explicit timing qualification state.
-No claim of BioSemi timing or spatial equivalence follows from this feature alone.
-
-### Phase 4 - Documentation And Handoff
-
-- [x] Update `docs/RUNTIME_EXECUTION.md` as the canonical transport/export contract;
-  update `docs/ENGINE_INTERFACE.md` for changed capability terminology if needed.
-- [x] Update `ARCHITECTURE.md`, `docs/agent/agent-index.md`, nearest package guides,
-  `docs/GUI_WORKFLOW.md`, and the relevant public setup guide after behavior lands.
-- [x] Coordinate the narrower delivered recording choice with the broader recording
-  setup plan; do not mark its unimplemented monitor/profile work completed.
-- [ ] Record tested vendor versions, fixture identity, checks, residual limitations,
-  and physical acceptance evidence. Move this plan to completed only after its agreed
-  implementation scope and documented acceptance are fulfilled.
-
-## Verification Matrix
-
-| Area | Required evidence |
-| --- | --- |
-| Adapter | ASCII framing/range, repeated codes, one send per event, explicit reset policy, invalid port, would-block/error, close and reconnect lifecycle with fakes. |
-| Timing hooks | Same compiled frames/order across serial/UDP, warmup exclusion, callback clock origin, no added waits/queues/retries, same-frame collision rejection. |
-| Launch policy | Legacy defaults, selected-local precedence, invalid saved choice, production null rejection, Test/Pilot isolation, no fallback. |
-| Logs/paths | Full and compact evidence, attempted versus sent, abort/partial export, explicit participant/session association, no raw-file overwrite. |
-| GUI | Apply/Cancel, keyboard access, long labels/error states, truthful readiness wording, no clipping, correct device instructions. |
-| BioSemi regression | Existing wire bytes, codes, resets, recording prompt, legacy project/bundle round trips, library COM3 policy and schedules unchanged. |
-| End-to-end | Actual BDF event reconciliation, 250 Hz Toolbox processing, loss handling, expected FFT/SNR outputs and documented timing qualification. |
-
-Extend existing focused test homes such as `tests/unit/test_serial_trigger_backend.py`,
-`tests/unit/test_psychopy_engine.py`, `tests/unit/test_runtime_launcher_flow.py`, and
-runtime/export tests. Add the Unicorn adapter tests beside the current backend tests;
-avoid duplicating the implementation in assertions. The triggers route currently lists
-`test_serial_trigger_backend.py` explicitly: register a new adapter file in
-`.agents/verification.toml`, or extend the existing routed file. Run
-`./scripts/verify.ps1 -CheckConfig` after changing verification configuration. Register
-any new GUI test file in the Qt registry.
-
-Implementation verification routes (run from the Studio repository):
-
-```powershell
-./scripts/verify.ps1 -Scope triggers -Tier focused
-./scripts/verify.ps1 -Scope runtime -Tier focused
-./scripts/verify.ps1 -Scope engine -Tier focused
-./scripts/verify.ps1 -Scope gui -Tier focused
-./scripts/verify.ps1 -Scope docs -Tier focused
-./scripts/verify.ps1 -Scope repo -Tier precommit
-```
-
-Use additional core/project-io routes only when their contracts change. Ordinary
-checks must use fakes and safe non-Qt coverage. Qt execution and physical marker
-tests require a user-approved safe visible setup; never use offscreen Qt locally.
+## Current baseline on November 19, 2026
+
+[Studio 3.1.0](../completed/release-3.1.0.md) ships Windows Unicorn Recorder
+output for ordinary recording runs. The device is selected in Recording settings.
+Studio checks for an active raw Recorder file before launch, then submits ordered
+decimal ASCII UDP markers to the selected loopback port. Test and Pilot use null
+output. The September 28 decision to allow ordinary launches superseded the
+original blanket receiver-validation blocker. Exports still describe receiver
+validation as pending. See the [runtime contract](../../RUNTIME_EXECUTION.md#unicorn-recorder-udp-receiver-validation-pending).
+
+Three retained checks establish the current bench evidence:
+
+- September 28, Recorder 1.24.02 (`1.24.2.2760`), vendor test signal. All 426
+  sent markers, including codes 1–255 and adjacent repeated codes, matched the
+  classic `24BIT` BDF Status channel and parallel CSV. The raw header establishes
+  the observed format. Long-run wireless stability and loss detection were outside
+  this test.
+- November 12, Windows USB Bluetooth bench, Recorder test signal. The finalized
+  classic BDF retained all 11 markers from Trigger Tester and a normal Studio
+  launch, in exact order. This is the verified visible path on that setup.
+- The [offline timing report](../../RUNTIME_EXECUTION.md#unicorn-recorder-timing-report)
+  matched 145 of 145 markers with the saved two-minute raw BDF and Studio
+  acquisition log. All oddball gaps were 50 frames and the 52,989 samples had no
+  counter discontinuities or invalid flags. The nominal BDF span was 115.897 ms
+  longer than the Studio callback span. Fullscreen repeats separately
+  characterized software cadence. The callback clock, BDF nominal rate and panel
+  light are distinct references. The detailed results and limits are in the
+  [progress log](#decision-and-progress-log).
+
+Studio's completed-session and whole-study handoffs retain the effective
+recording declaration and attempted marker sequence. Current Toolbox source
+supports explicit Unicorn processing at native 250 Hz with eight scalp
+channels, `average_scalp` reference, sample-wise marker decoding and interpolation
+disabled. Generated BDF+ fixtures and the extracted 426-marker bench receipt
+cover software compatibility. Live vendor BDF+ and full reviewed processing of an
+actual Recorder acquisition remain open. Follow the companion plan in the active
+`FPVS-Toolbox` checkout at
+`docs/agent/exec-plans/active/unicorn-hybrid-black-support.md`.
+
+## Remaining work and acceptance
+
+1. **Qualify the Recorder and wireless path.** In an approved visible Windows
+   setup, use the installed Studio build, supported Recorder, existing Bluetooth
+   dongle and nonparticipant recordings. Record the Recorder and Studio builds,
+   dongle/driver and power policy, logger settings, format header, signal source
+   and raw data hashes. Observe ready, absent, idle, wrong-port, interrupted and
+   vendor-disconnect cases. Capture a representative long run across all
+   conditions and an interrupted run, with raw BDF and diagnostic CSV when
+   available. Check first/last and repeated markers, exact order and sample
+   association, and the visibility of gaps through counter/validity signals.
+   Retain a real vendor BDF+ fixture if supported and identify its actual format
+   from the header. Record proven limits for unobservable loss, unsupported
+   formats and wrong-port sends. Record the packaged checks and a BioSemi
+   regression for the established serial workflow.
+2. **Qualify the Toolbox handoff on actual Recorder files.** Explicitly associate
+   the raw recording with the Studio visits/runs. Verify the actual electrode
+   labels and reference wiring, raw units and amplitude, recorded sample
+   continuity and complete marker reconciliation against the Studio sidecar.
+   Run the native 250 Hz, eight-channel, average-reference profile through
+   ordinary reviewed processing and FFT/BCA/SNR outputs. Confirm interpolation
+   stays disabled and available ROI/QC policies and provenance are explicit.
+   Exercise the handling of missing/extra markers, gaps and invalid inputs.
+   Retain raw file and handoff identifiers, Toolbox build, QC outcome and expected
+   export evidence. Assess classic BDF and continuous BDF+ separately on
+   recordings from the supported configuration. Report remaining limitations in
+   the Toolbox plan and Studio runtime contract before changing receiver status.
+3. **Measure physical timing on the intended setup.** Use an independent
+   calibrated reference and existing suitable lab equipment to measure actual
+   optical onset against recorded events at the beginning, middle and end of a
+   representative session. Set acceptance bounds in advance for the intended
+   analysis and highest retained harmonic. Record sign and distribution of
+   onset-to-event delay, drift, sample gaps, lost events and display frame
+   failures. Retain the setup, reference and calibration evidence. Until this is
+   available, physical timing remains unqualified.
+
+Close the plan after the agreed receiver format, wireless loss behavior,
+packaged acquisition, Toolbox processing and physical timing gates have recorded
+outcomes and the owning contracts reflect the scope supported. Keep receiver
+qualification and physical timing status distinct.
+
+## Workflow and ownership
+
+The Windows route uses the existing headset and vendor Recorder. Bluetooth carries
+EEG to Recorder. Studio sends markers to localhost and retains launch/acquisition
+evidence. Recorder owns raw logging and manual start/stop. The operator associates
+the raw recording with the correct visit and confirms electrode mode and montage.
+Toolbox owns sample interpretation, marker reconciliation, reference, QC and
+analysis provenance. The [Studio–Toolbox integration plan](studio-toolbox-integration.md)
+covers cross-product handoff and the [lab-independent setup plan](../planned/lab-independent-recording-setup.md)
+tracks broader recording preferences independently.
+
+Keep the authored schedule, one-marker-per-frame rule and external output
+capability. The existing adapter pre-encodes codes 1–255 and gives each compiled
+callback one nonblocking submission. The runtime retains attempted, accepted and
+failed output and the run-relative callback clock in both export modes, including
+interrupted runs. Recorder readiness describes observed file growth at launch.
+Verified receipt requires the saved recording. The BDF remains the raw EEG and
+recorded-event authority. Toolbox uses reviewed recording association and preserves
+the source samples and marker indices.
+
+The existing no-purchase decision uses the vendor application and standard-library
+UDP. The stock Fz, C3, Cz, C4, Pz, PO7, Oz and PO8 mapping is a declaration to
+verify on the actual recording. Studio keeps the raw callback clock and sends
+promptly. If a qualified measurement later supports applying a constant shift in
+Toolbox, retain the calibration, signed offset, sample rounding and residual
+alongside the original indices. A constant shift cannot repair jitter, drift or
+missing data.
+
+## Evidence pointers and verification
+
+The original review on September 25 used Studio `6c95178`. The
+[Recorder manual](https://github.com/unicorn-bi/Unicorn-Recorder-Hybrid-Black/blob/main/README.md)
+describes raw logging and ASCII UDP. The
+[vendor FAQ](https://www.gtec.at/unicorn-faq/) covers the Suite release and
+licensing. The
+[hardware manual](https://github.com/unicorn-bi/Unicorn-Suite-Hybrid-Black-User-Manual/blob/main/UnicornHybridBlack.md)
+describes the stock cap. [PsychoPy timing guidance](https://psychopy.org/general/timing/millisecondPrecision.html)
+distinguishes software timing and physical onset. Use the retained fixtures and
+reports below to document the observed behavior of a specific Recorder build.
+
+Use the `triggers`, `runtime`, `engine`, `gui` and `docs` focused verification
+scopes for changed Studio behavior, and safe `repo` precommit for cross-layer
+changes. Keep fake output in automated checks. Use the [Trigger Tester smoke path](../../GUI_WORKFLOW.md#trigger-tester)
+and normal launch for approved visible acceptance. Check late failure and abort
+evidence in full and compact exports, Test/Pilot isolation, and existing BioSemi
+behavior. Add project I/O checks when its contract changes, and run `-CheckConfig`
+after changing verification routing. Actual Recorder, Toolbox and timing evidence
+follows the acceptance sequence above.
 
 ## Decision And Progress Log
+
+The dated entries preserve the observations and decisions at the time. The current
+baseline and acceptance sequence above replace their original launch and release gates.
 
 - 2026-11-12: On the built-in Lenovo display, same-PC PsychoPy 2026.1.1
   fullscreen repeats ended 37.790 and 36.478 ms early over 120 s. A minimal

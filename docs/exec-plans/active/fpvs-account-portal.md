@@ -4,7 +4,35 @@ Status: Active
 
 Date: 2026-10-06
 
-## Personal accounts and lab Library access (2026-11-15)
+## Current baseline (2026-11-19)
+
+[Studio 3.1.0](../completed/release-3.1.0.md) ships the personal account connection
+used by Settings > Account and the Experiment Library. OpenFPVS applied migration
+0028 and deployed lab-scoped Library access on November 15. The cutover verified
+that all 15 existing experiments belonged to NERD Lab and that signed-out access
+was denied. Browser sign-in and a single-use computer code connect a new Studio
+installation. Existing computer credentials retain their scope. OpenFPVS owns
+live membership and Library access. See the [account portal contract](../../EXPERIMENT_LIBRARY.md#account-portal).
+
+## Remaining acceptance
+
+- [ ] With the owner's live account, verify personal password sign-in and join
+  NERD Lab with its lab code. Confirm the lab and its assigned experiments appear
+  in the account's Library. Record the outcome in the OpenFPVS `PORTAL_PLAN.md`.
+- [ ] On a separate machine with a fresh Studio 3.1.0 profile, generate and redeem
+  a one-time computer code from an authorized account. Verify a permitted bundle
+  downloads and opens. Revoke the test access and confirm subsequent protected
+  requests are denied and the downloaded local project remains usable. Record the
+  installed version and the enrollment, download and revocation outcomes separately
+  from the owner's browser sign-in.
+
+## Historical evidence
+
+Earlier account flows, hostnames and rollout checklists below capture the system
+at their stated dates. The November 15 cutover and the current acceptance above
+supersede the original enrollment and deployment checklist.
+
+### Personal accounts and lab Library access (2026-11-15)
 
 Studio offers browser sign-in and a one-time computer code in the Library, including
 through Settings > Account. Offline use and existing local projects remain available.
@@ -17,7 +45,6 @@ website migration 0028. The website owns the database and cutover runbook.
 
 - [x] Personal sign-in handoff and scoped membership enforcement in both repositories.
 - [x] Apply 0028 and deploy the matching Worker.
-- [ ] Verify personal sign-in and joining NERD Lab with the owner's live account.
 
 Studio precommit passed 6,344 tests with 17 skips. The 117 registered Library,
 startup and Settings Qt checks passed on the approved 1920×1080 display. The
@@ -30,7 +57,7 @@ experiments belong to NERD Lab, and deployed Worker version
 `2e65a89e-2dd4-42d8-b7dc-eae8bb65468d`. Live public and signed-out protection
 checks passed, including the retained native origins.
 
-## Account management from Studio (2026-11-15)
+### Account management from Studio (2026-11-15)
 
 Settings > Account opens the canonical OpenFPVS account page in the default browser.
 OpenFPVS handles sign-in, profile and photo editing, password changes, named lab
@@ -55,7 +82,7 @@ My Uploads fits `760x600` and `820x660` with a long title. The website passed 48
 Node tests, a Worker dry build and synthetic Chrome checks at 360px and 1280px.
 Production email, password and submission flows remain unverified.
 
-## Standalone website maintenance checkout (2026-10-06)
+### Standalone website maintenance checkout (2026-10-06)
 
 The private OpenFPVS website/service checkout now lives in the sibling
 `../OpenFPVS/` at `C:\Users\zcm58\PycharmProjects\OpenFPVS`, opened as its own
@@ -65,19 +92,21 @@ documentation; the private project's `PORTAL_PLAN.md` owns website implementatio
 and deployment acceptance. Dated deployment evidence below keeps its historical
 paths and facts rather than describing the current maintenance directory.
 
-## Studio 2.2.7 direct native connection (2026-10-06)
+### Studio 2.2.7 direct native connection (2026-10-06)
 
 The later desktop update selects `https://openfpvs.com` directly and requires one
 lab-code reconnection under the new origin-bound credential/cache namespace.
 Only the two exact previous managed origins share receipt/version identity;
 installed receipt bytes and local experiments stay unchanged. `/v2` and schema
 `1.0` remain unchanged, and the retained old native hosts still serve released
-clients. No SQL access reset is reapplied. The separate
-`release-2.2.7.md` plan owns installer, patch and publication acceptance; its
-released-base package excludes the feature branch's unreleased results sharing.
+clients. No SQL access reset is reapplied. The
+[archived 2.2.7 draft](../../references/archive/release-2.2.7.md) preserves that
+effort's build evidence and unfinished publication checks. Its released-base
+package excludes the feature branch's unreleased results sharing.
 The domain migration phase below records the earlier website deployment, before
 this desktop origin change.
-## Portal domain migration (2026-10-06)
+
+### Portal domain migration (2026-10-06)
 
 The current portal destination is `https://openfpvs.com`, replacing the previous
 browser address at `fpvs.zack-murphy.com`. The migration keeps the same Cloudflare
@@ -116,7 +145,7 @@ loads at the new `/admin` address with existing credentials. Real email delivery
 and an authenticated physical-PC download were not exercised during migration;
 the private service plan records those verification boundaries.
 
-## Library access reset and administrator workspace
+### Library access reset and administrator workspace
 
 The user confirmed the administrator login works. The current follow-up organizes
 the dashboard into tabs, removes previously enrolled/revoked computer display,
@@ -163,7 +192,7 @@ Evidence is retained under `build/release-2.2.6/`. Installer lifecycle, a second
 physical PC and real experimental/EEG execution were not run. The unreleased
 results-sharing feature remains on its separate branch.
 
-## Dedicated administrator password login
+### Dedicated administrator password login
 
 The approved follow-up gives `/admin` a dedicated administrator login and dashboard
 landing, an `/admin/sign-in` entry alias, seven-day browser sessions and email
@@ -208,7 +237,7 @@ The administrator confirmed real password login and dashboard landing work.
 Recovery/provider interruption have synthetic coverage; acceptance did not force
 a real password reset.
 
-## OpenFPVS website simplification
+### OpenFPVS website simplification
 
 The current follow-up renames the website **OpenFPVS Experiment Library** and its
 administrator **OpenFPVS Administrator**. Remove stimulus-set labels from reader
@@ -247,7 +276,7 @@ The live browser confirms OpenFPVS branding and both login choices. No migration
 real email, live account/code mutation or paid feature was needed. Protected
 real-account and second-machine acceptance remain the pre-existing separate checks.
 
-## Portal navigation and website theme
+### Portal navigation and website theme
 
 The user requested a top header, optional account controls that change after
 sign-in and clearer stimulus-set wording. After reviewing Studio's colour palette,
@@ -276,7 +305,7 @@ and the browser shows the final lab-code homepage. No database migration, real
 email, live account/code change or paid feature was needed. The pre-existing
 protected real-account and second-machine native acceptance checks remain separate.
 
-## Experiment website follow-up
+### Experiment website follow-up
 
 The user authorized a clean lab-code-protected experiment website, with citations
 for the exact experiment stimulus set/version and recorded download totals, managed
@@ -323,9 +352,9 @@ checks pass on the custom and retained native hostnames; all changed code/style
 assets match source hashes, and the browser confirms the lab-code landing page.
 Real protected catalog/download/editor checks and second-machine native acceptance
 remain separate. No live accounts/codes were changed, real emails sent, or paid
-features enabled. This plan remains active for the pre-existing live acceptance gap.
+features enabled. Live native acceptance remained open at this stage.
 
-## Owner-chosen lab codes
+### Owner-chosen lab codes
 
 The owner may type a custom code when creating or replacing a lab code, or leave
 the optional field blank for a secure generated code. Custom codes are case
@@ -354,7 +383,7 @@ checks pass on both retained hostnames; changed assets match local source hashes
 No migration, real account/code mutation, real email, paid service or desktop
 contract change was needed.
 
-## Reusable lab-code follow-up
+### Reusable lab-code follow-up
 
 The user now prefers PI-distributed lab access over individual researcher email
 registration. Add one reusable view/download code per lab, issued and revoked by
@@ -402,7 +431,7 @@ preserved hostnames. No real lab code, researcher grant or experimental result
 was created for verification. Desktop changes are source on the feature branch;
 an updated installer has not been built or published.
 
-## Approved outcome
+### Initial approved outcome
 
 The user authorized account registration, a private account-management dashboard
 and administrator page at `https://openfpvs.com`. Initial sole administrator
@@ -416,7 +445,7 @@ owner's manual review. The final design must use free services only, without pai
 subscriptions or paid overages. Cloudflare Workers/D1 host the portal and data;
 Resend Free delivers sign-in email with hard UTC limits of 100 daily/3,000 monthly.
 
-## Ownership and boundaries
+### Initial ownership and boundaries
 
 Implementation belongs to private `zcm58/FPVS-Studio-Library`, alongside its existing
 Worker and D1 database, on `codex/account-portal`. The local implementation checkout
@@ -431,7 +460,7 @@ consent and the separate Results Worker are outside this portal deployment. Init
 permissions are Library view and experiment download. New grants do not authorize
 result submission or experiment publication.
 
-## Verification and deployment
+### Initial verification and deployment
 
 - [x] Verified passwordless email sign-in, pending profiles, bounded single-use links,
   secure session cookies, CSRF and disabled-account checks.
@@ -444,14 +473,13 @@ result submission or experiment publication.
 - [x] Domain and email configuration, non-destructive remote schema migration,
   authorized deployment and live sign-in/read-only acceptance.
 - [x] Canonical integration documents and exact implementation/deployment state.
-- [ ] Live second-machine enrollment, permitted download and revocation acceptance.
 
 Paid subscriptions, chargeable overages and Cloudflare Access billing activation
 are excluded. Tests never send email, query
 real researcher records or submit research reports. Owner identity, email delivery and
 domain configuration must be confirmed before calling the portal live.
 
-## Verification evidence
+### Initial verification evidence
 
 The private service's 74 Node tests pass with native Windows access, including
 actual workerd/D1 migration preservation and atomic email quotas. Syntax, generated
@@ -473,6 +501,4 @@ Worker secret. After the owner registration/sign-in instructions, the user repor
 acceptance; owner email delivery and sign-in are no longer setup blockers.
 No paid subscription or overage consent has been activated.
 
-The plan remains active for live enrollment/download/revocation on another machine.
-Those flows pass synthetic coverage, but the user's portal confirmation does not
-establish that separate native acceptance check.
+Enrollment, download and revocation passed synthetic coverage at this stage.

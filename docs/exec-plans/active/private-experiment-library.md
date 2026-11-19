@@ -4,6 +4,67 @@ Status: Active
 
 Date: 2026-09-16
 
+## Current baseline on November 19, 2026
+
+[Studio 3.1.0](../completed/release-3.1.0.md) is the published Windows release.
+Phase 1 ships whole-project Library browse, verified download and installation,
+explicit separate downloads, and guarded updates of a linked current project.
+Studio connects new computers through a personal OpenFPVS account, with Library
+access derived from lab membership. Existing computer credentials retain their
+documented access. OpenFPVS applied migration `0028` and deployed the matching
+Worker. See the [Library contract](../../EXPERIMENT_LIBRARY.md) and the
+[account portal plan](fpvs-account-portal.md) for the current access model.
+
+The 3.1.0 evidence covers a fresh Windows install, upgrade from 3.0.1, and
+native full-size Library geometry where the display supports it. The
+[update dialog acceptance](../completed/library-update-dialog-refinement.md)
+also covers both themes and both sizes at 100% scaling, including progress,
+cancellation and the reminder with controlled data. These results supersede the
+historical general installer and default-size dialog gates below. The September
+live check used two credential targets and two local projects. Installed
+end-to-end acceptance on a second physical machine still needs its own record.
+
+## Remaining whole-project acceptance
+
+1. On two physical Windows machines with different Studio roots, use approved
+   synthetic accounts and lab content. Connect from the installed app, browse
+   and download a representative large project, review its Setup, then reopen
+   and compile while offline. Revoke one computer and verify fresh requests
+   are rejected there while its existing local project still opens. Record the
+   installed versions, archive size, lab permission, and outcomes on both systems.
+2. Use an approved visible session to exercise the current update on those
+   clients. Check the collection warning, reminder, in-place update and separate
+   download with an older linked copy. Verify the backup and retained participant
+   output, blocked replacement with pending reporting, and view-only behavior.
+   Cover the remaining scaling and keyboard/lifecycle cases from the
+   [visible acceptance matrix](../../EXPERIMENT_LIBRARY.md#verification-and-visible-acceptance),
+   including developer publishing controls if they are in the rollout scope.
+3. For a wider rollout that includes Linux, verify the native Secret Service
+   keyring with save, restart and disconnect on a supported environment. Record
+   the target bundle sizes and expected concurrent readers and confirm the lab's
+   credential rotation and service recovery owner before expanding access.
+
+Close Phase 1 acceptance with the installed client and service versions, the
+scope of each flow exercised, and any remaining platform limits. The account
+portal owns acceptance involving the owner's live account. Recording and
+physical display timing follow the [recording contract](../../RUNTIME_EXECUTION.md)
+and require their own evidence before an experiment is used for acquisition.
+
+## Deferred Phase 2
+
+Individual-condition browsing and import into an existing project remain
+deferred. If separately approved after whole-project acceptance, start with
+dependency closure and transactional local import, then extend publishing and
+catalog support, then add the editable condition review. Phase 2 closes when a
+researcher can add multiple compatible conditions with selected codes/settings,
+cancel without modifying the receiving project, and save, reopen and compile
+offline while the original conditions, settings and history are preserved. See the
+[retained condition design](#phase-2-portable-condition-and-merge-contract) and
+[delivery sequence](#phase-2-add-individual-conditions-and-manual-setup).
+
+The dated notes and original design below preserve the implementation history.
+Use the current contract and acceptance steps above for the released workflow.
+
 ## Studio mouse-repair release (November 1, 2026)
 
 The additional shared renderer repairs below are now published in
@@ -454,10 +515,10 @@ assets. Individual-condition merging remains deferred.
   (222 files), repository/docs audits and 2,672 safe unit tests, with 11 skips for
   unavailable Windows symlink privileges. No Qt, presentation or live service calls
   were run for this follow-up.
-- [ ] Visible/manual acceptance remains pending: inspect the full warning and both
-  choices at minimum/default size in both themes, keep an older collecting project,
-  then separately download/review a newer version. Registered Qt tests were not run;
-  execution requires an explicitly approved safe visible environment.
+- Visible checks for this October dialog were still pending. The later
+  [update dialog acceptance](../completed/library-update-dialog-refinement.md)
+  covers the current review and transfer surfaces. The current installed collection
+  and permission flow is in [remaining acceptance](#remaining-whole-project-acceptance).
 
 Canonical workflow and warning text live in
 [Project version checks](../../EXPERIMENT_LIBRARY.md#project-version-checks).
@@ -550,11 +611,12 @@ changes do not rewrite those independent copies.
   `build/c3ready`. Verified original release SHA-256 values, ordinary import/compile,
   explicit COM3, unchanged remaining project fields and byte-identical stimulus/task
   payloads. Retained preparation evidence in `build/com3-preparation-results.json`.
-- [ ] Publish the prepared v1.0.1 archives and withdraw the three defective v1.0.0
-  catalog entries after publication verification. Automatic approval review rejected
-  the upload because it requires explicit authorization for experiment-content
-  publication to `zcm58/FPVS-Studio-Library`. No remote mutation occurred; exact
-  prepared bytes are retained for approval. Previously imported projects are unchanged.
+- Automatic approval review rejected the September request to publish the exact
+  prepared archives and withdraw the three v1.0.0 entries because publishing experiment
+  content required explicit authorization. The prepared bytes were retained and the
+  request made no remote changes. Subsequent catalog availability and publication
+  are recorded in the dated notes. This historical request does not authorize
+  backdated publication or withdrawal.
 
 ## Live download availability follow-up (September 17, 2026)
 
@@ -652,7 +714,7 @@ second ZIP format and lets the existing bundle importer still open it as a new p
 Adding it to an existing project requires a new core merge service; the current project
 importer does not do that.
 
-## Current Repository Evidence
+## September repository evidence
 
 Investigated checkout: `codex/cognitive-load-fpvs`, commit `2e69209`.
 
@@ -968,7 +1030,10 @@ need a new ProjectFile schema or a change to the existing bundle envelope.
 
 ## Delivery Sequence And Verification Gates
 
-### Phase 1: Deliver whole-project support
+### Phase 1: Original whole-project delivery sequence
+
+The source and release steps below are retained as the original delivery record.
+Current cross-machine acceptance is tracked above.
 
 1. **Project contracts and clean publishing.** Finalize experiment catalog/enrollment
    contracts, secure credential storage, and complete-project publishing preparation.
@@ -1054,7 +1119,7 @@ conflict correction, cancellation, and preservation of the receiving experiment.
 Compile validation does not establish physical timing or EEG-trigger delivery;
 ordinary production preflight remains mandatory. Report unperformed checks explicitly.
 
-## Open Operational Choices
+## Original rollout choices
 
 - Resolved for the test deployment: private `zcm58/FPVS-Studio-Library`, service
   `fpvs-studio-library.fpvs-studio-zcm58.workers.dev`, and two synthetic demo projects.
@@ -1066,10 +1131,8 @@ ordinary production preflight remains mandatory. Report unperformed checks expli
 - Linux native keyring and supported installed-environment acceptance (packaging
   explicitly includes the Secret Service backend and its required metadata).
 
-Resolve remaining operational choices before wider lab rollout and packaged acceptance.
-No automatic content updates, arbitrary repository selector, public marketplace,
-Git LFS client, or cross-project asset sharing is included in the first delivery.
-The developer publishing follow-up adds the bundled, password-gated upload GUI described above.
+The current wider-rollout gates are tracked above. The developer publishing follow-up
+added the bundled, password-gated upload GUI described above.
 
 ## Planning Verification And Progress
 
@@ -1157,8 +1220,10 @@ The developer publishing follow-up adds the bundled, password-gated upload GUI d
   structured JSON output and logged CLI errors now follow Studio's conventions.
   Registered Qt cases cover General/Advanced geometry, password rejection/cancel,
   Enter activation, restart gating in source/frozen paths and ordinary settings.
-- [ ] Visible Qt/manual GUI acceptance: Library, creation and developer publishing
-  geometry/keyboard/lifecycle cases registered; execution remains unrun.
+- The September changes registered Library, creation and developer publishing
+  geometry, keyboard and lifecycle coverage. Later Windows dialog and installer
+  evidence is linked in the current baseline. The remaining visible cases follow
+  the current acceptance steps above.
 - [x] September 17 incomplete-upload recovery: reproduced the real Cognitive Load
   asset stuck in GitHub `starter` state with no digest. Exact retry previously stopped
   at the generic checksum check. Retry now rehashes local bytes and rechecks remote
@@ -1174,9 +1239,9 @@ The developer publishing follow-up adds the bundled, password-gated upload GUI d
   Library focused: 161 passed, one Windows symlink skip. Precommit: Ruff, compilation,
   full source mypy, repo/docs audits and 1,877 unit tests passed, eight symlink skips.
   No GUI execution, installer rebuild or second physical machine check was performed.
-- [ ] New installer, second physical machine, Linux native keyring, display scaling,
-  representative large archive, and physical recording acceptance remain unrun.
-- [ ] Phase 2 individual-condition implementation remains deferred.
+- The 3.1.0 release supplies current Windows installer evidence. The active checks
+  above track further cross-machine and installed workflow acceptance. The deferred
+  condition design remains available for future approval.
 
 The plan follows the repository's compact-map and explicit-owner approach described in
 [harness engineering](https://openai.com/index/harness-engineering/): keep boundaries,

@@ -2,6 +2,41 @@
 
 Status: Active
 
+## Current baseline (Studio 3.1.0)
+
+Bounded cache handling, digest verification, download locking, and installer
+owned-file reconciliation are in the shipped updater and setup. Studio and
+Update & Repair use **Download and Install**. The 3.1.0 release recorded 246
+visible Qt tests, packaged Studio and standalone updater smoke checks, and a
+metadata check from the extracted 3.0.1 updater against the published release.
+The disposable Windows release job verified fresh install, direct 3.0.1 →
+3.1.0 upgrade, installed launch and uninstall. Both installs matched all 7,995
+owned files. The upgrade removed obsolete package metadata and preserved
+settings, project and unrelated-file sentinels.
+[Studio 3.1.0 verification](../completed/release-3.1.0.md).
+
+## Remaining native Windows acceptance
+
+1. In a disposable Windows snapshot, qualify an installed updater-driven upgrade
+   through **Download and Install**, from verified selection through Save,
+   helper commitment, Studio exit and relaunch. Exercise Save cancellation and
+   retry from the verified cache, uncommitted close/shutdown, and the supported
+   asset path. Record the installed version and owned-file parity for each path.
+2. Exercise historical chained and skipped-version upgrades using published
+   baselines supported by the current inventory. Verify known obsolete-file and
+   journal cleanup while preserving modified or unrelated content, project data
+   and preferences.
+3. Complete native recovery and cache cases in the
+   [lifecycle checklist](../../../packaging/inno/LIFECYCLE_TESTS.md), including
+   locked files, interrupted replacement or journal writes, unsafe paths,
+   same-size corruption, concurrent download and uninstall with an active lock.
+   Record recovery or safe failure and verify the next clean retry.
+
+Close when the retained evidence covers the remaining cases or names an explicit,
+approved deferral. Use the existing updater, GUI, and packaging tests for any
+source changes found necessary by those checks. The dated entries below record
+previous work and the evidence available at the time.
+
 ## Combined download and install follow-up (October 30, 2026)
 
 The updater uses one explicit **Download and Install** action. That click authorizes
@@ -334,7 +369,7 @@ Read `src/fpvs_studio/updates/AGENTS.md`, `packaging/AGENTS.md`, and
    active partials, every failure/finalization path, simultaneous attempts, shutdown,
    same-size corruption, post-update cleanup, and an obsolete installed-file sentinel.
 
-## Sequence And Acceptance
+## Original implementation sequence
 
 1. Implement cache policy plus `tmp_path` unit tests before changing GUI or packaging.
 2. Add download locking/final cleanup, then GUI shutdown coordination and registered
@@ -342,26 +377,23 @@ Read `src/fpvs_studio/updates/AGENTS.md`, `packaging/AGENTS.md`, and
 3. Add digest verification and update the documented GitHub Release contract.
 4. Add safe installed-file reconciliation and a Windows two-version packaging check.
 
-Implementation acceptance means safe local checks pass and the startup release check
-remains metadata-only, with download/install still explicit. Final release acceptance
-additionally requires a disposable Windows update-over-old plus final uninstall that
-leaves no obsolete app files or update installers. That lifecycle acceptance remains
-pending until a suitable environment is available.
-
 ## Progress
 
 - [x] Review implementation and approve policy defaults.
 - [x] Establish clean feature branch and updater/packaging baseline (25 tests).
 - [x] Bounded cache, cancellation, cross-process locking, and digest verification.
-- [x] Non-blocking GUI lifecycle and registered regression coverage (not executed).
+- [x] Non-blocking GUI lifecycle and registered regression coverage.
 - [x] Owned-file reconciliation for published legacy and future installations.
 - [x] Safe local focused/precommit checks and documentation.
-- [ ] Disposable Windows fresh-install, chained-upgrade, failure, and uninstall checks.
+- [x] 3.1.0 packaged smoke and disposable fresh-install, direct 3.0.1 upgrade
+  and ordinary uninstall.
+- [ ] Managed updater, historical upgrade, native recovery and extended cache
+  acceptance listed above.
 - [x] User-reported visible GUI acceptance (2026-08-31); automated Qt suite not run.
 - [x] Build and hand off the local `1.3.1b1` manual-test installer.
 - [x] Fix the beta 1 profile lookup failure and hand off `1.3.1b2` for a manual retry.
 - [x] Final implementation review and safe verification for feature-branch handoff
-  (2026-09-02); native lifecycle acceptance remains pending.
+  (2026-09-02).
 
 ## Repository Wrap-Up (2026-09-02)
 
@@ -501,16 +533,14 @@ pending until a suitable environment is available.
 - Keep all cleanup best-effort and logged; cleanup failure must not damage user data or
   prevent FPVS Studio from starting.
 
-## Verification
+## Historical release verification (October 9, 2026)
 
 The installation-percentage follow-up was published in
 [Studio 2.4.3](../completed/release-2.4.3.md) on 2026-10-09, with a full installer
 and authenticated direct 2.4.2 patch. Exact payload reconstruction, frozen updater
 source, asset digests, signed GitHub release/assets and live updater selection passed.
-Registered Qt, visible GUI and actual installed-update checks remain unrun; the
-earlier Windows lifecycle acceptance below remains separate.
+Registered Qt, visible GUI and installed-update checks were unrun for that release.
 
 Run the `updates`, `gui`, and `packaging` focused scopes, followed by repo precommit.
 Run registered Qt coverage only when the user approves a safe visible environment.
-Complete the documented Windows fresh-install, update-over-old, and uninstall smoke
-path before release.
+Record any new native results against the remaining acceptance matrix above.

@@ -4,16 +4,52 @@ Status: Active
 
 Date: 2026-09-12
 
-## Browser-free feature requests (November 18, 2026)
+## Current baseline (2026-11-19)
 
-1. Use digest-bound desktop capabilities for feature requests and verify that the
-   separate service rejects bug payloads, invalid receipts and over-budget intake.
-2. Preserve draft recovery and confirm receipt in the dialog with a 300 ms button
-   transition. Verify placeholder rendering, reduced motion and ambiguous delivery.
-3. Commit and push the desktop and service changes. Staging and production
-   activation remain separate deployment acceptance.
+[Studio 3.1.0](../completed/release-3.1.0.md) sends **Help > Request a Feature**
+through `/v1/feature-intents` and `/v1/feature-reports`. This path has no browser
+fallback. The Feedback Worker implements both endpoints, but production version
+`07990408-e6ac-4bc7-802c-842addba62db` lacks `DIRECT_FEATURE_REPORTS_ENABLED`.
+Both that flag and `SUBMISSIONS_ENABLED` must be `true` for direct submission.
+With the direct flag absent, the service returns HTTP 503 `intake_disabled`.
+The feature editor's local draft, copy and save actions remain available.
+Manual bug intake, automatic crash intake and delivery are enabled. Manual bug
+reports still use browser verification. See the [Studio reporting contract](../../BUG_REPORTING.md)
+and [Feedback deployment record](https://github.com/zcm58/FPVS-Studio-Feedback/blob/main/DEPLOYMENT.md).
 
-## Automatic crash reporting follow-up (October 8, 2026)
+## Remaining acceptance
+
+- [ ] In Feedback staging, verify authorized synthetic direct-feature delivery
+  with the required switches enabled. Confirm feature-only input, receipt recovery
+  without duplicates and one private issue and email. Restore the staging switches
+  after acceptance.
+- [ ] Enable `DIRECT_FEATURE_REPORTS_ENABLED=true` in the reviewed production
+  configuration and deploy through the Feedback runbook. Record the active Worker
+  version and the deployed flag values. Verify direct-feature submission with
+  Studio 3.1.0 and an authorized synthetic request, including the receipt and
+  absence of a browser prompt. Confirm manual intake and delivery remain enabled.
+- [ ] Finish the native bug-dialog acceptance at the documented minimum and default
+  sizes in both themes, including the 125% and 150% Windows scaling checks and the
+  packaged manual-report flow. Use the [manual smoke path](../../BUG_REPORTING.md#verification-and-visible-acceptance).
+
+[Packaged automatic crash acceptance](automatic-crash-reporting.md) is tracked
+separately.
+
+## Historical evidence
+
+The entries below preserve the earlier implementation and acceptance design.
+Current menu placement, activation state and outstanding checks are above and in
+the reporting contract.
+
+### Browser-free feature requests (November 18, 2026)
+
+Studio `fd41d93` and Feedback `9eb004a` added digest-bound desktop feature
+capabilities. The desktop change retains draft recovery and uses a 300 ms button
+transition after receipt when reduced motion is off. The source coverage includes
+placeholder rendering, reduced motion and ambiguous delivery. The original
+source checklist is superseded by the deployment acceptance above.
+
+### Automatic crash reporting follow-up (October 8, 2026)
 
 The user authorized automatic emails to the existing maintainer address from all
 installations, initially with explicit opt-in and subsequently requested as opt-out.
@@ -25,9 +61,9 @@ authorization supersedes the earlier no-automatic-upload constraint only for tha
 separate crash-only workflow. Desktop source now defaults on and preserves saved
 opt-outs. The user explicitly approved removing the automatic-report service browser
 check after automatic review requested exact authorization; background registration
-is implemented. Live automatic intake remains disabled pending deployment acceptance.
+was implemented. Live automatic intake was disabled at this point in the rollout.
 
-## Native diagnostics follow-up (October 8, 2026)
+### Native diagnostics follow-up (October 8, 2026)
 
 The [Studio crash reliability work](../completed/studio-crash-reliability.md) adds app-owned local
 native tracebacks and Qt warnings/fatal breadcrumbs. Collection uses the existing
@@ -35,17 +71,17 @@ redaction, size limits, preview and explicit submission. No service changes, aut
 upload or feature-request log collection are introduced. Worker wrappers remain alive
 through native cleanup; the GUI continues processing events during shutdown.
 
-## Error reporting follow-up (October 2, 2026)
+### Error reporting follow-up (October 2, 2026)
 
 The user requested common-error explanations and a Report this bug. Please!
 button on error popups, including fresh report prefilling and optional reproduction
 notes. This supersedes the historical File-only preference below. The existing
 approved service, explicit submission/browser verification, redaction, payload
 limits, worker lifecycle, and receipt recovery remain canonical. Implementation
-and Studio 2.2.5 publication are tracked in
-[the active release plan](error-reporting-and-release-2.2.5.md).
+and the proposed Studio 2.2.5 publication are recorded in
+[the archived release draft](../../references/archive/error-reporting-and-release-2.2.5.md).
 
-## Service integration (2026-09-14)
+### Service integration (2026-09-14)
 
 The user subsequently authorized Cloudflare provisioning and direct email
 notifications to `zmurphy@abe.msstate.edu`. The independent service repository is
@@ -70,14 +106,12 @@ separate invocations. A generation-checked five-minute maintenance chain handles
 cleanup and recovery, with Cron retained as a secondary fallback. Workers Free
 remains in use. The separate service README documents retention, retries and the
 operator restart procedure after a queue outage longer than its 24-hour retention.
-Production intake/delivery are enabled. Desktop configuration now defaults to the
+Production intake/delivery were enabled. Desktop configuration defaulted to the
 approved production endpoint, with an explicitly empty environment override to
-disable it. Source activation requires an updated release for existing installations.
-The earlier desktop-only deferral below records the original implementation stage;
-it does not override this later authorization. Visible desktop geometry and a
-packaged release remain separate acceptance work, so this plan remains active.
+disable it. At this stage, existing installations still needed an updated release
+and the visible desktop geometry and packaged workflow awaited acceptance.
 
-## Desktop implementation (2026-09-14)
+### Desktop implementation (2026-09-14)
 
 Feature-request extension: implemented File > Request a Feature with a single
 4,000-character text box, live counter, independent local drafts, copy/text export,
@@ -114,9 +148,9 @@ separately, reversing the original backend-first implementation order below.
 - Cloudflare, DNS, GitHub App/repository creation, live service validation, and
   packaged deployment remain deferred. No remote resources were changed.
 
-The plan remains active for the separate service integration and visible acceptance.
+The service integration and visible acceptance were open at this stage.
 
-## Decisions and scope
+### Initial decisions and scope
 
 The user requested a plan for Cloudflare hosting using their existing
 `zack-murphy.com` domain and selected descriptions and text error logs only.
@@ -144,7 +178,7 @@ Selected deployment configuration:
 - Full text diagnostics retained in D1 for 14 days. Issue descriptions and a short
   reviewed error excerpt remain in the private GitHub issue until manually removed.
 
-## Domain evidence and deployment boundary
+### Initial domain evidence and deployment boundary
 
 On 2026-09-12 the public homepage identified itself as built with Quarto and GitHub
 Pages. Public DNS returned `holly.ns.cloudflare.com` and
@@ -160,7 +194,7 @@ chosen hostname. Preserve the homepage, mail records, and current site deploymen
 [Homepage](https://zack-murphy.com/),
 [Custom Domain requirements](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
 
-## User workflow
+### Original user workflow
 
 1. Open **File > Report a Bug...** beside the existing File-menu support actions.
    Welcome, root setup, and error dialogs have no reporting button. Unexpected
@@ -186,14 +220,14 @@ eight-step Setup layout. Normal closing preserves the unsent draft; **Discard**
 explicitly deletes that draft. Network work cancels asynchronously without blocking
 the GUI or destroying active worker threads.
 
-## Native Report a Bug surface
+### Original native Report a Bug surface
 
 Implement a dedicated PySide6 `ReportBugDialog`, titled **Report a Bug**, rather
 than asking users to write their report on a website. The browser is used only
 for the verification step. All writing, diagnostic review, progress, and recovery
 remain in the native dialog.
 
-### Entry points and ownership
+#### Entry points and ownership
 
 - Add `report_bug_action` in `gui/main_window.py`, between **Check for Updates**
   and the existing Tutorials/About actions in File. It is available regardless
@@ -208,7 +242,7 @@ remain in the native dialog.
   `gui/bug_report_controller.py`. The main window wires the File actions.
   GUI-neutral collection, persistence, and submission remain in `support/`.
 
-### Layout and fields
+#### Layout and fields
 
 Use the shared dialog styling and components, with a fixed header, two tabs, a
 wrapped status area, and persistent footer actions. The Details tab opens first.
@@ -240,7 +274,7 @@ Before submission, show concise copy explaining the private destination, the
 that a browser verification step will open. Detailed retention information can
 expand in-place. No screenshot, attachment picker, or project-upload control in v1.
 
-### Interaction states
+#### Interaction states
 
 | State | Required behavior |
 | --- | --- |
@@ -256,7 +290,7 @@ receipt/report ID for later reconciliation. Do not discard that identity and the
 resend as a new report. Editing after a definite failure invalidates verification;
 editing after an uncertain outcome first requires checking the previous delivery.
 
-### GUI acceptance
+#### GUI acceptance
 
 The native dialog is part of the initial implementation, not a later enhancement.
 Exercise its minimum 760x680 and default 860x760 sizes in both themes, including
@@ -271,7 +305,7 @@ error-prefill draft preservation, tab switching, diagnostic exclusion/editing,
 validation, every state above, keyboard operation, sizing, and worker-safe closing.
 Use fake services; do not open a real browser or send real reports in GUI tests.
 
-## Service design
+### Service design
 
 ```text
 FPVS Studio report editor -- reviewed text --> Worker HTTPS API
@@ -320,7 +354,7 @@ app identifier are not authentication. Validate actual streamed request size as
 well as Content-Length. Use prepared SQL statements.
 [Turnstile validation](https://developers.cloudflare.com/turnstile/get-started/server-side-validation/).
 
-## GitHub delivery and recovery
+### GitHub delivery and recovery
 
 - Store the GitHub App private key and Turnstile secret in Worker secrets. Use a
   fixed server-configured repository; callers cannot choose the destination,
@@ -353,7 +387,7 @@ well as Content-Length. Use prepared SQL statements.
 [GitHub App installation authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation),
 [Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/).
 
-## Staying within the free plans
+### Staying within the free plans
 
 Verified published allowances on 2026-09-12:
 
@@ -397,7 +431,7 @@ R2 remains a future option requiring a new decision: it requires a subscription
 checkout and can bill above its included usage.
 [R2 onboarding](https://developers.cloudflare.com/r2/get-started/).
 
-## Desktop diagnostics and ownership
+### Initial desktop diagnostics and ownership
 
 Current startup does not configure persistent application logging. The shared
 `gui/window_helpers.py::_show_error_dialog` already formats exception tracebacks.
@@ -439,7 +473,7 @@ remove recoverable backup copies: Free D1 Time Travel retains recovery history
 for seven days. Document this and the separate GitHub retention honestly.
 [D1 recovery limits](https://developers.cloudflare.com/d1/platform/limits/).
 
-## Implementation order and acceptance
+### Superseded initial implementation and rollout checklist
 
 1. **Account and feasibility check:** inspect the active zone/hostname, free plan,
    shared usage, and proposed private repository. Measure a minimal Worker/D1/
@@ -482,9 +516,8 @@ Service tests run in that service repository with its own instructions. Update
 ARCHITECTURE.md, the agent index, GUI_WORKFLOW.md, and support/service contracts when
 implementation establishes the new owners; do not describe planned behavior as shipped.
 
-## Earlier planning validation
+### Earlier planning validation
 
 The original 2026-09-12 planning change affected only this plan and `docs/PLANS.md`.
 `./scripts/verify.ps1 -Scope docs -Tier focused` passed on 2026-09-12: documentation
-hygiene and all nine harness-documentation tests. Current desktop implementation
-and the deferred service work are recorded at the top of this plan.
+hygiene and all nine harness-documentation tests.

@@ -1438,12 +1438,12 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
     QLineEdit, QComboBox, QAbstractSpinBox, QTextEdit, QPlainTextEdit {{
         color: {theme.text_primary};
         background-color: {theme.surface_elevated};
-        border: 1px solid {theme.border};
+        border: 1px solid {theme.control_border};
         border-radius: 6px;
         padding: 3px 6px;
         font-size: {FONT_SIZE_CONTROL}px;
-        selection-background-color: {theme.surface_alt};
-        selection-color: {theme.text_primary};
+        selection-background-color: {theme.primary};
+        selection-color: {theme.selected_text};
     }}
     QLineEdit, QComboBox, QAbstractSpinBox {{
         min-height: 22px;
@@ -1475,9 +1475,9 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
     QComboBox QAbstractItemView {{
         color: {theme.text_primary};
         background-color: {theme.surface_elevated};
-        selection-background-color: {theme.surface_alt};
-        selection-color: {theme.text_primary};
-        border: 1px solid {theme.border};
+        selection-background-color: {theme.primary};
+        selection-color: {theme.selected_text};
+        border: 1px solid {theme.control_border};
     }}
     QCheckBox, QRadioButton {{
         color: {theme.text_primary};
@@ -1656,7 +1656,7 @@ def action_palette_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
     QTreeWidget#action_palette_results {{
         background-color: {theme.surface};
         color: {theme.text_primary};
-        border: 1px solid {theme.border};
+        border: 1px solid {theme.control_border};
         border-radius: 6px;
         outline: none;
     }}
@@ -1700,8 +1700,11 @@ def condition_modifier_stylesheet(theme: StudioTheme | QPalette | None = None) -
     QDialog[conditionModifiersDialog="true"] QListWidget {{
         color: {theme.text_primary};
         background-color: {theme.surface};
-        border: 1px solid {theme.border_soft};
+        border: 1px solid {theme.control_border};
         border-radius: 6px;
+    }}
+    QDialog[conditionModifiersDialog="true"] QListWidget:focus {{
+        border-color: {theme.focus_ring};
     }}
     QDialog[conditionModifiersDialog="true"] QListWidget::item:selected {{
         color: {theme.selected_text};
@@ -1792,7 +1795,7 @@ def experiment_designer_stylesheet(
         min-height: 26px; padding: 6px 20px;
     }}
     QWidget#experiment_designer_widget QPushButton[primaryActionRole="true"]:hover {{
-        background: #2c9397;
+        background: {resolved.primary_hover}; color: {resolved.selected_text};
     }}
     QWidget#experiment_designer_widget QPushButton[primaryActionRole="true"]:disabled {{
         background: {resolved.surface_alt}; color: {resolved.disabled_text};
@@ -1882,8 +1885,8 @@ def attentional_blink_stream_stylesheet(theme: StudioTheme | QPalette | None = N
     QWidget#ab_stream_designer QTableWidget {{
         background: {resolved.surface}; alternate-background-color: {resolved.surface_alt};
         color: {resolved.text_primary}; border: 1px solid {resolved.border_soft};
-        border-radius: 5px; selection-background-color: {resolved.info_bg};
-        selection-color: {resolved.text_primary};
+        border-radius: 5px; selection-background-color: {resolved.primary};
+        selection-color: {resolved.selected_text};
     }}
     QWidget#ab_stream_designer QTableWidget::item {{ padding: 0 8px; }}
     QWidget#ab_stream_designer QHeaderView::section {{
@@ -1907,7 +1910,6 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     color_page_background = theme.page_background
     color_surface_alt = theme.surface_alt
     color_surface_elevated = theme.surface_elevated
-    color_border = theme.border
     color_border_soft = theme.border_soft
     color_text_primary = theme.text_primary
     color_text_secondary = theme.text_secondary
@@ -2129,7 +2131,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-weight: 700;
     }}
     QPushButton {{
-        border: 1px solid {color_border};
+        border: 1px solid {theme.control_border};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         padding: 6px 12px;
@@ -2137,12 +2139,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-size: {FONT_SIZE_CONTROL}px;
         min-height: 30px;
     }}
-    QPushButton:hover {{
-        border-color: {color_border_soft};
-        background-color: {color_surface_alt};
-    }}
-    QPushButton:pressed {{
-        border-color: {color_border_soft};
+    QPushButton:hover, QPushButton:pressed {{
+        border-color: {theme.text_hint};
         background-color: {color_surface_alt};
     }}
     QPushButton:disabled {{
@@ -2253,7 +2251,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QListWidget#condition_list,
     QListWidget#setup_wizard_condition_list,
     QListWidget#run_readiness_checklist {{
-        border: 1px solid {color_border_soft};
+        border: 1px solid {theme.control_border};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         outline: none;
@@ -2291,6 +2289,8 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QListWidget#run_readiness_checklist::item {{
         padding: 4px 6px;
     }}
+    QListWidget#condition_list:focus,
+    QListWidget#setup_wizard_condition_list:focus,
     QListWidget#run_readiness_checklist:focus {{
         border-color: {theme.focus_ring};
     }}
@@ -2357,13 +2357,17 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QTableWidget#assets_table,
     QTableWidget#fixation_cross_data_table {{
-        border: 1px solid {color_border_soft};
+        border: 1px solid {theme.control_border};
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         gridline-color: {color_border_soft};
         selection-background-color: {theme.surface_alt};
         selection-color: {theme.text_primary};
         outline: none;
+    }}
+    QTableWidget#assets_table:focus,
+    QTableWidget#fixation_cross_data_table:focus {{
+        border-color: {theme.focus_ring};
     }}
     QTableWidget#assets_table QHeaderView::section,
     QTableWidget#fixation_cross_data_table QHeaderView::section {{
@@ -2379,14 +2383,14 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QTableWidget#fixation_cross_data_table::item {{
         padding: 4px 8px;
     }}
+    QTableWidget#assets_table::item:hover,
+    QTableWidget#fixation_cross_data_table::item:hover {{
+        background-color: {color_surface_alt};
+    }}
     QTableWidget#assets_table::item:selected,
     QTableWidget#fixation_cross_data_table::item:selected {{
         background-color: {color_primary};
         color: {theme.selected_text};
-    }}
-    QTableWidget#assets_table::item:hover,
-    QTableWidget#fixation_cross_data_table::item:hover {{
-        background-color: {color_surface_alt};
     }}
     QPlainTextEdit#assets_status_text,
     QPlainTextEdit#session_summary_text {{
@@ -2394,6 +2398,10 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         border-radius: {CARD_CORNER_RADIUS}px;
         background-color: {color_surface_elevated};
         color: {color_text_primary};
+    }}
+    QPlainTextEdit#assets_status_text:focus,
+    QPlainTextEdit#session_summary_text:focus {{
+        border-color: {theme.focus_ring};
     }}
     """ + _text_role_stylesheet(theme) + _inline_status_stylesheet(theme)
 
@@ -2688,7 +2696,7 @@ def welcome_window_stylesheet(theme: StudioTheme | QPalette | None = None) -> st
         background: transparent;
     }}
     QPushButton {{
-        border: 1px solid {theme.border};
+        border: 1px solid {theme.control_border};
         border-radius: 10px;
         padding: 12px 10px;
         background-color: {theme.surface_elevated};

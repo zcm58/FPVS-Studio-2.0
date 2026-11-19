@@ -2,15 +2,41 @@
 
 Status: Active
 
-The original Creatine report was on the experiment computer directly. The user
-reproduced an invisible/unusable cursor here on exclusive fullscreen response screens
-viewed through Parsec, despite native visibility flags and accepted clicks. The earlier
-native-state checks were insufficient physical acceptance. The teardown and
-frame-rendered response-cursor repairs are implemented. The user has now confirmed
-visible movement and aligned clicks in the same exclusive fullscreen/Parsec case;
-physical Escape and post-Escape relaunch also passed. Source verification is complete.
-Keep this plan active for the original reporter's direct-host
-qualification; that machine-specific cause has not been established here.
+## Current baseline
+
+Studio 3.1.0 includes the teardown repair and the frame-rendered Windows/Pyglet
+response cursor. Development-host source and exclusive fullscreen checks passed.
+The user confirmed visible movement and aligned clicks through Parsec, and human
+Escape and post-Escape relaunch also passed. The original Creatine report came
+from a user sitting at the experiment computer. That direct-host case remains open.
+
+## Remaining acceptance
+
+- [ ] Have the original reporter use the current Windows build at the experiment
+  computer itself. Run a short fullscreen Test/Pilot with copied Creatine image
+  and word recognition tasks and the original display settings. Confirm the
+  visible pointer moves across the choices, clicks select the intended targets,
+  feedback displays, and normal exit restores the desktop pointer.
+- [ ] On that host, use the physical Escape key during a response screen, then
+  relaunch and repeat a click. Record build, Windows version, GPU/driver, display
+  resolution/scaling and mode, and participant-visible observations and outcomes.
+  If the failure recurs, retain the exact step and session diagnostics to
+  reproduce it on the host.
+
+Close when the original reporter confirms the direct-host sequence and the
+engine maintainer records the result against the
+[mouse-response contract](../../ENGINE_INTERFACE.md#modular-task-rendering).
+Native flags, accepted clicks alone and framebuffer captures are diagnostic evidence.
+
+November 19 follow-up passed all 648 focused engine tests, including
+response-pointer setup, click handling and teardown on normal exit and
+abort. The office PC differs from the original report's computer. The
+direct-host image and word tasks, physical Escape and relaunch remain open.
+On the office PC at 150% Windows scaling, framebuffer measurements showed
+the pointer drawn in both copied Creatine response grids and the native
+handlers accepted one synthetic target click in each. This supplements the
+original Parsec observation and records the current engine behavior on the
+office PC.
 
 ## Current repair and acceptance
 

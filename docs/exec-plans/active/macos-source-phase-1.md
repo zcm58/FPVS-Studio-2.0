@@ -2,29 +2,65 @@
 
 Status: Active
 
-Source implementation and automated source/bundle qualification are complete; physical Mac
-GUI/display/service acceptance was explicitly deferred by the user and remains open.
-Keep this plan active until those gates have evidence; no full parity claim is made.
+## Current baseline
 
-## Decision and outcome
+At the Studio 3.1.0 source baseline, macOS authoring, local Test/Pilot and bundle
+handoff are implemented. The Windows release and the Mac source matrices have
+separate records. Hosted arm64 and Intel checks cover native adapters and both
+directions of synthetic bundle transfer. Local Mac evidence includes visible Qt,
+offline Library import, scoped display/Retina checks and presentation callbacks.
+The user deferred broader physical GUI, display and service acceptance. The
+[macOS support guide](../../MACOS_SUPPORT.md#current-acceptance-gates) owns the
+support limits and exact evidence matrix.
 
-Requested on 2026-11-02: support FPVS Studio from source on macOS so a researcher
-can set up, import, edit and test an experiment on a Mac, then transfer it to a
-Windows lab PC for acquisition. Phase 1 targets parity with the non-hardware
-features of the Windows source application. EEG hardware support is Phase 2.
+## Remaining acceptance
 
-Implementation was authorized on 2026-11-02. Work is active; native Mac acceptance
-remains a required gate and is not established by Windows/fake-backed tests.
-The user selected macOS CI for automated validation and explicitly deferred physical
-Mac GUI/display/service checks until later. Implemented source and Windows/fake-backed
-verification are recorded below; deferred native checks remain open acceptance.
+- [ ] On each physical Mac target being qualified, record a clean source install,
+  first launch, preferences/restart and shutdown. Verify all nine Setup steps at
+  1120 × 820 in Light and Dark, long paths, Retina/dialog/font geometry, keyboard
+  and accessibility. Exercise Finder and Trash, cancellation and permissions.
+- [ ] On the affected Mac, use **Repair Mac 2.command** or **Repair Mac 2.py**.
+  Verify the initial engine/dependency checks, the targeted SciPy recovery if the
+  matching loader failure occurs, accurate completion status, and PyCharm
+  reopening when required. Repeat with a healthy environment and exercise
+  check-only mode, canceled quit and offline reporting recovery. Record the actual
+  engine and display preflight outcome in Test/Pilot. See the
+  [repair preflight](../completed/macos-repair-preflight.md),
+  [completion report](../completed/macos-repair-completion-reports.md) and
+  [targeted SciPy repair](../completed/targeted-scipy-repair.md) records.
+- [ ] Complete native PsychoPy Test/Pilot sessions for each supported experiment
+  category, with representative image and word conditions, tasks and modifiers.
+  Check selected display and Retina geometry, native and observed refresh,
+  timing QC, literal keyboard/mouse response, abort/recovery and local exports.
+  Verify null output and preserve authored recording settings.
+- [ ] Exercise physical bundle dialogs, case-sensitive volumes and broader
+  scene/media transfer both ways. Verify the receiving Windows lab's normal
+  preflight, and compare payloads and same-target compiled plans.
+- [ ] With authorized test accounts and synthetic data, check native Keychain
+  enrollment/restart/revocation, interactive Library download/update/cancel,
+  sharing/reporting, and offline/locked-store recovery. Revisit the intermittent
+  native Library crash on the affected Mac. Exercise the applicable exports and
+  maintainer permission boundaries.
+
+Close when the Mac maintainer and operators record the source commit, OS/CPU,
+dependency versions, display and scaling, workflow and outcome for each physical
+target against the [native checklist](../../MACOS_SUPPORT.md#native-acceptance-to-complete-later).
+EEG acquisition, receiver qualification and physical timing measurement retain
+their separate gates.
+
+## Original decision and workflow
+
+The user authorized macOS source support on 2026-11-02 so a researcher could set
+up, import, edit and test an experiment on a Mac, then transfer it to a Windows
+lab PC for acquisition. The user selected macOS CI for automated validation and
+deferred physical checks. Phase 1 covers the non-hardware Windows source workflows.
 
 Success is this workflow, using the same Studio version on both computers:
 
 1. Export an existing Windows project as `.fpvsbundle`.
 2. Install Studio's source dependencies on a Mac and import into its configured
    FPVS Studio Root Folder, without configuring an EEG device.
-3. Inspect and edit all eight Setup steps, stimuli, tasks and session settings.
+3. Inspect and edit all nine current Setup steps, stimuli, tasks and session settings.
 4. Explicitly test the experiment locally with the existing PsychoPy runtime and
    null trigger output. Mac display calibration is local to this test unless the
    researcher explicitly changes the authored project.
@@ -35,7 +71,7 @@ Success is this workflow, using the same Studio version on both computers:
 
 ## Scope and boundaries
 
-### Top-level repair entry point (2026-11-11)
+### Historical top-level repair entry point (2026-11-11)
 
 The helper is now named `Repair Mac.py`. Running it updates saved PyCharm repair
 configurations that use either of its previous paths.
@@ -57,7 +93,7 @@ for unchanged application behavior; no application or report protocol changed.
 Native Mac repair/restart/reporting acceptance remains unchanged from the
 diagnostics follow-up below.
 
-### Repair diagnostics and reporting (2026-11-11)
+### Historical repair diagnostics and reporting (2026-11-11)
 
 Authorized follow-up: keep all new diagnostics and reporting implementation in
 `macos_repair_environment.py`. Retain private per-run logs, including
@@ -85,10 +121,10 @@ report delivery was executed. An audit rejected a literal synthetic Windows home
 path in a redaction test; constructing that fixture with `PureWindowsPath` resolved
 it without changing the behavior under test.
 
-The native acceptance path is to run the helper in PyCharm, inspect the saved log,
-copy it, then explicitly send a test report through browser verification; repeat
-after a failed check and a restart, and exercise an offline submission/status check
-without duplicate delivery.
+At this revision the manual reporting acceptance path was to run the helper in
+PyCharm, inspect and copy the saved log, then explicitly send a test report through
+browser verification. The planned checks included a failed check, a restart and
+offline recovery without duplicate delivery. The current repair flow is above.
 
 ### PyCharm environment repair (2026-11-11)
 
@@ -277,14 +313,15 @@ Source paths above are relative to `src/fpvs_studio/`. The
 features, adapters, successful CI and deferred physical evidence. Detailed behavior stays
 in [GUI workflow](../../GUI_WORKFLOW.md), [runtime execution](../../RUNTIME_EXECUTION.md),
 [environment](../../ENVIRONMENT.md) and [architecture](../../../ARCHITECTURE.md).
-Coordinate with [lab-independent recording setup](../planned/lab-independent-recording-setup.md)
-without expanding this phase into named lab profiles or multi-monitor selection.
+Named lab profiles remain under
+[lab-independent recording setup](../planned/lab-independent-recording-setup.md).
+Per-launch Mac monitor selection shipped separately and still needs its physical
+checks. See the [monitor selection record](../completed/macos-monitor-selection.md).
 
-## Implementation milestones and remaining acceptance
+## Implementation milestones
 
-Checked items mean implementation/recorded checks are complete. They do not close
-an adjacent native acceptance item. Physical acceptance below remains deferred by the
-user; completed CI items link to the real hosted results.
+Checked items record the implemented work and the checks run. The physical
+acceptance checklist above reflects the current Studio and repair workflows.
 
 ### 1. Establish a reproducible Mac source environment
 
@@ -382,7 +419,7 @@ import must not require Mac enrollment or a new network connection.
   neither local nor hosted offscreen Qt is a substitute for approved visible checks.
 - [x] Record successful native CI runs, resolved dependency versions and qualification
   limits. Both recorded source environments pass; physical acceptance remains open.
-- [ ] Finish physical software acceptance: eight Setup steps at 1120x820 in both
+- [ ] Finish physical software acceptance: nine Setup steps at 1120x820 in both
   themes, long paths, Retina/dialog/font geometry, keyboard/accessibility, native
   rendering/cleanup and authorized Library/sharing/support/maintainer/export flows.
   Explicitly deferred by user; no service activity is authorized merely by the plan.
@@ -477,9 +514,9 @@ evidence are attached to the run. Private native Keychain probes performed real
 save/load/delete without an interactive skip. Hosted 60 Hz / 1024x768 display
 metadata is recorded with `physical_display_qualified=false`.
 
-No real projects, participant data, live service enrollment, EEG devices or physical
-Mac presentation were used. Physical and interactive acceptance remains explicitly
-deferred rather than inferred from the automated results.
+The hosted CI workflows used synthetic data and windowless probes. The separate
+local runs above provide bounded native GUI and presentation evidence. Broader
+physical and interactive acceptance remains deferred.
 
 Planning baseline (historical): 30 focused non-Qt bundle/path/task/relocation checks
 and 13 documentation checks passed before implementation. Those checks established

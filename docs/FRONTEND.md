@@ -208,6 +208,9 @@ one of those groups.
   document notifications until shown, and closed Find Action refreshes on reopening.
   Buttons use the theme's hover, pressed and keyboard focus styles. Primary buttons
   use a focus border that contrasts with their fill in both themes.
+  Shared text fields and dropdowns use the teal selection pair. Focused lists and
+  tables show a contrasting outline at the same border width. Disabled labels use
+  a readable muted foreground in both themes.
   AB previews share derived descriptions within one edit only. Manage Projects scans
   through the app-owned job lifecycle with loading, close and retry states; see
   [GUI responsiveness](GUI_WORKFLOW.md#authoring-and-project-discovery-responsiveness).

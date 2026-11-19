@@ -1,8 +1,12 @@
 # FPVS Studio 2.2.7 OpenFPVS Connection Release
 
-Status: Active
+Status: Archived
 
 Date: 2026-10-06
+
+The independent draft remains unpublished and was intentionally retained by later
+releases. Use the current [Experiment Library contract](../../EXPERIMENT_LIBRARY.md)
+for OpenFPVS access. The original draft's unchecked gates are historical.
 
 ## Scope
 
@@ -30,7 +34,7 @@ The private service plan owns deployment/website acceptance.
 
 - FPVS Studio now connects to the OpenFPVS Experiment Library at openfpvs.com. Re-enter your lab access code once after updating; existing experiments remain available offline.
 
-## Gates
+## Original release gates
 
 - [x] Verify endpoint selection, fresh service-bound enrollment, retry/reopen behavior and exact receipt comparisons.
 - [x] Pass Library/core/packaging/update/documentation focused checks and repository precommit.

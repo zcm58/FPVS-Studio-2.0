@@ -326,7 +326,7 @@ physical key interaction remains a separate acceptance check.
 | Software area | Current implementation/evidence | Remaining Mac evidence |
 | --- | --- | --- |
 | Source startup and dependencies | Clean engine installs, dependency checks and windowless source imports passed both CPU lanes. | First visible startup, restart and close are physical deferred. |
-| Projects and all eight Setup steps | Shared root discovery, create/open/save, drafts, templates and validation; same persisted schemas. | Native dialogs, long paths, cancel/permission errors, 1120x820 bounds and both themes. |
+| Projects and all nine Setup steps | Shared root discovery, create/open/save, drafts, templates and validation; same persisted schemas. | Native dialogs, long paths, cancel/permission errors, 1120x820 bounds and both themes. |
 | Experiment categories | Shared FPVS Oddball, Cognitive Load FPVS and supported letter-stream Attentional-Blink authoring/compiler/runtime. Standard FPVS remains unavailable on all hosts; retired image-pair AB remains unsupported. | Representative native local tests for every supported category; no category is qualified merely by being listed. |
 | Timing, session order and fixation | Shared frame compiler, display-rate constraints, randomization domains, saved/partial condition blocks, fixation rules and seeded realization; same-target cross-OS schedule comparisons passed. | Physical refresh, Retina geometry and onset checks. Different refresh targets need compatible authored timing, not assumed identical frames. |
 | Images and words | Shared import, inspection, variants, normalization, resizing, image/character geometry and word content. Portable intake guards and Finder-metadata tests are non-Qt. | Native source selection, case-sensitive volumes, Unicode filenames, previews and resizer flows. |
@@ -444,7 +444,7 @@ participant data or publish/contact external services without authorization.
   checks on both recorded hosted targets.
 - [ ] Visible first source launch, preferences/restart and clean shutdown on each
   physical target.
-- [ ] All eight Setup steps at 1120x820 in both themes, long values, dialogs,
+- [ ] All nine Setup steps at 1120x820 in both themes, long values, dialogs,
   validation/busy/error states, shortcuts, focus and accessibility.
 - [ ] Native Keychain, Trash/Finder, locked/unavailable-store and permission/cancel
   recovery; use only synthetic credentials and files.

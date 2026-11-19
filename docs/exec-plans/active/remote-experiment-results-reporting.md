@@ -4,13 +4,49 @@ Status: Active
 
 Date: 2026-10-07
 
-## One-time lab connection (2026-10-29)
+## Current baseline (2026-11-19)
+
+[Studio 3.1.0](../completed/release-3.1.0.md) includes private OpenFPVS Results
+enrollment, sharing of eligible completed sessions, receipt recovery and descriptive
+comparison. The integrated Worker and D1 routes have been live since October.
+The November 3 audit verified approved connections for eleven repaired protocol
+scopes and live receipts for eligible study records, including four recovered Birth
+Control sessions. Operational data and synthetic integration tests establish those
+specific delivery outcomes. The controlled two-machine and cancellation checks below
+remain open. See the [data-sharing contract](../../DATA_SHARING.md) and
+[November 3 delivery audit](../completed/reporting-protocol-audit-20261103.md).
+
+## Remaining acceptance
+
+- [ ] In an authorized isolated OpenFPVS study, separately enroll and approve two
+  installed Studio 3.1.0 clients. Run controlled ordinary presentations with
+  synthetic participant data and compare each client's local fixation metrics
+  with the live receipt and dashboard totals. Verify same-receipt recovery after
+  a lost response and rejection for an out-of-scope or revoked credential. Check
+  comparison suppression below the documented cohort requirement and the aggregate
+  against a compatible synthetic reference cohort that meets it.
+- [ ] Separately reproduce slow or stalled staging requests during a project switch
+  and application shutdown. Verify that canceled work drains, that a stale response
+  cannot update a newly selected project, and that an ambiguous upload retains its
+  original report identity for receipt reconciliation on restart.
+
+Record installed builds, service environment, device and study scopes, receipt and
+metrics reconciliation, and cancellation outcomes in the OpenFPVS
+`PROJECT_REPORTING.md` acceptance record.
+
+## Historical evidence
+
+The following sections retain the earlier standalone proposal, rollout and later
+fixes. Production integration and release supersede the former activation and
+packaging checklist. The current gates above cover the remaining acceptance.
+
+### One-time lab connection (2026-10-29)
 
 The [connection plan](../completed/one-time-lab-connection.md) replaces repeated code and
 project-ID entry with authorized study discovery using the saved Library identity.
 Separate Results approval, credentials, saved opt-outs and upload ownership remain.
 
-## Pending connection recovery (2026-10-29)
+### Pending connection recovery (2026-10-29)
 
 An exact OpenFPVS `credential_scope_conflict` now offers explicit replacement
 of the unchanged unregistered local credential. The default answer is No. The
@@ -22,16 +58,15 @@ Malformed bounded error JSON, including excessive nesting, becomes an actionable
 protocol error. Regression and compiled evidence are recorded in the
 [2.5.4 release plan](../completed/interlab-reliability-release-2.5.4.md).
 
-## Reporting implementation
+### Reporting implementation
 
 Implementation approved on 2026-10-05 on `codex/experiment-data-sharing`.
 The source feature is integrated with OpenFPVS lab-code/project administration on
 `codex/openfpvs-project-reporting` and sibling OpenFPVS's
-`codex/studio-project-reporting`. Current verification and remaining activation are
-recorded below; earlier standalone notes are historical. Keep this plan active
-until production activation and packaged Studio acceptance are resolved.
+`codex/studio-project-reporting`. The standalone service proposal predates this
+integration.
 
-## Outcome and approved scope
+### Outcome and approved scope
 
 The 2026-10-12 integration decision supersedes the earlier default-off preference:
 first successful results enrollment defaults sharing on, saved off choices remain
@@ -53,7 +88,7 @@ explicit lab/project grants and private project dashboard. Begin with its
 and synthetic wire fixtures remain undeployed. No research data is submitted by
 local verification, and no additional service or storage provider is required.
 
-## Implemented ownership
+### Implemented ownership
 
 - Core `data_sharing.py` owns strict allowlisted report, profile, receipt and
   comparison schemas and read-only authored protocol/selected-asset fingerprints.
@@ -75,7 +110,7 @@ local verification, and no additional service or storage provider is required.
   refreshes results on each page load/reload/history restoration. Separate Results
   credentials do not expand Library permissions.
 
-## Decisions and integrity boundaries
+### Decisions and integrity boundaries
 
 First approved enrollment follows the current default described above and preserves
 saved off choices. Project/config/bundle transfers exclude automatic sharing
@@ -116,7 +151,7 @@ per scope stays active. Unsent/unfinished captures and raw research exports are
 preserved; receipts and mapping survive for audit. Archive makes no network request
 and changes no shared data. Partial moves are actionable and resumable.
 
-## Initial source verification (before OpenFPVS review)
+### Initial source verification (before OpenFPVS review)
 
 - [x] Neutral strict contracts, zero-target/no-hit semantics, private field rejection,
   bounded payloads and authored/actual-asset fingerprint checks.
@@ -146,7 +181,7 @@ and changes no shared data. Partial moves are actionable and resumable.
   full source mypy (222 files), repository audits and docs hygiene. Earlier Windows
   file-access failures did not recur; no import/serialization code was changed.
 
-## Historical remaining acceptance (2026-10-05)
+### Initial acceptance checklist (2026-10-05)
 
 - [x] Obtain a clean repo precommit result. The earlier file-locking process remains
   unproven; this passing run does not claim an unrelated Windows issue was fixed.
@@ -154,19 +189,11 @@ and changes no shared data. Partial moves are actionable and resumable.
   themes, 125% and 150% scaling: 80 tab/state layouts pass, with explicit opt-out and
   cancellation actions. Retained synthetic reports/screenshots are under the ignored
   `build/results-review/visible-1.25/` and `visible-1.5/` directories.
-- [ ] End-to-end request cancellation during project switching and app shutdown with
-  a staging service. Synthetic layout and registered Qt checks do not establish this.
-- [ ] Reconcile this feature with the current released master before packaging a
-  Results release, then verify the resulting Library and reporting workflows together.
-- [ ] Before live enrollment, authorize private-data ownership, retention/deletion,
-  backup, research approval, hostname/D1 provisioning and current account capacity.
-  Desktop configuration alone is not authorization to deploy.
-- [ ] Deploy an isolated staging experiment after approval. Enroll multiple machines
-  with synthetic sessions; verify full/compact local metrics, lost-response retry
-  deduplication, credential-scope rejection, revocation and a 10-session/3-other-device
-  reference cohort. No local test establishes live multi-machine acceptance.
+At this stage, the proposed standalone service still needed ownership, retention,
+backup and provisioning decisions, release reconciliation and controlled
+acceptance. The integrated OpenFPVS deployment superseded the standalone rollout.
 
-## Historical OpenFPVS review and integration target (2026-10-05)
+### Historical OpenFPVS review and integration target (2026-10-05)
 
 The user selected the existing Library lab code with explicit contribution permission
 per experiment, plus Studio's separate local experiment opt-in. This is the next
@@ -224,7 +251,7 @@ it directly at the Library origin would not connect these services. Preserve exa
 version publication links and bundle download totals separately from contributed
 session counts; neither is a count of participants.
 
-## OpenFPVS integration and activation (2026-10-07)
+### OpenFPVS integration and activation (2026-10-07)
 
 The user approved private lab/administrator project pages, existing lab codes with
 explicit project grants, and automatic sharing only after local experiment opt-in.
@@ -267,9 +294,9 @@ participant number was added to the wire contract. Toolbox reporting is also def
   patch, metadata and checksums pass extraction/source/digest/updater checks;
   bounded visible packaged startup checks pass. See
   [the release record](../completed/release-2.4.0.md).
-- [ ] Real two-machine study enrollment, presentation/metrics acceptance and shutdown
-  cancellation remain operational checks. No real report, experiment or participant
-  upload was used for verification; no production project grant was created.
+
+No real report, experiment or participant upload was used for this October 7
+verification. No production project grant was created during that check.
 
 The earlier standalone bridge/provisioning targets are superseded by the existing
 OpenFPVS backend. The unresolved local capture-capacity limitation above remains
@@ -324,7 +351,7 @@ registered Qt execution needs explicit user approval in a safe visible environme
 Do not use offscreen Qt. The service README owns local synthetic Node test/check
 commands and the separately authorized deployment procedure.
 
-## Dialog copy refinement (2026-10-08)
+### Dialog copy refinement (2026-10-08)
 
 The user's 2026-10-08 dialog simplification removes secondary explanations from the
 main view, keeps optional privacy/identity/cohort detail in tooltips, and preserves
@@ -349,7 +376,7 @@ verification; it is not claimed as a passing complete run. No Qt, HTTP, presenta
 or hardware was launched. The registered GUI checks cover both compact sizes and
 empty/ready/busy/error/validation/offline states; execution remains visible opt-in.
 
-## October 9 reliability follow-up
+### October 9 reliability follow-up
 
 The 2.4.4 reliability follow-up exposes the bounded capture capacity and adds Review
 captures for confirmed archival of unchanged terminal excluded evidence. The launch
@@ -358,7 +385,7 @@ gate also drains local opt-out persistence before runtime starts. See
 canonical storage protections and archive workflow. Visible synthetic qualification
 and the complete non-Qt gate are recorded in the 2.4.4 release plan.
 
-## October 27 startup notice and Welcome follow-up
+### October 27 startup notice and Welcome follow-up
 
 The user requested a dismissible modal identifying projects with saved-report issues,
 replacing the vague persistent Welcome status line. The sequential startup pass now

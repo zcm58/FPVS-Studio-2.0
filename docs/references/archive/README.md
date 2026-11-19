@@ -14,3 +14,6 @@ start from `../../../AGENTS.md`, `../../../ARCHITECTURE.md`, and `../../index.md
 - `REPO_SCAFFOLD_PLAN.md`: original scaffold plan.
 - `PHASE4_AUDIT.md`: historical Phase 4 audit notes.
 - `PY310_COMPAT_AUDIT.md`: historical Python 3.10 compatibility audit notes.
+- [Studio 2.2.5 reporting proposal](error-reporting-and-release-2.2.5.md). The completed release record tracks publication.
+- [Studio 2.2.7 OpenFPVS connection draft](release-2.2.7.md). The independently built draft was retained unpublished.
+- [Studio 2.8.0 draft](release-2.8.0.md). Its features shipped in 2.8.1.

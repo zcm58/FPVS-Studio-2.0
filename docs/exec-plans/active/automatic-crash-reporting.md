@@ -4,7 +4,38 @@ Status: Active
 
 Date: 2026-10-08
 
-## November 19 platform implementation
+## Current baseline (2026-11-19)
+
+[Studio 3.1.0](../completed/release-3.1.0.md) ships the expanded automatic error and
+crash reporter. Toolbox implements the same contract in source (`8423aa0b`). The
+Feedback service applied migration 0007 and enabled automatic intake. Production
+Worker `07990408-e6ac-4bc7-802c-842addba62db` also supports private redacted crash-log
+downloads. Staging verified private issue creation, email delivery and authenticated
+log download using synthetic reports. The general Studio 3.1.0 packaged smoke and
+that service test are separate from packaged end-to-end reporting acceptance.
+See the [service deployment record](https://github.com/zcm58/FPVS-Studio-Feedback/blob/main/DEPLOYMENT.md).
+
+## Remaining acceptance
+
+- [ ] Verify the packaged reporter in Studio 3.1.0 and in a Toolbox release that
+  includes the implementation. Use isolated profiles and authorized synthetic
+  incidents. Check the first-use disclosure, retained opt-out, handled error and
+  next-launch recovery, and an ambiguous retry with the same receipt. Record the
+  build, outcome and delivery evidence for each app. Verify one private issue and
+  maintainer email per accepted incident, with the expected sanitized facts and
+  a private redacted log when available.
+
+Feedback commit `a44fa63` with clearer crash filenames and email text is pushed
+and awaits its own service rollout. Its deployment is independent of the packaged
+reporter check. If rolled out, verify the revised issue, email and private asset
+using a synthetic staging incident and record the deployed version.
+
+## Historical evidence
+
+The dated notes and checklists below describe earlier states. The November 19
+deployment supersedes the earlier activation blockers.
+
+### November 19 platform implementation
 
 The [platform automatic error and crash reporting contract](../../BUG_REPORTING.md#platform-automatic-error-and-crash-reporting)
 defines the shared scope for Studio and Toolbox. It expands eligible incidents to
@@ -20,7 +51,6 @@ retain their original eligibility.
 - [x] Verify focused synthetic recovery, fake HTTP, and native Diagnostics on the laptop display.
 - [x] Verify Studio and Toolbox source sessions and schema-2 client envelopes.
 - [x] Verify synthetic staging delivery and activate the production Feedback Worker.
-- [ ] Verify reporting in packaged Studio and Toolbox releases.
 
 Visible Studio path at `860x560` and `1000x680`: launch with a clean isolated profile,
 review the disclosure before enabling capture, open Settings > Diagnostics in both
@@ -38,7 +68,7 @@ on the reviewed Worker module. See the
 [service deployment record](https://github.com/zcm58/FPVS-Studio-Feedback/blob/main/DEPLOYMENT.md)
 for the migration, exact versions and receipt evidence.
 
-## Authorized workflow
+### Authorized workflow
 
 The user requested automatic crash reports emailed to their existing maintainer address
 (`zmurphy@abe.msstate.edu`) and selected all installations, then requested an opt-out
@@ -58,7 +88,7 @@ as unclean shutdowns, not proven crashes. Automatic reports contain app/OS versi
 failure category and a bounded sanitized stack, without exception messages, research
 records, environment dumps, full support logs or arbitrary attachments.
 
-## Boundaries
+### Boundaries
 
 - Desktop support owns per-user consent, crash session records, sanitized payloads,
   bounded persistent outbox and installation capabilities in account-local storage.
@@ -74,7 +104,7 @@ records, environment dumps, full support logs or arbitrary attachments.
 - Reuse the PySide6 cleanup, registered pytest-qt and project-path audit skills.
   The user's earlier visible synthetic Qt approval remains applicable.
 
-## Verification and progress
+### Initial verification and progress
 
 - [x] Inspect desktop/service ownership and confirm recipient and opt-in scope.
 - [x] Run repo focused baseline (52 pass).
@@ -83,10 +113,10 @@ records, environment dumps, full support logs or arbitrary attachments.
 - [x] Wire Settings and startup through app-owned workers; register visible coverage.
 - [x] Run focused/precommit and visible synthetic Qt checks plus service tests/dry-run.
 - [x] Validate deployment availability and document concrete rollout status.
-- [ ] Authenticate Cloudflare and perform additive migration, live acceptance and activation.
+- Cloudflare authentication, migration and activation were pending at this stage.
 - [x] Update canonical docs, clean temporary artifacts and summarize limitations.
 
-## Opt-out follow-up
+### Opt-out follow-up
 
 - [x] Change the desktop default to on while preserving existing saved opt-outs.
 - [x] Prepare background registration, cancellation, offline/retry/renewal and GUI coverage.
@@ -124,12 +154,11 @@ production and staging dry-runs pass (43.36 KiB bundle, 12.38 KiB gzip). The unc
 desktop already passed the opt-out verification above; these service-only edits do
 not require another desktop or visible Qt run.
 
-## Delivery status
+### Studio 2.4.2 delivery and initial activation blocker
 
-The desktop source now ships in the public
-[Studio 2.4.2 release](../completed/release-2.4.2.md). The independent service remains
-inactive: no new Cloudflare authentication, migration, deployment or live email test
-was performed during that release. Its rollout remains the open item in this plan.
+The original desktop source shipped in the public
+[Studio 2.4.2 release](../completed/release-2.4.2.md). That release included no new
+Cloudflare authentication, migration, deployment or live email test.
 
 The original desktop and service working-tree edits prepared opt-out and
 browser-free automatic registration. Those edits did not replace the local
@@ -140,10 +169,8 @@ deployments, live reports or emails were performed. Automatic intake stays false
 both service configs. A fresh limited device sign-in offered after explicit
 browser-removal approval also expired after five minutes without authorization.
 No migrations, deployments or live email tests were performed in this follow-up.
-Live activation requires an authenticated session and
-acceptance before enabling that switch; installations require an updated desktop build.
 
-## Source acceptance evidence
+### Source acceptance evidence
 
 - Service: 24 synthetic tests pass, including complete automatic issue/email chaining,
   sanitized email contents, duplicate completion, role separation, revocation/expiry,
@@ -162,7 +189,7 @@ acceptance before enabling that switch; installations require an updated desktop
   has 33 denied filesystem/PowerShell fixture failures, 2,843 passes and 11 symlink
   skips; the permission-correct rerun passes with 2,876 tests and 11 symlink skips. These checks never use offscreen Qt.
 
-## Changed owners and manual smoke
+### Initial implementation owners and manual smoke
 
 Desktop source: `app/main.py`, `support/diagnostics.py`, `support/client.py`, new
 `support/crash_reporting.py`, `gui/application.py`, `gui/controller.py`,
@@ -177,13 +204,12 @@ the existing Settings minimum/default size in both themes and confirm reporting 
 without a browser; reproduce a synthetic unexpected exit, restart and inspect
 the maintainer email/private issue. Test offline queuing and disable during delivery;
 confirm the preference stays off on restart and queued files are discarded. Current
-  local tests stub network/browser and never enroll the user's actual installation.
+local tests stub network/browser and never enroll the user's actual installation.
 
 Downloaded isolated Qt dependencies and four temporary service patch helpers were
 removed after testing. Ignored XML reports retain the visible verification evidence.
-The execution plan remains active for the authenticated live activation step.
 
-## October 9 remote integration
+### October 9 remote integration
 
 Studio crash fixes and opt-out reporting were committed as `b3d5328`, then integrated
 with remote reporting lifecycle and whole-project upload commits `c62a913` and
@@ -208,16 +234,15 @@ recheck (`build/merge-serialization-recheck.xml`). No unrelated project-I/O or t
 change was added, and the original full gate's failed result is retained here.
 This source integration does not activate live crash intake or release an installer.
 
-## October 9 reliability follow-up
+### October 9 reliability follow-up
 
 The 2.4.4 fix serializes local preference writes independently of blocked HTTP and
 rejects stale load/network results. Logging budget or sink failure retains the active
 session snapshot until actual shutdown. Synthetic support and visible GUI checks cover
 blocked delivery, rapid toggles, shutdown persistence and later crash recovery.
-The canonical contract remains in [Bug reporting](../../BUG_REPORTING.md); authenticated
-live crash-service activation remains a separate rollout item.
+The canonical contract remains in [Bug reporting](../../BUG_REPORTING.md).
 
-## October 27 diagnostic reliability follow-up
+### October 27 diagnostic reliability follow-up
 
 The approved scope contains four narrow fixes: tolerate disappearing owned logs
 during rotation and collection; defer only the session whose native trace cannot be

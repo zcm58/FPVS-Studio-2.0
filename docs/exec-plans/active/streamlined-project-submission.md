@@ -2,20 +2,43 @@
 
 Status: Active
 
-Desktop source ships in Studio 2.4.2; visible synthetic Qt verification passes.
-Cloudflare production activation is complete. Authenticated end-to-end
-upload/email/validation/publication qualification remains pending.
-
 Date: 2026-10-08
 
-## Large whole-project submissions
+## Current baseline (2026-11-19)
 
-Studio keeps the 64 MiB HTTP path and streams larger bundles under 2 GiB to the
-same private review draft using a linked lab PI account. Verify ordinary and PI
-submissions, loss of membership during upload, exact-byte retry and the pending
-receipt before deployment. Installer delivery follows the Studio release cycle.
+[Studio 3.1.0](../completed/release-3.1.0.md) includes the whole-project review
+workflow and the larger upload path from `e8a3f65`. Bundles through 64 MiB use HTTP
+without Library enrollment. A linked personal account with an active lab PI role
+can stream a larger bundle, up to 2,147,483,647 bytes, into the same private review
+flow. See the [Library upload contract](../../EXPERIMENT_LIBRARY.md#upload-a-project-for-review).
 
-## October 29 cancellation recovery
+The ordinary review service went live in October. On November 18 OpenFPVS deployed
+the PI path as Worker `e68aed7a-d86f-45e3-bb40-ed27651073e7`. Live boundary probes
+confirmed the PI requirement. Local Worker tests streamed synthetic bundles to a
+simulated GitHub draft, including a maximum-size transfer. Those results establish
+the tested transport and boundary behavior. The deployed source and evidence are in
+OpenFPVS `CONDITION_REVIEW.md` and its record commit `3f49f0f`.
+
+## Remaining acceptance
+
+- [ ] In packaged Studio 3.1.0, use approved synthetic projects to submit a standard
+  bundle without Library enrollment and a bundle over 64 MiB with a linked lab PI
+  account. Verify each pending submission and its exact bundle identity in My
+  Uploads. Check cancellation/retry of prepared bytes and denial after PI access
+  is lost, using designated test access.
+- [ ] Confirm the administrator receives one review email per completed upload.
+  Validate the intended test bundle, publish its same private draft, and confirm
+  the catalog and submission status reconcile to the exact reviewed asset. Record
+  the installed build, deployed Worker, receipts and delivery/publication results in
+  OpenFPVS `CONDITION_REVIEW.md`.
+
+## Historical evidence
+
+The following checks and rollout notes record the original standard-size path and
+the later cancellation fix. The Studio 3.1.0 and PI deployment status above
+supersede earlier release and activation references.
+
+### October 29 cancellation recovery
 
 Cancel can arrive after preparation succeeds while the worker is finishing native
 cleanup. The controller now retains that exact preparation and author identity for
@@ -30,9 +53,9 @@ The combined upload-job/version unit selection passes 34 tests. Library focused 
 retained preparation and controls at `760x600` and `820x660`; source Qt is unrun.
 Compiled smoke should cancel as preparation finishes, confirm that no upload starts,
 and retry using the retained preparation. Live upload/email/publication qualification
-remains pending as recorded below.
+was still pending.
 
-## Approved outcome
+### Approved outcome
 
 Reuse the existing clean publication exporter, submission transport, private GitHub
 drafts, administrator review and accepted catalog overlay. File > Export > Upload
@@ -47,7 +70,7 @@ links. The administrator validates and tests the project, then publishes the sam
 GitHub draft. The existing catalog automatically reconciles that publication; signed
 bundle validation and withdrawal checks remain required for Library delivery.
 
-## Owners and lean implementation
+### Initial implementation ownership
 
 - Studio keeps core/developer clean preparation, app-owned GUI jobs and the existing
   bounded Library HTTP transport. Retain the enrolled condition API for older clients.
@@ -59,7 +82,7 @@ bundle validation and withdrawal checks remain required for Library delivery.
 - Keep optional help/inventory details out of the main form. GUI coverage remains
   registered visible opt-in; ordinary local verification does not instantiate Qt.
 
-## Acceptance
+### Initial source acceptance checklist
 
 - [x] Whole-project preparation preserves every condition and excludes research/private files.
 - [x] One Upload action handles save, preparation, delivery, errors, cancellation and exact retry.
@@ -72,7 +95,7 @@ bundle validation and withdrawal checks remain required for Library delivery.
 - [x] Run safe precommit; investigate its two Windows rename failures with fresh-folder regressions.
 - [x] Document activation, approved visible smoke and production qualification boundaries.
 
-## Source verification and delivery record
+### Source verification and delivery record
 
 The existing exporter remains unchanged. Studio reuses PublisherService preparation,
 LibraryClient streaming and OS credential storage under a separate submission namespace.
@@ -127,7 +150,7 @@ Preserve the existing limited login/domain configuration for activation.
 Production migration/deployment and a Studio installer release are separate delivery
 operations; prepare reviewable artifacts and verification before any required approval.
 
-## October 9 Studio integration verification
+### October 9 Studio integration verification
 
 The user authorized visible synthetic Qt tests. After merging the reporting/upload
 updates with the worker crash fixes and automatic crash reporting, all 78 selected
@@ -140,7 +163,7 @@ dependencies were removed. This does not establish live upload, email or publica
 The full merged source checks and Windows save-retry test caveat are recorded in
 [the automatic crash-reporting integration record](automatic-crash-reporting.md#october-9-remote-integration).
 
-## Cloudflare activation: 2026-10-09
+### Cloudflare activation: 2026-10-09
 
 The user authorized activation. Sibling OpenFPVS source `a134828` passed all 329
 synthetic tests, syntax checks, binding type generation and dry packaging. A fresh
@@ -157,4 +180,4 @@ The canonical activation/evidence record is sibling `../OpenFPVS/CONDITION_REVIE
 Cloudflare activation, visible synthetic Qt checks and the Studio 2.4.2 release
 are complete. Authenticated native upload/email/validation/publication qualification
 remains unperformed. No project submission, provider email or publication was used
-as a deployment smoke test. Keep this plan active for that remaining check.
+as a deployment smoke test.

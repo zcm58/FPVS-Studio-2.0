@@ -1,42 +1,43 @@
 # Plans
 
 Use this map for feature-sized work; read only the plan matching the task. Current
-behavior belongs in architecture/package guides and focused contracts. A plan may
-remain active for external acceptance after its desktop source ships. An unfinished
-historical release draft does not authorize publishing an old version.
+behavior belongs in architecture/package guides and focused contracts. An active
+plan may track external acceptance after the source ships. The active and planned
+scopes below were reviewed against Studio 3.1.0 and its integration baseline on
+2026-11-19.
 
 ## Active Work and Acceptance
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Shared authoring tokens implemented; native scaling and full Setup acceptance remain. |
-| [Desktop text hierarchy](exec-plans/active/desktop-text-hierarchy.md) | Welcome version and shared text roles implemented. Visible verification pending. |
-| [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Visible checks passed. Physical discovery and reconnect acceptance pending. |
-| [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Show higher fixed refresh rates and link to Advanced display |
-| [Studio 2.8.0 release](exec-plans/active/release-2.8.0.md) | Retained draft and build evidence |
-| [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
-| [Fit task screens](exec-plans/active/task-screen-fit.md) | Use the realized viewport for pre- and post-condition screens in Test/Pilot and recording |
-| [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
-| [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Expanded desktop capture, build acceptance, and independent service rollout |
-| [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
-| [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Manual service implemented; retained native/packaged acceptance and automatic-crash follow-up have separate evidence |
-| [Error reporting and 2.2.5 proposal](exec-plans/active/error-reporting-and-release-2.2.5.md) | Implemented source with an unfinished historical release request; preserve its evidence without republishing the already released version |
-| [OpenFPVS account portal](exec-plans/active/fpvs-account-portal.md) | Personal Studio connection and lab-scoped Library cutover with migration 0028; live account rollout tracked separately |
-| [Private Experiment Library](exec-plans/active/private-experiment-library.md) | Whole projects/current-project updates implemented; wider installed/Linux/keyring/hardware acceptance remains separate; individual-condition Phase 2 deferred |
-| [Independent 2.2.7 release draft](exec-plans/active/release-2.2.7.md) | Built unpublished draft explicitly retained by later releases; its visible/release gates are unfinished |
-| [Results reporting](exec-plans/active/remote-experiment-results-reporting.md) | Deployed integration and synthetic acceptance recorded; real two-machine presentation/metrics and shutdown cancellation remain operational checks |
-| [Whole-project review uploads](exec-plans/active/streamlined-project-submission.md) | Desktop/service deployment recorded; authenticated live upload/email/publication qualification remains unperformed |
-| [Studio/Toolbox/OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md) | Completed handoff/shared reporting implemented; manual workflow and hardware/montage qualification remain separate |
-| [Unicorn recording](exec-plans/active/unicorn-hybrid-black-support.md) | Raw BDF markers and offline timing report verified. Fullscreen bench repeats characterized software cadence. Broader receiver, Toolbox and physical timing checks remain open. |
+| [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
+| [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Recorder 2 digit sends verified. Qualify physical automatic discovery and BioSemi reconnect in ActiView. |
+| [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Native 60.02 Hz advisory and keyboard actions passed. Qualify the fixed 60/120 Hz display switch. |
+| [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Windows cursor passed Parsec, Escape and relaunch. Qualify the original reporter's Creatine project on the direct host. |
+| [Fit task screens](exec-plans/active/task-screen-fit.md) | Viewport fitting shipped in 2.9.1. Repeat the affected Creatine laptop runs at 125% and 150%. |
+| [macOS source support](exec-plans/active/macos-source-phase-1.md) | Source and hosted ARM/Intel transfer checks passed. Verify the physical GUI, Test/Pilot, affected-Mac repair and interactive services. |
+| [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Live intake enabled. Qualify packaged Studio and Toolbox end to end and track the separate crash filename/email rollout. |
+| [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Fresh install, direct 3.0.1 upgrade and uninstall passed for 3.1.0. Qualify managed upgrades, historical upgrade paths and native recovery/cache behavior. |
+| [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Activate and verify direct feature requests in production. Finish packaged/native manual-report acceptance. |
+| [OpenFPVS account portal](exec-plans/active/fpvs-account-portal.md) | Migration 0028 is deployed. Verify owner sign-in and lab membership, then enrollment, download and revocation on a second computer. |
+| [Private Experiment Library](exec-plans/active/private-experiment-library.md) | Whole-project install, guarded updates and personal accounts shipped. Qualify installed multi-machine, credential and larger-project cases. Individual-condition import remains deferred. |
+| [Results reporting](exec-plans/active/remote-experiment-results-reporting.md) | Live study receipts verified. Check two-machine presentation and metrics, plus cancellation during shutdown. |
+| [Whole-project review uploads](exec-plans/active/streamlined-project-submission.md) | Standard and PI paths are deployed. Verify packaged authenticated uploads, notification and publication of the exact reviewed artifact. |
+| [Studio/Toolbox/OpenFPVS integration](exec-plans/active/studio-toolbox-integration.md) | Studio export shipped and matching Toolbox support is in source. Verify the installed pair, roll out collection/roster support, then qualify the three-product workflow. |
+| [Unicorn recording](exec-plans/active/unicorn-hybrid-black-support.md) | Raw BDF markers and offline timing report verified. Qualify receiver loss, Toolbox processing and optical timing. |
 
 ## Planned Work
 
 Proposals are not implemented behavior. Start in `planned/` and move a plan to
 `active/` when implementation is authorized.
 
-- [Image pool reset policy](exec-plans/planned/image-pool-reset-policy.md)
+- [Image pool reset policy](exec-plans/planned/image-pool-reset-policy.md) adds
+  opt-in carryover between repeated Shuffle runs while retaining 3.1.0 seed behavior by default.
 - [Participant results and question presentation](exec-plans/planned/participant-results-and-question-presentation.md)
-- [Lab-independent recording setup](exec-plans/planned/lab-independent-recording-setup.md)
+  adds a filtered response viewer and Masking export using the existing result readers.
+  Optional question styling remains a separate slice.
+- [Named local recording profiles](exec-plans/planned/lab-independent-recording-setup.md)
+  builds reusable per-computer profiles on the current Recording settings and selected-display preflight.
 
 ## Plan Rules and History
 
@@ -44,6 +45,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Archived release drafts and proposals](references/archive/README.md)
 - [Master consolidation](exec-plans/completed/master-consolidation.md):
   merged ImageEqualizer, Library updates and pending work with current updater/Mac repair source.
 - [Targeted SciPy repair](exec-plans/completed/targeted-scipy-repair.md):
@@ -63,6 +65,8 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
   updated. Focused and approved visible Windows checks passed; verification recorded.
 - [Desktop panel hierarchy](exec-plans/completed/desktop-panel-hierarchy.md):
   flattened redundant framing and verified the affected layouts in Light and Dark.
+- [Desktop text hierarchy](exec-plans/completed/desktop-text-hierarchy.md) records
+  Windows text, launch status, keyboard and Reduce motion verification.
 - [Desktop interface polish](exec-plans/completed/desktop-interface-polish.md):
   simplified project entry, guided setup, runtime diagnostics, Settings and Image Resizer.
   Verified in Light and Dark on the Windows desktop at 100% scaling.

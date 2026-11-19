@@ -1,9 +1,17 @@
 # Native Windows lifecycle acceptance (explicit opt-in only)
 
-Status: **Pending installer lifecycle.** The user accepted the visible updater GUI on
-2026-08-31. No agent-run installer, uninstaller, or Qt application has been executed.
-Python fixture tests and Inno compilation do not validate native Windows file-handle,
-rollback, or uninstall behavior.
+The [Studio 3.1.0 release record](../../docs/exec-plans/completed/release-3.1.0.md)
+verifies fresh install, direct upgrade from 3.0.1, installed launch and ordinary
+uninstall on disposable Windows. Use the
+[active updater plan](../../docs/exec-plans/active/bounded-updater-storage-and-clean-upgrades.md)
+to track managed upgrades, historical upgrade paths, interruption, recovery and
+extended uninstall/cache cases. Run destructive fixtures only in a disposable
+environment with explicit opt-in.
+
+## Historical 1.3.1 beta acceptance (August–September 2026)
+
+The user accepted the visible updater GUI on 2026-08-31. Agent-run installer,
+uninstaller and Qt execution had not occurred at the start of that beta test.
 
 The user requested a local `1.3.1b1` beta to install manually on their own machine.
 That is an ordinary upgrade test, not authorization for agent-run installation or the
@@ -83,7 +91,7 @@ handle-bound SHA-256 hashing; no extra interpreter is required on end-user machi
 1. Install the old release(s) in the disposable account, adding sentinels before the
    final upgrade. Record the original uninstall registry entry and shortcuts.
 2. Run the new installer with Inno logging enabled, both directly and from the app's
-   explicit **Install and Restart** action. Verify ordinary installation/launch UX.
+   explicit **Download and Install** action. Verify ordinary installation/launch UX.
 3. Confirm obsolete **known-hash** files disappear, current packaged files match the
    fresh new installation, unknown/modified files survive, and old package metadata
    no longer shadows the current app version.

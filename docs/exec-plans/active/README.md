@@ -1,8 +1,8 @@
 # Active Execution Plans
 
 Use this folder for approved FPVS Studio implementation and unresolved acceptance.
-Find the relevant plan and current remaining gate in [the planning map](../../PLANS.md);
-do not load every active plan. Retained historical release drafts are identified there.
+Find the relevant plan and current remaining gate in [the planning map](../../PLANS.md).
+Retained historical release drafts live in [Archived References](../../references/archive/README.md).
 
 Active plans must declare:
 

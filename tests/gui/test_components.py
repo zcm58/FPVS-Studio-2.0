@@ -366,9 +366,84 @@ def test_studio_themes_keep_accessible_text_contrast(qapp) -> None:
         assert contrast_ratio(theme.text_primary, theme.surface_elevated) >= 4.5
         assert contrast_ratio(theme.text_secondary, theme.surface_elevated) >= 4.5
         assert contrast_ratio(theme.selected_text, theme.primary) >= 4.5
-        assert contrast_ratio(theme.error_text, theme.page_background) >= 4.5
-        assert contrast_ratio(theme.error_text, theme.surface_elevated) >= 4.5
+        for text, fill in (
+            (theme.success_text, theme.success_bg),
+            (theme.warning_text, theme.warning_bg),
+            (theme.info_text, theme.info_bg),
+            (theme.pending_text, theme.pending_bg),
+            (theme.error_text, theme.error_bg),
+        ):
+            for surface in (fill, theme.page_background, theme.surface_elevated, theme.surface_alt):
+                assert contrast_ratio(text, surface) >= 4.5
+        for surface in (
+            theme.page_background, theme.surface, theme.surface_elevated, theme.surface_alt,
+        ):
+            assert contrast_ratio(theme.disabled_text, surface) >= 4.5
+        assert contrast_ratio(theme.primary_disabled_text, theme.primary_disabled_bg) >= 4.5
         assert theme.error_text in error_text_stylesheet(theme)
+
+
+@pytest.mark.parametrize("theme", [LIGHT_STUDIO_THEME, DARK_STUDIO_THEME], ids=["light", "dark"])
+def test_studio_control_boundaries_and_focus_keep_contrast(theme) -> None:
+    fields = form_controls_stylesheet(theme)
+    studio = studio_theme_stylesheet(theme)
+    welcome = welcome_window_stylesheet(theme)
+    actions = components.action_palette_stylesheet(theme)
+    modifiers = components.condition_modifier_stylesheet(theme)
+    ab_stream = components.attentional_blink_stream_stylesheet(theme)
+    designer = components.experiment_designer_stylesheet(theme)
+    boundary = f"border: 1px solid {theme.control_border};"
+    hover = f"border-color: {theme.text_hint};"
+    focus = f"border: 2px solid {theme.focus_ring};"
+    filled_focus = f"border-color: {theme.selected_text};"
+    focus_color = f"border-color: {theme.focus_ring};"
+    disabled_color = f"color: {theme.disabled_text};"
+    for stylesheet, selector, declaration in (
+        (fields, "QPlainTextEdit", boundary),
+        (fields, "QComboBox QAbstractItemView", boundary),
+        (fields, "QPlainTextEdit:hover", hover),
+        (fields, "QPlainTextEdit:focus", focus_color),
+        (fields, "QPlainTextEdit:disabled", disabled_color),
+        (actions, "QTreeWidget#action_palette_results", boundary),
+        (actions, "QTreeWidget#action_palette_results:focus", focus_color),
+        (modifiers, 'QDialog[conditionModifiersDialog="true"] QListWidget', boundary),
+        (modifiers, 'QDialog[conditionModifiersDialog="true"] QListWidget:focus', focus_color),
+        (ab_stream, "QWidget#ab_stream_designer QTableWidget",
+         f"selection-background-color: {theme.primary};"),
+        (ab_stream, "QWidget#ab_stream_designer QTableWidget",
+         f"selection-color: {theme.selected_text};"),
+        (designer, 'QWidget#experiment_designer_widget QPushButton[primaryActionRole="true"]:hover',
+         f"background: {theme.primary_hover}; color: {theme.selected_text};"),
+        (studio, "QPushButton", boundary),
+        (studio, "QPushButton:hover, QPushButton:pressed", hover),
+        (studio, "QPushButton:disabled", disabled_color),
+        (studio, "QPushButton:focus", focus),
+        (studio, 'QPushButton[primaryActionRole="true"]:disabled',
+         f"color: {theme.primary_disabled_text};"),
+        (studio, 'QPushButton[primaryActionRole="true"]:focus', filled_focus),
+        (studio, "QListWidget#run_readiness_checklist", boundary),
+        (studio, "QListWidget#run_readiness_checklist:focus", focus_color),
+        (studio, "QTableWidget#fixation_cross_data_table", boundary),
+        (studio, "QTableWidget#fixation_cross_data_table:focus", focus_color),
+        (studio, "QPlainTextEdit#session_summary_text:focus", focus_color),
+        (welcome, "QPushButton", boundary),
+        (welcome, "QPushButton:focus", focus),
+        (welcome, 'QPushButton[welcomeRole="primary"]:focus', filled_focus),
+    ):
+        rule = stylesheet.split(f"{selector} {{", 1)[1].split("}", 1)[0]
+        assert declaration in rule, selector
+
+    for surface in (
+        theme.page_background, theme.surface, theme.surface_elevated, theme.surface_alt,
+    ):
+        assert contrast_ratio(theme.control_border, surface) >= 3
+        assert contrast_ratio(theme.text_hint, surface) >= 3
+        assert contrast_ratio(theme.focus_ring, surface) >= 3
+    for fill in (theme.primary, theme.primary_hover, theme.primary_pressed):
+        assert contrast_ratio(theme.selected_text, fill) >= 4.5
+    assert contrast_ratio(theme.primary, theme.surface_elevated) >= 3
+    assert contrast_ratio(theme.primary, theme.surface_alt) >= 3
+    assert contrast_ratio(theme.primary, theme.border_soft) >= 3
 
 
 def test_dark_theme_stylesheets_use_dark_tokens(qapp) -> None:
@@ -435,9 +510,11 @@ def test_form_styles_preserve_native_arrow_subcontrols(qapp) -> None:
         assert subcontrol not in stylesheet
 
 
-def test_shared_fields_keep_keyboard_editing_and_selection(qtbot) -> None:
+@pytest.mark.parametrize("theme", [LIGHT_STUDIO_THEME, DARK_STUDIO_THEME], ids=["light", "dark"])
+def test_shared_fields_keep_keyboard_editing_and_selection(qtbot, theme) -> None:
     dialog = QDialog()
     qtbot.addWidget(dialog)
+    dialog.setPalette(_palette_with_window_color(theme.page_background))
     layout = QFormLayout(dialog)
     name = QLineEdit("Condition", dialog)
     combo = QComboBox(dialog)
@@ -450,6 +527,11 @@ def test_shared_fields_keep_keyboard_editing_and_selection(qtbot) -> None:
     apply_dialog_theme(dialog)
     dialog.resize(420, 200)
     dialog.show()
+    for widget in (name, combo.view()):
+        widget.ensurePolished()
+        palette = widget.palette()
+        assert palette.color(QPalette.ColorRole.Highlight).name() == theme.primary
+        assert palette.color(QPalette.ColorRole.HighlightedText).name() == theme.selected_text
     name.setFocus()
     name.selectAll()
     qtbot.keyClicks(name, "Renamed condition")
