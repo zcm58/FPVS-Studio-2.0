@@ -10,6 +10,7 @@ from PySide6.QtWidgets import QProgressDialog, QWidget
 from shiboken6 import isValid
 
 from fpvs_studio.gui.update_lifecycle import update_lifecycle
+from fpvs_studio.support.diagnostics import record_internal_error
 
 ProgressDialogFactory = Callable[[str, str, int, int, QWidget], QProgressDialog]
 
@@ -36,6 +37,7 @@ class GuiTaskWorker(QObject):
         try:
             result = self._callback()
         except Exception as error:
+            record_internal_error(error, "application")
             self.failed.emit(error)
         else:
             self.succeeded.emit(result)
@@ -85,6 +87,7 @@ class PersistentThreadTaskWorker(QObject):
         try:
             result = request.callback()
         except Exception as error:
+            record_internal_error(error, "presentation")
             self.failed.emit(request, error)
         else:
             self.succeeded.emit(request, result)

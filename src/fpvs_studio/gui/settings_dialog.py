@@ -578,14 +578,17 @@ class AppSettingsDialog(QDialog):
         diagnostics_layout = QVBoxLayout(diagnostics)
         diagnostics_layout.setContentsMargins(0, 0, 0, 0)
         diagnostics_layout.setSpacing(10)
-        self.crash_reports_checkbox = QCheckBox("Automatically send crash reports", diagnostics)
+        self.crash_reports_checkbox = QCheckBox(
+            "Automatically send error and crash reports", diagnostics,
+        )
         self.crash_reports_checkbox.setObjectName("automatic_crash_reports_checkbox")
         self.crash_reports_checkbox.setChecked(automatic_crash_reports_enabled)
         self.crash_reports_checkbox.setEnabled(on_automatic_crash_reports_changed is not None)
         self.crash_reports_checkbox.toggled.connect(self._configure_crash_reports)
         diagnostics_layout.addWidget(self.crash_reports_checkbox)
         crash_help = QLabel(
-            "Studio sends a report on the next launch after a crash.", diagnostics,
+            "Studio reports unexpected errors and recovers crash reports on the next launch.",
+            diagnostics,
         )
         crash_help.setWordWrap(True)
         mark_text_role(crash_help, "supporting")
@@ -608,9 +611,10 @@ class AppSettingsDialog(QDialog):
         self.crash_report_details_button.setAutoRaise(True)
         self.crash_report_details_button.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         details = QLabel(
-            "The Studio maintainer receives the app and OS versions, failure category, and "
-            "sanitized stack locations. Reports exclude error messages, full logs, projects, "
-            "stimuli, and participant records.\n\n"
+            "The Studio maintainer receives the app and OS versions, hardware and selected "
+            "software details, the failed operation, and sanitized stack locations when "
+            "available. Reports exclude error messages, full logs, projects, stimuli, and "
+            "participant records.\n\n"
             "Turning this off discards queued reports for this installation and revokes "
             "reporting access when connected. Reports already sent or in transit "
             "cannot be recalled.",

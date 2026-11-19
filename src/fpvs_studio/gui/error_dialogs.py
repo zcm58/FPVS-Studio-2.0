@@ -8,6 +8,7 @@ from functools import partial
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 
+from fpvs_studio.support.diagnostics import record_internal_error
 from fpvs_studio.support.error_explanations import ErrorExplanation, explain_error
 
 REPORT_BUTTON_TEXT = "Report this bug. Please!"
@@ -112,6 +113,7 @@ def install_error_reporting(app: QApplication) -> ErrorDialogReporter:
 def decorate_error_dialog(
     box: QMessageBox, error: BaseException, *, explanation: ErrorExplanation | None = None,
 ) -> None:
+    record_internal_error(error, "application")
     app = QApplication.instance()
     if isinstance(app, QApplication):
         install_error_reporting(app).decorate(box, error=error, explanation=explanation)

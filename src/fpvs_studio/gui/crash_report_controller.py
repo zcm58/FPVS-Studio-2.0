@@ -8,15 +8,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, RLock
 
-from PySide6.QtCore import QObject, QTimer, Signal, Slot
-from PySide6.QtWidgets import QApplication
+from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from fpvs_studio.gui.update_lifecycle import UpdateJob, UpdateTaskResult, update_lifecycle
 from fpvs_studio.support.client import ReportCancelled, ReportClient, ReportServiceError
 from fpvs_studio.support.crash_reporting import CrashConsent, CrashStore
+from fpvs_studio.support.diagnostics import refresh_automatic_capture
 from fpvs_studio.support.storage import support_directory
 
 _LOGGER = logging.getLogger(__name__)
+REPORT_CONTENTS = (
+    "Reports include the app and operating system versions, hardware model, CPU, GPU, "
+    "memory, selected software versions, the failed operation, and sanitized stack locations "
+    "when available. They exclude error messages, full logs, project data, stimuli, and "
+    "participant records."
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +61,8 @@ class CrashReportController(QObject):
         self._preference_revision = 0
         self._job_revision = 0
         self._delivery_notice = ""
+        self._disclosure: QMessageBox | None = None
+        self._disclosure_shown = False
         self._lifecycle = update_lifecycle(app)
         self._lifecycle.shutdown_started.connect(self._shutdown)
         self._retry = QTimer(self)
@@ -103,7 +112,9 @@ class CrashReportController(QObject):
         self._preference_revision += 1
         self._delivery_notice = ""
         if not enabled:
+            refresh_automatic_capture(enabled=False)
             self._retry.stop()
+            self._disclosure_shown = False
         if self._job is not None:
             self._job.cancel()
         self._notify("Saving preference…")
@@ -135,6 +146,8 @@ class CrashReportController(QObject):
         if isinstance(result.value, CrashConsent):
             self._consent = result.value
             self.enabled = self._consent.enabled
+            if self.enabled and self._consent.expanded_disclosed:
+                refresh_automatic_capture(enabled=True)
         self._report_state()
         self._upload()
 
@@ -154,8 +167,9 @@ class CrashReportController(QObject):
             self.client.revoke_crashes(consent, cancel)
             consent = store.finish_revocation(consent.installation_id, cancel)
             connected = True
-        if not consent.enabled or cancel.is_set():
+        if not consent.enabled or not consent.expanded_disclosed or cancel.is_set():
             return _SyncResult(consent, connected=connected)
+        store.recover()  # Freeze local recovery before a potentially blocked registration request.
         if not consent.registered:
             self.client.register_crashes(consent, cancel)
             consent = store.mark_registered(consent.installation_id, cancel)
@@ -171,8 +185,9 @@ class CrashReportController(QObject):
     @Slot()
     def _upload(self) -> None:
         pending_revocation = self._consent is not None and self._consent.revoke_pending
+        disclosed = self._consent is not None and self._consent.expanded_disclosed
         if (
-            (self.enabled or pending_revocation)
+            (self.enabled and disclosed or pending_revocation)
             and self.client.enabled
             and self._job is None
             and self._preference_job is None
@@ -221,6 +236,8 @@ class CrashReportController(QObject):
             if result.value.connected:
                 self._delivery_notice = ""
         self._report_state()
+        if self.enabled and self._consent is not None and self._consent.expanded_disclosed:
+            refresh_automatic_capture(enabled=True)
         if stage == "load":
             self._upload()
 
@@ -233,13 +250,55 @@ class CrashReportController(QObject):
         status = self._delivery_notice
         if pending_revocation and not self.enabled:
             status = "Access revocation will retry when connected."
+        elif self.enabled and self._consent is not None and not self._consent.expanded_disclosed:
+            status = "Review the report contents before automatic reporting starts."
+            self._show_disclosure()
         elif self.enabled and not self.client.enabled:
             status = "Report delivery is paused for this launch."
         self._notify(status)
 
+    def _show_disclosure(self) -> None:
+        if self._disclosure is not None or self._disclosure_shown:
+            return
+        self._disclosure_shown = True
+        notice = QMessageBox(QApplication.activeWindow())
+        notice.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        notice.setObjectName("automatic_crash_report_disclosure")
+        notice.setWindowTitle("Automatic error and crash reports")
+        notice.setText(
+            "Studio can send automatic reports to its maintainer after an error or crash."
+        )
+        notice.setInformativeText(REPORT_CONTENTS + "\n\nChange this in Settings > Diagnostics.")
+        keep = notice.addButton("Keep enabled", QMessageBox.ButtonRole.AcceptRole)
+        off = notice.addButton("Turn off", QMessageBox.ButtonRole.RejectRole)
+        notice.setDefaultButton(keep)
+        notice.setEscapeButton(off)
+
+        def disclose() -> None:
+            self._disclosure = None
+            if self._lifecycle.is_shutting_down:
+                return
+            if notice.clickedButton() is off:
+                self.configure(False)
+            elif notice.clickedButton() is keep and self.enabled and self._preference_job is None:
+                # A remote revocation can be in flight while the operator reads the notice.
+                self._preference_revision += 1
+                self._preference_job = self._lifecycle.start_task(
+                    lambda progress, cancel: self.store().disclose(),
+                    keep_success_on_cancel=True,
+                    finish_on_shutdown=True,
+                )
+                self._preference_job.finished.connect(self._preference_done)
+
+        notice.finished.connect(disclose)
+        self._disclosure = notice
+        notice.show()
+
     @Slot()
     def _shutdown(self) -> None:
         self._retry.stop()
+        if self._disclosure is not None:
+            self._disclosure.close()
         if self._job is not None:
             self._job.cancel()
 

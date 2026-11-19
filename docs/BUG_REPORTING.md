@@ -35,11 +35,14 @@ persistence. Local Qt execution remains opt-in; no live service is used.
 
 ## Platform automatic error and crash reporting
 
-This is the target contract for FPVS Studio and FPVS Toolbox. The automatic
+This is the shared contract for FPVS Studio and FPVS Toolbox. The automatic
 Mac repair completion report is the reference for environment detail and email
 format. Studio first shipped narrower crash capture and recovery in 2.4.2.
-Mac repair workflow intake is live. Expanded desktop capture and automatic crash
-intake require implementation and deployment acceptance.
+Mac repair workflow and schema-2 desktop incident intake are live. Expanded capture
+is implemented in Studio and Toolbox source. Installed clients need a build that
+includes those changes.
+See the [automatic-crash plan](exec-plans/active/automatic-crash-reporting.md)
+for build, staging, and activation evidence.
 
 ### Which incidents are reported
 
@@ -177,26 +180,27 @@ record is authoritative for migration `0006_workflow_reporting.sql` and the sepa
 `WORKFLOW_REPORTS_ENABLED` switch. Workflow completion and desktop crash intake
 have separate routes and installation capabilities.
 
-### Existing Studio crash capture and recovery
+### Studio capture and recovery
 
-Settings > Diagnostics offers **Automatically send crash reports**, on by default
-in desktop source. A saved off choice remains off across upgrades and restarts.
+Settings > Diagnostics offers **Automatically send error and crash reports**, on by
+default. A saved off choice remains off across upgrades and restarts. A one-time
+startup notice lists the expanded fields and offers **Keep enabled** or **Turn off**.
+Studio waits for the local disclosure record before expanded capture and delivery.
 The switch remains usable during network work. Local preference writes run independently
 of blocked HTTP, serialize repeated changes and finish during ordinary shutdown.
 Stale network/load results cannot restore an earlier preference. Registration happens in a worker
 without opening a browser, and closing Settings preserves the preference.
 An explicitly disabled reporting origin pauses registration and uploads.
 
-Studio's client is prepared for browser-free background registration. The current
-Feedback service provides the Mac workflow route. Desktop crash intake still
-requires service implementation and deployment acceptance. Manual bug reports
-retain browser/Turnstile verification.
+Studio registers in the background. Manual bug reports retain browser/Turnstile
+verification.
 
 After an unexpected exit, the next Studio startup recovers eligible app-owned
 session records in a background worker. The first launch persists a stable random
 installation identity before capture, even if registration is offline. Only sessions
-started with reporting enabled in the active preference generation are eligible;
-sessions created while off and prior historical sessions are never backfilled.
+started with reporting enabled in the active preference generation are eligible.
+Studio may begin capture within the first eligible launch after showing the notice.
+Sessions started while off and pre-v2 historical sessions stay local.
 Python failures and native trace evidence
 have separate categories; without native evidence the report says **unclean shutdown**,
 which can also mean forced termination or power loss. Healthy active processes and
@@ -205,13 +209,15 @@ An unreadable or changing native trace defers only its session for a later recov
 pass; other eligible sessions can still be recovered. Deferred evidence is preserved
 without guessing a failure category.
 
-Automatic payloads contain Studio/OS versions, timestamp, failure category and at
-most 40 sanitized stack locations. Only package-relative Studio source paths,
-function names and line numbers survive; external paths/names become `<external>`.
-The current schema excludes exception messages, hardware metadata, full logs,
-environment, hostnames, project/stimulus data, participant records and attachments.
-See the [platform contract](#platform-automatic-error-and-crash-reporting) for the
-proposed expanded schema and maintainer email.
+Studio captures unexpected programming failures at app and worker boundaries.
+It holds handled failures briefly before queueing so a correlated fatal exit can
+provide stronger evidence. An already queued report keeps its identity and contents.
+The session snapshot preserves the original Studio and OS versions and any
+available allowlisted hardware and software facts. Inventory work runs outside
+the GUI, presentation and fault-handler paths. Reports contain a failure category,
+operation, occurrence or recovery timestamp and up to 40 sanitized stack locations.
+Only package-relative Studio locations, function names and line numbers survive.
+External paths and function names become `<external>`.
 
 The account-local `support/automatic-crashes/` directory owns consent and a random
 installation capability, session snapshots and queued payloads/receipt capabilities.
@@ -235,9 +241,8 @@ Exhausting the log budget or losing the log sink leaves the running session snap
 active until Studio actually closes. A later unexpected exit can still recover as
 an unclean shutdown even when bounded native/log capture has stopped.
 
-The desktop protocol expects a revocable scoped grant. Future service work requires
-an additive migration against the current Feedback schema and a separate activation
-switch after deployment acceptance. The scoped grant design uses a one-year lifetime.
+The desktop protocol uses a revocable scoped grant with a one-year lifetime.
+The service controls intake with a separate activation switch.
 Expired/missing grants are registered again with the
 same capability after a failed upload, preserving queued identities and retry backoff.
 Registration shares the 1,000/day intent budget and a
@@ -246,15 +251,18 @@ to three per installation/day and share the existing 100/day global report/stora
 limits. Duplicate acceptance cannot create another issue or completed notification.
 Ambiguous email delivery can still repeat a notification through the existing queue.
 
-The existing desktop client uses POST `/v1/crash-installations` with the random installation
+The desktop client uses POST `/v1/crash-installations` with the random installation
 bearer token and exactly `{schema_version: "1", installation_id}` to register a UUID.
 Only its capability hash is stored by the service. Registration retries reuse the
 same identity/token; mismatched tokens and revoked identities cannot register.
-POST `/v1/crash-reports` authenticates the
-installation capability and accepts exactly `{report, receipt_token_sha256}`;
-the report fields are `schema_version: "1"`, `kind: "crash"`, `report_id`, `created_at`,
-`app_version`, `os_version`, `crash_type`, and `stack`. Each stack frame has exactly
-`module`, `function`, and `line`; the complete envelope is capped at 32 KiB.
+POST `/v1/crash-reports` uses the installation capability and `X-Installation-ID`
+and accepts exactly `{report, receipt_token_sha256}`. Required report fields are
+`schema_version: "2"`, `kind: "crash"`, `report_id`, `created_at`, `time_basis`,
+`product`, `app_version`, `os_family`, `os_version`, `crash_type`, `operation` and
+`stack`. The optional `context` object contains the allowlisted inventory above.
+Each stack frame has exactly `module`, `function`, and `line`. The complete envelope
+is capped at 32 KiB. Ambiguous delivery checks the same report UUID and the separate
+receipt capability at `/v1/reports/{id}/status` before a retry.
 POST `/v1/crash-installations/{id}/revoke` revokes that installation. Installation and
 receipt capabilities are scoped to crash reporting. Manual bug reports use browser
 verification, and feature requests have their own intake.
@@ -265,7 +273,6 @@ registration quota. Never ship a shared service secret as a substitute.
 
 Source implementation and rollout evidence are tracked in
 [the automatic-crash plan](exec-plans/active/automatic-crash-reporting.md).
-The expanded platform payload requires updated desktop builds and compatible service intake.
 
 ### Manual bug reports
 

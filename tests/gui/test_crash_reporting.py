@@ -66,12 +66,14 @@ class FakeLifecycle(QObject):
         (True, "", False),
         (False, "", False),
         (True, "Connecting to the reporting service…", True),
+        (True, "Review the report contents before automatic reporting starts.", False),
         (True, "Delivery is unavailable. Queued reports stay on this computer and will be retried.",
          False),
         (False, "Access revocation will retry when connected.", False),
         (False, "Could not read or save the setting. No reports will be sent this launch.", False),
     ],
-    ids=["enabled", "off", "registering", "delivery-error", "revocation", "preference-error"],
+    ids=["enabled", "off", "registering", "disclosure", "delivery-error", "revocation",
+         "preference-error"],
 )
 def test_settings_diagnostics_fit_and_bind(
     qtbot, tmp_path, size, background, enabled, message, busy,
@@ -123,7 +125,10 @@ def test_settings_diagnostics_fit_and_bind(
     assert changes == [not enabled]
 
 
-def controller(tmp_path, monkeypatch, transport):
+def controller(tmp_path, monkeypatch, transport, *, disclosed=True):
+    store = CrashStore(tmp_path)
+    if disclosed and not (store.folder() / "consent.json").exists():
+        store.disclose()
     lifecycle = FakeLifecycle()
     monkeypatch.setattr(module, "update_lifecycle", lambda app=None: lifecycle)
     monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: pytest.fail("browser opened"))
@@ -142,16 +147,31 @@ def registration(method, url, data, headers):
     return json.dumps({"installation_id": body["installation_id"], "state": "registered"}).encode()
 
 
-def test_default_startup_registers_once_in_background_without_browser(tmp_path, monkeypatch):
+def test_startup_disclosure_precedes_capture_and_background_registration(
+    qtbot, tmp_path, monkeypatch,
+):
     requests = []
 
     def transport(*args):
         requests.append(args)
         return registration(*args)
 
-    value, lifecycle = controller(tmp_path, monkeypatch, transport)
+    value, lifecycle = controller(tmp_path, monkeypatch, transport, disclosed=False)
     value.start()
     lifecycle.jobs[-1][0].complete()  # Local preference.
+    assert value.enabled and not value.busy and requests == []
+    assert not value.store().consent().expanded_disclosed
+    notice = value._disclosure
+    assert notice is not None
+    qtbot.waitUntil(notice.isVisible)
+    assert all(field in notice.informativeText() for field in ("hardware model", "GPU", "memory"))
+    for label in notice.findChildren(QLabel):
+        if label.isVisible() and label.wordWrap():
+            assert label.height() >= label.heightForWidth(label.width())
+    keep = next(button for button in notice.buttons() if button.text() == "Keep enabled")
+    qtbot.mouseClick(keep, Qt.MouseButton.LeftButton)
+    lifecycle.jobs[-1][0].complete()  # Persist the choice before registration.
+    assert value.store().consent().expanded_disclosed
     assert value.enabled and value.busy
     assert value.status == "Connecting to the reporting service…"
     assert requests == []
@@ -295,7 +315,7 @@ def test_expected_registration_cancellation_is_not_logged_as_failure(
 
 def test_reenable_revokes_old_access_before_registering_new_generation(tmp_path, monkeypatch):
     store = CrashStore(tmp_path)
-    first = store.consent()
+    first = store.disclose()
     store.disable()
     requests = []
 
@@ -314,6 +334,37 @@ def test_reenable_revokes_old_access_before_registering_new_generation(tmp_path,
     assert requests[0].endswith("/revoke") and requests[1].endswith("/crash-installations")
     assert value.store().consent().installation_id != first.installation_id
     assert value.enabled and value.store().consent().registered
+    value.deleteLater()
+
+
+def test_pending_revocation_and_disclosure_can_finish_independently(qtbot, tmp_path, monkeypatch):
+    store = CrashStore(tmp_path)
+    disabled = store.disable()
+    requests = []
+
+    def transport(method, url, data, headers):
+        requests.append(url)
+        if url.endswith("/revoke"):
+            return b'{"state":"revoked"}'
+        return registration(method, url, data, headers)
+
+    value, lifecycle = controller(tmp_path, monkeypatch, transport, disclosed=False)
+    value.configure(True)
+    lifecycle.jobs[-1][0].complete()  # Re-enable the preference while revocation is queued.
+    revoke_work = lifecycle.jobs[-1][0]
+    notice = value._disclosure
+    assert notice is not None
+    keep = next(button for button in notice.buttons() if button.text() == "Keep enabled")
+    qtbot.mouseClick(keep, Qt.MouseButton.LeftButton)
+    assert lifecycle.jobs[-1][0] is not revoke_work
+    lifecycle.jobs[-1][0].complete()  # Disclosure never waits for the network worker.
+    assert store.consent().expanded_disclosed and store.consent().revoke_pending
+    revoke_work.complete()
+    lifecycle.jobs[-1][0].complete()
+    active = store.consent()
+    assert active.expanded_disclosed and active.registered and not active.revoke_pending
+    assert active.installation_id != disabled.installation_id
+    assert [path.rsplit("/", 1)[-1] for path in requests] == ["revoke", "crash-installations"]
     value.deleteLater()
 
 
@@ -369,14 +420,16 @@ def test_expired_grant_is_registered_again_without_browser_or_losing_reports(tmp
 
     monkeypatch.setattr("fpvs_studio.support.crash_reporting.process_alive", lambda pid: False)
     store = CrashStore(tmp_path)
-    consent = store.consent()
+    consent = store.disclose()
     store.mark_registered(consent.installation_id, Event())
     store.save_session(
         CrashSession(
             session_id=uuid4(),
             pid=123456,
             os_version="test",
+            os_family="Windows",
             installation_id=consent.installation_id,
+            generation=consent.workflow_generation,
         )
     )
     requests = []
@@ -409,9 +462,14 @@ def test_native_fatal_is_recovered_for_default_enabled_first_session(tmp_path):
     import sys
 
     store = CrashStore(tmp_path)
+    store.disclose()
     script = """
 import sys
 from pathlib import Path
+if sys.platform == "win32":
+    import ctypes
+    ctypes.windll.kernel32.SetErrorMode(0x0001 | 0x0002 | 0x8000)
+    ctypes.CDLL("ucrtbase")._set_abort_behavior(0, 0x0003)
 from fpvs_studio.support.diagnostics import DiagnosticLogging
 logging = DiagnosticLogging(Path(sys.argv[1]), capture_native=True)
 logging.start()
@@ -454,10 +512,11 @@ def test_real_worker_keeps_gui_responsive_and_retains_opt_out_after_settings_clo
     monkeypatch.setattr(qapp, "_fpvs_update_lifecycle", lifecycle, raising=False)
     monkeypatch.setattr("fpvs_studio.support.crash_reporting.process_alive", lambda pid: False)
     store = CrashStore(tmp_path)
-    consent = store.consent()
+    consent = store.disclose()
     store.save_session(CrashSession(
         session_id=uuid4(), pid=123456, os_version="Synthetic OS",
         installation_id=consent.installation_id,
+        os_family="Windows", generation=consent.workflow_generation,
     ))
     assert len(store.recover()) == 1
 

@@ -35,6 +35,8 @@ def support_directory() -> Path:
 
 def atomic_text(path: Path, text: str) -> None:
     """Use an exclusive sibling temporary file and replace only the selected destination."""
+    from fpvs_studio.core.serialization import replace_file_atomically
+
     path = filesystem_path(path)
     temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
     created = False
@@ -46,7 +48,7 @@ def atomic_text(path: Path, text: str) -> None:
             stream.write(text)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temporary, path)
+        replace_file_atomically(temporary, path)
     finally:
         if created:
             temporary.unlink(missing_ok=True)

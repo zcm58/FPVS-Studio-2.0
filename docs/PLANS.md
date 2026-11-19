@@ -17,7 +17,7 @@ historical release draft does not authorize publishing an old version.
 | [Cursor regression audit](exec-plans/active/cursor-regression-audit-20261104.md) | Frame-rendered Windows response cursor passed user-visible fullscreen/Parsec, Escape and relaunch checks; original reporter's direct-host qualification remains open |
 | [Fit task screens](exec-plans/active/task-screen-fit.md) | Use the realized viewport for pre- and post-condition screens in Test/Pilot and recording |
 | [macOS source support: Phase 1](exec-plans/active/macos-source-phase-1.md) | Source implementation and automated Mac/bundle checks passed; physical GUI/display/service acceptance deferred |
-| [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Default-on desktop source implemented; independent service activation/live delivery remains pending |
+| [Automatic crash reporting](exec-plans/active/automatic-crash-reporting.md) | Expanded desktop capture, build acceptance, and independent service rollout |
 | [Bounded updater storage and upgrades](exec-plans/active/bounded-updater-storage-and-clean-upgrades.md) | Current combined install action implemented; visible/packaged and installed-upgrade acceptance remains separate |
 | [Cloudflare bug reporting](exec-plans/active/cloudflare-bug-reporting.md) | Manual service implemented; retained native/packaged acceptance and automatic-crash follow-up have separate evidence |
 | [Error reporting and 2.2.5 proposal](exec-plans/active/error-reporting-and-release-2.2.5.md) | Implemented source with an unfinished historical release request; preserve its evidence without republishing the already released version |

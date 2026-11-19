@@ -7,7 +7,6 @@ import faulthandler
 import logging
 import logging.handlers
 import os
-import platform
 import queue
 import re
 import stat
@@ -15,14 +14,25 @@ import sys
 import threading
 import time
 import traceback
+from collections import deque
 from contextlib import nullcontext
 from pathlib import Path
 from types import TracebackType
 from typing import BinaryIO
 from uuid import UUID, uuid4
 
-from fpvs_studio.support.crash_reporting import CrashSession, CrashStore, StackFrame, safe_frame
-from fpvs_studio.support.models import MAX_LOG_BYTES
+from fpvs_studio.support.crash_inventory import collect_inventory, os_identity
+from fpvs_studio.support.crash_reporting import (
+    CrashContext,
+    CrashSession,
+    CrashStore,
+    HandledIncident,
+    Operation,
+    OSFamily,
+    StackFrame,
+    safe_frame,
+)
+from fpvs_studio.support.models import MAX_LOG_BYTES, utc_now
 from fpvs_studio.support.storage import owned_folder, support_directory
 
 _LOG_NAME = re.compile(r"session-[0-9a-f]{32}(?:-native)?\.log(?:\.[12])?\Z")
@@ -39,6 +49,20 @@ _CREDENTIAL = re.compile(
 _logging_notice = ""
 _native_diagnostic_fd: int | None = None
 _active_logging: DiagnosticLogging | None = None
+
+
+def refresh_automatic_capture(*, enabled: bool) -> None:
+    if (active := _active_logging) is not None:
+        if enabled:
+            active.capture_refresh.set()
+        else:
+            active._capture_can_start = False
+            active.capture_enabled.clear()
+
+
+def record_internal_error(error: BaseException, operation: Operation) -> None:
+    if (active := _active_logging) is not None:
+        active.record_handled(error, operation)
 
 
 def record_qt_fatal(message: str) -> None:
@@ -251,7 +275,13 @@ class DiagnosticLogging:
         self.session_id = uuid4().hex
         self._crash_store: CrashStore | None = None
         self._crash_session: CrashSession | None = None
-        self._failure_stack: list[StackFrame] | None = None
+        self._failure: tuple[str, Operation, list[StackFrame]] | None = None
+        self._handled: queue.Queue[HandledIncident] = queue.Queue(maxsize=10)
+        self._inventory: queue.Queue[CrashContext] = queue.Queue(maxsize=1)
+        self.capture_enabled = threading.Event()
+        self.capture_refresh = threading.Event()
+        self.capture_refresh.set()
+        self._capture_can_start = True
         self.ready = threading.Event()
         self._native_file: BinaryIO | None = None
         self._owns_fault_handler = False
@@ -293,10 +323,13 @@ class DiagnosticLogging:
     def _exception(
         self, kind: type[BaseException], value: BaseException, tb: TracebackType | None
     ) -> None:
+        self.record_handled(value, "application")
         self.logger.error("Unhandled application error", exc_info=(kind, value, tb))
         self.previous_hook(kind, value, tb)
 
     def _thread_exception(self, args: threading.ExceptHookArgs) -> None:
+        if args.exc_value is not None:
+            self.record_handled(args.exc_value, "application")
         self.logger.error(
             "Unhandled thread error",
             exc_info=(
@@ -307,12 +340,115 @@ class DiagnosticLogging:
         )
         self.previous_thread_hook(args)
 
-    def record_failure(self, error: BaseException) -> None:
+    def record_failure(self, error: BaseException, operation: Operation = "startup") -> None:
         """Remember only source locations; persistence remains on the logging thread."""
-        self._failure_stack = [
-            safe_frame(frame.f_code.co_filename, frame.f_code.co_name, line)
-            for frame, line in traceback.walk_tb(error.__traceback__)
-        ][-40:]
+        if self.capture_enabled.is_set():
+            self._failure = (utc_now(), operation, self._safe_stack(error))
+
+    @staticmethod
+    def _safe_stack(error: BaseException) -> list[StackFrame]:
+        frames = deque(traceback.walk_tb(error.__traceback__), maxlen=40)
+        return [safe_frame(frame.f_code.co_filename, frame.f_code.co_name, line)
+                for frame, line in frames]
+
+    def record_handled(self, error: BaseException, operation: Operation) -> None:
+        # Catch only programming/internal failures at app/worker boundaries. Routine
+        # validation, I/O, cancellation and dependency-specific errors stay local.
+        if not self.capture_enabled.is_set():
+            return
+        for _ in range(8):
+            cause = error.__cause__
+            if cause is None or cause is error:
+                break
+            error = cause
+        if getattr(error, "_fpvs_automatic_incident", False) or type(error) not in (
+            AssertionError, AttributeError, IndexError, KeyError, NameError,
+            NotImplementedError, RuntimeError, TypeError, ZeroDivisionError,
+        ):
+            return
+        stack = self._safe_stack(error)
+        modules = [frame.module for frame in stack if frame.module != "<external>"]
+        if not modules or any(
+            module.startswith(("fpvs_studio/support/", "fpvs_studio/gui/crash_report_"))
+            for module in modules
+        ):
+            return
+        if operation == "application":
+            for module in reversed(modules):
+                if module.startswith("fpvs_studio/preprocessing/"):
+                    operation = "processing"
+                    break
+                if "export" in module:
+                    operation = "export"
+                    break
+                if module.startswith("fpvs_studio/core/project_"):
+                    operation = "project"
+                    break
+        try:
+            self._handled.put_nowait(HandledIncident(operation=operation, stack=stack))
+        except queue.Full:
+            return
+        error._fpvs_automatic_incident = True  # type: ignore[attr-defined]
+
+    def _update_crash_capture(self, *, closing: bool = False) -> None:
+        global _logging_notice
+        store = self._crash_store
+        if store is None:
+            return
+        try:
+            if self.capture_refresh.is_set():
+                self.capture_refresh.clear()
+                consent = store.consent()
+                if self._capture_can_start and not consent.enabled:
+                    self._capture_can_start = False  # An opted-out session stays local.
+                if (
+                    self._capture_can_start and self._crash_session is None and consent.enabled
+                    and consent.expanded_disclosed and not consent.revoke_pending
+                ):
+                    family, version, build = os_identity()
+                    self._crash_session = CrashSession(
+                        session_id=UUID(self.session_id), pid=os.getpid(),
+                        os_version=version, os_family=family,
+                        installation_id=consent.installation_id,
+                        generation=consent.workflow_generation,
+                    )
+                    if store.update_session(self._crash_session):
+                        self.capture_enabled.set()
+                        threading.Thread(
+                            target=self._collect_inventory, args=(family, build), daemon=True,
+                            name="fpvs-crash-inventory",
+                        ).start()
+            session = self._crash_session
+            if session is None:
+                return
+            changed = closing
+            if not self._inventory.empty():
+                session.context = self._inventory.get_nowait()
+                changed = True
+            while not self._handled.empty():
+                handled = self._handled.get_nowait()
+                if len(session.handled) < 10:
+                    session.handled.append(handled)
+                    changed = True
+            if self._failure is not None:
+                session.failed_at, session.operation, session.stack = self._failure
+                session.state = "failed"
+                self._failure = None
+                changed = True
+            if closing and session.state != "failed":
+                session.state = "clean"
+            if changed and not store.update_session(session):
+                self.capture_enabled.clear()
+        except (OSError, ValueError):
+            self.capture_enabled.clear()
+            _logging_notice = "Automatic crash capture could not update its local record."
+
+    def _collect_inventory(self, family: OSFamily, build: str | None) -> None:
+        try:
+            if self.capture_enabled.is_set():
+                self._inventory.put_nowait(collect_inventory(family, build))
+        except (OSError, ValueError):
+            pass  # Optional inventory never blocks diagnostics or native recovery.
 
     def _run(self) -> None:
         global _logging_notice, _native_diagnostic_fd
@@ -322,16 +458,7 @@ class DiagnosticLogging:
                 try:
                     self._crash_store = CrashStore(self.root)
                     self._crash_store.prune_sessions()
-                    consent = self._crash_store.consent()
-                    self._crash_session = CrashSession(
-                        session_id=UUID(self.session_id), pid=os.getpid(),
-                        os_version=f"{platform.system()} {platform.release()}",
-                        installation_id=(
-                            consent.installation_id
-                            if consent.enabled and not consent.revoke_pending else None
-                        ),
-                    )
-                    self._crash_store.save_session(self._crash_session)
+                    self._update_crash_capture()
                 except (OSError, ValueError):
                     _logging_notice = "Automatic crash capture could not access its local settings."
             folder = owned_folder(self.root, "logs")
@@ -360,6 +487,7 @@ class DiagnosticLogging:
                 _native_diagnostic_fd = self._native_file.fileno()
             self.ready.set()
             while not self.stop_event.is_set() or not self.records.empty():
+                self._update_crash_capture()
                 # Windows can report recoverable native exceptions too. Stop capture
                 # at the budget rather than accumulating unlimited raw tracebacks.
                 if self._native_file is not None and self._native_file.tell() >= 1024 * 1024:
@@ -387,21 +515,14 @@ class DiagnosticLogging:
             # session. Drain the bounded queue until explicit app shutdown; a
             # later abrupt exit still recovers the active snapshot honestly.
             while not self.stop_event.is_set():
+                self._update_crash_capture()
                 try:
                     discarded = self.records.get(timeout=0.1)
                     if isinstance(discarded, threading.Event):
                         discarded.set()
                 except queue.Empty:
                     pass
-            if self._crash_session is not None and self._crash_store is not None:
-                try:
-                    self._crash_session.state = (
-                        "failed" if self._failure_stack is not None else "clean"
-                    )
-                    self._crash_session.stack = self._failure_stack or []
-                    self._crash_store.save_session(self._crash_session)
-                except (OSError, ValueError):
-                    _logging_notice = "Automatic crash capture could not finish its local record."
+            self._update_crash_capture(closing=True)
             if sink is not None:
                 sink.close()
 

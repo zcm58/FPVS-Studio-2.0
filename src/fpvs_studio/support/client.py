@@ -126,6 +126,7 @@ class ReportClient:
         data: bytes | None = None,
         token: str = "",
         cancel: Event | None = None,
+        installation_id: str | None = None,
     ) -> dict[str, object]:
         if not self.enabled:
             raise ReportServiceError(
@@ -136,6 +137,8 @@ class ReportClient:
         headers = {"Accept": "application/json", "Content-Type": "application/json"}
         if token:
             headers["Authorization"] = f"Bearer {token}"
+        if installation_id is not None:
+            headers["X-Installation-ID"] = installation_id
         raw = self.transport(method, self.origin + path, data, headers)
         if cancel is not None and cancel.is_set():
             raise ReportCancelled("Submission canceled. Your draft is preserved.")
@@ -222,18 +225,38 @@ class ReportClient:
     def submit_crash(self, event: CrashEvent, token: str, cancel: Event) -> Receipt:
         """Idempotent automatic intake uses the saved report ID and immutable payload."""
         body = json.dumps({
-            "report": event.report.model_dump(mode="json"),
+            "report": event.report.model_dump(mode="json", exclude_none=True),
             "receipt_token_sha256": hashlib.sha256(event.receipt_token.encode()).hexdigest(),
         }, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         if len(body) > 32 * 1024:
             raise ReportServiceError("The automatic crash report exceeds its size limit.")
-        response = self._request("POST", "/v1/crash-reports", data=body, token=token, cancel=cancel)
+        response = self._request(
+            "POST", "/v1/crash-reports", data=body, token=token, cancel=cancel,
+            installation_id=str(event.installation_id),
+        )
         state = response.get("state")
         if response.get("report_id") != str(event.report.report_id) or state not in (
             "received", "submitted",
         ):
             raise ReportServiceError("Invalid automatic crash-report receipt.")
         return Receipt(str(event.report.report_id), str(state))
+
+    def check_crash_receipt(self, event: CrashEvent, cancel: Event) -> Receipt:
+        report_id = str(event.report.report_id)
+        try:
+            response = self._request(
+                "GET", f"/v1/reports/{report_id}/status", token=event.receipt_token, cancel=cancel,
+            )
+        except ReportServiceError as error:
+            if error.status == 401:
+                return Receipt(report_id, "not_received")
+            raise
+        state = response.get("state")
+        if response.get("report_id") != report_id or state not in (
+            "received", "submitted", "not_received",
+        ):
+            raise ReportServiceError("Invalid automatic crash-report receipt.")
+        return Receipt(report_id, str(state))
 
     def submit(self, draft: Draft, intent: Intent, cancel: Event) -> Receipt:
         # The caller MUST durably save delivery='uncertain' before this method.

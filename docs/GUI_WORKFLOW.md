@@ -1,8 +1,10 @@
 # GUI Workflow
 
-Settings > Diagnostics exposes default-on automatic crash reporting at the shared
+Settings > Diagnostics exposes default-on automatic error and crash reporting at the shared
 `860x560` minimum and `1000x680` default sizes. The checkbox shows the preference.
-Inline notices report loading, connection, pending revocation, and failures.
+Inline notices report loading, connection, pending revocation, and failures. On the
+first eligible launch, the startup notice shows the expanded contents before capture
+and offers **Keep enabled** and **Turn off**.
 **Report contents and privacy** expands the data and opt-out details. In a visible
 smoke test, tab from Diagnostics to the checkbox and disclosure, then open and close
 the disclosure in both themes at both sizes. During a simulated delivery failure,

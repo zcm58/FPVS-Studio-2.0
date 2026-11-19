@@ -16,14 +16,18 @@ from uuid import uuid4
 
 import pytest
 
+from fpvs_studio import __version__
+from fpvs_studio.support import crash_inventory as inventory
 from fpvs_studio.support.client import SERVICE_ORIGIN, ReportClient, ReportServiceError
 from fpvs_studio.support.crash_reporting import (
     CrashConsent,
     CrashSession,
     CrashStore,
+    HandledIncident,
     process_alive,
     safe_frame,
 )
+from fpvs_studio.support.diagnostics import DiagnosticLogging, refresh_automatic_capture
 
 
 @pytest.fixture
@@ -33,11 +37,15 @@ def crash_store(tmp_path, monkeypatch):
 
 
 def session(store, consent=None, **fields):
+    environment = {
+        "os_family": "Windows", "generation": consent.workflow_generation,
+    } if consent else {}
     value = CrashSession(
         session_id=uuid4(),
         pid=123456,
         os_version="Synthetic OS",
         installation_id=consent.installation_id if consent else None,
+        **environment,
         **fields,
     )
     store.save_session(value)
@@ -45,7 +53,7 @@ def session(store, consent=None, **fields):
 
 
 def enabled(store):
-    value = CrashConsent(enabled=True)
+    value = CrashConsent(enabled=True, expanded_disclosed=True)
     store.save_consent(value)
     return value
 
@@ -57,6 +65,63 @@ def test_on_by_default_persists_identity_and_never_backfills_historical_sessions
     assert CrashStore(crash_store.root).consent() == first
     assert crash_store.recover() == []
     assert crash_store._session_path(old).exists()
+
+
+def test_disclosure_blocks_upload_and_legacy_sessions_are_never_backfilled(crash_store):
+    consent = crash_store.consent()
+    legacy = session(crash_store, consent)
+    legacy.generation = None
+    legacy.os_family = None
+    crash_store.save_session(legacy)
+    assert consent.enabled and not consent.expanded_disclosed
+    assert crash_store.recover() == []
+    consent = crash_store.disclose()
+    assert consent.expanded_disclosed and crash_store.recover() == []
+
+
+def test_disclosure_retries_a_transient_windows_replace_lock(crash_store, monkeypatch):
+    before = crash_store.consent()
+    replace = os.replace
+    injections = []
+
+    def briefly_locked(source, destination):
+        if not injections:
+            injections.append(destination)
+            error = PermissionError("Synthetic Windows replacement lock")
+            error.winerror = 5
+            raise error
+        return replace(source, destination)
+
+    monkeypatch.setattr(os, "replace", briefly_locked)
+    assert crash_store.disclose().expanded_disclosed
+    assert crash_store.consent().installation_id == before.installation_id
+    assert len(injections) == 1
+
+
+@pytest.mark.parametrize("queued", [False, True])
+def test_correlated_fatal_failure_preserves_the_queued_identity_and_payload(
+    crash_store, queued,
+):
+    consent = enabled(crash_store)
+    stack = [safe_frame("fpvs_studio/processing.py", "evaluate", 42)]
+    incident = HandledIncident(operation="processing", stack=stack)
+    affected = session(crash_store, consent, state="clean", handled=[incident])
+    if queued:
+        original, = crash_store.recover()
+        assert original.report.time_basis == "occurrence"
+        assert original.report.created_at == incident.created_at
+    affected.state = "failed"
+    affected.stack = stack
+    affected.failed_at = "2026-11-19T12:01:04+00:00"
+    crash_store.update_session(affected)
+    recovered, = crash_store.recover()
+    assert recovered.report.report_id == incident.report_id
+    assert recovered.report.operation == "processing"
+    if queued:
+        assert recovered == original
+    else:
+        assert recovered.report.crash_type == "python_exception"
+        assert recovered.report.created_at == affected.failed_at
 
 
 def test_existing_opt_out_survives_reloads_and_new_default(crash_store):
@@ -312,7 +377,16 @@ def test_ambiguous_delivery_retries_same_identity_and_then_stops(crash_store):
     sent = []
 
     def transport(method, url, data, headers):
+        if method == "GET":
+            assert url.startswith(SERVICE_ORIGIN + "/v1/reports/")
+            assert headers["Authorization"] != f"Bearer {consent.token}"
+            raise ReportServiceError("No receipt yet", status=401)
         assert url == SERVICE_ORIGIN + "/v1/crash-reports"
+        assert headers["X-Installation-ID"] == str(consent.installation_id)
+        report = json.loads(data)["report"]
+        assert report["schema_version"] == "2" and report["product"] == "studio"
+        assert report["os_family"] == "Windows" and report["time_basis"] == "recovery"
+        assert "context" not in report
         sent.append(data)
         if len(sent) == 1:
             raise ReportServiceError("Synthetic lost response")
@@ -330,6 +404,87 @@ def test_ambiguous_delivery_retries_same_identity_and_then_stops(crash_store):
     assert sent[0] == sent[1]
     assert crash_store.deliver(client, Event()) == 0
     assert crash_store.pending() == []
+
+
+def test_delivered_receipt_resolves_ambiguous_upload_without_second_post(crash_store):
+    consent = enabled(crash_store)
+    session(crash_store, consent)
+    accepted, = crash_store.recover()
+    requests = []
+
+    def transport(method, url, data, headers):
+        requests.append(method)
+        if method == "POST":
+            raise ReportServiceError("Synthetic lost acknowledgment")
+        assert url == f"{SERVICE_ORIGIN}/v1/reports/{accepted.report.report_id}/status"
+        assert headers["Authorization"] == f"Bearer {accepted.receipt_token}"
+        assert data is None
+        return json.dumps({
+            "report_id": str(accepted.report.report_id), "state": "submitted",
+        }).encode()
+
+    client = ReportClient(SERVICE_ORIGIN, transport=transport)
+    with pytest.raises(ReportServiceError):
+        crash_store.deliver(client, Event())
+    saved, = crash_store.pending()
+    saved.next_attempt = 0
+    crash_store.save_event(saved)
+    assert crash_store.deliver(client, Event()) == 1
+    assert requests == ["POST", "GET"] and crash_store.pending() == []
+
+
+def test_background_inventory_omits_private_or_absent_facts(monkeypatch):
+    monkeypatch.setattr(inventory.platform, "machine", lambda: "arm64")
+    monkeypatch.setattr(inventory, "_mac_inventory", lambda: {
+        "hardware_model": "MacBookPro18,3", "cpu_model": "Apple M1 Pro",
+        "os_build": "26A23", "gpus": ["/Users/person/GPU", "64:86:82:10:11:12"],
+        "ram": None, "serial": "do not send",
+    })
+    context = inventory.collect_inventory("macOS", None)
+    assert context.hardware_model == "MacBookPro18,3"
+    assert context.cpu_model == "Apple M1 Pro" and context.os_build == "26A23"
+    assert context.gpus is None and context.ram_gib is None
+    assert "serial" not in context.model_dump_json()
+
+
+def test_live_disclosure_enables_capture_and_preserves_session_facts(crash_store, monkeypatch):
+    from fpvs_studio.support.crash_reporting import CrashContext
+
+    monkeypatch.setattr(
+        "fpvs_studio.support.diagnostics.os_identity", lambda: ("macOS", "27.0", "26A7"),
+    )
+    query_ran = Event()
+
+    def inventory_worker(family, build):
+        assert family == "macOS" and build == "26A7"
+        query_ran.set()
+        return CrashContext(os_build=build)
+
+    monkeypatch.setattr("fpvs_studio.support.diagnostics.collect_inventory", inventory_worker)
+    logging_session = DiagnosticLogging(crash_store.root, capture_native=True)
+    logging_session.start()
+    try:
+        assert not query_ran.is_set() and not logging_session.capture_enabled.is_set()
+        crash_store.disclose()
+        refresh_automatic_capture(enabled=True)
+        assert query_ran.wait(3)
+        try:
+            code = compile(
+                "raise RuntimeError('private participant information')",
+                "fpvs_studio/project.py", "exec",
+            )
+            exec(code, {})
+        except RuntimeError as error:
+            logging_session.record_handled(error, "project")
+            logging_session.record_handled(error, "application")
+    finally:
+        logging_session.close()
+    event, = crash_store.recover()
+    assert event.report.crash_type == "internal_error"
+    assert event.report.operation == "project" and event.report.time_basis == "occurrence"
+    assert event.report.app_version == __version__ and event.report.os_version == "27.0"
+    assert event.report.context.os_build == "26A7"
+    assert "private" not in event.report.model_dump_json()
 
 
 def test_disable_cancels_activation_discards_backlog_and_precedes_network(crash_store):
@@ -362,7 +517,7 @@ def test_cancel_or_replaced_generation_cannot_register(crash_store):
 
 
 def test_reenable_revokes_old_generation_without_backfilling_opted_out_sessions(crash_store):
-    first = crash_store.consent()
+    first = enabled(crash_store)
     session(crash_store, first)
     crash_store.disable()
     session(crash_store)
@@ -463,6 +618,7 @@ def test_real_logging_child_session_lifecycle(tmp_path, outcome):
     store = CrashStore(tmp_path)
     # The first launch must capture a crash even before background registration succeeds.
     assert store.consent().enabled
+    store.disclose()
     script = """
 import os, sys
 from pathlib import Path
@@ -494,6 +650,8 @@ session.close()
 @pytest.mark.parametrize("failure", ["budget", "startup_budget", "io"])
 @pytest.mark.parametrize("outcome", ["clean", "abrupt", "python"])
 def test_log_sink_failure_preserves_the_actual_application_lifecycle(tmp_path, failure, outcome):
+    store = CrashStore(tmp_path)
+    store.disclose()
     script = """
 import os, sys, time
 from pathlib import Path

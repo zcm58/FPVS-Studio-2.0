@@ -83,6 +83,7 @@ class _Harness:
     def __init__(self):
         self.worker = deque()
         self.gui = deque()
+        self.reported_errors = []
         self.lifecycle = SimpleNamespace(
             is_shutting_down=False, shutdown_started=_Signal(self),
         )
@@ -104,6 +105,9 @@ class _Harness:
                 WindowModality=SimpleNamespace(WindowModal="modal"),
             ),
             "update_lifecycle": lambda: self.lifecycle, "isValid": lambda _worker: True,
+            "record_internal_error": (
+                lambda error, operation: self.reported_errors.append((str(error), operation))
+            ),
         }
         exec(compile(ast.fix_missing_locations(module), str(source), "exec"), namespace)
         self.presentation = namespace["PersistentThreadTaskWorker"]()
@@ -177,6 +181,10 @@ def test_overlapping_presentations_keep_results_and_completion_separate(
     assert executed == ["first", "second"]
     assert first.outcomes == [("error" if first_fails else "success", "first")]
     assert second.outcomes == [("error" if second_fails else "success", "second")]
+    assert harness.reported_errors == [
+        (label, "presentation") for label, failed in (("first", first_fails),
+                                                      ("second", second_fails)) if failed
+    ]
     for task in (first, second):
         assert task.completions == ["finished"]
         assert task.progress_dialog.closed

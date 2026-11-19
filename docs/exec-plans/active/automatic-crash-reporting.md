@@ -4,16 +4,39 @@ Status: Active
 
 Date: 2026-10-08
 
-## November 18 platform specification
+## November 19 platform implementation
 
 The [platform automatic error and crash reporting contract](../../BUG_REPORTING.md#platform-automatic-error-and-crash-reporting)
-defines the target for Studio and Toolbox. It expands eligible incidents to
+defines the shared scope for Studio and Toolbox. It expands eligible incidents to
 unexpected application errors and adds bounded hardware context, running software
 versions and a short error summary to the Mac repair-style maintainer email.
-The earlier source checks below cover the narrower Studio crash client and its
-historical service work. The current Feedback service ships Mac workflow intake.
-The platform specification leaves desktop implementation and service activation
-as future work.
+Studio source now captures allowlisted session inventory in a background worker
+after a one-time disclosure. Handled internal errors are staged before upload to
+allow stronger correlated fatal evidence. Queued payloads retain their identity
+through retries and receipt lookup. Existing saved opt-outs and older sessions
+retain their original eligibility.
+
+- [x] Update Studio capture, app and worker boundaries, schema v2 delivery, and Settings.
+- [x] Verify focused synthetic recovery, fake HTTP, and native Diagnostics on the laptop display.
+- [x] Verify Studio and Toolbox source sessions and schema-2 client envelopes.
+- [x] Verify synthetic staging delivery and activate the production Feedback Worker.
+- [ ] Verify reporting in packaged Studio and Toolbox releases.
+
+Visible Studio path at `860x560` and `1000x680`: launch with a clean isolated profile,
+review the disclosure before enabling capture, open Settings > Diagnostics in both
+themes, and check keyboard navigation to **Report contents and privacy**. Simulate
+offline delivery and opt out while the worker remains busy. Confirm the preference
+on restart and that no queued reports or credentials were sent by the synthetic run.
+The approved internal-display run passed 48 visible Windows tests. The GUI-focused
+and documentation checks passed 183 and 13 tests respectively. The working-tree
+precommit gate stopped at an unrelated existing syntax error in `Repair Mac 2.py`.
+
+Staging acceptance created private [report 17](https://github.com/zcm58/FPVS-Studio-Feedback/issues/17)
+from a synthetic incident. Cloudflare confirmed delivery of the short email to the
+maintainer's mail server. Production health confirmed desktop crash intake enabled
+on the reviewed Worker module. See the
+[service deployment record](https://github.com/zcm58/FPVS-Studio-Feedback/blob/main/DEPLOYMENT.md)
+for the migration, exact versions and receipt evidence.
 
 ## Authorized workflow
 
