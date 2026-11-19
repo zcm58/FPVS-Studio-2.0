@@ -864,6 +864,7 @@ def test_updater_is_self_contained_windowed_and_keeps_a_narrow_dependency_graph(
         [
             "fpvs_studio", "fpvs_studio.updates.models", "fpvs_studio.gui.updater_window",
             "fpvs_studio.gui.update_lifecycle", "fpvs_studio.gui.thread_completion",
+            "fpvs_studio.gui.update_progress",
         ],
     )
     entries, analysis = actual["calls"]["analysis"]
