@@ -205,6 +205,10 @@ Python failures and native trace evidence
 have separate categories; without native evidence the report says **unclean shutdown**,
 which can also mean forced termination or power loss. Healthy active processes and
 clean exits are excluded. This is best-effort recovery, not a guaranteed minidump.
+Studio keeps exits from PyCharm source runs local when no Python failure or native
+trace was recorded. PyCharm's Stop button can end the process before it saves a
+clean shutdown. Captured Python, native and handled internal failures in those
+runs remain eligible for automatic reporting.
 An unreadable or changing native trace defers only its session for a later recovery
 pass; other eligible sessions can still be recovered. Deferred evidence is preserved
 without guessing a failure category.

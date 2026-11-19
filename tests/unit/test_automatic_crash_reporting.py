@@ -137,9 +137,10 @@ def test_invalid_preference_never_becomes_default_enabled(crash_store):
         crash_store.consent()
 
 
-def test_native_recovery_contains_only_source_locations(crash_store):
+@pytest.mark.parametrize("pycharm_hosted", [False, True])
+def test_native_recovery_contains_only_source_locations(crash_store, pycharm_hosted):
     consent = enabled(crash_store)
-    value = session(crash_store, consent)
+    value = session(crash_store, consent, pycharm_hosted=pycharm_hosted)
     logs = crash_store.root / "logs"
     logs.mkdir()
     (logs / f"session-{value.session_id.hex}-native.log").write_text(
@@ -157,6 +158,7 @@ def test_native_recovery_contains_only_source_locations(crash_store):
     assert event.report.stack[1].function == "<external>"
     data = event.model_dump_json()
     assert "private" not in data and "secret" not in data and "participant" not in data
+    assert "pycharm_hosted" not in data
     assert crash_store.recover()[0].receipt_token == event.receipt_token
 
 
@@ -354,6 +356,18 @@ def test_unknown_unclean_exit_is_not_labeled_native_crash(crash_store):
     consent = enabled(crash_store)
     session(crash_store, consent)
     assert crash_store.recover()[0].report.crash_type == "unclean_shutdown"
+
+
+def test_pycharm_abrupt_exit_still_reports_a_separate_handled_failure(crash_store):
+    consent = enabled(crash_store)
+    incident = HandledIncident(operation="project", stack=[
+        safe_frame("fpvs_studio/gui/workers.py", "run", 42),
+    ])
+    session(crash_store, consent, pycharm_hosted=True, handled=[incident])
+    event, = crash_store.recover()
+    assert event.report.crash_type == "internal_error"
+    assert event.report.report_id == incident.report_id
+    assert crash_store.recover() == [event]
 
 
 def test_python_failure_uses_safe_frames_and_preserves_original_version(crash_store):
@@ -613,8 +627,14 @@ def test_retry_backoff_does_not_starve_other_reports(crash_store):
     assert len(crash_store.pending()) == 3
 
 
-@pytest.mark.parametrize("outcome", ["clean", "abrupt", "python"])
-def test_real_logging_child_session_lifecycle(tmp_path, outcome):
+@pytest.mark.parametrize(("outcome", "pycharm_hosted", "expected"), [
+    ("clean", False, None),
+    ("abrupt", False, "unclean_shutdown"),
+    ("python", False, "python_exception"),
+    ("abrupt", True, None),
+    ("python", True, "python_exception"),
+])
+def test_real_logging_child_session_lifecycle(tmp_path, outcome, pycharm_hosted, expected):
     store = CrashStore(tmp_path)
     # The first launch must capture a crash even before background registration succeeds.
     assert store.consent().enabled
@@ -633,18 +653,20 @@ if sys.argv[2] == "python":
 session.close()
 """
     result = subprocess.run(
-        [sys.executable, "-c", script, str(tmp_path), outcome], capture_output=True, timeout=15
+        [sys.executable, "-c", script, str(tmp_path), outcome], capture_output=True, timeout=15,
+        env={**os.environ, "PYCHARM_HOSTED": "1" if pycharm_hosted else "0"},
     )
     assert result.returncode == (17 if outcome == "abrupt" else 0), result.stderr.decode()
     events = store.recover()
-    if outcome == "clean":
+    if expected is None:
         assert events == []
+        assert store.recover() == []
     else:
         assert len(events) == 1
-        assert events[0].report.crash_type == (
-            "python_exception" if outcome == "python" else "unclean_shutdown"
-        )
+        assert events[0].report.crash_type == expected
         assert "private" not in events[0].model_dump_json()
+    snapshot, = store.folder().glob("session-*.json")
+    assert ("pycharm_hosted" in json.loads(snapshot.read_bytes())) == pycharm_hosted
 
 
 @pytest.mark.parametrize("failure", ["budget", "startup_budget", "io"])

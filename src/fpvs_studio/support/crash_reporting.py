@@ -142,6 +142,7 @@ class CrashSession(BaseModel):
     context: CrashContext | None = None
     installation_id: UUID | None = None
     generation: UUID | None = None
+    pycharm_hosted: bool = False
     state: Literal["active", "clean", "failed"] = "active"
     stack: list[StackFrame] = Field(default_factory=list, max_length=40)
     failed_at: str | None = None
@@ -303,7 +304,9 @@ class CrashStore:
 
     def save_session(self, session: CrashSession) -> None:
         with self._lock:
-            atomic_text(self._session_path(session), session.model_dump_json())
+            # Keep ordinary snapshots readable by older builds sharing this folder.
+            exclude = None if session.pycharm_hosted else {"pycharm_hosted"}
+            atomic_text(self._session_path(session), session.model_dump_json(exclude=exclude))
 
     def update_session(self, session: CrashSession) -> bool:
         """Merge worker updates with receipt and queue state written during the session."""
@@ -428,16 +431,16 @@ class CrashStore:
                     continue
                 if native is not None:
                     stack, kind = native, "native_fault"
-            matched = next((incident for incident in reversed(session.handled)
-                            if fatal and _same_incident(incident.stack, stack)), None)
             if fatal:
-                if matched is None or (not matched.queued and matched.report_id not in ids):
-                    self._queue(session, events, consent, kind, stack, matched)
-                # A correlated incident may already be queued or accepted. Mark the fatal
-                # snapshot resolved only after an immutable event exists.
+                # A force stop in PyCharm can leave an active record with no crash evidence.
+                if kind != "unclean_shutdown" or not session.pycharm_hosted:
+                    matched = next((incident for incident in reversed(session.handled)
+                                    if _same_incident(incident.stack, stack)), None)
+                    if matched is None or (not matched.queued and matched.report_id not in ids):
+                        self._queue(session, events, consent, kind, stack, matched)
+                    if matched is not None:
+                        matched.queued = True
                 session.reported = True
-                if matched is not None:
-                    matched.queued = True
                 self.save_session(session)
             for incident in session.handled:
                 if len(events) >= 10:

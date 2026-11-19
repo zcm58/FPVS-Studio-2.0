@@ -411,6 +411,10 @@ class DiagnosticLogging:
                         os_version=version, os_family=family,
                         installation_id=consent.installation_id,
                         generation=consent.workflow_generation,
+                        pycharm_hosted=(
+                            os.environ.get("PYCHARM_HOSTED") == "1"
+                            and not getattr(sys, "frozen", False)
+                        ),
                     )
                     if store.update_session(self._crash_session):
                         self.capture_enabled.set()
