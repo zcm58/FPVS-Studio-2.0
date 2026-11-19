@@ -120,11 +120,14 @@ the service. Existing code-connected computers keep their lab and access level.
 
 Enrollment is stored for the current OS user on that computer. Other user profiles
 enroll separately. The code itself is not retained as the device credential. Search
-by title, description, or category; select a result to see its complete description,
-version, download size, file count, extracted size, and minimum Studio version.
+by title, description, or category. The summary shows the project title, download
+size, minimum Studio version, and condition count. Studio reads the count from
+the selected bundle's signed metadata without downloading it. Entries whose
+metadata is unavailable, including view-only lab entries, show **Not listed**.
 Each opening or Refresh fetches current availability and scans projects under the
 configured Studio Root Folder in a worker. A recorded installation of the same or a
-newer release shows **Already installed** and disables downloading. **Review update…**
+newer release marks the project **Installed** in the list and disables downloading.
+An older release is marked **Installed · update available**. **Review update…**
 opens an older installed project's version dialog. Unlinked copies matching the exact
 project ID (including bundle collision suffixes) or title show **Review existing
 project…**; this is a review candidate, never an automatically inferred Library link.
@@ -138,10 +141,11 @@ ID, filename, size and SHA-256. Public catalog entries come from explicit releas
 listings with active safety evidence. Public downloads recheck the listing and
 evidence while obtaining the asset. Unlisting or safety withdrawal removes the
 public entry. Transfer failures show an error and leave local copies intact.
-The Library displays every available version.
-Experiments requiring a newer Studio version remain visible with an explanation and
-a disabled setup action. List titles may elide; a tooltip and the scrollable plain-text
-details expose their complete values.
+The Library displays every available version and labels releases by version in
+the list when they share a title.
+Experiments requiring a newer Studio version show the minimum version and a
+disabled **Studio update required** button. Long list titles remain accessible in
+the tooltip and the full summary.
 
 The **Color Oddball Demo** uses 12 original grayscale object silhouettes shared
 between conditions and red and green versions for the oddballs. Each condition

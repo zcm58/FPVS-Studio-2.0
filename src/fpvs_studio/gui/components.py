@@ -1636,6 +1636,10 @@ def _library_dialog_stylesheet(palette: QPalette) -> str:
     }}
     QPushButton[libraryProject="true"]:focus {{ border-color: {theme.focus_ring}; }}
     QPushButton[libraryProject="true"]:checked:focus {{ border: 2px solid {theme.focus_ring}; }}
+    QPushButton[libraryProject="true"][libraryInstallation="installed"],
+    QPushButton[libraryProject="true"][libraryInstallation="update"] {{
+        border-left: 3px solid {theme.success_text};
+    }}
     """
 
 

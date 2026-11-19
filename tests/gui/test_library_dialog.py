@@ -7,8 +7,8 @@ from threading import Event
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import Qt, QThread, QUrl
-from PySide6.QtGui import QColor, QImage, QPalette, QTextDocument
+from PySide6.QtCore import QAbstractAnimation, Qt, QThread
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
 from tests.gui.helpers import (
     assert_visible_children_within_parent,
@@ -171,9 +171,12 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
             assert label.height() >= label.heightForWidth(label.width())
     if state in ("ready", "busy", "error"):
         assert item.title in dialog.details.toPlainText()
-        assert item.description in _project_buttons(dialog)[0].toolTip()
-        assert "Project files: 3" in dialog.details.toPlainText()
-        assert "Minimum FPVS Studio: 1.0.0" in dialog.details.toPlainText()
+        assert _project_buttons(dialog)[0].toolTip() == item.title
+        assert "Download size" in dialog.details.toPlainText()
+        assert "Minimum Studio version\n1.0.0" in dialog.details.toPlainText()
+        assert "Conditions" in dialog.details.toPlainText()
+        assert "Project files" not in dialog.details.toPlainText()
+        assert item.description not in dialog.details.toPlainText()
         assert "Compatible with this Studio version" not in dialog.details.toPlainText()
         assert "This experiment is not installed" not in dialog.details.toPlainText()
         assert "Review display, timing and triggers" not in dialog.details.toPlainText()
@@ -209,7 +212,12 @@ def test_library_layout_and_full_metadata(qtbot, tmp_path, size, state) -> None:
     if state in {"installed", "update", "review"}:
         installed = dialog.selected_installation()
         assert installed is not None
-        assert installed.message in dialog.details.toPlainText()
+        assert str(installed.project.root) not in dialog.details.toPlainText()
+        row = _project_buttons(dialog)[0]
+        assert row.accessibleDescription() == {
+            "installed": "Installed", "update": "Installed · update available",
+            "review": "Possible local copy",
+        }[state]
 
 
 def test_catalog_permission_overrides_saved_access_and_refreshes_actions(qtbot) -> None:
@@ -236,17 +244,17 @@ def test_catalog_permission_overrides_saved_access_and_refreshes_actions(qtbot) 
     assert "Creates a separate project" in dialog.install_button.toolTip()
 
 
-def test_library_details_keep_installation_check_until_it_finishes(qtbot) -> None:
+def test_library_install_action_waits_for_installation_check(qtbot) -> None:
     dialog = LibraryDialog()
     qtbot.addWidget(dialog)
     dialog.set_connection(_connection())
     dialog.set_catalog(LibraryCatalog(
         schema_version="1.0", library_name="Research", items=[_item()],
     ))
-    assert "Checking installed experiments" in dialog.details.toPlainText()
+    assert dialog.install_button.text() == "Checking installation…"
     assert not dialog.install_button.isEnabled()
     dialog.set_installations((), "https://library.example.test")
-    assert "Checking installed experiments" not in dialog.details.toPlainText()
+    assert dialog.install_button.text() == "Download and set up experiment"
     assert "This experiment is not installed" not in dialog.details.toPlainText()
     assert dialog.install_button.isEnabled()
 
@@ -272,13 +280,51 @@ def test_library_search_and_incompatible_item(qtbot) -> None:
     dialog.set_connection(_connection())
     item = _item(min_studio_version="999.0.0")
     dialog.set_catalog(LibraryCatalog(schema_version="1.0", library_name="Research", items=[item]))
-    assert "Requires FPVS Studio 999.0.0" in dialog.details.toPlainText()
+    assert "Minimum Studio version\n999.0.0" in dialog.details.toPlainText()
+    assert dialog.install_button.text() == "Studio update required"
+    assert "Requires FPVS Studio 999.0.0" in dialog.install_button.toolTip()
     assert not dialog.install_button.isEnabled()
     dialog.search_edit.setText("nothing matches")
     assert dialog.selected_item() is None
     assert "No matching" in dialog.details.toPlainText()
-    dialog.search_edit.setText("attentional")
-    assert len(_project_buttons(dialog)) == 1
+
+
+def test_library_summary_reveal_respects_reduce_motion(qtbot, qapp, monkeypatch):
+    monkeypatch.setattr("fpvs_studio.gui.components._system_motion_enabled", lambda: True)
+    previous = qapp.property("studioReduceMotion")
+    dialog = LibraryDialog()
+    qtbot.addWidget(dialog)
+    dialog.set_public_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Public projects", items=[_demo(), _item()],
+    ))
+    dialog.show()
+    first, second = _project_buttons(dialog)
+    try:
+        qapp.setProperty("studioReduceMotion", False)
+        second.click()
+        assert dialog._reveal_animation.state() == QAbstractAnimation.State.Running
+        dialog._reveal_animation.setCurrentTime(dialog._reveal_animation.duration())
+        assert dialog.details.graphicsEffect() is None
+        qapp.setProperty("studioReduceMotion", True)
+        first.click()
+        assert dialog._reveal_animation.state() == QAbstractAnimation.State.Stopped
+        assert dialog.details.graphicsEffect() is None
+    finally:
+        qapp.setProperty("studioReduceMotion", previous)
+
+
+def test_library_list_distinguishes_releases_with_the_same_title(qtbot):
+    dialog = LibraryDialog()
+    qtbot.addWidget(dialog)
+    dialog.set_public_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Public projects",
+        items=[
+            _item(title="Masking", version="2.0"), _item(title="Masking", version="1.0"), _demo(),
+        ],
+    ))
+    assert [row.accessibleName() for row in _project_buttons(dialog)] == [
+        "Masking · 2.0", "Masking · 1.0", "Color Oddball Demo",
+    ]
 
 
 @pytest.mark.parametrize("size", [(900, 640), (1040, 760)])
@@ -302,18 +348,15 @@ def test_public_demo_and_view_only_lab_share_one_browser(qtbot, monkeypatch, siz
     assert dialog.selected_scope() == "public"
     assert dialog.install_button.isEnabled()
     assert dialog.status_label.text() == "No account required"
-    assert "1.2 Hz" in dialog.details.toPlainText()
-    assert "3 runs per condition" in dialog.details.toPlainText()
+    dialog.set_condition_count(_demo(), "public", 2)
+    assert "Conditions\n2" in dialog.details.toPlainText()
+    assert "1.2 Hz" not in dialog.details.toPlainText()
     dialog.set_catalog_state("lab", loading=True)
     assert dialog.selected_scope() == "public"
     assert not dialog.install_button.isEnabled()
     assert "current Library check" in dialog.install_button.toolTip()
     dialog.set_catalog_state("lab")
     assert dialog.install_button.isEnabled()
-    diagram = dialog.details.document().resource(
-        QTextDocument.ResourceType.ImageResource.value, QUrl("studio:color-oddball-demo"),
-    )
-    assert isinstance(diagram, QImage) and not diagram.isNull()
     dialog.search_edit.setFocus()
     qtbot.keyClick(dialog.search_edit, Qt.Key.Key_Tab)
     assert _project_buttons(dialog)[0].hasFocus()
@@ -335,6 +378,7 @@ def test_public_demo_and_view_only_lab_share_one_browser(qtbot, monkeypatch, siz
     dialog.search_edit.setText("reading")
     assert dialog.selected_scope() == "lab"
     assert dialog.install_button.text() == "View-only access"
+    assert "Conditions\nNot listed" in dialog.details.toPlainText()
     assert not dialog.install_button.isEnabled()
     assert "No matching public projects" in dialog.public_status.text()
     dialog.search_edit.clear()
@@ -380,6 +424,9 @@ class _Client:
         if self.public_error:
             raise LibraryError("Public catalog unavailable.")
         return LibraryCatalog(schema_version="1.0", library_name="Public projects", items=[_demo()])
+
+    def condition_count(self, item, *, scope, cancel_event=None):
+        return 2 if scope == "public" else 3
 
     def download(self, item, *, scope="lab", cancel_event=None, progress_callback=None):
         self.download_started.set()
@@ -446,6 +493,25 @@ def test_public_catalog_requires_no_connection_and_preserves_scope_on_import(
     assert origin.item_id == "color-oddball-demo"
     finished(None)
     assert client.releases == 1
+
+
+def test_condition_summary_reads_selected_proof_without_download(
+    qapp, qtbot, monkeypatch, tmp_path,
+):
+    client = _Client(tmp_path / "demo.fpvsbundle")
+    client.service_url = MANAGED_LIBRARY_SERVICE_URL
+    client.connection = _connection()
+    controller, _client, _lifecycle = _controller(
+        qapp, qtbot, monkeypatch, tmp_path, lambda *_args: pytest.fail("Unexpected import"),
+        client=client,
+    )
+    dialog = controller.dialog
+    assert dialog.selected_scope() == "public"
+    qtbot.waitUntil(lambda: "Conditions\n2" in dialog.details.toPlainText())
+    dialog.search_edit.setText(_item().title)
+    assert dialog.selected_scope() == "lab"
+    qtbot.waitUntil(lambda: "Conditions\n3" in dialog.details.toPlainText())
+    assert not client.download_started.is_set()
 
 
 def test_catalog_failures_do_not_clear_other_scope(qapp, qtbot, monkeypatch, tmp_path) -> None:

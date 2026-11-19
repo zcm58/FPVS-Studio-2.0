@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import socket
+from collections import Counter
 from html import escape
 
-from PySide6.QtCore import QEasingCurve, QEvent, QRectF, Qt, QUrl, QVariantAnimation, Signal
-from PySide6.QtGui import QCloseEvent, QColor, QDesktopServices, QImage, QPainter, QResizeEvent
+from PySide6.QtCore import QEasingCurve, QEvent, Qt, QUrl, QVariantAnimation, Signal
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QResizeEvent, QTextOption
 from PySide6.QtWidgets import (
     QDialog,
     QFormLayout,
@@ -38,13 +39,15 @@ from fpvs_studio.gui.components import (
     configure_setup_form,
     mark_primary_action,
     mark_text_role,
+    refresh_widget_style,
     widget_animation_duration,
 )
-from fpvs_studio.gui.design_system import StudioColorScheme, resolve_studio_theme
+from fpvs_studio.gui.design_system import FONT_SIZE_BODY, FONT_SIZE_PAGE_TITLE, resolve_studio_theme
 from fpvs_studio.gui.library_access_dialog import STUDIO_ACCOUNT_URL
 from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
 
 _RowKey = tuple[LibraryScope, str, str]
+_SummaryKey = tuple[LibraryScope, str, str, str]
 _SCOPES: tuple[LibraryScope, ...] = ("public", "lab")
 
 
@@ -63,68 +66,58 @@ def _format_size(size_bytes: int) -> str:
     )
 
 
-def _plain_text_html(text: str) -> str:
-    return escape(text).replace("\n", "<br>")
+def _summary_key(item: LibraryItem, scope: LibraryScope) -> _SummaryKey:
+    return scope, item.item_id, item.version, item.sha256
 
 
 class _ProjectRow(QPushButton):
-    def __init__(self, item: LibraryItem, parent: QWidget) -> None:
+    def __init__(self, item: LibraryItem, parent: QWidget, *, show_version: bool) -> None:
         super().__init__(parent)
         self.item = item
+        self._title = f"{item.title} · {item.version}" if show_version else item.title
+        self._elide_mode = (
+            Qt.TextElideMode.ElideMiddle if show_version else Qt.TextElideMode.ElideRight
+        )
         self.category = experiment_category_label(ExperimentCategory(item.experiment_category))
-        self._title = f"{item.title}  ·  {item.version}"
+        self.installation: LibraryInstallStatus | None = None
+        self._status = ""
         self.setProperty("libraryProject", "true")
         self.setAutoDefault(False)
         self.setCheckable(True)
         self.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed)
         self.setAccessibleName(self._title)
-        self.setAccessibleDescription(self.category)
-        self.setToolTip(f"{self._title}\n{self.category}\n\n{item.description}")
-        self.setText(f"{self._title}\n{self.category}")
+        self.setText(self._title)
+
+    def set_installation(self, installation: LibraryInstallStatus | None) -> None:
+        self.installation = installation
+        state = installation.state if installation is not None else "unchecked"
+        self._status = {
+            "installed": "Installed",
+            "update": "Installed · update available",
+            "review": "Possible local copy",
+        }.get(state, "")
+        self.setAccessibleDescription(self._status)
+        self.setToolTip("\n".join(filter(None, (self._title, self._status))))
+        if self.property("libraryInstallation") != state:
+            self.setProperty("libraryInstallation", state)
+            refresh_widget_style(self)
+        self._update_text()
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802
         super().resizeEvent(event)
+        self._update_text()
+
+    def _update_text(self) -> None:
         width = max(0, self.width() - 26)
-        self.setText("\n".join(
-            self.fontMetrics().elidedText(line, Qt.TextElideMode.ElideRight, width)
-            for line in (self._title, self.category)
-        ))
-
-
-class _LibraryDetails(QTextBrowser):
-    def loadResource(self, resource_type: int, name: QUrl | str) -> object:  # noqa: N802
-        if QUrl(name).toString() != "studio:color-oddball-demo":
-            return super().loadResource(resource_type, name)
-        theme = resolve_studio_theme(self.palette())
-        dark = theme.scheme == StudioColorScheme.DARK
-        image = QImage(456, 56, QImage.Format.Format_ARGB32_Premultiplied)
-        image.fill(Qt.GlobalColor.transparent)
-        painter = QPainter(image)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(Qt.PenStyle.NoPen)
-        for index in range(5):
-            painter.setBrush(QColor(theme.surface_alt if index < 4 else theme.info_bg))
-            painter.drawRoundedRect(QRectF(index * 92, 0, 88, 56), 6, 6)
-        painter.setBrush(QColor("#b6c7dc" if dark else "#52657c"))
-        painter.drawEllipse(QRectF(32, 16, 24, 24))
-        painter.drawRoundedRect(QRectF(124, 16, 24, 24), 8, 8)
-        painter.drawRect(QRectF(216, 20, 24, 5))
-        painter.drawRect(QRectF(216, 31, 24, 5))
-        painter.drawEllipse(QRectF(308, 16, 24, 24))
-        painter.setBrush(QColor(theme.surface_alt))
-        painter.drawEllipse(QRectF(313, 21, 14, 14))
-        painter.setBrush(QColor("#e38388" if dark else "#aa4950"))
-        painter.drawPie(QRectF(400, 16, 24, 24), 90 * 16, 180 * 16)
-        painter.setBrush(QColor("#76bc99" if dark else "#34755c"))
-        painter.drawPie(QRectF(400, 16, 24, 24), -90 * 16, 180 * 16)
-        painter.end()
-        return image
+        title = self.fontMetrics().elidedText(self._title, self._elide_mode, width)
+        self.setText(f"{title}\n{self._status}" if self._status else title)
 
 
 class LibraryDialog(QDialog):
     """Browse editable local experiment copies at 900x640 minimum / 1040x760 default."""
 
     action_requested = Signal(str)
+    summary_requested = Signal()
     closing = Signal()
 
     def __init__(self, *, openfpvs: bool = True) -> None:
@@ -146,10 +139,11 @@ class LibraryDialog(QDialog):
         self._selection_explicit = False
         self._installations: tuple[InstalledLibraryProject, ...] | None = None
         self._service_url = ""
+        self._condition_counts: dict[_SummaryKey, int | None] = {}
         self._status_override = ""
         self._reveal_widget: QWidget | None = None
         self._reveal_animation = QVariantAnimation(self)
-        self._reveal_animation.setStartValue(0.72)
+        self._reveal_animation.setStartValue(0.90)
         self._reveal_animation.setEndValue(1.0)
         self._reveal_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         self._reveal_animation.valueChanged.connect(self._reveal_step)
@@ -271,10 +265,11 @@ class LibraryDialog(QDialog):
         browse.addWidget(scroll, 1)
         columns.addWidget(sidebar, 1)
 
-        self.details = _LibraryDetails(workspace)
+        self.details = QTextBrowser(workspace)
         self.details.setObjectName("library_experiment_details")
         self.details.setAccessibleName("Selected experiment details")
         self.details.setOpenExternalLinks(False)
+        self.details.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
         self.details.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         columns.addWidget(self.details, 2)
         layout.addWidget(workspace, 1)
@@ -364,6 +359,11 @@ class LibraryDialog(QDialog):
         if first_public_load:
             self._selected = None
         self._catalogs[scope] = catalog
+        current_keys = {_summary_key(item, scope) for item in catalog.items} if catalog else set()
+        self._condition_counts = {
+            key: count for key, count in self._condition_counts.items()
+            if key[0] != scope or (count is not None and key in current_keys)
+        }
         for key in tuple(self._rows):
             if key[0] == scope:
                 row = self._rows.pop(key)
@@ -371,9 +371,12 @@ class LibraryDialog(QDialog):
                 row.hide()
                 row.deleteLater()
         parent = self.public_section if scope == "public" else self.lab_section
-        for item in catalog.items if catalog else ():
+        items = catalog.items if catalog else ()
+        title_counts = Counter(item.title.casefold() for item in items)
+        for item in items:
             key = (scope, item.item_id, item.version)
-            row = _ProjectRow(item, parent)
+            row = _ProjectRow(item, parent, show_version=title_counts[item.title.casefold()] > 1)
+            self._sync_row_installation(row)
             row.clicked.connect(lambda _checked=False, key=key: self._select(key))
             self._row_layouts[scope].addWidget(row)
             self._rows[key] = row
@@ -443,16 +446,37 @@ class LibraryDialog(QDialog):
     ) -> None:
         self._installations = projects
         self._service_url = service_url
+        for row in self._rows.values():
+            self._sync_row_installation(row)
         self._selection_changed()
 
-    def selected_installation(self) -> LibraryInstallStatus | None:
-        item = self.selected_item()
-        if item is None or self._installations is None:
-            return None
-        return library_install_status(
-            self._installations, service_url=self._service_url,
-            item_id=item.item_id, version=item.version, title=item.title,
+    def _sync_row_installation(self, row: _ProjectRow) -> None:
+        item = row.item
+        row.set_installation(
+            library_install_status(
+                self._installations, service_url=self._service_url,
+                item_id=item.item_id, version=item.version, title=item.title,
+            ) if self._installations is not None else None,
         )
+
+    def selected_installation(self) -> LibraryInstallStatus | None:
+        row = self._rows.get(self._selected) if self._selected else None
+        return row.installation if row else None
+
+    def needs_condition_count(self, item: LibraryItem, scope: LibraryScope) -> bool:
+        return self.can_download and _summary_key(item, scope) not in self._condition_counts
+
+    def set_condition_count(
+        self, item: LibraryItem, scope: LibraryScope, count: int | None,
+    ) -> None:
+        key = _summary_key(item, scope)
+        catalog = self._catalogs[scope]
+        if catalog is None or item not in catalog.items:
+            return
+        self._condition_counts[key] = count
+        selected = self.selected_item()
+        if selected is not None and _summary_key(selected, self.selected_scope()) == key:
+            self._render_details(selected)
 
     def set_busy(self, busy: bool, message: str = "", *, downloading: bool = False) -> None:
         restore_focus = not busy and self.cancel_button.hasFocus()
@@ -533,47 +557,26 @@ class LibraryDialog(QDialog):
             self._animate_reveal(self.details)
         self._sync_footer()
         self._sync_actions()
+        self.summary_requested.emit()
 
     def _render_details(self, item: LibraryItem) -> None:
-        category = experiment_category_label(ExperimentCategory(item.experiment_category))
-        installed = self.selected_installation()
-        installation = "Checking installed experiments…" if installed is None else (
-            installed.message if installed.state != "new" else ""
-        )
         theme = resolve_studio_theme(self.palette())
-        demo = ""
-        if (
-            self.selected_scope() == "public" and item.item_id == "color-oddball-demo"
-            and item.version == "1.0.0"
-        ):
-            demo = """
-                <table width="456"><tr>
-                <td><b>Base images</b></td><td align="right"><b>Oddball</b></td>
-                </tr></table>
-                <p><img src="studio:color-oddball-demo" width="456" height="56"
-                  alt="Four grayscale base examples and a red or green oddball"></p>
-                <p>Every fifth image is a red or green oddball, depending on the condition.</p><hr>
-                <table width="100%" cellspacing="0" cellpadding="5">
-                <tr><td>Base rate</td><td>Oddball rate</td><td>Per run</td></tr>
-                <tr style="font-size: 18px; font-weight: 700">
-                <td>6 Hz</td><td>1.2 Hz</td><td>40 s</td></tr></table><hr>
-                <p>3 runs per condition · Fixation cross task</p>
-            """
-        description = _plain_text_html(item.description)
-        notices = "".join(f"<p>{_plain_text_html(notice)}</p>" for notice in (
-            item.compatibility_message, installation,
-        ) if notice)
-        metadata = f"{escape(category)} · Version {escape(item.version)}"
+        scope = self.selected_scope()
+        count = self._condition_counts.get(_summary_key(item, scope))
+        conditions = str(count) if count is not None else (
+            "Checking…" if self.needs_condition_count(item, scope) else "Not listed"
+        )
+        minimum_color = theme.text_primary if item.compatible else theme.warning_text
         self.details.setHtml(f"""
-            <body style="font-size: 13px; color: {theme.text_primary}">
-            <p style="font-size: 24px; font-weight: 700">{escape(item.title)}</p>
-            <p style="color: {theme.text_muted}">{metadata}</p>
-            <p>{description}</p>
-            {demo}
-            <p style="color: {theme.text_muted}">Download: {_format_size(item.size_bytes)}<br>
-            Project files: {item.file_count:,} · {_format_size(item.uncompressed_size_bytes)}<br>
-            Minimum FPVS Studio: {escape(item.min_studio_version)}</p>
-            {notices}</body>
+            <body style="font-size: {FONT_SIZE_BODY}px; color: {theme.text_primary}">
+            <p style="font-size: {FONT_SIZE_PAGE_TITLE}px; font-weight: 700; margin-bottom: 20px">
+            {escape(item.title)}</p>
+            <p><span style="color: {theme.text_secondary}">Download size</span><br>
+            <b>{_format_size(item.size_bytes)}</b></p>
+            <p><span style="color: {theme.text_secondary}">Minimum Studio version</span><br>
+            <b style="color: {minimum_color}">{escape(item.min_studio_version)}</b></p>
+            <p><span style="color: {theme.text_secondary}">Conditions</span><br>
+            <b>{conditions}</b></p></body>
         """)
 
     def _sync_footer(self) -> None:
@@ -590,7 +593,7 @@ class LibraryDialog(QDialog):
             return
         self._reveal_widget = widget
         effect = QGraphicsOpacityEffect(widget)
-        effect.setOpacity(0.72)
+        effect.setOpacity(0.90)
         widget.setGraphicsEffect(effect)
         self._reveal_animation.setDuration(duration)
         self._reveal_animation.start()
@@ -604,9 +607,7 @@ class LibraryDialog(QDialog):
     def _finish_reveal(self) -> None:
         self._reveal_animation.stop()
         if self._reveal_widget is not None:
-            effect = self._reveal_widget.graphicsEffect()
-            if effect is not None:
-                effect.setEnabled(False)
+            self._reveal_widget.setGraphicsEffect(None)  # type: ignore[arg-type]  # Qt accepts None to remove the effect.
             self._reveal_widget = None
 
     def _sync_actions(self, *_args: object) -> None:
@@ -636,6 +637,9 @@ class LibraryDialog(QDialog):
             )
         if "lab" in self._loading and self.can_download:
             guidance = "Wait for the current Library check to finish."
+        if item is not None and self.can_download and not item.compatible:
+            self.install_button.setText("Studio update required")
+            guidance = item.compatibility_message
         if self._downloading:
             self.install_button.setText("Preparing bundle…")
         self.install_button.setToolTip(guidance)

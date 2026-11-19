@@ -406,6 +406,33 @@ class LibraryClient:
             self.store.save(credential.model_copy(update={"connection": connection}))
         return catalog
 
+    def condition_count(
+        self, item: LibraryItem, *, scope: LibraryScope, cancel_event: Event | None = None,
+    ) -> int:
+        """Read the verified condition count without fetching the experiment bundle."""
+        public = scope == "public"
+        if public:
+            self._require_public_service()
+        require_pinned_origin(self.service_url)
+        check_cancel(cancel_event)
+        token = "" if public else self._credential().token
+        api = _PUBLIC_API if public else "/v2"
+        item_path = f"{api}/items/{item.item_id}/versions/{item.version}"
+        return self._read_condition_count(item, item_path, token, cancel_event)
+
+    def _read_condition_count(
+        self, item: LibraryItem, item_path: str, token: str, cancel_event: Event | None,
+    ) -> int:
+        evidence = self._json_request(
+            "GET", f"{item_path}/provenance", token=token, cancel_event=cancel_event, limit=8192,
+        )
+        if not isinstance(evidence, dict) or set(evidence) != {
+            "schema_version", "key_id", "proof",
+        } or evidence["schema_version"] != "1.0":
+            raise LibraryError("untrusted_provenance: Invalid bundle safety response.")
+        verify_proof(evidence["proof"], evidence["key_id"], item, self.service_url)
+        return int(evidence["proof"]["condition_count"])
+
     def download(
         self,
         item: LibraryItem,
@@ -447,15 +474,7 @@ class LibraryClient:
                     raise LibraryError(
                         "This Library item changed or was withdrawn. Refresh the catalog."
                     )
-                evidence = self._json_request(
-                    "GET", f"{item_path}/provenance",
-                    token=token, cancel_event=cancel_event, limit=8192,
-                )
-                if not isinstance(evidence, dict) or set(evidence) != {
-                    "schema_version", "key_id", "proof",
-                } or evidence["schema_version"] != "1.0":
-                    raise LibraryError("untrusted_provenance: Invalid bundle safety response.")
-                verify_proof(evidence["proof"], evidence["key_id"], item, self.service_url)
+                self._read_condition_count(item, item_path, token, cancel_event)
                 self._cache.clear(keep=retained.name)
                 if progress_callback is not None:
                     progress_callback(item.size_bytes, item.size_bytes)

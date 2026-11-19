@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import Event
 from typing import cast
 
-from PySide6.QtCore import QObject
+from PySide6.QtCore import QObject, QTimer
 from PySide6.QtWidgets import QApplication
 
 from fpvs_studio.core.library_installations import (
@@ -67,6 +67,11 @@ class LibraryController(QObject):
         self.dialog: LibraryDialog | None = None
         self._job: UpdateJob | None = None
         self._catalog_jobs: dict[LibraryScope, UpdateJob] = {}
+        self._summary_job: UpdateJob | None = None
+        self._summary_timer = QTimer(self)
+        self._summary_timer.setSingleShot(True)
+        self._summary_timer.setInterval(160)
+        self._summary_timer.timeout.connect(self._load_condition_count)
         self._importing = False
         self._install_item: tuple[LibraryItem, LibraryScope] | None = None
         self._closing = False
@@ -82,6 +87,7 @@ class LibraryController(QObject):
                 openfpvs=self.client.service_url == MANAGED_LIBRARY_SERVICE_URL,
             )
             self.dialog.action_requested.connect(self._action)
+            self.dialog.summary_requested.connect(self._summary_timer.start)
             self.dialog.closing.connect(self._close)
         self._closing = False
         self.dialog.show()
@@ -207,6 +213,32 @@ class LibraryController(QObject):
             self._view().set_public_catalog(catalog)
         else:
             self._view().set_catalog(catalog)
+
+    def _load_condition_count(self) -> None:
+        if self._summary_job is not None or self._closing or self._lifecycle.is_shutting_down:
+            return
+        view = self._view()
+        item, scope = view.selected_item(), view.selected_scope()
+        if item is None or not view.needs_condition_count(item, scope):
+            return
+        job = self._lifecycle.start_task(
+            lambda _progress, cancel: self.client.condition_count(
+                item, scope=scope, cancel_event=cancel,
+            ),
+        )
+        self._summary_job = job
+
+        def finished(result: object) -> None:
+            self._summary_job = None
+            if self._closing or self._lifecycle.is_shutting_down:
+                return
+            outcome = cast(UpdateTaskResult, result)
+            if not outcome.cancelled:
+                count = outcome.value if outcome.error is None else None
+                view.set_condition_count(item, scope, count if isinstance(count, int) else None)
+            self._summary_timer.start()
+
+        job.finished.connect(finished)
 
     def _action(self, action: str) -> None:
         if action == "cancel":
@@ -335,6 +367,9 @@ class LibraryController(QObject):
 
     def _close(self) -> None:
         self._closing = True
+        self._summary_timer.stop()
+        if self._summary_job is not None:
+            self._summary_job.cancel()
         for job in self._catalog_jobs.values():
             job.cancel()
         self._catalog_jobs.clear()

@@ -192,6 +192,21 @@ def test_public_catalog_and_download_share_normal_metadata_and_proof(public_envi
     assert not bundle.exists()
 
 
+def test_condition_count_reads_only_verified_proof(public_environment):
+    client, requests, replies = public_environment
+    replies.append(provenance_reply())
+    assert client.condition_count(item(), scope="public") == 1
+    assert len(requests) == 1
+    assert requests[0].full_url.endswith("/provenance")
+    assert requests[0].get_header("Authorization") is None
+    assert not client._cache.root.exists()
+    invalid = provenance_reply()
+    invalid["proof"]["condition_count"] = 12
+    replies.append(invalid)
+    with pytest.raises(LibraryError, match="untrusted_provenance"):
+        client.condition_count(item(), scope="public")
+
+
 def test_public_retained_payload_still_needs_exact_live_proof(public_environment):
     client, requests, replies = public_environment
     replies.append(payload_reply())
