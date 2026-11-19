@@ -14,6 +14,19 @@ was denied. Browser sign-in and a single-use computer code connect a new Studio
 installation. Existing computer credentials retain their scope. OpenFPVS owns
 live membership and Library access. See the [account portal contract](../../EXPERIMENT_LIBRARY.md#account-portal).
 
+## Local verification (2026-11-19)
+
+OpenFPVS `03fa4f3` passed 33 synthetic tests across account Library access,
+researcher passwords, portal runtime, and lab removal, with zero failures or skips.
+Local workerd and D1 exercised database migration and credential lifecycle. The
+tests covered password sign-in, one-time computer-code claims, live membership
+checks before and during download, and suspension or access revocation.
+
+The Studio Library focused selection at `313f0bd` included 160 passing client and
+credential tests and one Windows symlink-permission skip. These cases exercised
+persisted enrollment token retry, view-only download denial, credential revocation,
+and bundle integrity with fake transport and credential storage.
+
 ## Remaining acceptance
 
 - [ ] With the owner's live account, verify personal password sign-in and join

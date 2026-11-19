@@ -19,6 +19,26 @@ simulated GitHub draft, including a maximum-size transfer. Those results establi
 the tested transport and boundary behavior. The deployed source and evidence are in
 OpenFPVS `CONDITION_REVIEW.md` and its record commit `3f49f0f`.
 
+## Local verification (2026-11-19)
+
+OpenFPVS `03fa4f3` passed 39 synthetic submission tests, with zero failures or
+skips. Local workerd and D1 exercised immutable reservations, fixed-length uploads
+to a simulated GitHub draft, and a 502,495,471-byte PI transfer with cancellation,
+revocation during transfer and exact-asset retry. Size admission accepted metadata
+at 2,147,483,647 bytes and rejected it one byte higher. Provider fixtures covered
+one notification with the exact draft link, email retry with the same idempotency
+key, and catalog reconciliation to the original validated asset. Standard
+submissions were also tested without enrollment.
+
+The Studio Library focused selection at `313f0bd` included 110 passing publication,
+submission client and upload-job tests. These cases exercised preparation of all
+conditions, preservation of exact prepared bytes after cancellation, standard upload
+retry with the same identity, and PI request and stream size boundaries with fake
+transport.
+
+Two visible Windows Qt cases passed for canceling as preparation completes
+and keeping retry controls usable at both documented dialog sizes.
+
 ## Remaining acceptance
 
 - [ ] In packaged Studio 3.1.0, use approved synthetic projects to submit a standard

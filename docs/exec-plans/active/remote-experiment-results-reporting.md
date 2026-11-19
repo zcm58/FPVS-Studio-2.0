@@ -16,6 +16,27 @@ specific delivery outcomes. The controlled two-machine and cancellation checks b
 remain open. See the [data-sharing contract](../../DATA_SHARING.md) and
 [November 3 delivery audit](../completed/reporting-protocol-audit-20261103.md).
 
+## Local verification (2026-11-19)
+
+Studio `313f0bd` passed 310 distinct local cases across the Results client,
+background jobs, models, runtime, service, storage and wire modules. Synthetic
+checks exercised same-identity retry, stale job cancellation on project switch or
+shutdown, and capture and delivery of eligible fixation metrics using a stub engine
+and fake transport. The initial run reached the default 30-second watchdog while
+flushing local participant results in the capacity and archive runtime case. That
+case passed on rerun with a 120-second watchdog. The separate 1,500-session storage
+fixture reached its 600-second watchdog during shared filesystem load. The last
+progress check observed 434 archived sessions.
+
+OpenFPVS `03fa4f3` passed 82 synthetic Results tests across reporting scope,
+intake, dashboard, session status and summary, with zero failures or skips.
+Local workerd and D1 returned a fresh private session snapshot. Other cases covered
+byte-identical receipt recovery, conflicting-report rejection, private lab and
+protocol scope, revocation, cohort rules, and suppression of incompatible metrics.
+
+Forty-eight visible Windows Qt cases also passed for the Results dialog's
+layout, long content, and tabs across the registered sizes and states.
+
 ## Remaining acceptance
 
 - [ ] In an authorized isolated OpenFPVS study, separately enroll and approve two

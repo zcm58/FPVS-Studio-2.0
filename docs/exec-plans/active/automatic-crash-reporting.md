@@ -15,6 +15,23 @@ log download using synthetic reports. The general Studio 3.1.0 packaged smoke an
 that service test are separate from packaged end-to-end reporting acceptance.
 See the [service deployment record](https://github.com/zcm58/FPVS-Studio-Feedback/blob/main/DEPLOYMENT.md).
 
+## Local verification (2026-11-19)
+
+Studio `313f0bd` exercised the support client, report builder, automatic reporter,
+and background reporting jobs with isolated profiles and fake HTTP. The initial
+selection recorded 151 passes, one Windows symlink-permission skip and three
+15-second logging-child timeouts. Windows also locked a temporary PowerShell
+policy probe during teardown. All three timed-out cases passed on a targeted rerun
+with the original limits. The selection covered disclosure and retained opt-out,
+handled and native recovery, redaction, and same-receipt retry and reconciliation.
+Two additional visible Qt cases passed for startup disclosure order and persisted
+opt-out with controlled transport.
+
+Feedback `a44fa63` passed all 55 synthetic tests, with zero failures or skips.
+Crash intake tests checked bounded facts, capability scope, duplicate delivery,
+then one private issue and one maintainer email using mocked providers. A filename
+test checked the app, incident and date for recovered unclean shutdown logs.
+
 ## Remaining acceptance
 
 - [ ] Verify the packaged reporter in Studio 3.1.0 and in a Toolbox release that

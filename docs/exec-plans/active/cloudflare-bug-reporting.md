@@ -17,6 +17,19 @@ Manual bug intake, automatic crash intake and delivery are enabled. Manual bug
 reports still use browser verification. See the [Studio reporting contract](../../BUG_REPORTING.md)
 and [Feedback deployment record](https://github.com/zcm58/FPVS-Studio-Feedback/blob/main/DEPLOYMENT.md).
 
+## Local verification (2026-11-19)
+
+Studio `313f0bd` passed 88 cases in `test_support_client.py` and
+`test_support_reports.py`, with one Windows symlink-permission skip. Fake transport
+covered the direct-feature routes and receipt handling, reviewed manual diagnostics
+and draft recovery. Feedback `a44fa63` passed all 55 synthetic tests. The suite
+checked the disabled direct-feature response, feature-only digest-bound input,
+duplicate receipt recovery, manual Turnstile, and the shared issue and email queue
+with mocked providers. Both checked-in Worker configurations default direct feature
+intake to `false`. The in-memory fixture enables it for direct-feature tests.
+Six visible Windows Qt cases passed for report layout and direct-feature receipt
+handling with a controlled service.
+
 ## Remaining acceptance
 
 - [ ] In Feedback staging, verify authorized synthetic direct-feature delivery
