@@ -28,6 +28,50 @@ collection migrations absent from the applied migration history and neither
 report and snapshot acceptance below predates the collection/roster workflow.
 The sibling `OpenFPVS/INTEGRATION_PLAN.md` owns its deployment and live acceptance.
 
+## Windows source verification on November 19, 2026
+
+Studio `313f0bd` and Toolbox `84ac8656` passed a paired synthetic transfer.
+The Studio runtime with a stub renderer and marker transport wrote a 30-visit
+study. Toolbox proposed 28 clear matches, one ambiguous visit and one missing
+visit. After resolving the ambiguity and deferring the missing visit, Toolbox
+selected 29 recordings for processing. Reopening preserved the decisions and
+replaying the export left `project.json` byte-identical.
+
+Studio retained the study identity across reopen and required a reason for an
+in-place protocol edit. The next export added one method-compatible visit.
+Preview left the Toolbox manifest unchanged. Applying and reopening the new
+revision preserved the prior decisions and added the new recording to the
+selection. Replaying it left the manifest byte-identical again. A later
+cycle-count change blocked a mixed-version selection before any write. A
+separate Studio copy received a new study identity. Standalone Setup and
+completed-session files also imported and reopened. The official
+`scripts/verify_studio_toolbox_handoff.py` run produced BioSemi and Unicorn
+completed files and canonical session reports with 43 simulated marker attempts
+per visit. Toolbox imported both completed files.
+
+Studio passed 68 focused handoff, project version and collection tests. Toolbox
+passed 206 focused import, cohort and results-sharing tests. These include
+explicit handling of a previously reviewed visit omitted from a later roster,
+archived output for the 20-visit result, and a new release for 21 visits.
+The Windows source smoke exercised review and batch selection with synthetic
+filenames. Separately, Toolbox decoded all 43 markers from a generated 256 Hz
+BioSemi BDF built from one visit's exported schedule, preprocessed the recording,
+and wrote a spectral result using the imported protocol. The installed batch and
+production result-release workflow remain in the acceptance steps below.
+
+The broader Toolbox project-I/O route reported 1,353 passes and 14 skips.
+Its manifest-write recovery test exceeded the 20-second wait for a spawned
+process on the full run and passed on an isolated rerun.
+
+OpenFPVS `03fa4f3` passed 82 local Results tests and 42 analysis-snapshot and
+processed-results tests. Fresh local Workerd and D1 applied both collection
+migrations. The checks cover session intake, revocation, separate labs and
+protocols, exact receipt retries, and collection closure and reopening. Reviewed
+roster revisions and CSV-backed visit coverage drove per-lab analysis status.
+Snapshot reads respected lab scope and revocation, and revisions preserved the
+published parent. The site and installed applications still need the linked
+production study below.
+
 ## Remaining work and acceptance
 
 1. **Verify the installed Studio–Toolbox pair.** Record the exact builds and

@@ -24,6 +24,25 @@ historical general installer and default-size dialog gates below. The September
 live check used two credential targets and two local projects. Installed
 end-to-end acceptance on a second physical machine still needs its own record.
 
+## Windows source verification on November 19, 2026
+
+Studio `313f0bd` passed the focused Library route with 577 tests and 24 subtests.
+Three symlink cases were skipped because this Windows environment could not
+create them. The checks cover enrollment token retry, view-only access,
+revocation, authorization before cache reuse, signed proof, transfer size and
+digest checks, and cancellation. The synthetic archive checks cover independent
+installation and offline reopening, plus guarded replacement with backup and
+preservation of participant output and pending reporting. The credential tests
+exercise the Windows and Linux adapter contracts with mocked OS calls.
+
+Two source clients using an in-process synthetic service and separate in-memory
+credential stores enrolled, browsed, verified signed provenance and imported the
+same 2,443-byte bundle into independent Studio roots. The service rejected fresh
+requests from the revoked client while the other retained access. Both reopened
+projects compiled at 60 Hz without service calls. Cross-machine installed
+acceptance still needs the large-archive, protected-storage and revocation
+checks below.
+
 ## Remaining whole-project acceptance
 
 1. On two physical Windows machines with different Studio roots, use approved
