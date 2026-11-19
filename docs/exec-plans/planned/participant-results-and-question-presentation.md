@@ -21,6 +21,15 @@ Baseline reviewed: Studio 3.1.0 (2026-11-19)
   Masking views, a filtered response viewer and an explicit export of its loaded
   selection are proposed. Optional participant question styling is a separate slice.
 
+- November 19 unattended baseline verification passed 120 cases for workbook
+  consolidation, answer recovery and deduplication, Masking trial output, and
+  interrupted-write durability. One Windows symlink case was skipped. The
+  initial 30-second watchdog fired during a Masking fixture's file replacement.
+  The same selection completed on retry with a 120-second test allowance.
+  A visible Windows Qt case also passed for refreshing the active project's
+  workbook before opening it. The proposed response viewer and filtered export
+  still need implementation and acceptance.
+
 ## Outcome and workflow
 
 1. Add **View > Participant Responses...** for modular tasks. A read-only table

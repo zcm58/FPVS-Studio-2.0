@@ -42,6 +42,8 @@ requests from the revoked client while the other retained access. Both reopened
 projects compiled at 60 Hz without service calls. Cross-machine installed
 acceptance still needs the large-archive, protected-storage and revocation
 checks below.
+Five visible Windows Qt cases passed for public and view-only browsing,
+enrollment, import lease handling, and disconnect with controlled services.
 
 ## Remaining whole-project acceptance
 

@@ -40,6 +40,10 @@ whether it needs a separate policy before exposing the control there.
   three Oddball images, preserved every complete pool, unique partial pools, and
   per-role counts differing by at most one. Compiler focused verification passed
   451 tests. This verifies the existing within-run behavior, not the proposed option.
+- November 19 unattended verification passed 55 targeted cases covering pool
+  exhaustion and refill, the existing seeded and Sequential selection behavior,
+  and persistence of saved order. Carryover still requires implementation and
+  the compatibility and workflow checks below.
 
 ## Proposed User Experience
 
