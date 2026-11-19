@@ -391,7 +391,7 @@ def test_project_update_menu_and_notice_respect_busy_guards(qtbot, tmp_path, mon
         on_request_project_update=lambda: requested.append(True),
     )
     qtbot.addWidget(window)
-    assert window.project_update_action in window.file_menu.actions()
+    assert window.project_update_action in window.project_menu.actions()
     window.project_update_action.trigger()
     assert requested == [True]
     window.set_project_update_notice("A new library version is available.")

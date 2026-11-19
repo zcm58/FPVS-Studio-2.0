@@ -79,6 +79,7 @@ def test_tools_menu_exposes_in_window_image_resizer(
         "File",
         "View",
         "Tools",
+        "Help",
     ]
     assert [
         action.text() for action in window.tools_menu.actions() if not action.isSeparator()

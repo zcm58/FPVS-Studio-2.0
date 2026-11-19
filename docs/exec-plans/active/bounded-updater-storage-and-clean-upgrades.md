@@ -178,7 +178,7 @@ or downloads. Outstanding installed/clean-PC release acceptance remains separate
   pass; registered phase/geometry and startup-cancellation tests are added but not run.
   Final repo precommit passes with 1,455 tests and seven symlink-permission skips,
   plus Ruff, compilation, mypy, and repository/documentation audits.
-  Visible acceptance: open File > Check for Updates at 680x600 and 760x620, confirm the
+  Visible acceptance: open Help > Check for Updates at 680x600 and 760x620, confirm the
   latest version appears during verification with actions disabled, then check the
   installed-file and transfer statuses during Download Update. No installer is launched.
 
@@ -223,7 +223,7 @@ or downloads. Outstanding installed/clean-PC release acceptance remains separate
   passed (226 tests, four Windows symlink-permission skips); packaging focused
   checks passed (168 tests), including the existing frozen-version regression.
   The source resolver already contains the 1.4.1 correction; no source fix was needed.
-- Reopening the packaged app and using File > Check for Updates remains the visible
+- Reopening the packaged app and using Help > Check for Updates remains the visible
   confirmation step. No Qt app, installer, or uninstaller was executed. This repair
   does not complete the outstanding installer lifecycle acceptance checks.
 

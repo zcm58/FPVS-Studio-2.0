@@ -118,7 +118,7 @@ quit. Closing is available after the transfer finishes or fails.
 A queued offline report, retry backoff or an explicit hold leaves closing available.
 On the next launch, eligible pending reports follow the startup policy above.
 
-**File > Linked OpenFPVS Study** shows local collection and the last confirmed
+**File > Project > Linked OpenFPVS Study** shows local collection and the last confirmed
 website status. **Check website status** refreshes a receipt for this enrolled
 study. **Manage collection on OpenFPVS** shows outstanding local reports before
 opening the signed-in website. After completion, **Share study roster** asks for

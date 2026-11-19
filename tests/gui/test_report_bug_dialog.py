@@ -600,11 +600,11 @@ def test_welcome_and_root_have_no_reporting_buttons(qtbot):
         )
 
 
-def test_file_menu_support_order(controller, qtbot, tmp_path, monkeypatch):
+def test_help_menu_support_order(controller, qtbot, tmp_path, monkeypatch):
     _, window = open_created_project(controller, qtbot, tmp_path, "Bug Report Menu")
-    actions = [action for action in window.file_menu.actions() if not action.isSeparator()]
+    actions = [action for action in window.help_menu.actions() if not action.isSeparator()]
     assert window.report_bug_action.text() == "Report a Bug..."
-    assert actions.index(window.report_bug_action) == actions.index(window.check_updates_action) + 1
+    assert actions.index(window.report_bug_action) == actions.index(window.tutorials_action) + 1
     assert (
         actions.index(window.request_feature_action) == actions.index(window.report_bug_action) + 1
     )

@@ -807,8 +807,11 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.settings_action, "File", "preferences recording test pilot root"),
             ActionEntry(self.new_project_action, "Home", "create new experiment"),
             ActionEntry(self.open_project_action, "Home", "open existing experiment"),
-            ActionEntry(self.collection_action, "File", "complete reopen collection"),
-            ActionEntry(self.linked_collection_action, "File", "collection status roster OpenFPVS"),
+            ActionEntry(self.collection_action, "File / Project", "complete reopen collection"),
+            ActionEntry(
+                self.linked_collection_action, "File / Project",
+                "collection status roster OpenFPVS",
+            ),
             ActionEntry(self.export_study_action, "File / Export", "whole study toolbox handoff"),
             ActionEntry(self.manage_projects_action, "File", "rename projects"),
             ActionEntry(self.import_project_bundle_action, "File / Import", "import fpvsbundle"),
@@ -831,16 +834,16 @@ class StudioMainWindow(QMainWindow):
                 self.interrupted_sessions_action, "View", "crash recovery condition rerun",
             ),
             ActionEntry(self.library_action, "View", "download experiments catalog"),
-            ActionEntry(self.project_update_action, "File", "library project version"),
+            ActionEntry(self.project_update_action, "File / Project", "library project version"),
             ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
             ActionEntry(self.image_equalizer_action, "Tools", "grayscale brightness rms contrast"),
             ActionEntry(self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi"),
             ActionEntry(self.condition_figure_action, "Tools", "fpvs sequence image 600 dpi png"),
-            ActionEntry(self.check_updates_action, "File", "software version update"),
-            ActionEntry(self.tutorials_action, "File", "help tutorials getting started"),
-            ActionEntry(self.report_bug_action, "File", "help bug support issue"),
-            ActionEntry(self.request_feature_action, "File", "help suggestion feedback"),
-            ActionEntry(self.about_action, "File", "version information"),
+            ActionEntry(self.check_updates_action, "Help", "software version update"),
+            ActionEntry(self.tutorials_action, "Help", "help tutorials getting started"),
+            ActionEntry(self.report_bug_action, "Help", "help bug support issue"),
+            ActionEntry(self.request_feature_action, "Help", "help suggestion feedback"),
+            ActionEntry(self.about_action, "Help", "version information"),
         )
 
     def _action_palette_available(self) -> bool:
@@ -892,12 +895,20 @@ class StudioMainWindow(QMainWindow):
         self.file_menu = self.menuBar().addMenu("File")
         self.view_menu = self.menuBar().addMenu("View")
         self.tools_menu = self.menuBar().addMenu("Tools")
+        self.help_menu = self.menuBar().addMenu("Help")
         self.menuBar().setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.file_menu.aboutToShow.connect(self._refresh_linked_study_action)
         self.file_menu.addAction(self.manage_projects_action)
-        self.file_menu.addAction(self.collection_action)
-        self.file_menu.addAction(self.linked_collection_action)
         self.file_menu.addAction(self.save_project_action)
+        self.file_menu.addSeparator()
+        self.project_menu = self.file_menu.addMenu("Project")
+        self.project_menu.aboutToShow.connect(self._refresh_linked_study_action)
+        self.project_menu.addAction(self.collection_action)
+        self.project_menu.addAction(self.linked_collection_action)
+        self.project_menu.addSeparator()
+        self.project_menu.addAction(self.project_update_action)
+        self.project_menu.addAction(
+            "Experiment version history…", self.show_experiment_version_history
+        )
         self.save_state_label = StatusBadgeLabel(parent=self.menuBar())
         self.save_state_label.setObjectName("project_save_state")
         self.save_state_label.setWordWrap(False)
@@ -919,17 +930,15 @@ class StudioMainWindow(QMainWindow):
         if self.publish_library_action is not None:
             self.export_menu.addAction(self.publish_library_action)
         self.file_menu.addMenu(self.export_menu)
-        self.file_menu.addAction(self.project_update_action)
-        self.file_menu.addAction(
-            "Experiment version history…", self.show_experiment_version_history
-        )
+        self.file_menu.addSeparator()
         self.file_menu.addAction(self.find_action_action)
         self.file_menu.addAction(self.settings_action)
-        self.file_menu.addAction(self.check_updates_action)
-        self.file_menu.addAction(self.report_bug_action)
-        self.file_menu.addAction(self.request_feature_action)
-        self.file_menu.addAction(self.tutorials_action)
-        self.file_menu.addAction(self.about_action)
+        self.help_menu.addAction(self.tutorials_action)
+        self.help_menu.addAction(self.report_bug_action)
+        self.help_menu.addAction(self.request_feature_action)
+        self.help_menu.addSeparator()
+        self.help_menu.addAction(self.check_updates_action)
+        self.help_menu.addAction(self.about_action)
         self.view_menu.addAction(self.library_action)
         self.view_menu.addAction(self.participant_results_action)
         self.view_menu.addAction(self.fixation_cross_data_action)
@@ -942,7 +951,7 @@ class StudioMainWindow(QMainWindow):
 
         # Native menus collapse neighboring separators around hidden actions.
         for menu in (
-            self.file_menu, self.import_menu, self.export_menu, self.view_menu, self.tools_menu,
+            self.import_menu, self.export_menu, self.view_menu, self.tools_menu,
         ):
             for action in menu.actions()[1:]:
                 menu.insertSeparator(action)
@@ -1934,7 +1943,8 @@ class StudioMainWindow(QMainWindow):
                 self.refresh_study_state()
                 if self.linked_collection_action.isVisible():
                     self.statusBar().showMessage(
-                        "Local status saved. See File > Linked OpenFPVS Study for website status.",
+                        "Local status saved. See File > Project > Linked OpenFPVS Study "
+                        "for website status.",
                         8000,
                     )
         except Exception as error:

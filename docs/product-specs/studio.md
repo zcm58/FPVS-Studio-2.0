@@ -108,7 +108,7 @@ Setup save.
 
 Normal Open always opens the latest working setup. **Manage Projects** shows
 which projects have multiple saved versions and offers their history. There
-and under **File > Experiment version history**, authors can open a saved
+and under **File > Project > Experiment version history**, authors can open a saved
 version read-only, name it, restore it or create a separate study from it.
 Show the save time, changes and associated visits. History works offline.
 
@@ -154,7 +154,7 @@ state. **Restore** returns it to Active or Completed according to that saved sta
 
 Local completion and study export work offline, including for unlinked projects.
 For a linked project, show its local state and the last collection status
-confirmed by OpenFPVS under **File > Linked OpenFPVS Study**. Only an OpenFPVS administrator or a designated lead
+confirmed by OpenFPVS under **File > Project > Linked OpenFPVS Study**. Only an OpenFPVS administrator or a designated lead
 explicitly authorized to close collection for that study can close it study-wide.
 Reopening collection on OpenFPVS requires service authorization as the OpenFPVS
 administrator or a PI of the lab that owns the study.
@@ -180,7 +180,7 @@ Maintainers track cross-app work in the private umbrella checkout's `INTEGRATION
 
 ### Learning and development priorities
 
-**File > Tutorials** opens the OpenFPVS getting-started guide. Link YouTube
+**Help > Tutorials** opens the OpenFPVS getting-started guide. Link YouTube
 tutorials from the site as they become available. Keep the immediate instruction
 needed to complete an action in Studio so ordinary local work remains usable offline.
 

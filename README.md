@@ -143,7 +143,7 @@ Custom condition templates are stored in your FPVS Studio Root Folder.
 
 ## Updating FPVS Studio
 
-Use `File > Check for Updates` inside FPVS Studio. You can download and install future updates from this screen. 
+Use `Help > Check for Updates` inside FPVS Studio. You can download and install future updates from this screen.
 
 
 ## Current Beta Notes

@@ -567,7 +567,7 @@ uninstall registration still belong to the user's installed application.
 
 ## In-App Update Flow
 
-Users can use `File > Check for Updates`. FPVS Studio also runs one silent
+Users can use `Help > Check for Updates`. FPVS Studio also runs one silent
 startup check after the Welcome window appears. Packaged Windows builds call `HelperClient`
 from the existing app-owned worker lifecycle. A private helper process checks GitHub Releases
 and returns current/latest versions, notes, and a candidate package type/size without a

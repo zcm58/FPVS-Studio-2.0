@@ -143,11 +143,11 @@ or participant data is needed for this acceptance.
 
 ## Bug reporting
 
-File > Request a Feature opens a separate text-only draft at 700x480
+Help > Request a Feature opens a separate text-only draft at 700x480
 (minimum 620x440), with a 4,000-character counter and copy/save actions.
 It collects no logs. Both reporting actions use the approved service by default.
 
-File > Report a Bug opens a native report editor at 860x760 (minimum 760x680).
+Help > Report a Bug opens a native report editor at 860x760 (minimum 760x680).
 Error popups also offer Report this bug. Please!, with plain-language explanations
 and original technical details under Show Details. The button prefills a fresh
 report; reproduction notes are optional. Details and Diagnostics support editing/excluding logs,
@@ -358,7 +358,7 @@ Library-linked projects check for newer versions on open and every five minutes
 while idle. Eligible versions show a Home notice and an automatic update-review
 offer. Offers wait for presentation and other dialogs to finish and for Studio
 to regain focus.
-**File > Update Project Version...** also checks manually, controls automatic
+**File > Project > Update Project Version...** also checks manually, controls automatic
 checks, and links earlier downloads explicitly. **Update current project** is primary
 for a known older linked version; it replaces authored settings/stimuli in the same
 folder, retaining participant data/local setup and a recoverable authored backup.
@@ -1720,7 +1720,7 @@ title in lowercase with spaces and punctuation removed, such as
 `-completed`. `Export > Group
 Summary...` manually writes an Excel workbook from the current participant summary rows,
 with a first row aggregating rows marked `Include In Analysis = Y` and participant rows
-remaining visible underneath for filtering/audit. **File > Tutorials** opens the OpenFPVS Studio getting-started guide. Settings shows the current app
+remaining visible underneath for filtering/audit. **Help > Tutorials** opens the OpenFPVS Studio getting-started guide. Settings shows the current app
 version from `pyproject.toml` during source-tree runs and from package metadata in
 bundled installs, and exposes the app-level run export mode. Compact mode is the default
 for fresh GUI preferences, skips detailed run folders and writes the participant results
@@ -1948,7 +1948,7 @@ The current GUI supports:
 - configuring fixed or randomized fixation target counts per condition run; compiled
   color changes are balanced across the full condition with seeded jitter and
   deterministic no-immediate-repeat behavior across consecutive compiled runs
-- checking for app updates from `File > Check for Updates`
+- checking for app updates from `Help > Check for Updates`
 - reviewing the active project's pooled fixation accuracy and reaction-time history from
   `View > Fixation Task Accuracy...` without modifying logs or scoring, with an optional
   Excel export written only to the user-selected destination
@@ -2072,7 +2072,7 @@ Run display calibration smoke checks in an approved visible session.
 
 Updater visible/manual smoke (run only in an approved visible Windows session):
 
-1. Open `File > Check for Updates` and inspect the `680x600` minimum and `760x620`
+1. Open `Help > Check for Updates` and inspect the `680x600` minimum and `760x620`
    default sizes with long versions, three short release-note bullets, long/many-line
    notes, and error details. Confirm separate bullet lines and bounded long previews.
    Check every action label, wrapped status, full-detail tooltip, accessible description,

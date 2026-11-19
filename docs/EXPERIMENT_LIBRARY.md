@@ -275,7 +275,7 @@ automatic check after 30 minutes in the current Studio session. Closing the wind
 normally dismisses that offer for the session. A later release can be offered
 independently. Polling waits while review or download work is open. Installation
 requires an explicit action.
-The Home notice, **Review update...** and **File > Update Project Version...** retain
+The Home notice, **Review update...** and **File > Project > Update Project Version...** retain
 manual access. Offline, revoked
 or unavailable service states do not block project opening or claim the project is current.
 

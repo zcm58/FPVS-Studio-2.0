@@ -113,6 +113,8 @@ one of those groups.
   page's palette. Application theme changes use fresh colors so the client area stays aligned
   with Qt's native Windows title bar and minimize/maximize/close controls.
   Shared cards and fixation-editor local styles refresh through the same palette observer.
+- File groups collection and version actions under Project, alongside Import and Export.
+  Help contains Tutorials, bug and feature reporting, app updates, and About.
 - File > Find Action opens searchable existing commands
   with `Ctrl+F`. Conditions has a name/trigger filter that retains the selected
   editor context. Interaction and sizing contracts live in

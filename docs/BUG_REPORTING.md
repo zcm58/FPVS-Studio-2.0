@@ -2,7 +2,7 @@
 
 ## Feature requests
 
-File > Request a Feature opens a single-column editor at minimum 620x440 and
+Help > Request a Feature opens a single-column editor at minimum 620x440 and
 default 700x480. The writing prompt appears inside the empty editor, with a live
 4,000-character counter (Unicode code points) below it. Copy Request and Save
 Request are available. Over-limit pasted text remains editable;
@@ -281,7 +281,7 @@ Source implementation and rollout evidence are tracked in
 ### Manual bug reports
 
 The native desktop implementation is available independently of Cloudflare.
-**File > Report a Bug...** opens Details and Diagnostics tabs. Error popups also
+**Help > Report a Bug...** opens Details and Diagnostics tabs. Error popups also
 offer **Report this bug. Please!**, including errors before a project is open or
 while choosing the Studio Root. One click closes the error popup and opens the
 existing reporter with its full error details attached alongside collected session
@@ -523,7 +523,7 @@ offscreen Qt execution. GUI geometry has not been accepted solely by static chec
 
 Manual visible acceptance in both themes and at 125%/150% Windows scaling:
 
-1. Open File > Report a Bug at 760x680 and 860x760. Repeat the action and confirm one
+1. Open Help > Report a Bug at 760x680 and 860x760. Repeat the action and confirm one
    dialog. Check both tabs, longest status text, keyboard traversal, and no clipping.
 2. Write a detailed report, edit the diagnostic preview, exclude logs, and copy/save
    text. Check that excluded logs and receipt tokens are absent. Cancel the picker.

@@ -79,7 +79,7 @@ def _available_update(_cancel_event: Event | None = None) -> UpdateCheckResult:
 
 
 @pytest.mark.parametrize("size", [(760, 520), (1120, 720)])
-def test_main_window_menus_separate_each_visible_action(
+def test_main_window_menu_groups_fit(
     controller,
     qtbot,
     tmp_path: Path,
@@ -91,14 +91,21 @@ def test_main_window_menus_separate_each_visible_action(
     QApplication.processEvents()
     assert window.size().toTuple() == size
     menu_bar = window.menuBar()
+    assert [action.text() for action in menu_bar.actions()] == ["File", "View", "Tools", "Help"]
     anchor = menu_bar.mapToGlobal(QPoint(0, menu_bar.height()))
 
     menus = (
         (window.file_menu, [
-            "Manage Projects...", "Data Collection Complete", "Save", "Import", "Export",
-            "Update Project Version...", "Experiment version history…",
-            "Find Action...", "Settings...", "Check for Updates", "Report a Bug...",
-            "Request a Feature...", "Tutorials", "About",
+            "Manage Projects...", "Save", None, "Project", "Import", "Export",
+            None, "Find Action...", "Settings...",
+        ]),
+        (window.project_menu, [
+            "Data Collection Complete", None, "Update Project Version...",
+            "Experiment version history…",
+        ]),
+        (window.help_menu, [
+            "Tutorials", "Report a Bug...", "Request a Feature...", None, "Check for Updates",
+            "About",
         ]),
         (window.view_menu, [
             "Experiment Library...", "Open Participant Results", "Fixation Task Accuracy...",
@@ -113,6 +120,9 @@ def test_main_window_menus_separate_each_visible_action(
             "Completed Study for Toolbox…", "Group Summary...", "Upload Project for Review...",
         ]),
     )
+    individually_divided = (
+        window.view_menu, window.tools_menu, window.import_menu, window.export_menu,
+    )
     for menu, labels in menus:
         menu.popup(anchor)
         try:
@@ -121,10 +131,9 @@ def test_main_window_menus_separate_each_visible_action(
             rows = [(action, menu.actionGeometry(action)) for action in menu.actions()]
             # Hidden actions and the extra separators they leave have no visible row.
             rows = [(action, rect) for action, rect in rows if not rect.isEmpty()]
-            assert [action.text() for action, _ in rows if not action.isSeparator()] == labels
-            assert [action.isSeparator() for action, _ in rows] == [
-                index % 2 == 1 for index in range(2 * len(labels) - 1)
-            ]
+            if menu in individually_divided:
+                labels = [label for entry in labels for label in (entry, None)][:-1]
+            assert [None if action.isSeparator() else action.text() for action, _ in rows] == labels
             for action, rect in rows:
                 assert menu.rect().contains(rect)
                 if not action.isSeparator():
@@ -135,20 +144,42 @@ def test_main_window_menus_separate_each_visible_action(
             menu.hide()
 
 
-def test_main_window_exposes_file_check_for_updates_action(
+def test_project_submenu_opens_with_keyboard(controller, qtbot, tmp_path, monkeypatch):
+    _document, window = open_created_project(controller, qtbot, tmp_path)
+    assert not window.linked_collection_action.isVisible()
+    monkeypatch.setattr(
+        "fpvs_studio.data_sharing.storage.load_settings",
+        lambda _root: SimpleNamespace(profile=SimpleNamespace(project_id="linked-test-project")),
+    )
+    window.show()
+    bar = window.menuBar()
+    window.file_menu.popup(bar.mapToGlobal(QPoint(0, bar.height())))
+    try:
+        window.file_menu.setActiveAction(window.project_menu.menuAction())
+        qtbot.keyClick(window.file_menu, Qt.Key.Key_Right)
+        qtbot.waitUntil(window.project_menu.isVisible)
+        assert window.project_menu.activeAction() is window.collection_action
+        assert window.linked_collection_action.isVisible()
+        qtbot.keyClick(window.project_menu, Qt.Key.Key_Escape)
+        assert not window.project_menu.isVisible()
+    finally:
+        window.file_menu.hide()
+
+
+def test_main_window_exposes_help_check_for_updates_action(
     controller,
     qtbot,
     tmp_path: Path,
 ) -> None:
     _document, window = open_created_project(controller, qtbot, tmp_path)
 
-    actions = [action.text() for action in window.file_menu.actions()]
+    actions = [action.text() for action in window.help_menu.actions()]
 
     assert window.check_updates_action.text() == "Check for Updates"
     assert "Check for Updates" in actions
 
 
-def test_main_window_exposes_file_about_action(
+def test_main_window_exposes_help_about_action(
     controller,
     qtbot,
     tmp_path: Path,
@@ -163,7 +194,7 @@ def test_main_window_exposes_file_about_action(
         lambda _parent, title, message: messages.append((title, message)),
     )
 
-    actions = [action.text() for action in window.file_menu.actions()]
+    actions = [action.text() for action in window.help_menu.actions()]
     assert window.about_action.text() == "About"
     assert "About" in actions
 
@@ -191,10 +222,10 @@ def test_main_window_offers_openfpvs_studio_tutorial(
     )
 
     visible_actions = [
-        action.text() for action in window.file_menu.actions() if action.isVisible()
+        action.text() for action in window.help_menu.actions() if action.isVisible()
     ]
     assert window.tutorials_action.text() == "Tutorials"
-    assert window.tutorials_action in window.file_menu.actions()
+    assert window.tutorials_action in window.help_menu.actions()
     assert window.tutorials_action.isVisible()
     assert "Tutorials" in visible_actions
 

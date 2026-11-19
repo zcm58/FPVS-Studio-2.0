@@ -141,6 +141,7 @@ def test_view_menu_order_and_action_load_active_project(
         "File",
         "View",
         "Tools",
+        "Help",
     ]
     assert [action.text() for action in window.view_menu.actions() if not action.isSeparator()] == [
         "Experiment Library...",
