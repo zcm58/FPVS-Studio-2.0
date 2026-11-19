@@ -36,6 +36,16 @@ checks. The owning [refresh-check contract](../../GUI_WORKFLOW.md#launch) and
 [registered cases](../../../tests/gui/test_refresh_recommendation_dialog.py)
 define the expected routing and recovery behavior.
 
+## Unattended verification (November 19, 2026)
+
+The registered visible advisory cases passed for controlled higher rates,
+unsupported alternatives, keyboard behavior and Settings-launch recovery.
+Two geometry cases documented by the suite as having no advisory for fixed
+60 Hz without alternatives were skipped. The focused source selection also
+passed 256 tests across Windows monitor selection, runtime refresh handling,
+and task presentation. The same-resolution native 60 → 120 Hz switch and
+subsequent launch checks still require a display that offers both fixed modes.
+
 ## Office PC verification (November 19, 2026)
 
 Studio's native query found one 1920 × 1080 display at fixed 60.02043 Hz.

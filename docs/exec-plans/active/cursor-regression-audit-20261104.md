@@ -28,6 +28,15 @@ engine maintainer records the result against the
 [mouse-response contract](../../ENGINE_INTERFACE.md#modular-task-rendering).
 Native flags, accepted clicks alone and framebuffer captures are diagnostic evidence.
 
+The November 19 unattended sweep also passed 256 selected engine and display
+cases on the branch containing the texture-unit repair (`ba631d9`). The
+selection covered image and shape cursor rendering, mouse responses, hitboxes,
+and Windows monitor and refresh handling.
+The first native synthetic repeat stopped before its first framebuffer capture
+under the diagnostic's 20-second frame deadline. PsychoPy also logged that it
+could not measure a consistent refresh rate during the concurrent test load.
+The desktop pointer was restored on exit.
+
 November 19 follow-up passed all 648 focused engine tests, including
 response-pointer setup, click handling and teardown on normal exit and
 abort. The office PC differs from the original report's computer. The

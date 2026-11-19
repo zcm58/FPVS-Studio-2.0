@@ -40,6 +40,15 @@ Close when the GUI maintainer records the build, OS, scale, window size and
 results for these checks against the [frontend](../../FRONTEND.md) and
 [appearance](../../GUI_WORKFLOW.md#settings-appearance-and-layout) contracts.
 
+## Unattended verification (November 19, 2026)
+
+On the office Windows PC at 100% scaling with a 1920 × 1032 work area, the
+registered visible desktop selection passed all palette cases. It included
+Light and Dark contrast and focus boundaries, keyboard interaction, native
+menu fit, all nine Setup pages in both palettes, Auto scheme handling, and
+equality of compiled experiment settings and rendered figure pixels. The
+full-window native 150% matrix on a taller display remains open.
+
 ## Initial office PC verification (November 19, 2026)
 
 Windows Light/Dark changes reached the open Welcome window and Settings dialog

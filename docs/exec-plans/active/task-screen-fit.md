@@ -28,6 +28,10 @@ Simulated DPI scales and packaged smoke provide separate regression evidence.
 
 ## Verification record
 
+The November 19 unattended source sweep passed 256 selected cases across
+the presentation and Windows display paths. It exercised measured text,
+selection hitboxes, pointer behavior and refresh handling with controlled inputs.
+
 November 19 follow-up on the Studio 3.1.0 feature branch passed 648 focused
 engine tests, including the Creatine image grid at simulated 100%, 125% and
 150% scales and native-handler click mapping. The authored Creatine fixture
