@@ -31,6 +31,10 @@ Simulated DPI scales and packaged smoke provide separate regression evidence.
 The November 19 unattended source sweep passed 256 selected cases across
 the presentation and Windows display paths. It exercised measured text,
 selection hitboxes, pointer behavior and refresh handling with controlled inputs.
+In a follow-up at 100% on the office display, eight synthetic choice targets
+accepted the expected select, deselect and Submit sequence in a native window
+with images and in fullscreen with shapes. The affected laptop's copied
+Creatine Test/Pilot runs remain open.
 
 November 19 follow-up on the Studio 3.1.0 feature branch passed 648 focused
 engine tests, including the Creatine image grid at simulated 100%, 125% and

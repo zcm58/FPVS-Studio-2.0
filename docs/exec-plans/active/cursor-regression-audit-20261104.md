@@ -35,7 +35,12 @@ and Windows monitor and refresh handling.
 The first native synthetic repeat stopped before its first framebuffer capture
 under the diagnostic's 20-second frame deadline. PsychoPy also logged that it
 could not measure a consistent refresh rate during the concurrent test load.
-The desktop pointer was restored on exit.
+The default cursor was restored on exit. A repeat starting the diagnostic
+deadline at the first flip passed windowed image choices and fullscreen shape
+choices. The rendered cursor changed framebuffer pixels at all nine samples
+in each mode. Synthetic input submitted the intended four choices after an
+early Submit, a deselection and a replacement. The window returned to the
+default cursor type in both modes. The reporter's direct-host checks remain.
 
 November 19 follow-up passed all 648 focused engine tests, including
 response-pointer setup, click handling and teardown on normal exit and
