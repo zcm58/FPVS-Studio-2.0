@@ -474,6 +474,6 @@ include = [
   ".agents/scripts/verify.py",
 ]
 manual_smoke = [
-  "On an approved physical Mac, launch Studio and exercise all eight Setup steps in both themes at 1120x820.",
+  "On an approved physical Mac, launch Studio and exercise all nine Setup steps in both themes at 1120x820.",
   "Check Retina calibration and fixed-rate PsychoPy playback on the connected display; hosted CI does not qualify presentation timing or EEG hardware.",
 ]

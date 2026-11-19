@@ -138,6 +138,20 @@ follows the acceptance sequence above.
 The dated entries preserve the observations and decisions at the time. The current
 baseline and acceptance sequence above replace their original launch and release gates.
 
+- 2026-11-19: Windows source verification at `313f0bd` passed 379 tests with one
+  Windows symlink-privilege skip. Checks covered fake UDP output and Recorder
+  readiness, Test/Pilot isolation, marker and failure evidence in runtime exports,
+  synthetic BDF and offline timing cases, and completed-session and whole-study
+  handoffs. Two separate visible Windows Qt Trigger Tester cases passed for
+  the saved UDP endpoint and explicit digit sends with fake output. At Toolbox
+  `84ac8656`, four offline checks passed. The retained
+  receipt and a generated classic-BDF replay preserved all 426 code/sample pairs,
+  including four adjacent equal-code pairs. Synthetic classic BDF and continuous
+  BDF+ agreed where both marker sources were represented. The original raw bench
+  files were unavailable at the documented local locations, so the 145-marker
+  timing comparison was not rerun. Receiver loss, reviewed Toolbox processing
+  of actual Recorder files and optical timing remain open.
+
 - 2026-11-12: On the built-in Lenovo display, same-PC PsychoPy 2026.1.1
   fullscreen repeats ended 37.790 and 36.478 ms early over 120 s. A minimal
   PsychoPy 2026.2.5 loop ended 37.233 ms early, and 7,200 Windows kernel

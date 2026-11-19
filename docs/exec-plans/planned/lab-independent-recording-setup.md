@@ -24,6 +24,17 @@ current computer and see the effective configuration before launching.
   BrainVision reminder. Physical Unicorn receiver and timing acceptance have
   their own [recording plan](../active/unicorn-hybrid-black-support.md).
 
+## Unattended baseline verification, 2026-11-19
+
+At `313f0bd`, 89 non-Qt Windows tests passed for computer-default preferences,
+launch settings and selected-monitor refresh and screen mapping. The recording
+runtime checks also exercised project overrides and inherited defaults in
+acquisition and handoff evidence. A broader launcher run and a targeted retry
+hit the 30 s and 120 s test watchdogs in the existing repeated-participant
+session check while resolving paths and writing temporary run exports. That
+case remains unverified on this run. Named profile persistence, selection and
+two-profile hardware acceptance are pending implementation.
+
 ## Profile workflow
 
 1. In the existing Recording page, create or select a named local profile

@@ -17,6 +17,18 @@ tester and marker sending on a physical 2026 actiCHamp setup with Recorder 2 and
 a USB TriggerBox. The retained bench result covers marker sending. Discovery and
 reconnect have their own physical acceptance steps below.
 
+## Verification, 2026-11-19
+
+On Windows at `313f0bd`, 278 non-Qt tests passed for BrainVision and BioSemi
+discovery, serial access, failure guidance and fake trigger backends. The
+fixtures exercised named-port filtering, the single added-port rule for BioSemi
+reconnect, rejection of unrelated port changes, and manual open/close at the
+configured baud rate without sending a byte. They also covered denied access,
+cleanup and cancellation. Two separate visible Windows Qt cases passed for
+BioSemi reconnect with one or multiple ports added using controlled inputs.
+Physical COM discovery/reconnect, recorder receipt and saved-setting
+preservation checks remain open below.
+
 ## Remaining acceptance
 
 - [ ] With physical BrainVision hardware on Windows, verify one named TriggerBox

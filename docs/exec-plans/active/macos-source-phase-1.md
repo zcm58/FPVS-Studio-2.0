@@ -430,6 +430,20 @@ must not be described as full Phase-1 parity.
 
 ## Verification record
 
+### Windows-hosted source verification, 2026-11-19
+
+At `313f0bd`, Darwin-targeted mypy passed for nine source files. A focused
+Windows-hosted source run passed 177 tests with five native Mac probes skipped.
+It exercised repair reporting with fake transport, display and Retina adapters,
+and the synthetic create/import/re-export/return bundle path. The bundle check
+preserved the seven-run compiled plan and project recording selection across
+relocation and rejected an altered plan and an existing artifact destination.
+The broader `macos` focused route passed 1,919 tests with 34 skips and one failure.
+Its worker exited during the synthetic 1,500-session data-sharing stress test,
+which has a 600-second watchdog.
+These checks used Windows and synthetic fixtures. The physical Mac, native
+Test/Pilot, affected-Mac repair and interactive service gates above remain open.
+
 ### Local source-startup investigation, 2026-11-02
 
 The user's standalone base Python lacked Studio dependencies, and the existing `.venv`
