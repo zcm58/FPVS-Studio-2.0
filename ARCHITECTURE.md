@@ -13,8 +13,8 @@ triggers; normal Windows/Linux launches retain hardware and display preflight.
 Mac tests retain refresh verification and transient calibration; EEG is excluded.
 Test Mode defaults off at startup.
 
-Setup retains Timing drafts across Display & Session. Core defines demographics;
-Setup preview and launch share the participant form. See the
+Setup owns page activation and retains Timing drafts across steps. Core defines
+demographics. Setup and launch share the participant form. See
 [Setup workflow](docs/GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
 
 Core owns randomized block membership and occurrence identity; see the

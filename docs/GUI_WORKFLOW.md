@@ -174,6 +174,11 @@ When the active Setup step changes, the progress connectors fill or retract in u
 to 150 ms. The form and active step label update immediately. Connectors update
 instantly when Windows Animation effects are off or macOS Reduce motion is on.
 
+The guided Conditions editor refreshes its list from document changes. Timing
+retains drafts and validates them between steps, with table rows refreshed when
+Timing is visible. The compatibility Assets and Run views refresh when shown.
+The older Conditions editor is created on request and retains its draft handling.
+
 Project has two sibling **Project details** and **Experiment setup** cards inside a
 frameless workspace. Their top/bottom edges and title baselines align, with 16 px
 internal padding and a 24 px gutter. Bold card titles sit above the field labels;

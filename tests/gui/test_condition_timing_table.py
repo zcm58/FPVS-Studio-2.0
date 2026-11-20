@@ -11,6 +11,7 @@ from tests.gui.helpers import assert_visible_children_within_parent, record_setu
 from fpvs_studio.core.condition_timing import resolve_condition_stream_timing
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.session_ordering import effective_condition_presentation_count
+from fpvs_studio.core.validation import APPROVED_MONITOR_REFRESH_RATES_HZ
 from fpvs_studio.gui.condition_timing_table import FREQUENCY_OVERRIDE_WARNING, ConditionTimingTable
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
@@ -30,6 +31,59 @@ def _document(tmp_path):
             condition_id, sequence_count=1, oddball_cycle_repeats_per_sequence=12,
         )
     return document, first, second
+
+
+def test_guided_timing_refreshes_on_entry_and_preserves_hidden_drafts(
+    qtbot, monkeypatch, tmp_path,
+):
+    document, first, second = _document(tmp_path)
+    messages = record_setup_validation_dialogs(monkeypatch)
+    wizard = SetupWizardPage(
+        document, load_condition_template_profiles=lambda: [],
+        manage_condition_templates=lambda: [],
+    )
+    qtbot.addWidget(wizard)
+    wizard.resize(1120, 820)
+    wizard.show()
+    wizard.open_wizard(step_key="conditions", allow_step_jumps=True)
+    timing = wizard.condition_timing_table
+    assert timing.table.rowCount() == 0
+
+    calls = []
+    refresh = timing.refresh
+
+    def record_refresh():
+        calls.append(timing.isVisible())
+        refresh()
+
+    monkeypatch.setattr(timing, "refresh", record_refresh)
+    document.update_condition(first, name="Renamed image presentation")
+    document.update_condition(second, name="Renamed word presentation")
+    QApplication.processEvents()
+    assert calls == []
+
+    wizard.open_wizard(step_key="timing")
+    QApplication.processEvents()
+    assert calls == [True]
+    assert [timing.table.item(row, 0).text() for row in range(timing.table.rowCount())] == [
+        condition.name for condition in document.ordered_conditions()
+    ]
+    timing.presentation_count_spins[first].setValue(3)
+    wizard._go_next()
+    assert messages == []
+    assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
+    document.update_display_settings(preferred_refresh_hz=120)
+    QApplication.processEvents()
+    assert calls == [True]
+    assert timing.pending_presentation_counts() == {first: 3}
+
+    wizard._go_back()
+    QApplication.processEvents()
+    assert calls == [True, True]
+    assert timing.presentation_count_spins[first].value() == 3
+    assert timing.apply_pending_edits()
+    condition = document.get_condition(first)
+    assert effective_condition_presentation_count(document.project, condition) == 3
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
@@ -78,7 +132,10 @@ def test_timing_can_select_shared_display_rate_and_resolve_legacy_durations(
         assert display.refresh_hz_combo.currentData() == 60.0
         assert table.duration_spins[first].isEnabled()
         assert table.total_stimulation_labels[first].text() != "Unresolved"
-        assert combo.count() == display.refresh_hz_combo.count() == 5
+        for refresh_combo in (combo, display.refresh_hz_combo):
+            assert tuple(
+                refresh_combo.itemData(index) for index in range(refresh_combo.count())
+            ) == APPROVED_MONITOR_REFRESH_RATES_HZ
         combo.setFocus()
         qtbot.keyClick(combo, Qt.Key.Key_Tab)
         assert table.shared_frequency_spin.hasFocus()
@@ -848,6 +905,15 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     wizard.setPalette(palette)
     wizard.resize(1120, 820)
     wizard.show()
+    wizard.open_wizard(step_key="timing", allow_step_jumps=True)
+    QApplication.processEvents()
+    table = wizard.condition_timing_table
+    assert all(not spin.isEnabled() for spin in table.presentation_count_spins.values())
+    assert table.presentation_count_spins[catch_id].value() == 1
+    assert "variant and catch grouping" in table.presentation_count_spins[catch_id].toolTip()
+    duration_draft = table.duration_spins["color-1"].value() + 1
+    table.duration_spins["color-1"].setValue(duration_draft)
+
     wizard.open_wizard(step_key="session", allow_step_jumps=True)
     QApplication.processEvents()
     editor = wizard.session_structure_editor
@@ -856,19 +922,16 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     assert editor.session_layout.labelForField(editor.block_count_spin).text() == (
         "Repeats per condition"
     )
-    table = wizard.condition_timing_table
-    assert all(not spin.isEnabled() for spin in table.presentation_count_spins.values())
-    assert table.presentation_count_spins[catch_id].value() == 1
-    assert "variant and catch grouping" in table.presentation_count_spins[catch_id].toolTip()
-    duration_draft = table.duration_spins["color-1"].value() + 1
-    table.duration_spins["color-1"].setValue(duration_draft)
     editor.block_count_spin.setValue(4)
     assert document.project.settings.session.block_count == 4
-    assert table.presentation_count_spins["color-1"].value() == 4
-    assert table.presentation_count_spins[catch_id].value() == 1
-    assert table.duration_spins["color-1"].value() == duration_draft
     assert editor.presentation_total_label.text() == "13 total"
     assert wizard.step_stack.currentWidget() is wizard.display_session_step_surface
     assert editor.isVisible()
     assert not table.isVisible()
     assert_visible_children_within_parent(wizard.display_session_step_surface)
+    wizard._go_back()
+    QApplication.processEvents()
+    assert table.isVisible()
+    assert table.presentation_count_spins["color-1"].value() == 4
+    assert table.presentation_count_spins[catch_id].value() == 1
+    assert table.duration_spins["color-1"].value() == duration_draft

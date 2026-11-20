@@ -232,7 +232,7 @@ class SetupWizardPage(QWidget):
         self._refresh_timer.setInterval(0)
         self._refresh_timer.timeout.connect(self.refresh)
 
-        self.conditions_page = ConditionsPage(document, embedded=True, parent=self)
+        self._conditions_page: ConditionsPage | None = None
         self.demographics_setup_step = DemographicsSetupStep(document, self)
         self.demographics_setup_step.pending_edits_changed.connect(self.pending_edits_changed)
         self.condition_setup_step = ConditionSetupStep(
@@ -240,8 +240,12 @@ class SetupWizardPage(QWidget):
         )
         self.condition_setup_step.busy_changed.connect(self.schedule_refresh)
         self.add_condition_button = self.condition_setup_step.add_condition_button
+        # Compatibility pages have no guided step. Keep their show-time refreshes
+        # dormant until a caller explicitly shows them.
         self.assets_page = AssetsPage(document, self)
+        self.assets_page.hide()
         self.run_page = RunPage(document, parent=self)
+        self.run_page.hide()
         self.project_overview_editor = ProjectOverviewEditor(
             document,
             load_condition_template_profiles=load_condition_template_profiles,
@@ -387,7 +391,6 @@ class SetupWizardPage(QWidget):
         self.advanced_stack = _CurrentWidgetStack(self)
         self.advanced_stack.setObjectName("setup_wizard_advanced_stack")
         self.advanced_stack.addWidget(QWidget(self))
-        self.advanced_stack.addWidget(self.conditions_page)
 
         self.content_stack = _CurrentWidgetStack(self)
         self.content_stack.setObjectName("setup_wizard_content_stack")
@@ -504,6 +507,14 @@ class SetupWizardPage(QWidget):
     def is_launch_ready(self) -> bool:
         return self._readiness_report().badge_state == "ready"
 
+    @property
+    def conditions_page(self) -> ConditionsPage:
+        if self._conditions_page is None:
+            page = ConditionsPage(self._document, embedded=True, parent=self.advanced_stack)
+            self.advanced_stack.addWidget(page)
+            self._conditions_page = page
+        return self._conditions_page
+
     def first_incomplete_step_key(self) -> str:
         for index, (step_key, _title) in enumerate(_WIZARD_STEPS):
             if not self._step_valid(index):
@@ -559,7 +570,8 @@ class SetupWizardPage(QWidget):
             return False
         self.project_overview_editor.flush_pending_edits()
         self.condition_setup_step.flush_pending_edits()
-        self.conditions_page.flush_pending_edits()
+        if self._conditions_page is not None:
+            self._conditions_page.flush_pending_edits()
         return True
 
     def _select_step(self, index: int) -> None:
@@ -722,7 +734,7 @@ class SetupWizardPage(QWidget):
         timing_controls = self.runtime_settings_editor.take_timing_controls()
         self.condition_timing_table = ConditionTimingTable(
             self._document, page, cadence_controls=None if ab else timing_controls,
-            refresh_controls=None if ab else refresh_group,
+            refresh_controls=None if ab else refresh_group, defer_hidden_refresh=True,
         )
         QWidget.setTabOrder(
             self.timing_refresh_hz_combo, self.condition_timing_table.shared_frequency_spin,
@@ -1045,7 +1057,8 @@ class SetupWizardPage(QWidget):
         self.step_stack.setCurrentIndex(self._active_step_index)
         self.advanced_stack.setCurrentIndex(0)
         self.content_stack.setCurrentWidget(self.guided_panel)
-        self._refresh_current_editor_page()
+        if step_key != "conditions":
+            self._refresh_current_editor_page()
         if step_key == "session":
             self.session_structure_editor.randomization_editor.refresh()
         self._sync_timing_refresh_hz()

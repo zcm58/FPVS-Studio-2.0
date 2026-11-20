@@ -61,10 +61,13 @@ class ConditionTimingTable(QWidget):
     def __init__(
         self, document: ProjectDocument, parent: QWidget | None = None,
         *, cadence_controls: QWidget | None = None, refresh_controls: QWidget | None = None,
+        defer_hidden_refresh: bool = False,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("condition_timing_table")
         self._document = document
+        self._defer_hidden_refresh = defer_hidden_refresh
+        self._refresh_pending = True
         self._syncing = False
         self._applying = False
         self._shared_hz = document.project.settings.protocol.base_hz
@@ -159,8 +162,13 @@ class ConditionTimingTable(QWidget):
         self.duration_choices.hide()
         layout.addWidget(self.duration_choices)
         self.shared_frequency_spin.valueChanged.connect(self._shared_frequency_changed)
-        document.project_changed.connect(self.refresh)
-        self.refresh()
+        document.project_changed.connect(self._refresh_if_active)
+        if defer_hidden_refresh:
+            self._update_actions()
+            if document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK:
+                self.hide()
+        else:
+            self.refresh()
 
     def _frequency_spin(self, name: str) -> QDoubleSpinBox:
         spin = QDoubleSpinBox(self)
@@ -175,7 +183,13 @@ class ConditionTimingTable(QWidget):
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         super().showEvent(event)
-        self.refresh()
+        if not self._defer_hidden_refresh or self._refresh_pending:
+            self.refresh()
+
+    def _refresh_if_active(self) -> None:
+        self._refresh_pending = True
+        if not self._defer_hidden_refresh or self.isVisible():
+            self.refresh()
 
     def has_pending_edits(self) -> bool:
         return (self._shared_dirty or bool(self._overrides) or bool(self._durations)
@@ -184,6 +198,7 @@ class ConditionTimingTable(QWidget):
     def refresh(self) -> None:
         if self._applying:
             return
+        self._refresh_pending = False
         if self.has_pending_edits():
             self._sync_duration_cells()
             self._sync_presentation_count_cells()
@@ -256,6 +271,9 @@ class ConditionTimingTable(QWidget):
             )
             self.presentation_count_spins[condition.condition_id] = count_spin
             self.table.setCellWidget(row, 3, count_spin)
+            # The first visible column fit needs the styled editor's full width.
+            count_spin.ensurePolished()
+            count_spin.setMinimumWidth(count_spin.sizeHint().width())
             total_label = QLabel(self)
             total_label.setAccessibleName(f"Total stimulation for {condition.name}")
             total_label.setMinimumWidth(110)
@@ -499,10 +517,12 @@ class ConditionTimingTable(QWidget):
         self._shared_dirty = False
         self._syncing = True
         self.shared_frequency_spin.setValue(self._shared_hz)
+        self._display_shared_hz = self.shared_frequency_spin.value()
         self._syncing = False
         self.error_label.hide()
         self.duration_choices.hide()
-        self.refresh()
+        self._update_actions()
+        self._refresh_if_active()
         self.draft_changed.emit()
 
     def apply_pending_edits(self) -> bool:

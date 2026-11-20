@@ -9,6 +9,7 @@ from tests.gui.helpers import assert_visible_children_within_parent, write_image
 from tests.unit.test_masking import masking_project
 
 from fpvs_studio.core.enums import ExperimentCategory, StimulusModality
+from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
 from fpvs_studio.gui.condition_setup_step import ConditionSetupStep
 from fpvs_studio.gui.document import ProjectDocument
 
@@ -126,22 +127,69 @@ def test_search_refresh_and_rename_keep_selected_identity(search_step):
     assert "Trigger 123" in step.condition_list.currentItem().toolTip()
 
 
-def test_add_duplicate_and_remove_remain_visible_under_search(search_step):
+def test_import_refreshes_each_condition_status_once(search_step, tmp_path, monkeypatch):
     document, step, condition_ids = search_step
+    sources = write_image_directory(tmp_path / "sources", count=1)
+    status_rows = []
+    conflict_checks = []
+    original_status = step._condition_status_text
+
+    def count_status(condition, **kwargs):
+        status_rows.append(condition.condition_id)
+        return original_status(condition, **kwargs)
+
+    def count_conflicts(project):
+        conflict_checks.append(project)
+        return category_conflict_condition_ids(project)
+
+    monkeypatch.setattr(step, "_condition_status_text", count_status)
+    monkeypatch.setattr(
+        "fpvs_studio.gui.condition_setup_step.category_conflict_condition_ids", count_conflicts,
+    )
+
+    for role, expected_status in (("base", "Needs images"), ("oddball", "Ready")):
+        status_rows.clear()
+        conflict_checks.clear()
+        document.import_condition_stimulus_folder(condition_ids[0], role=role, source_dir=sources)
+
+        assert status_rows == condition_ids
+        assert conflict_checks == [document.project]
+        assert step.selected_condition_id() == condition_ids[0]
+        current = step.condition_list.currentItem()
+        assert current.text().endswith(expected_status)
+        assert current.toolTip().endswith(expected_status)
+        assert current.data(Qt.ItemDataRole.AccessibleTextRole) == current.toolTip()
+
+
+def test_add_duplicate_and_remove_remain_visible_under_search(search_step, monkeypatch):
+    document, step, condition_ids = search_step
+    status_rows = []
+    original_status = step._condition_status_text
+
+    def count_status(condition, **kwargs):
+        status_rows.append(condition.condition_id)
+        return original_status(condition, **kwargs)
+
+    monkeypatch.setattr(step, "_condition_status_text", count_status)
     step.condition_search_edit.setText("animal")
     step._add_condition()
     added_id = step.selected_condition_id()
     assert added_id not in condition_ids
+    assert status_rows == [*condition_ids, added_id]
     assert _visible_ids(step) == [condition_ids[1], added_id]
     step.condition_name_edit.setText("New experiment condition")
     step.condition_name_edit.editingFinished.emit()
+    status_rows.clear()
     step._duplicate_condition()
     duplicated_id = step.selected_condition_id()
     assert duplicated_id not in [*condition_ids, added_id]
+    assert status_rows == [*condition_ids, added_id, duplicated_id]
     assert _visible_ids(step) == [condition_ids[1], duplicated_id]
 
+    status_rows.clear()
     step._remove_condition()
 
+    assert status_rows == [*condition_ids, added_id]
     assert document.get_condition(duplicated_id) is None
     assert step.selected_condition_id() == condition_ids[1]
     assert _visible_ids(step) == [condition_ids[1]]

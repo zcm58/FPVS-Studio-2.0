@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import cast
 
 from PySide6.QtCore import QSignalBlocker, QSize, Qt, Signal
-from PySide6.QtGui import QResizeEvent
+from PySide6.QtGui import QResizeEvent, QShowEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -38,7 +38,11 @@ from fpvs_studio.core.enums import (
     StimulusModality,
 )
 from fpvs_studio.core.experiment_categories import category_conflict_condition_ids
-from fpvs_studio.core.masking import condition_masking, masking_catch_condition_block_reason
+from fpvs_studio.core.masking import (
+    MaskingSettings,
+    condition_masking,
+    masking_catch_condition_block_reason,
+)
 from fpvs_studio.core.models import (
     AttentionalBlinkStreamSettings,
     Condition,
@@ -788,9 +792,13 @@ class ConditionSetupStep(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(workspace, 1)
 
+        # Source imports update the project before separately announcing the manifest.
         self._document.project_changed.connect(self.refresh)
-        self._document.manifest_changed.connect(self.refresh)
         self.refresh()
+
+    def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
+        super().showEvent(event)
+        self._sync_detail_field_widths()
 
     def selected_condition_id(self) -> str | None:
         item = self.condition_list.currentItem()
@@ -819,25 +827,32 @@ class ConditionSetupStep(QWidget):
         layout.addWidget(count_label)
         return column
 
+    def _sync_detail_field_widths(self) -> None:
+        self.timing_template_combo.ensurePolished()
+        self.condition_name_edit.ensurePolished()
+        _configure_detail_field_widths(self.timing_template_combo, self.condition_name_edit)
+
     def refresh(self) -> None:
-        detail_fields = (
-            self.timing_template_combo,
-            self.condition_name_edit,
-        )
-        for field in detail_fields:
-            field.ensurePolished()
-        _configure_detail_field_widths(detail_fields[0], *detail_fields[1:])
+        project = self._document.project
+        conflicts = set(category_conflict_condition_ids(project))
+        stimulus_sets = {stimulus.set_id: stimulus for stimulus in project.stimulus_sets}
         selected_condition_id = self.selected_condition_id()
         with QSignalBlocker(self.condition_list):
             self.condition_list.clear()
             for condition in self._document.ordered_conditions():
                 settings = condition.attentional_blink
-                masking = condition_masking(self._document.project, condition)
+                masking = condition_masking(project, condition)
+                status = self._condition_status_text(
+                    condition,
+                    has_conflict=condition.condition_id in conflicts,
+                    masking=masking,
+                    stimulus_sets=stimulus_sets,
+                )
                 timing_label = (
                     f"Catch · EEG {condition.trigger_code} · random SOA"
                     if condition.masking_catch else
                     f"Masking · {masking.soa_ms:g} ms SOA" if masking is not None else
-                    f"{self._document.project.settings.protocol.base_hz:g} Hz character stream"
+                    f"{project.settings.protocol.base_hz:g} Hz character stream"
                     if isinstance(settings, AttentionalBlinkStreamSettings)
                     else _timing_template_label(condition.duty_cycle_mode)
                 )
@@ -845,12 +860,11 @@ class ConditionSetupStep(QWidget):
                     timing_label if condition.masking_catch else
                     ("" if isinstance(settings, AttentionalBlinkStreamSettings)
                      else f"{timing_label} - ") +
-                    f"{self._condition_status_text(condition)}"
+                    status
                 )
                 item = QListWidgetItem(f"{condition.name}\n{detail_text}")
                 item.setToolTip(
-                    f"{condition.name}\nTrigger {condition.trigger_code}\n{timing_label}\n"
-                    f"{self._condition_status_text(condition)}"
+                    f"{condition.name}\nTrigger {condition.trigger_code}\n{timing_label}\n{status}"
                 )
                 item.setSizeHint(QSize(0, 48))
                 item.setData(Qt.ItemDataRole.UserRole, condition.condition_id)
@@ -873,20 +887,20 @@ class ConditionSetupStep(QWidget):
                 )
                 self.condition_list.setCurrentItem(first_match)
         self._apply_condition_search()
-        self._refresh_editor()
+        self._refresh_editor(has_legacy_conflicts=bool(conflicts))
+        self._sync_detail_field_widths()
 
-    def _refresh_legacy_condition_actions(self) -> bool:
-        conflicts = category_conflict_condition_ids(self._document.project)
+    def _refresh_legacy_condition_actions(self, *, has_conflicts: bool) -> None:
         can_separate = (
             self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
+            and has_conflicts
             and any(
                 item.attentional_blink is not None for item in self._document.project.conditions
             )
-            and bool(conflicts)
         )
         can_clear_unused_t2 = (
             self._document.project.experiment_category == ExperimentCategory.FPVS_ODDBALL
-            and bool(conflicts)
+            and has_conflicts
             and all(item.attentional_blink is None for item in self._document.project.conditions)
         )
         self.separate_conditions_button.setText(
@@ -895,7 +909,7 @@ class ConditionSetupStep(QWidget):
         )
         self.separate_conditions_button.setVisible(can_separate or can_clear_unused_t2)
         self.separate_conditions_button.setEnabled(self._active_task is None)
-        if conflicts:
+        if has_conflicts:
             self.condition_list_hint.setText(
                 "This older oddball experiment retains unused T2 assignments. "
                 "Clear them to continue."
@@ -905,8 +919,7 @@ class ConditionSetupStep(QWidget):
             )
         else:
             self.condition_list_hint.clear()
-        self.condition_list_hint.setVisible(bool(conflicts))
-        return bool(conflicts)
+        self.condition_list_hint.setVisible(has_conflicts)
 
     def flush_pending_edits(self) -> None:
         self._base_words_committer.flush()
@@ -997,17 +1010,23 @@ class ConditionSetupStep(QWidget):
         self.condition_search_status.setText(result_text)
         self.condition_search_status.show()
 
-    def _condition_status_text(self, condition: Condition) -> str:
-        if condition.condition_id in category_conflict_condition_ids(self._document.project):
+    def _condition_status_text(
+        self,
+        condition: Condition,
+        *,
+        has_conflict: bool,
+        masking: MaskingSettings | None,
+        stimulus_sets: dict[str, StimulusSet],
+    ) -> str:
+        if has_conflict:
             return "Needs separation"
         if not is_guided_trigger_code(condition.trigger_code):
             return "Needs trigger"
-        masking = condition_masking(self._document.project, condition)
         if masking is not None:
             return ("Masking configured" if masking.base_visuals and masking.target_visuals
                     else "Configure masking sources")
-        base_set = self._document.get_stimulus_set(condition.base_stimulus_set_id)
-        oddball_set = self._document.get_stimulus_set(condition.oddball_stimulus_set_id)
+        base_set = stimulus_sets.get(condition.base_stimulus_set_id)
+        oddball_set = stimulus_sets.get(condition.oddball_stimulus_set_id)
         if base_set is None or oddball_set is None:
             return "Missing stimulus sources"
         if base_set.modality == StimulusModality.IMAGE:
@@ -1030,9 +1049,11 @@ class ConditionSetupStep(QWidget):
         condition_id = self.selected_condition_id()
         return self._document.get_condition(condition_id) if condition_id else None
 
-    def _refresh_editor(self, *_args: object) -> None:
+    def _refresh_editor(self, *, has_legacy_conflicts: bool | None = None) -> None:
         condition = self._current_condition()
-        has_legacy_conflicts = self._refresh_legacy_condition_actions()
+        if has_legacy_conflicts is None:
+            has_legacy_conflicts = bool(category_conflict_condition_ids(self._document.project))
+        self._refresh_legacy_condition_actions(has_conflicts=has_legacy_conflicts)
         enabled = condition is not None and not self.is_busy()
         self.condition_list.setEnabled(not self.is_busy())
         self.condition_search_edit.setEnabled(not self.is_busy())
@@ -1399,7 +1420,6 @@ class ConditionSetupStep(QWidget):
         except Exception as error:
             _show_error_dialog(self, "Condition Error", error)
             return
-        self.refresh()
 
     def _apply_name(self) -> None:
         condition_id = self.selected_condition_id()
@@ -1496,7 +1516,6 @@ class ConditionSetupStep(QWidget):
             parent=self,
         )
         dialog.exec()
-        self.refresh()
 
     def _open_task_settings(self) -> None:
         condition_id = self.selected_condition_id()
@@ -1509,7 +1528,6 @@ class ConditionSetupStep(QWidget):
             parent=self,
         )
         dialog.exec()
-        self.refresh()
 
     def _separate_conditions(self) -> None:
         if self._active_task is not None:
@@ -1532,7 +1550,6 @@ class ConditionSetupStep(QWidget):
                             condition.condition_id,
                             t2_stimulus_set_id=None, isi_stimulus_set_id=None,
                         )
-                self.refresh()
             return
         answer = QMessageBox.question(
             self, "Separate experiment types",
@@ -1571,7 +1588,6 @@ class ConditionSetupStep(QWidget):
         if not isinstance(result, SeparatedProjects):
             raise TypeError("Unexpected experiment separation result.")
         self._document.accept_separated_project(result.attentional_blink)
-        self.refresh()
         QMessageBox.information(
             self, "Experiments separated",
             "This experiment now contains only Attentional-Blink conditions. "
@@ -1693,7 +1709,6 @@ class ConditionSetupStep(QWidget):
         self.busy_changed.emit(False)
 
     def _select_condition(self, condition_id: str) -> None:
-        self.refresh()
         for index in range(self.condition_list.count()):
             item = self.condition_list.item(index)
             if item.data(Qt.ItemDataRole.UserRole) == condition_id:

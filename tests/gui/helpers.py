@@ -195,11 +195,9 @@ def find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) ->
 def prepare_compile_ready_project(window: Any, tmp_path: Path) -> None:
     """Add one feasible presentation and import base/oddball image folders."""
 
-    window.conditions_page._add_condition()
+    condition_id = window.document.create_condition()
     base_dir = write_image_directory(tmp_path / "base")
     oddball_dir = write_image_directory(tmp_path / "oddball")
-    condition_id = window.conditions_page.selected_condition_id()
-    assert condition_id is not None
     window.document.import_condition_stimulus_folder(condition_id, role="base", source_dir=base_dir)
     window.document.import_condition_stimulus_folder(
         condition_id,

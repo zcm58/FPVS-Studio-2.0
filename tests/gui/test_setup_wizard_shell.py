@@ -40,6 +40,7 @@ from fpvs_studio.gui.components import (
     setup_wizard_stylesheet,
     studio_theme_stylesheet,
 )
+from fpvs_studio.gui.condition_pages import ConditionsPage
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.design_system import resolve_studio_theme
 from fpvs_studio.gui.document import ProjectDocument
@@ -954,23 +955,77 @@ def test_setup_wizard_refresh_skips_hidden_heavy_pages(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Scope")
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Refresh Scope")
+    condition_id = document.create_condition(name="Original condition")
+    window.show_setup_wizard(step_key="conditions")
+    QApplication.processEvents()
     guide = window.setup_wizard_page
-    guide.open_wizard(step_key="project")
+    assert guide.isVisible()
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
+    assets = window.assets_page
+    run = window.run_page
+    guided = guide.condition_setup_step
+    refresh_assets = assets.refresh
+    refresh_run = run.refresh
+    condition_status = guided._condition_status_text
     calls = {"assets": 0, "run": 0}
+    statuses = []
 
     def _count_assets_refresh() -> None:
         calls["assets"] += 1
+        refresh_assets()
 
     def _count_run_refresh() -> None:
         calls["run"] += 1
+        refresh_run()
 
-    monkeypatch.setattr(window.assets_page, "refresh", _count_assets_refresh)
-    monkeypatch.setattr(window.run_page, "refresh", _count_run_refresh)
+    def _count_condition_status(condition, **kwargs):
+        statuses.append(condition.name)
+        return condition_status(condition, **kwargs)
 
-    guide.refresh()
+    monkeypatch.setattr(assets, "refresh", _count_assets_refresh)
+    monkeypatch.setattr(run, "refresh", _count_run_refresh)
+    monkeypatch.setattr(guided, "_condition_status_text", _count_condition_status)
+
+    guided.condition_name_edit.setText("Updated condition")
+    guided.condition_name_edit.editingFinished.emit()
+    document.update_condition(condition_id, name="Latest condition")
+    QApplication.processEvents()
 
     assert calls == {"assets": 0, "run": 0}
+    assert statuses == ["Updated condition", "Latest condition"]
+    assert not assets.isVisible() and not run.isVisible()
+    assert assets.assets_table.item(0, 0).text() == "Original condition"
+
+    assets.show()
+    assert assets.assets_table.item(0, 0).text() == "Latest condition"
+    assets.hide()
+    run.show()
+    run.hide()
+    assert calls == {"assets": 1, "run": 1}
+
+
+def test_setup_creates_legacy_conditions_only_when_requested_and_flushes_its_draft(
+    qtbot, controller: StudioController, tmp_path: Path,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Condition Editors")
+    condition_id = document.create_condition(name="First condition")
+    window.show_setup_wizard(step_key="conditions")
+    guide = window.setup_wizard_page
+    document.update_condition(condition_id, name="Current condition")
+    assert guide.flush_pending_edits()
+    assert guide.findChild(ConditionsPage) is None
+
+    legacy = guide.conditions_page
+    assert legacy is window.conditions_page
+    assert not legacy.isVisible()
+    assert legacy.condition_name_edit.text() == "Current condition"
+    instructions = "Read these instructions before recording."
+    legacy.instructions_edit.setPlainText(instructions)
+
+    assert guide.flush_pending_edits()
+    assert document.project.conditions[0].instructions == instructions
+    assert guide.conditions_page is legacy
 
 
 @pytest.mark.parametrize("condition_name", ["Condition 1", "A"])
