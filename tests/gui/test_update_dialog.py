@@ -22,7 +22,7 @@ from PySide6.QtCore import (
     QThread,
     QTimer,
 )
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QPalette, QTextCursor
 from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget
 from shiboken6 import isValid
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
@@ -444,7 +444,7 @@ def test_update_dialog_downloads_then_launches_installer(
     assert "projects, templates, settings, run history, and logs" in dialog.status_label.text()
     assert "0.9.0b1" in dialog.current_version_label.text()
     assert "0.9.0b2" in dialog.latest_version_label.text()
-    assert "Improved update flow" in dialog.notes_label.text()
+    assert "Improved update flow" in dialog.notes_view.toPlainText()
     assert dialog.release_notes_button.isEnabled()
     assert dialog.close_button.text() == "Remind Me Later"
 
@@ -497,9 +497,9 @@ def test_update_dialog_reports_manual_server_error(qtbot) -> None:
         lambda: "online service" in dialog.status_label.text()
     )
 
-    assert "internet connection" in dialog.notes_label.text()
-    assert "network unavailable" not in dialog.notes_label.text()
-    assert "network unavailable" in dialog.notes_label.toolTip()
+    assert "internet connection" in dialog.notes_view.toPlainText()
+    assert "network unavailable" not in dialog.notes_view.toPlainText()
+    assert "network unavailable" in dialog.notes_view.toolTip()
     assert dialog.download_button.isEnabled() is False
     assert dialog.close_button.text() == "Close"
 
@@ -1181,7 +1181,7 @@ def test_update_dialog_preserves_release_note_bullet_lines(
     notes = (
         "- Simplify the Experiment Library.\n"
         "- Show the current version in restored reports.\n"
-        "- Clarify BioSemi hardware labels."
+        "- Clarify <Space> key prompts in task instructions."
     )
     result = replace(_available_update(), release_notes_summary=notes)
     dialog = UpdateDialog(auto_check=False, initial_result=result, lifecycle=lifecycle)
@@ -1194,13 +1194,11 @@ def test_update_dialog_preserves_release_note_bullet_lines(
     qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
     qtbot.wait(1)
 
-    assert dialog.notes_label.text() == notes
-    assert dialog.notes_label.textFormat() == Qt.TextFormat.PlainText
-    assert dialog.notes_label.toolTip() == notes
-    assert dialog.notes_label.accessibleDescription() == notes
-    assert dialog.notes_label.height() + 1 >= dialog.notes_label.heightForWidth(
-        dialog.notes_label.width()
-    )
+    assert dialog.notes_view.toPlainText() == notes
+    assert dialog.notes_view.isReadOnly()
+    assert dialog.notes_view.tabChangesFocus()
+    assert dialog.notes_view.accessibleName() == dialog.notes_heading_label.text()
+    assert dialog.notes_view.verticalScrollBar().maximum() == 0
     assert (dialog.width(), dialog.height()) == size
     assert_visible_children_within_parent(dialog)
     opened: list[str] = []
@@ -1242,6 +1240,7 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         "- Preserve installation settings and projects.",
         "- Keep updater recovery actions available.",
         "- Show complete release notes on GitHub.",
+        *(f"- Fix display issue {index}." for index in range(24)),
         "- Retain verified hashes for downloaded installers.",
     ])
     result = replace(
@@ -1322,17 +1321,25 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
             assert label.height() + 1 >= label.heightForWidth(label.width()), label.objectName()
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
-    assert len(dialog.notes_label.text()) <= 240
-    assert dialog.notes_label.text() != full_notes
+    notes_view = dialog.notes_view
     if state == "error":
-        assert full_notes in dialog.notes_label.toolTip()
-        assert full_notes not in dialog.notes_label.accessibleDescription()
-        assert any(word in dialog.notes_label.text().lower() for word in ("try", "retry"))
+        assert full_notes in notes_view.toolTip()
+        assert full_notes not in notes_view.toPlainText()
+        assert any(word in notes_view.toPlainText().lower() for word in ("try", "retry"))
+        assert notes_view.verticalScrollBar().maximum() == 0
     else:
-        assert dialog.notes_label.toolTip() == full_notes
-        assert dialog.notes_label.accessibleDescription() == full_notes
-        assert len(dialog.notes_label.text().splitlines()) == 4
-        assert dialog.notes_label.text().endswith("...")
+        assert notes_view.toPlainText() == full_notes
+        assert notes_view.horizontalScrollBar().maximum() == 0
+        scroll = notes_view.verticalScrollBar()
+        assert scroll.maximum() > 0
+        qtbot.keyClick(notes_view, Qt.Key.Key_PageDown)
+        assert scroll.value() > 0
+        scroll.setValue(scroll.maximum())
+        last_bullet = QTextCursor(notes_view.document().lastBlock())
+        assert notes_view.viewport().rect().contains(notes_view.cursorRect(last_bullet).center())
+        if state == "checking-files":
+            jobs[-1].progress_changed.emit(UpdatePhase(dialog.status_label.text(), result), None)
+            assert scroll.value() == scroll.maximum()
 
 
 def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(monkeypatch):
@@ -1660,7 +1667,7 @@ def test_source_update_prompt_preserves_notes_and_has_no_installer_action(
     assert "pull the latest changes from the remote Git repository" in dialog.status_label.text()
     assert "restart Studio" in dialog.status_label.text()
     assert "2026.12.123rc10" in dialog.latest_version_label.text()
-    assert dialog.notes_label.text() == notes
+    assert dialog.notes_view.toPlainText() == notes
     assert dialog.download_button.isHidden() and not dialog.download_button.isEnabled()
     assert dialog.check_button.isVisible() and dialog.check_button.isEnabled()
     assert dialog.close_button.text() == "Remind Me Later"
@@ -1787,11 +1794,13 @@ def test_source_failed_check_keeps_pull_guidance_without_installer_advice(
     dialog._handle_task_error(error, "check")
     qtbot.wait(1)
     assert "pull the latest changes" in dialog.status_label.text()
-    assert "Check Again" in dialog.notes_label.text()
-    assert "installer" not in dialog.notes_label.text().lower()
-    assert "Repair" not in dialog.notes_label.text()
-    assert str(error) in dialog.notes_label.toolTip()
+    assert "Check Again" in dialog.notes_view.toPlainText()
+    assert "installer" not in dialog.notes_view.toPlainText().lower()
+    assert "Repair" not in dialog.notes_view.toPlainText()
+    assert str(error) in dialog.notes_view.toolTip()
     assert not dialog.download_button.isEnabled()
     assert_visible_children_within_parent(dialog)
-    for label in (dialog.status_label, dialog.notes_label):
-        assert label.height() + 1 >= label.heightForWidth(label.width())
+    assert dialog.status_label.height() + 1 >= dialog.status_label.heightForWidth(
+        dialog.status_label.width()
+    )
+    assert dialog.notes_view.verticalScrollBar().maximum() == 0

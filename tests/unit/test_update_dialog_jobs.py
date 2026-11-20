@@ -46,6 +46,8 @@ class _Widget:
     def setText(self, text):
         self.text = text
 
+    setPlainText = setText
+
     def setToolTip(self, text):
         self.tooltip = text
 
@@ -79,9 +81,6 @@ class _DialogBase:
 
     def _fit_action_buttons(self):
         pass
-
-    def _set_notes_text(self, text):
-        self.notes_label.setText(text)
 
 
 _UNSET = object()
@@ -134,7 +133,8 @@ def update_flow(tmp_path):
         "start_update_check", "start_download", "install_and_restart", "_start_task",
         "_handle_task_finished", "_handle_download_result", "_handle_task_error",
         "_handle_download_progress", "_handle_task_cancelled", "_download_available",
-        "_set_busy_state", "_set_close_button_text", "reject", "done", "_request_close",
+        "_set_busy_state", "_set_close_button_text", "_set_notes_text", "reject", "done",
+        "_request_close",
         "_handle_application_shutdown",
     }
     dialog.body = [
@@ -179,6 +179,7 @@ def update_flow(tmp_path):
     downloaded = DownloadedInstaller(tmp_path / "update.exe", 9, asset.sha256, asset)
     instance = namespace["UpdateDialog"]()
     instance._result = UpdateCheckResult("1.0", "2.0", True, None, "", asset, False)
+    instance._notes_text = ""
     instance._installer_updates_enabled = True
     instance._downloaded_installer = None
     instance._preparing_install = False
@@ -192,7 +193,7 @@ def update_flow(tmp_path):
     instance.result = None
     instance.visible = True
     for name in ("check_button", "download_button", "close_button", "progress_bar",
-                 "status_label", "notes_label"):
+                 "status_label", "notes_view"):
         setattr(instance, name, _Widget())
     instance._download_callback = lambda *_args: events.append("download") or downloaded
     instance._installer_launcher = lambda *_args: events.append("launch")
@@ -201,6 +202,26 @@ def update_flow(tmp_path):
     return SimpleNamespace(
         dialog=instance, jobs=jobs, events=events, downloaded=downloaded, lifecycle=lifecycle,
     )
+
+
+def test_notes_preview_preserves_text_and_does_not_reload_unchanged_notes(update_flow):
+    dialog = update_flow.dialog
+    rendered = []
+    dialog.notes_view.setPlainText = rendered.append
+    dialog.notes_view.setToolTip("Technical details from previous check")
+    notes = (
+        "- Show <Space> in task prompts.\n\n"
+        "- Keep localized labels readable. " + "Release detail " * 26 + "\n"
+        "- Preserve recordings.\n- Update recovery messages.\n- Improve startup speed."
+    )
+
+    dialog._set_notes_text(notes)
+    dialog._set_notes_text(notes)
+    assert rendered == [notes]
+    assert dialog.notes_view.tooltip == ""
+
+    dialog._set_notes_text("")
+    assert rendered == [notes, ""]
 
 
 def test_single_action_waits_for_download_and_install_worker_finish(update_flow):
@@ -346,7 +367,7 @@ def test_install_failure_invalidates_cached_download_before_retry(update_flow):
     assert flow.dialog._downloaded_installer is None
     assert flow.dialog.download_button.enabled
     assert flow.dialog.visible
-    assert "Installer verification failed" in flow.dialog.notes_label.tooltip
+    assert "Installer verification failed" in flow.dialog.notes_view.tooltip
     flow.dialog.start_download()
     assert len(flow.jobs) == 3
     assert flow.dialog._task_kind == "download"

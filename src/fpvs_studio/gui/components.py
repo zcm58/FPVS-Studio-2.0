@@ -2121,7 +2121,7 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         font-weight: 700;
     }}
     QLabel#update_dialog_status,
-    QLabel#update_dialog_notes {{
+    QPlainTextEdit#update_dialog_notes {{
         color: {color_text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}

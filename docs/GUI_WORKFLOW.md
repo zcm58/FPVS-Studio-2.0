@@ -1751,7 +1751,8 @@ guarded by `project.json` validation, confirmation, a post-action path check, an
 refresh of the manage list after each attempt. In packaged Windows builds,
 `Check for Updates` delegates to the independent updater through `HelperClient`, without
 blocking the GUI. It shows
-current/latest versions, release notes, and the candidate patch/full installer.
+current/latest versions, a wrapping and scrollable What's New preview, and the candidate
+patch/full installer. **View Full Release Notes** opens the published release page.
 Download and Install verifies the package with progress and continues to installation
 from that one explicit click. There is no separate install button or redundant install
 confirmation. The dialog also supports this-launch-only `Remind Me Later`.
@@ -2082,9 +2083,11 @@ Updater visible/manual smoke (run only in an approved visible Windows session):
 
 1. Open `Help > Check for Updates` and inspect the `680x600` minimum and `760x620`
    default sizes with long versions, three short release-note bullets, long/many-line
-   notes, and error details. Confirm separate bullet lines and bounded long previews.
-   Check every action label, wrapped status, full-detail tooltip, accessible description,
-   and release-page action without resizing.
+   notes, and error details. Confirm the preview keeps bullet lines intact, wraps long
+   text, and scrolls to the final line with the mouse and keyboard. Check that progress
+   and actions stay in view, Tab moves from the preview to the next enabled action, the
+   error tooltip exposes technical details, and **View Full Release Notes** opens the
+   release page.
 2. Using controlled offline callbacks (as in `tests/gui/test_update_dialog.py`), exercise
    current, newer/trusted, newer/missing-digest, busy, canceled, and failed states. A
    missing digest must disable Download and Install while preserving the newer-version copy.

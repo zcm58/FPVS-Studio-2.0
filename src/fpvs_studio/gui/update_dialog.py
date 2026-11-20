@@ -8,14 +8,15 @@ import sys
 from collections.abc import Callable
 from threading import Event
 
-from PySide6.QtCore import Qt, QTimer, QUrl, Slot
-from PySide6.QtGui import QCloseEvent, QDesktopServices
+from PySide6.QtCore import QTimer, QUrl, Slot
+from PySide6.QtGui import QCloseEvent, QDesktopServices, QTextOption
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -27,7 +28,6 @@ from fpvs_studio.gui.components import (
     mark_primary_action,
     mark_secondary_action,
 )
-from fpvs_studio.gui.design_system import elide_middle
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
     UpdateCallback,
@@ -123,6 +123,7 @@ class UpdateDialog(QDialog):
         self._close_pending = False
         self._close_result = int(QDialog.DialogCode.Rejected)
         self._result: UpdateCheckResult | None = None
+        self._notes_text = ""
         self._downloaded_installer: DownloadedInstaller | None = None
         self._preparing_install = False
         self._disposed = Event()
@@ -166,13 +167,14 @@ class UpdateDialog(QDialog):
         self.notes_heading_label = QLabel("What's New", self)
         self.notes_heading_label.setObjectName("update_dialog_notes_heading")
         layout.addWidget(self.notes_heading_label)
-        self.notes_label = QLabel("Release notes will appear when an update is available.", self)
-        self.notes_label.setObjectName("update_dialog_notes")
-        self.notes_label.setWordWrap(True)
-        self.notes_label.setTextFormat(Qt.TextFormat.PlainText)
-        self.notes_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(self.notes_label)
-        layout.addStretch(1)
+        self.notes_view = QPlainTextEdit(self)
+        self.notes_view.setObjectName("update_dialog_notes")
+        self.notes_view.setAccessibleName(self.notes_heading_label.text())
+        self.notes_view.setReadOnly(True)
+        self.notes_view.setTabChangesFocus(True)
+        self.notes_view.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+        self._set_notes_text("Release notes will appear when an update is available.")
+        layout.addWidget(self.notes_view, 1)
 
         self.progress_bar = UpdateProgressBar(self, animate_download=True)
         self.progress_bar.setObjectName("update_dialog_progress")
@@ -472,7 +474,7 @@ class UpdateDialog(QDialog):
             f"{explanation.summary}\n\n{SOURCE_UPDATE_INSTRUCTIONS}"
         )
         self._set_notes_text(advice)
-        self.notes_label.setToolTip(f"{advice}\n\nTechnical details:\n{error}")
+        self.notes_view.setToolTip(f"{advice}\n\nTechnical details:\n{error}")
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
@@ -613,19 +615,11 @@ class UpdateDialog(QDialog):
         self.setMinimumWidth(max(_MINIMUM_SIZE[0], required_width))
 
     def _set_notes_text(self, text: str) -> None:
-        # A compact preview keeps every action visible at the minimum size. The full
-        # release/error value remains available by tooltip and release-page action.
-        lines = [
-            " ".join(elide_middle(word, 64) for word in line.split())
-            for line in text.splitlines() if line.strip()
-        ]
-        if len(lines) > 4:
-            lines = lines[:4]
-            lines[-1] += "..."
-        line_budget = (240 - (len(lines) - 1)) // len(lines) if lines else 240
-        self.notes_label.setText("\n".join(elide_middle(line, line_budget) for line in lines))
-        self.notes_label.setToolTip(text)
-        self.notes_label.setAccessibleDescription(text)
+        # Check progress and completion can report the same notes. Keep the reading position.
+        if self._notes_text != text:
+            self._notes_text = text
+            self.notes_view.setPlainText(text)
+        self.notes_view.setToolTip("")
 
     def _open_release_notes(self) -> None:
         if self._result is None or self._result.release_url is None:
