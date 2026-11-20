@@ -26,7 +26,7 @@ from pydantic import (
 from fpvs_studio.core.compiler_assets import load_manifest, resolve_image_paths
 from fpvs_studio.core.execution import PARTICIPANT_HANDEDNESS_VALUES, PARTICIPANT_SEX_VALUES
 from fpvs_studio.core.models import ProjectFile
-from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.paths import ProjectPathResolver
 from fpvs_studio.core.randomization import randomization_protocol_identity
 from fpvs_studio.core.session_ordering import condition_ordering_identity
 
@@ -415,9 +415,10 @@ def protocol_fingerprint_with_assets(
 
     inspect(payload)
     provenance: list[tuple[str, str]] = []
+    paths = ProjectPathResolver(project_root)
     for relative_path in sorted(asset_paths):
         check_cancelled()
-        path = resolve_project_relative_path(project_root, relative_path)
+        path = paths.resolve(relative_path)
         digest = hashlib.sha256()
         with path.open("rb") as stream:
             while True:

@@ -6,6 +6,7 @@ import csv
 import io
 import os
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from openpyxl import load_workbook
@@ -772,7 +773,11 @@ def test_participant_summary_excludes_admin_test_participant_ids(tmp_path: Path)
     assert worksheet["A2"].value == "1"
 
 
-def test_refresh_participant_summary_if_stale_rebuilds_missing_xlsx(tmp_path: Path) -> None:
+def test_refresh_participant_summary_if_stale_rebuilds_missing_xlsx(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from fpvs_studio.runtime import participant_results
+
     history_path = tmp_path / "logs" / "session_condition_history.csv"
     history_path.parent.mkdir(parents=True, exist_ok=True)
     with history_path.open("w", encoding="utf-8", newline="") as handle:
@@ -805,7 +810,11 @@ def test_refresh_participant_summary_if_stale_rebuilds_missing_xlsx(tmp_path: Pa
     assert xlsx_path.is_file()
     workbook = load_workbook(xlsx_path)
     assert workbook["Participant Summary"]["A2"].value == "1"
+
+    inventory = Mock(wraps=participant_results.participant_results_source_paths)
+    monkeypatch.setattr(participant_results, "participant_results_source_paths", inventory)
     assert refresh_participant_summary_if_stale(tmp_path) is None
+    inventory.assert_called_once_with(tmp_path)
 
 
 def test_refresh_participant_summary_if_stale_regenerates_newer_history(

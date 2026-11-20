@@ -36,8 +36,38 @@ from fpvs_studio.core.enums import (
     TextHeightMode,
 )
 from fpvs_studio.core.models import ProjectFile, StimulusSet, TextHeightScheduleSettings
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.task_models import TaskBinding, TaskModule, TaskStep, TaskStepKind
 from fpvs_studio.preprocessing.importer import materialize_project_assets
+
+
+@pytest.mark.parametrize("manifest_backed", [False, True])
+def test_image_asset_scan_resolves_project_root_once_per_scan(
+    sample_project, sample_project_root, monkeypatch, manifest_backed,
+):
+    root = filesystem_path(sample_project_root)
+    stimulus = sample_project.stimulus_sets[0]
+    manifest = (
+        materialize_project_assets(sample_project, project_root=sample_project_root)
+        if manifest_backed else None
+    )
+    original = Path.resolve
+    root_resolutions = 0
+
+    def count_root_resolution(path, *args, **kwargs):
+        nonlocal root_resolutions
+        if path == root:
+            root_resolutions += 1
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", count_root_resolution)
+    for expected_count in (1, 2):
+        images = compiler_assets.resolve_image_paths(
+            stimulus, variant=StimulusVariant.ORIGINAL, project_root=sample_project_root,
+            manifest=manifest,
+        )
+        assert len(images) == stimulus.image_count
+        assert root_resolutions == expected_count
 
 
 def _memory_definition(root: Path):

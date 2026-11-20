@@ -1168,8 +1168,9 @@ def refresh_participant_summary_if_stale(project_root: Path) -> Path | None:
 
     log_root = logs_dir(project_root)
     history_path = log_root / SESSION_CONDITION_HISTORY_FILENAME
-    sources = participant_results_source_paths(project_root)
-    if not history_path.is_file() and not sources:
+    # History establishes there is something to check. Inventory its sources
+    # only after acquiring the lock that protects the freshness decision.
+    if not history_path.is_file() and not participant_results_source_paths(project_root):
         return None
 
     with project_reporting_lock(project_root):

@@ -16,10 +16,10 @@ from fpvs_studio.core.paths import (
     GENERATED_VARIANTS_DIRNAME,
     MANIFEST_FILENAME,
     STIMULI_DIRNAME,
+    ProjectPathResolver,
     filesystem_path,
     resolve_project_relative_path,
     stimulus_variant_dirname,
-    to_project_relative_posix,
 )
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.preprocessing.manifest import asset_variant_path, find_manifest_set
@@ -64,6 +64,7 @@ def _resolve_manifest_image_paths(
     if manifest_set is None or not manifest_set.assets:
         return None
 
+    paths = ProjectPathResolver(project_root)
     resolved: list[str] = []
     for asset in sorted(manifest_set.assets, key=lambda item: item.source.relative_path.lower()):
         relative_path = asset_variant_path(asset, variant=variant)
@@ -73,7 +74,7 @@ def _resolve_manifest_image_paths(
                 f"'{stimulus_set.name}'."
             )
         try:
-            candidate_path = resolve_project_relative_path(project_root, relative_path)
+            candidate_path = paths.resolve(relative_path)
         except ValueError as exc:
             raise CompileError(
                 f"Manifest path '{relative_path}' for set '{stimulus_set.name}' "
@@ -116,12 +117,13 @@ def _resolve_filesystem_image_paths(
 ) -> list[str]:
     """Resolve sorted project-relative image paths directly from the filesystem."""
 
+    paths = ProjectPathResolver(project_root)
     allowed_suffixes: tuple[str, ...]
     if variant == StimulusVariant.ORIGINAL:
         if stimulus_set.source_dir is None:
             raise CompileError(f"Image stimulus set '{stimulus_set.name}' is missing source_dir.")
         try:
-            source_dir = resolve_project_relative_path(project_root, stimulus_set.source_dir)
+            source_dir = paths.resolve(stimulus_set.source_dir)
         except ValueError as exc:
             raise CompileError(
                 f"Stimulus set '{stimulus_set.name}' source folder escapes the project root."
@@ -137,7 +139,7 @@ def _resolve_filesystem_image_paths(
             )
         )
         try:
-            source_dir = resolve_project_relative_path(project_root, derived_dir)
+            source_dir = paths.resolve(derived_dir)
         except ValueError as exc:
             raise CompileError(
                 f"Stimulus set '{stimulus_set.name}' derived folder escapes the project root."
@@ -145,9 +147,9 @@ def _resolve_filesystem_image_paths(
         allowed_suffixes = SUPPORTED_DERIVED_SUFFIXES
 
     source_dir = filesystem_path(source_dir)
-    if source_dir.exists() and source_dir.is_dir():
+    if source_dir.is_dir():
         resolved = [
-            to_project_relative_posix(project_root, path)
+            paths.relative_posix(path)
             for path in source_image_directory_files(
                 source_dir, sort_key=lambda item: item.name.lower(),
             )

@@ -11,6 +11,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from os import stat_result
 from pathlib import Path
 from threading import Event
 
@@ -106,13 +107,21 @@ def _cancelled(cancel_event: Event | None) -> None:
 
 
 def _regular(path: Path, *, directory: bool) -> None:
-    info = filesystem_path(path).lstat()
+    _require_regular(filesystem_path(path).lstat(), directory=directory)
+
+
+def _require_regular(info: stat_result, *, directory: bool | None = None) -> bool:
+    """Validate checked metadata and return whether it describes a directory."""
     if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
         raise ProjectBundleError("Project update paths cannot contain links or reparse points.")
-    if not (stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)):
+    is_directory = stat.S_ISDIR(info.st_mode)
+    if (directory is not None and directory != is_directory) or (
+        not is_directory and not stat.S_ISREG(info.st_mode)
+    ):
         raise ProjectBundleError("Project update paths must be ordinary files and directories.")
-    if not directory and info.st_nlink != 1:
+    if not is_directory and info.st_nlink != 1:
         raise ProjectBundleError("Project update files cannot have additional hard links.")
+    return is_directory
 
 
 def _root(path: Path) -> Path:
@@ -126,8 +135,9 @@ def _fingerprint(root: Path, cancel_event: Event | None) -> tuple[str, dict[str,
     assets: dict[str, str] = {}
     digest = hashlib.sha256()
     observed: dict[Path, tuple[int, int, int, int]] = {}
+    filesystem_root = filesystem_path(root)
     for relative in _OWNED:
-        base = filesystem_path(root / relative)
+        base = filesystem_root / relative
         paths = [base]
         if not base.exists():
             digest.update((relative + "\0missing\0").encode())
@@ -138,8 +148,8 @@ def _fingerprint(root: Path, cancel_event: Event | None) -> tuple[str, dict[str,
             while pending:
                 _cancelled(cancel_event)
                 directory = pending.pop()
-                _regular(directory, directory=True)
-                info = directory.stat()
+                info = directory.lstat()
+                _require_regular(info, directory=True)
                 observed[directory] = (
                     info.st_ino,
                     info.st_size,
@@ -152,20 +162,18 @@ def _fingerprint(root: Path, cancel_event: Event | None) -> tuple[str, dict[str,
                     raise ProjectBundleError("Project update found paths differing only by case.")
                 paths.append(directory)
                 for child in children:
-                    _regular(child, directory=child.is_dir())
-                    if child.is_dir():
+                    if _require_regular(child.lstat()):
                         pending.append(child)
                     else:
                         paths.append(child)
         for path in paths:
             _cancelled(cancel_event)
-            is_directory = path.is_dir()
-            _regular(path, directory=is_directory)
-            digest.update(path.relative_to(filesystem_path(root)).as_posix().encode("utf-8"))
+            before = path.lstat()
+            is_directory = _require_regular(before)
+            digest.update(path.relative_to(filesystem_root).as_posix().encode("utf-8"))
             digest.update(b"\0directory\0" if is_directory else b"\0file\0")
             if is_directory:
                 continue
-            before = path.stat()
             media_digest = hashlib.sha256() if relative == "stimuli" else None
             with path.open("rb") as handle:
                 for block in iter(lambda: handle.read(65536), b""):

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 import re
+from functools import cached_property
 from pathlib import Path, PurePosixPath, PureWindowsPath
 
 PROJECT_FILENAME = "project.json"
@@ -81,25 +82,44 @@ def validate_project_relative_path(value: str) -> str:
     return posix_path.as_posix()
 
 
-def resolve_project_relative_path(project_root: Path, relative_path: str) -> Path:
-    """Resolve a persisted path under ``project_root`` without requiring existence.
+class ProjectPathResolver:
+    """Reuse the resolved project root within one operation.
 
-    Resolution follows any existing symlink or junction prefixes. A target whose
-    resolved location leaves the resolved project root is rejected. Long Windows
-    targets retain the extended namespace for subsequent filesystem access.
+    Each lookup still resolves the target and checks containment. Create a new
+    resolver for a later operation so it sees changes to the project root.
     """
 
-    normalized = validate_project_relative_path(relative_path)
-    resolved_root = filesystem_path(project_root).resolve(strict=False)
-    resolved_target = (resolved_root / Path(normalized)).resolve(strict=False)
-    try:
-        resolved_target.relative_to(resolved_root)
-    except ValueError as exc:
-        raise ValueError(f"Project-relative path escapes the project root: {normalized}") from exc
-    ordinary_target = _without_windows_namespace(resolved_target)
-    if os.name == "nt" and len(str(ordinary_target).encode("utf-16-le")) // 2 >= 248:
-        return resolved_target
-    return ordinary_target
+    def __init__(self, project_root: Path) -> None:
+        self._project_root = project_root
+
+    @cached_property
+    def _resolved_root(self) -> Path:
+        return filesystem_path(self._project_root).resolve(strict=False)
+
+    def resolve(self, relative_path: str) -> Path:
+        normalized = validate_project_relative_path(relative_path)
+        root = self._resolved_root
+        resolved_target = (root / Path(normalized)).resolve(strict=False)
+        try:
+            resolved_target.relative_to(root)
+        except ValueError as exc:
+            raise ValueError(
+                f"Project-relative path escapes the project root: {normalized}"
+            ) from exc
+        ordinary_target = _without_windows_namespace(resolved_target)
+        if os.name == "nt" and len(str(ordinary_target).encode("utf-16-le")) // 2 >= 248:
+            return resolved_target
+        return ordinary_target
+
+    def relative_posix(self, target_path: Path) -> str:
+        target = filesystem_path(target_path).resolve()
+        return target.relative_to(self._resolved_root).as_posix()
+
+
+def resolve_project_relative_path(project_root: Path, relative_path: str) -> Path:
+    """Resolve a persisted project path, following linked prefixes and guarding containment."""
+
+    return ProjectPathResolver(project_root).resolve(relative_path)
 
 
 def slugify_project_name(name: str) -> str:
@@ -243,10 +263,7 @@ def condition_template_library_path(root_dir: Path) -> Path:
 def to_project_relative_posix(project_root: Path, target_path: Path) -> str:
     """Convert a path under a project root to a persisted POSIX relative path."""
 
-    relative = filesystem_path(target_path).resolve().relative_to(
-        filesystem_path(project_root).resolve()
-    )
-    return relative.as_posix()
+    return ProjectPathResolver(project_root).relative_posix(target_path)
 
 
 def from_project_relative_posix(project_root: Path, relative_path: str) -> Path:

@@ -434,6 +434,24 @@ def test_change_while_download_is_prepared_is_not_overwritten(update_case):
     assert load_library_origin(case.root).installed_version == "1.0.0"
 
 
+def test_snapshot_detects_change_to_already_hashed_asset(update_case, monkeypatch):
+    stimuli = filesystem_path(update_case.root / "stimuli")
+    first = stimuli / "a-fingerprint.dat"
+    second = stimuli / "z-fingerprint.dat"
+    first.write_bytes(b"first asset")
+    second.write_bytes(b"second asset")
+    original_open = Path.open
+
+    def open_and_modify_previous(path, *args, **kwargs):
+        if path == second:
+            first.write_bytes(b"asset changed after its original read")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", open_and_modify_previous)
+    with pytest.raises(ProjectBundleError, match="changed during update review"):
+        updater.capture_project_update_snapshot(update_case.root)
+
+
 @pytest.mark.parametrize(
     "changes",
     [
