@@ -1,12 +1,25 @@
 from collections import Counter
+from pathlib import Path
 from zipfile import ZipFile
 
 from PIL import Image
-from scripts.create_color_oddball_demo import prepare_demo
+from scripts.create_color_oddball_demo import prepare_demo, write_preview_strips
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.project_bundle import import_project_bundle
+
+
+def test_packaged_demo_strips_match_generated_stimuli(tmp_path):
+    write_preview_strips(tmp_path)
+    packaged = Path(__file__).resolve().parents[2] / "src/fpvs_studio/assets/oddball-demo"
+    for color in ("red", "green"):
+        with Image.open(tmp_path / f"{color}.png") as generated, Image.open(
+            packaged / f"{color}.png",
+        ) as bundled:
+            assert bundled.size == (1452, 132)
+            assert bundled.mode == "RGBA"
+            assert bundled.tobytes() == generated.tobytes()
 
 
 def test_public_color_demo_imports_and_compiles_on_supported_displays(tmp_path):

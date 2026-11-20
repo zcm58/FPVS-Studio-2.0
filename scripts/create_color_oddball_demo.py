@@ -26,6 +26,8 @@ DEMO_TITLE = "Color Oddball Demo"
 BACKGROUND = (128, 128, 128)
 # These foregrounds have approximately the same nominal sRGB relative luminance.
 PALETTE = {"gray": (75, 75, 75), "red": (137, 41, 48), "green": (34, 85, 56)}
+ODDBALL_COLORS = ("red", "green")
+ODDBALL_EVERY_N = 5
 
 
 def make_silhouettes() -> dict[str, Image.Image]:
@@ -100,6 +102,41 @@ def make_silhouettes() -> dict[str, Image.Image]:
     return {name: mask.resize((256, 256), Image.Resampling.LANCZOS) for name, mask in masks.items()}
 
 
+def make_stimuli() -> dict[str, dict[str, Image.Image]]:
+    masks = make_silhouettes()
+    background = Image.new("RGB", (256, 256), BACKGROUND)
+    stimuli = {}
+    for color, rgb in PALETTE.items():
+        foreground = Image.new("RGB", (256, 256), rgb)
+        stimuli[color] = {
+            name: Image.composite(foreground, background, mask) for name, mask in masks.items()
+        }
+    return stimuli
+
+
+def write_preview_strips(output_dir: Path) -> None:
+    """Write display-ready examples of two cycles per condition at 3× scale."""
+    stimuli = make_stimuli()
+    examples = (
+        "apple", "bottle", "fish", "headphones", "house",
+        "key", "lamp", "mug", "pencil", "umbrella",
+    )
+    tile, gap, cycle_gap = 132, 12, 36
+    cycles = len(examples) // ODDBALL_EVERY_N
+    width = len(examples) * tile + (len(examples) - cycles) * gap + (cycles - 1) * cycle_gap
+    output_dir.mkdir(parents=True, exist_ok=True)
+    for oddball in ODDBALL_COLORS:
+        strip = Image.new("RGBA", (width, tile))
+        left = 0
+        for index, name in enumerate(examples, start=1):
+            is_oddball = index % ODDBALL_EVERY_N == 0
+            color = oddball if is_oddball else "gray"
+            image = stimuli[color][name].resize((tile, tile), Image.Resampling.LANCZOS)
+            strip.paste(image, (left, 0))
+            left += tile + (cycle_gap if is_oddball else gap)
+        strip.save(output_dir / f"{oddball}.png", optimize=True)
+
+
 def prepare_demo(output_dir: Path) -> Path:
     """Author, validate, and export a portable project with no machine-specific data."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -112,14 +149,11 @@ def prepare_demo(output_dir: Path) -> Path:
         temporary_root = Path(temporary)
         scaffold = create_project(temporary_root, DEMO_TITLE)
         project = scaffold.project
-        masks = make_silhouettes()
-        background = Image.new("RGB", (256, 256), BACKGROUND)
-        for color, rgb in PALETTE.items():
+        for color, stimuli in make_stimuli().items():
             folder = temporary_root / color
             folder.mkdir()
-            foreground = Image.new("RGB", (256, 256), rgb)
-            for name, mask in masks.items():
-                Image.composite(foreground, background, mask).save(folder / f"{name}.png")
+            for name, image in stimuli.items():
+                image.save(folder / f"{name}.png")
             _, stimulus_set = import_stimulus_source_directory(
                 source_dir=folder, project_root=scaffold.project_root,
                 set_id=color, set_name=f"{color.title()} objects",
@@ -130,7 +164,7 @@ def prepare_demo(output_dir: Path) -> Path:
         project.settings.display.preferred_refresh_hz = 60
         project.settings.display.background_color = "#808080"
         project.settings.protocol.base_hz = 6
-        project.settings.protocol.oddball_every_n = 5
+        project.settings.protocol.oddball_every_n = ODDBALL_EVERY_N
         project.settings.session.block_count = 3
         project.settings.session.condition_ordering = "randomized_blocks"
         project.settings.condition_defaults.target_repeats_per_image = 16
@@ -148,7 +182,7 @@ def prepare_demo(output_dir: Path) -> Path:
                 duty_cycle_mode=DutyCycleMode.SINUSOIDAL,
                 order_index=index - 1, trigger_code=index,
             )
-            for index, color in enumerate(("red", "green"), start=1)
+            for index, color in enumerate(ODDBALL_COLORS, start=1)
         ]
         materialize_project_assets(project, project_root=scaffold.project_root)
         save_project_file(project, scaffold.project_root / "project.json")
@@ -170,6 +204,11 @@ def prepare_demo(output_dir: Path) -> Path:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output_dir", type=Path, help="Destination for the new bundle and metadata")
+    parser.add_argument("output_dir", type=Path, help="Destination for bundle or preview output")
+    parser.add_argument("--previews-only", action="store_true", help="Generate the Library images")
+    options = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(message)s")
-    logging.info("Prepared %s", prepare_demo(parser.parse_args().output_dir))
+    if options.previews_only:
+        write_preview_strips(options.output_dir)
+    else:
+        logging.info("Prepared %s", prepare_demo(options.output_dir))

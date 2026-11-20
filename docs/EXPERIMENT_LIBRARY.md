@@ -147,14 +147,17 @@ Experiments requiring a newer Studio version show the minimum version and a
 disabled **Studio update required** button. Long list titles remain accessible in
 the tooltip and the full summary.
 
-The **Color Oddball Demo** uses 12 original grayscale object silhouettes shared
-between conditions and red and green versions for the oddballs. Each condition
-repeats once in each of three blocks. One run has 48 oddball cycles and lasts 40 s
-at the nominal 6 Hz base and 1.2 Hz oddball rates. The cross changes from white to
-blue four times per run, and the participant presses Space. Use Experiment Test
-Mode to try the imported project without EEG equipment. Maintainers can prepare
-the versioned release with `scripts/create_color_oddball_demo.py` and the ordinary
-Library publication and validation workflow.
+The **FPVS Oddball Demo** uses 12 original grayscale object silhouettes shared
+between conditions and red and green versions for the oddballs. Studio shows two
+sample oddball cycles per condition before download for the public 1.0.0 release.
+Each condition repeats once in each of three blocks. One run has 48 oddball cycles
+and lasts 40 s at the nominal 6 Hz base and 1.2 Hz oddball rates. The cross changes
+from white to blue four times per run, and the participant presses Space. Use
+Experiment Test Mode to try the imported project without EEG equipment.
+Maintainers can prepare the versioned release with `scripts/create_color_oddball_demo.py`
+and the ordinary Library publication and validation workflow. Run
+`python -m scripts.create_color_oddball_demo --previews-only src/fpvs_studio/assets/oddball-demo`
+to regenerate the two Studio preview strips from the same stimulus artwork.
 
 **Download and set up experiment** verifies the payload, then enters the ordinary
 project-bundle review. Select the configured Studio Root Folder if necessary and confirm
@@ -926,8 +929,11 @@ Python worker while it fingerprints the installed project, leaving the dialog on
 **Preparing update** before the download request is sent. Start with a fresh copy
 and an empty download cache, then reopen the updated copy from disk.
 
-On a computer with no Library connection, open Experiment Library, search for
-the Color Oddball Demo, and download and confirm its reviewed import. Connect a
+On a computer with no Library connection, open Experiment Library and search for
+**FPVS Oddball Demo**. At 900 × 640 and 1040 × 760 in Light and Dark, check that the
+**Experiment preview** guidance and both labeled strips fit. Confirm that the
+fifth and tenth images are red or green in their respective conditions. Download
+the demo and confirm its reviewed import. Connect a
 view-only lab and confirm a lab project is view-only while the public demo still
 offers its applicable download or installed action. Repeat with reduced motion
 enabled and confirm the list and status remain legible without transitions.

@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
 
 import pytest
-from PySide6.QtCore import QAbstractAnimation, Qt, QThread
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtCore import QAbstractAnimation, Qt, QThread, QUrl
+from PySide6.QtGui import QColor, QPalette, QTextDocument
 from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton, QWidget
 from tests.gui.helpers import (
     assert_visible_children_within_parent,
@@ -323,7 +324,7 @@ def test_library_list_distinguishes_releases_with_the_same_title(qtbot):
         ],
     ))
     assert [row.accessibleName() for row in _project_buttons(dialog)] == [
-        "Masking · 2.0", "Masking · 1.0", "Color Oddball Demo",
+        "Masking · 2.0", "Masking · 1.0", "FPVS Oddball Demo",
     ]
 
 
@@ -349,8 +350,26 @@ def test_public_demo_and_view_only_lab_share_one_browser(qtbot, monkeypatch, siz
     assert dialog.install_button.isEnabled()
     assert dialog.status_label.text() == "No account required"
     dialog.set_condition_count(_demo(), "public", 2)
-    assert "Conditions\n2" in dialog.details.toPlainText()
-    assert "1.2 Hz" not in dialog.details.toPlainText()
+    QApplication.processEvents()
+    details = dialog.details.toPlainText()
+    assert details.splitlines()[0].strip() == "FPVS Oddball Demo"
+    assert "Conditions\n2" in details
+    assert "Experiment preview" in details
+    assert "Download this demo to see what FPVS experiments look like" in details
+    assert "project from the OpenFPVS Experiment Library." in details
+    assert "Red oddballs" in details and "Green oddballs" in details
+    assert "every fifth image" not in details
+    document = dialog.details.document()
+    strips = re.findall(r'<img\b[^>]*\bsrc="([^"]+)"', document.toHtml())
+    assert [QUrl(source).fileName() for source in strips] == ["red.png", "green.png"]
+    for source in strips:
+        assert document.resource(QTextDocument.ResourceType.ImageResource, QUrl(source))
+    assert document.idealWidth() <= dialog.details.viewport().width()
+    assert dialog.details.verticalScrollBar().maximum() == 0
+    assert _project_buttons(dialog)[0].accessibleName() == "FPVS Oddball Demo"
+    dialog.search_edit.setText("fpvs oddball demo")
+    assert dialog.selected_item() == _demo()
+    dialog.search_edit.clear()
     dialog.set_catalog_state("lab", loading=True)
     assert dialog.selected_scope() == "public"
     assert not dialog.install_button.isEnabled()
@@ -379,6 +398,7 @@ def test_public_demo_and_view_only_lab_share_one_browser(qtbot, monkeypatch, siz
     assert dialog.selected_scope() == "lab"
     assert dialog.install_button.text() == "View-only access"
     assert "Conditions\nNot listed" in dialog.details.toPlainText()
+    assert "Experiment preview" not in dialog.details.toPlainText()
     assert not dialog.install_button.isEnabled()
     assert "No matching public projects" in dialog.public_status.text()
     dialog.search_edit.clear()

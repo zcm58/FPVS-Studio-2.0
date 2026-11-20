@@ -5,6 +5,7 @@ from __future__ import annotations
 import socket
 from collections import Counter
 from html import escape
+from pathlib import Path
 
 from PySide6.QtCore import QEasingCurve, QEvent, Qt, QUrl, QVariantAnimation, Signal
 from PySide6.QtGui import QCloseEvent, QDesktopServices, QResizeEvent, QTextOption
@@ -42,13 +43,21 @@ from fpvs_studio.gui.components import (
     refresh_widget_style,
     widget_animation_duration,
 )
-from fpvs_studio.gui.design_system import FONT_SIZE_BODY, FONT_SIZE_PAGE_TITLE, resolve_studio_theme
+from fpvs_studio.gui.design_system import (
+    FONT_SIZE_BODY,
+    FONT_SIZE_PAGE_TITLE,
+    FONT_SIZE_SECTION_TITLE,
+    resolve_studio_theme,
+)
 from fpvs_studio.gui.library_access_dialog import STUDIO_ACCOUNT_URL
 from fpvs_studio.library.models import LibraryCatalog, LibraryConnection, LibraryItem
 
 _RowKey = tuple[LibraryScope, str, str]
 _SummaryKey = tuple[LibraryScope, str, str, str]
 _SCOPES: tuple[LibraryScope, ...] = ("public", "lab")
+_ODDBALL_DEMO_ID = "color-oddball-demo"
+_ODDBALL_DEMO_TITLE = "FPVS Oddball Demo"
+_ODDBALL_DEMO_PREVIEWS = Path(__file__).resolve().parents[1] / "assets" / "oddball-demo"
 
 
 def _label(text: str, parent: QWidget, *, supporting: bool = False) -> QLabel:
@@ -70,11 +79,40 @@ def _summary_key(item: LibraryItem, scope: LibraryScope) -> _SummaryKey:
     return scope, item.item_id, item.version, item.sha256
 
 
+def _display_title(item: LibraryItem, scope: LibraryScope) -> str:
+    if scope == "public" and item.item_id == _ODDBALL_DEMO_ID:
+        return _ODDBALL_DEMO_TITLE
+    return item.title
+
+
+def _oddball_demo_preview(text_secondary: str) -> str:
+    strips = []
+    for color in ("red", "green"):
+        url = escape((_ODDBALL_DEMO_PREVIEWS / f"{color}.png").as_uri(), quote=True)
+        strips.append(f"""
+            <p style="margin-top: 12px; margin-bottom: 4px"><b>{color.title()} oddballs</b></p>
+            <p style="margin-top: 0; margin-bottom: 0">
+            <img src="{url}" width="484" height="44"
+                 alt="Two cycles of four grayscale objects followed by one {color} object"></p>
+        """)
+    return f"""
+        <h2 style="font-size: {FONT_SIZE_SECTION_TITLE}px; margin-top: 20px; margin-bottom: 4px">
+        Experiment preview</h2>
+        <p style="color: {text_secondary}; margin-top: 0; margin-bottom: 0">
+        Download this demo to see what FPVS experiments look like and practice setting up a new
+        project from the OpenFPVS Experiment Library.</p>
+        {''.join(strips)}
+    """
+
+
 class _ProjectRow(QPushButton):
-    def __init__(self, item: LibraryItem, parent: QWidget, *, show_version: bool) -> None:
+    def __init__(
+        self, item: LibraryItem, parent: QWidget, *, title: str, show_version: bool,
+    ) -> None:
         super().__init__(parent)
         self.item = item
-        self._title = f"{item.title} · {item.version}" if show_version else item.title
+        self.display_title = title
+        self._title = f"{title} · {item.version}" if show_version else title
         self._elide_mode = (
             Qt.TextElideMode.ElideMiddle if show_version else Qt.TextElideMode.ElideRight
         )
@@ -372,10 +410,13 @@ class LibraryDialog(QDialog):
                 row.deleteLater()
         parent = self.public_section if scope == "public" else self.lab_section
         items = catalog.items if catalog else ()
-        title_counts = Counter(item.title.casefold() for item in items)
-        for item in items:
+        titles = [_display_title(item, scope) for item in items]
+        title_counts = Counter(title.casefold() for title in titles)
+        for item, title in zip(items, titles, strict=True):
             key = (scope, item.item_id, item.version)
-            row = _ProjectRow(item, parent, show_version=title_counts[item.title.casefold()] > 1)
+            row = _ProjectRow(
+                item, parent, title=title, show_version=title_counts[title.casefold()] > 1,
+            )
             self._sync_row_installation(row)
             row.clicked.connect(lambda _checked=False, key=key: self._select(key))
             self._row_layouts[scope].addWidget(row)
@@ -508,7 +549,7 @@ class LibraryDialog(QDialog):
                 if key[0] != scope:
                     continue
                 searchable = f"{row.item.title} {row.item.description} {row.category}".casefold()
-                visible = query in searchable
+                visible = query in searchable or query in row.display_title.casefold()
                 row.setVisible(visible)
                 if visible and incoming is None:
                     incoming = key
@@ -567,16 +608,22 @@ class LibraryDialog(QDialog):
             "Checking…" if self.needs_condition_count(item, scope) else "Not listed"
         )
         minimum_color = theme.text_primary if item.compatible else theme.warning_text
+        preview = (
+            _oddball_demo_preview(theme.text_secondary)
+            if scope == "public" and item.item_id == _ODDBALL_DEMO_ID and item.version == "1.0.0"
+            else ""
+        )
         self.details.setHtml(f"""
             <body style="font-size: {FONT_SIZE_BODY}px; color: {theme.text_primary}">
             <p style="font-size: {FONT_SIZE_PAGE_TITLE}px; font-weight: 700; margin-bottom: 20px">
-            {escape(item.title)}</p>
+            {escape(_display_title(item, scope))}</p>
             <p><span style="color: {theme.text_secondary}">Download size</span><br>
             <b>{_format_size(item.size_bytes)}</b></p>
             <p><span style="color: {theme.text_secondary}">Minimum Studio version</span><br>
             <b style="color: {minimum_color}">{escape(item.min_studio_version)}</b></p>
             <p><span style="color: {theme.text_secondary}">Conditions</span><br>
-            <b>{conditions}</b></p></body>
+            <b>{conditions}</b></p>
+            {preview}</body>
         """)
 
     def _sync_footer(self) -> None:
