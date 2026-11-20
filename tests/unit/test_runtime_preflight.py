@@ -11,6 +11,7 @@ from PIL import Image
 from fpvs_studio.core.compiler import compile_run_spec, compile_session_plan
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.execution import RunExecutionSummary
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
@@ -556,6 +557,46 @@ def test_session_preflight_measures_connected_refresh_once(
     )
 
     assert engine.refresh_measurement_count == 1
+
+
+def test_session_preflight_resolves_root_once_and_checks_targets_for_each_invocation(
+    multi_condition_project,
+    multi_condition_project_root: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = multi_condition_project_root
+    plan = compile_session_plan(
+        multi_condition_project, refresh_hz=60.0, project_root=project_root, random_seed=2026,
+    )
+    root_path = filesystem_path(project_root)
+    resolved_root = root_path.resolve()
+    expected_targets = [
+        resolved_root / image_path
+        for entry in plan.ordered_entries()
+        for image_path in sorted({
+            event.image_path for event in entry.run_spec.stimulus_sequence
+            if event.image_path is not None
+        })
+    ]
+    assert len(expected_targets) > len(set(expected_targets)) > 1
+    resolved_paths: list[Path] = []
+    original_resolve = Path.resolve
+
+    def count_resolutions(path: Path, strict: bool = False) -> Path:
+        resolved_paths.append(path)
+        return original_resolve(path, strict=strict)
+
+    monkeypatch.setattr(Path, "resolve", count_resolutions)
+    preflight_session_plan(project_root, plan, engine=_PreflightEngine())
+    assert resolved_paths == [root_path, *expected_targets]
+
+    resolved_paths.clear()
+    missing_target = expected_targets[0]
+    missing_target.unlink()
+    with pytest.raises(PreflightError, match="referenced assets are missing"):
+        preflight_session_plan(project_root, plan, engine=_PreflightEngine())
+    assert resolved_paths.count(root_path) == 1
+    assert missing_target in resolved_paths
 
 
 def test_preflight_distinguishes_windows_5994_mode_from_compiled_60_hz(

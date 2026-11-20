@@ -22,7 +22,7 @@ from tests.unit.test_data_sharing_client import (
     study_choice,
 )
 
-from fpvs_studio.core.data_sharing import DeliveryReceipt, SharingSettings
+from fpvs_studio.core.data_sharing import DeliveryReceipt, SessionReport, SharingSettings
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.data_sharing.client import DataSharingClient
@@ -639,6 +639,38 @@ def test_local_comparison_is_latest_session_with_target_weighting(tmp_path):
     row = view.local_conditions[0]
     assert row.fixation_targets == 40 and row.fixation_hits == 23
     assert row.accuracy_percent == 57.5 and row.session_count == 1
+
+
+def test_results_view_parses_each_record_once_and_preserves_scope_and_ties(tmp_path, monkeypatch):
+    enable(tmp_path)
+    base = report()
+    for suffix, condition, protocol in (
+        (2, "second", HASH),
+        (1, "first", HASH),
+        (3, "foreign", "b" * 64),
+    ):
+        record = base.model_copy(update={
+            "report_id": f"00000000-0000-4000-8000-{suffix:012d}",
+            "protocol_sha256": protocol,
+            "occurrences": (base.occurrences[0].model_copy(update={"condition_id": condition}),),
+        })
+        queue_report(tmp_path, record)
+
+    parse = Mock(wraps=SessionReport.model_validate_json)
+    monkeypatch.setattr(SessionReport, "model_validate_json", parse)
+    view = load_view(tmp_path, HASH, Event())
+    assert view.pending_count == 2
+    assert view.held_count == 0
+    assert [item.condition_id for item in view.local_conditions] == ["first"]
+    assert view.latest_completed_at == base.completed_at.isoformat()
+    assert parse.call_count == 3
+
+    foreign = tmp_path / "logs/data-sharing/outbox/00000000-0000-4000-8000-000000000003.json"
+    saved = json.loads(foreign.read_text(encoding="utf-8"))
+    saved["payload_sha256"] = "c" * 64
+    foreign.write_text(json.dumps(saved), encoding="utf-8")
+    with pytest.raises(SharingStorageError, match="malformed or unsupported"):
+        load_view(tmp_path, HASH, Event())
 
 
 def test_protocol_mismatch_cannot_be_explicitly_enabled(tmp_path):

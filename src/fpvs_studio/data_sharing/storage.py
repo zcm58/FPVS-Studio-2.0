@@ -13,7 +13,14 @@ from threading import Event
 from typing import Literal, TypeVar
 from uuid import uuid4
 
-from pydantic import Field, StrictInt, ValidationError, field_validator, model_validator
+from pydantic import (
+    Field,
+    StrictInt,
+    ValidationError,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 
 from fpvs_studio.core.data_sharing import (
     MAX_REPORT_BYTES,
@@ -99,6 +106,11 @@ def _storage_lock(root: Path) -> Iterator[None]:
         yield
 
 
+@dataclass
+class _ReportCapture:
+    report: SessionReport | None = None
+
+
 class OutboxRecord(SharingModel):
     schema_version: Literal["1.0"] = "1.0"
     report_id: str
@@ -127,7 +139,7 @@ class OutboxRecord(SharingModel):
         return _utc(value) if value is not None else None
 
     @model_validator(mode="after")
-    def validate_payload(self) -> OutboxRecord:
+    def validate_payload(self, info: ValidationInfo) -> OutboxRecord:
         encoded = self.payload_json.encode("utf-8")
         if len(encoded) > MAX_REPORT_BYTES:
             raise ValueError("Outbox payload exceeds its size limit.")
@@ -145,6 +157,8 @@ class OutboxRecord(SharingModel):
                 raise ValueError("Receipt digest does not match the report.")
         if (self.state == "uploaded") != (self.receipt is not None):
             raise ValueError("Uploaded records require an accepted receipt.")
+        if isinstance(info.context, _ReportCapture):
+            info.context.report = report
         return self
 
 
@@ -194,14 +208,16 @@ def _record_path(root: Path, report_id: str) -> Path:
     return _private_path(root, f"logs/data-sharing/outbox/{report_id}.json")
 
 
-def read_bounded_model(path: Path, model: type[_ModelT], limit: int) -> _ModelT:
+def read_bounded_model(
+    path: Path, model: type[_ModelT], limit: int, *, context: object = None,
+) -> _ModelT:
     """Read validated bounded bytes; callers must first establish project containment."""
     try:
         with path.open("rb") as stream:
             payload = stream.read(limit + 1)
         if len(payload) > limit:
             raise SharingStorageError("Sharing metadata exceeds its size limit.")
-        return model.model_validate_json(payload)
+        return model.model_validate_json(payload, context=context)
     except (ValidationError, UnicodeError) as exc:
         raise SharingStorageError("Sharing metadata is malformed or unsupported.") from exc
     except OSError as exc:
@@ -230,27 +246,39 @@ def load_settings(root: Path) -> SharingSettings:
     )
 
 
-def _records(root: Path) -> tuple[OutboxRecord, ...]:
+def _iter_records(root: Path, capture: _ReportCapture | None = None) -> Iterator[OutboxRecord]:
     directory = _outbox_path(root)
     if not directory.exists():
-        return ()
+        return
     paths = list(directory.glob("*.json"))
     if len(paths) > MAX_RECORDS:
         raise SharingStorageError(
             "Sharing outbox exceeds its record limit; review existing reports."
         )
-    records = []
     for path in sorted(paths):
         checked = _record_path(root, path.stem)
-        record = read_bounded_model(checked, OutboxRecord, MAX_RECORD_BYTES)
+        record = read_bounded_model(checked, OutboxRecord, MAX_RECORD_BYTES, context=capture)
         if record.report_id != path.stem:
             raise SharingStorageError("Sharing record filename does not match its report ID.")
-        records.append(record)
-    return tuple(records)
+        yield record
+
+
+def _records(root: Path) -> tuple[OutboxRecord, ...]:
+    return tuple(_iter_records(root))
 
 
 def list_records(root: Path) -> tuple[OutboxRecord, ...]:
     return _records(root)
+
+
+def iter_validated_reports(root: Path) -> Iterator[tuple[OutboxRecord, SessionReport]]:
+    """Yield each outbox record with the payload parsed during its fresh validation."""
+    capture = _ReportCapture()
+    for record in _iter_records(root, capture):
+        report = capture.report
+        assert report is not None
+        capture.report = None
+        yield record, report
 
 
 def list_pending(root: Path, *, include_held: bool = False) -> tuple[OutboxRecord, ...]:

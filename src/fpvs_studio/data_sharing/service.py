@@ -28,8 +28,8 @@ from fpvs_studio.data_sharing.storage import (
     SharingStorageError,
     archive_reviewed_captures,
     archive_uploaded,
+    iter_validated_reports,
     list_pending,
-    list_records,
     load_settings,
     read_payload,
     review_terminal_captures,
@@ -140,14 +140,13 @@ def load_view(
     """Read only; opening the dialog never enrolls, uploads, or edits research files."""
     check_cancel(cancel)
     settings = load_settings(root)
-    records = list_records(root)
-    scoped = (
-        tuple(record for record in records if _same_scope(record, settings.profile))
-        if settings.profile is not None
-        else ()
-    )
-    reports = [SessionReport.model_validate_json(record.payload_json) for record in scoped]
-    latest = max(reports, key=lambda report: report.completed_at) if reports else None
+    scoped = []
+    latest = None
+    for record, report in iter_validated_reports(root):
+        if settings.profile is not None and _same_scope(record, settings.profile):
+            scoped.append(record)
+            if latest is None or report.completed_at > latest.completed_at:
+                latest = report
     status = "pending" if settings.enabled else "off"
     error = ""
     if settings.profile is not None:

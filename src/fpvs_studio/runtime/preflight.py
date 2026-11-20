@@ -20,7 +20,7 @@ from fpvs_studio.core.attentional_blink_stream import (
 from fpvs_studio.core.contrast_modulation import is_sinusoidal_neutral_background
 from fpvs_studio.core.enums import DutyCycleMode, StimulusModality
 from fpvs_studio.core.experiment_categories import RETIRED_IMAGE_PAIR_MESSAGE
-from fpvs_studio.core.paths import resolve_project_relative_path
+from fpvs_studio.core.paths import ProjectPathResolver
 from fpvs_studio.core.run_spec import (
     AttentionalBlinkRunSpec,
     AttentionalBlinkStreamRunSpec,
@@ -544,7 +544,7 @@ def _validate_scene_timing(run_spec: RunSpec) -> None:
             raise PreflightError("Compiled masking target windows do not match the item grid.")
 
 
-def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
+def _resolve_project_image_path(project_paths: ProjectPathResolver, image_path: str) -> Path:
     relative_path = Path(image_path)
     if relative_path.is_absolute():
         raise PreflightError(
@@ -552,7 +552,7 @@ def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
             f"{image_path}"
         )
     try:
-        return resolve_project_relative_path(project_root, image_path)
+        return project_paths.resolve(image_path)
     except ValueError as exc:
         raise PreflightError(
             "Run preflight failed because an image stimulus path is invalid or "
@@ -562,7 +562,7 @@ def _resolve_project_image_path(project_root: Path, image_path: str) -> Path:
 
 
 def _validate_image_assets(
-    project_root: Path,
+    project_paths: ProjectPathResolver,
     run_spec: RunSpec,
     *,
     decode: bool,
@@ -589,7 +589,7 @@ def _validate_image_assets(
     unloadable_assets: list[str] = []
     resolution_mismatches: list[str] = []
     for image_path in sorted(image_references):
-        absolute_path = _resolve_project_image_path(project_root, image_path)
+        absolute_path = _resolve_project_image_path(project_paths, image_path)
         if not absolute_path.is_file():
             missing_assets.append(image_path)
             continue
@@ -651,7 +651,7 @@ def _task_image_paths(modules: list[TaskModuleSpec]) -> set[str]:
 
 
 def _validate_task_assets(
-    project_root: Path,
+    project_paths: ProjectPathResolver,
     modules: list[TaskModuleSpec],
     *,
     decode: bool,
@@ -667,7 +667,7 @@ def _validate_task_assets(
                 f"{exc}"
             ) from exc
     for image_path in sorted(_task_image_paths(modules)):
-        absolute_path = _resolve_project_image_path(project_root, image_path)
+        absolute_path = _resolve_project_image_path(project_paths, image_path)
         if not absolute_path.is_file():
             missing_assets.append(image_path)
             continue
@@ -712,6 +712,29 @@ def preflight_run_spec(
 ) -> None:
     """Validate one run spec before execution starts."""
 
+    _preflight_run_spec(
+        ProjectPathResolver(project_root),
+        run_spec,
+        engine=engine,
+        runtime_options=runtime_options,
+        decode_image_assets=decode_image_assets,
+    )
+    if verify_connected_refresh:
+        _verify_connected_refresh_rate(
+            [run_spec],
+            engine=engine,
+            runtime_options=runtime_options,
+        )
+
+
+def _preflight_run_spec(
+    project_paths: ProjectPathResolver,
+    run_spec: RunSpec,
+    *,
+    engine: PresentationEngine,
+    runtime_options: Mapping[str, object] | None,
+    decode_image_assets: bool,
+) -> None:
     if isinstance(run_spec.attentional_blink, AttentionalBlinkRunSpec):
         raise PreflightError(RETIRED_IMAGE_PAIR_MESSAGE)
     strict_timing = _strict_timing_enabled(runtime_options)
@@ -725,7 +748,7 @@ def preflight_run_spec(
         )
 
     _validate_sinusoidal_presentation(run_spec)
-    _validate_image_assets(project_root, run_spec, decode=decode_image_assets)
+    _validate_image_assets(project_paths, run_spec, decode=decode_image_assets)
     if (
         run_spec.display.on_frames + run_spec.display.off_frames
         != run_spec.display.frames_per_stimulus
@@ -760,12 +783,6 @@ def preflight_run_spec(
             "Run preflight failed because strict timing does not allow display warnings: "
             f"{'; '.join(blocking_display_warnings)}"
         )
-    if verify_connected_refresh:
-        _verify_connected_refresh_rate(
-            [run_spec],
-            engine=engine,
-            runtime_options=runtime_options,
-        )
 
 
 def preflight_session_plan(
@@ -793,14 +810,14 @@ def preflight_session_plan(
         except ValueError as exc:
             raise PreflightError(f"Session randomization provenance is invalid: {exc}") from exc
     _validate_session_presentation_identity(session_plan)
+    project_paths = ProjectPathResolver(project_root)
     for entry in ordered_entries:
-        preflight_run_spec(
-            project_root,
+        _preflight_run_spec(
+            project_paths,
             entry.run_spec,
             engine=engine,
             runtime_options=runtime_options,
             decode_image_assets=decode_image_assets,
-            verify_connected_refresh=False,
         )
         task_modules = [*entry.pre_tasks, *entry.post_tasks]
         for module in task_modules:
@@ -813,7 +830,7 @@ def preflight_session_plan(
                         f"compiled context: {exc}"
                     ) from exc
         _validate_task_assets(
-            project_root,
+            project_paths,
             task_modules,
             decode=decode_image_assets,
         )

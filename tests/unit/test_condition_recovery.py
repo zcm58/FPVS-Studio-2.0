@@ -15,7 +15,7 @@ from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.enums import StimulusModality
-from fpvs_studio.core.execution import RunExecutionSummary
+from fpvs_studio.core.execution import AcquisitionEvidence, RunExecutionSummary
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.scene_models import SceneEvent, SceneStreamSpec, SceneVisual
 from fpvs_studio.core.serialization import read_json_file, write_json_file
@@ -115,13 +115,22 @@ def test_project_update_recovery_guard_blocks_live_then_unreviewed_and_allows_re
 
 
 @pytest.mark.parametrize("state", ["completed", "cancelled"])
-def test_project_update_recovery_guard_allows_terminal_history(execution, state):
+def test_project_update_recovery_guard_allows_terminal_history(execution, state, monkeypatch):
     root, plan = execution
     recorder = _record(root, plan)
+    _acquisition(root, plan, execution_id=recorder.execution_id, mode=None)
     recorder.finish(state)
     recorder.close()
     before = _files(root)
+    read = Mock(wraps=condition_recovery._bounded_read)
+    monkeypatch.setattr(condition_recovery, "_bounded_read", read)
+    report = query_condition_recovery(root)
+    assert report.records == () and report.warnings == ()
+    assert sum(call.args[1] is AcquisitionEvidence for call in read.call_args_list) == 1
+
+    read.reset_mock()
     ensure_project_update_recovery_ready(root)
+    assert sum(call.args[1] is AcquisitionEvidence for call in read.call_args_list) == 2
     assert _files(root) == before
 
 
@@ -758,6 +767,15 @@ def test_terminal_marker_suppresses_legacy_running_receipt(execution):
     recorder.finish("cancelled")
     recorder.close()
     assert not query_condition_recovery(root).records
+    receipt = root / "logs/acquisition" / f"{recorder.execution_id}.acquisition-v1.json"
+    receipt.write_text("malformed receipt", encoding="utf-8")
+    before = _files(root)
+    report = query_condition_recovery(root)
+    assert report.records == ()
+    assert report.warnings == (f"Could not inspect acquisition record {receipt.name}.",)
+    with pytest.raises(ValueError, match="Interruption evidence needs review"):
+        ensure_project_update_recovery_ready(root)
+    assert _files(root) == before
 
 
 def test_query_rejects_redirected_record(execution, tmp_path):

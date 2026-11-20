@@ -244,14 +244,14 @@ def _legacy_full_records(
         metadata = summary.get("runtime_metadata") or {}
         definitions = _legacy_definitions(_json(plan_path)) if plan_path.is_file() else []
         responses_path = resolve_project_relative_path(root, f"{directory}/task_responses.csv")
-        responses: list[dict[str, Any]] = [
-            {**row, "_csv_escaped": True} for row in _csv(responses_path)
-        ]
+        responses_by_run: dict[str | None, list[dict[str, Any]]] = {}
+        for row in _csv(responses_path):
+            run_id = row.get("session_run_id") or row.get("run_id")
+            responses_by_run.setdefault(run_id, []).append({**row, "_csv_escaped": True})
         runs = []
         for run in summary.get("run_results", []):
             run_id = str(run.get("run_id", ""))
-            selected = [row for row in responses
-                        if (row.get("session_run_id") or row.get("run_id")) == run_id]
+            selected = list(responses_by_run.get(run_id, ()))
             if not responses_path.is_file():
                 journal = resolve_project_relative_path(
                     root, f"{directory}/{run_id}/task_responses.jsonl",

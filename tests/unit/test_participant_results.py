@@ -32,6 +32,7 @@ from fpvs_studio.core.task_models import (
 )
 from fpvs_studio.runtime.participant_results import (
     DEMOGRAPHIC_ANSWERS_SHEET_NAME,
+    _legacy_full_records,
     add_participant_results_sheets,
     capture_participant_results,
     freeze_legacy_participant_results,
@@ -202,6 +203,26 @@ def test_legacy_full_and_compact_numbered_sources_deduplicate(tmp_path, results)
     # A new private snapshot is preferred, and does not duplicate historical sources.
     capture_participant_results(tmp_path, plan, summary)
     assert len(_rows(_workbook(tmp_path, history), "Task Answers")) == 1
+
+
+def test_legacy_full_csv_retains_response_order_and_run_id_fallback(tmp_path):
+    output = tmp_path / "runs/legacy"
+    output.mkdir(parents=True)
+    (output / "session_summary.json").write_text(
+        json.dumps({"run_results": [{"run_id": run_id} for run_id in ("a", "b", "a", "c")]}),
+        encoding="utf-8",
+    )
+    (output / "task_responses.csv").write_text(
+        "session_run_id,run_id,answer\nb,a,first b\n,a,first a\nb,,second b\n,a,second a\n",
+        encoding="utf-8",
+    )
+    ((record, _source),) = _legacy_full_records(tmp_path, [{"output_dir": "runs/legacy"}])
+    responses = [run["responses"] for run in record["runs"]]
+    assert [[row["answer"] for row in run] for run in responses] == [
+        ["first a", "second a"], ["first b", "second b"], ["first a", "second a"], [],
+    ]
+    assert all(row["_csv_escaped"] for run in responses for row in run)
+    assert responses[0] is not responses[2]
 
 
 def test_legacy_compact_missing_labels_is_explicit_and_read_only(tmp_path, results):

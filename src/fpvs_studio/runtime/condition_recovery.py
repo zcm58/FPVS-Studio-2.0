@@ -483,9 +483,11 @@ def query_condition_recovery(
             if checkpoint.execution_id != candidate.stem:
                 raise ValueError("Recovery execution identifier does not match its filename.")
             known.add(checkpoint.execution_id)
-            if _is_test_checkpoint(project_root, checkpoint):
+            # Terminal checkpoints already suppress legacy fallback. The separate
+            # acquisition scan still validates their receipts.
+            if checkpoint.state in {"completed", "cancelled"}:
                 continue
-            if checkpoint.state in {"completed", "cancelled"} or not _inactive(project_root, path):
+            if _is_test_checkpoint(project_root, checkpoint) or not _inactive(project_root, path):
                 continue
             runs = checkpoint.runs
             if not runs:
@@ -633,12 +635,11 @@ def ensure_project_update_recovery_ready(
             if checkpoint.execution_id != candidate.stem:
                 raise ValueError(unreadable)
             known.add(checkpoint.execution_id)
+            if checkpoint.state in {"completed", "cancelled"}:
+                continue
             if _is_test_checkpoint(project_root, checkpoint):
                 continue
-            if checkpoint.state not in {"completed", "cancelled"} and not _inactive(
-                project_root,
-                path,
-            ):
+            if not _inactive(project_root, path):
                 raise ValueError(busy)
         report = query_condition_recovery(project_root, include_acknowledged=True)
         check_cancel()
