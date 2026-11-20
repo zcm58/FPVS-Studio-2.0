@@ -237,6 +237,13 @@ def test_link_and_reparse_paths_rejected(tmp_path, monkeypatch):
         storage.save_settings(tmp_path, settings)
 
 
+@pytest.mark.parametrize("relative", ["logs/../settings.json", "logs/settings.json:other"])
+def test_private_path_requires_a_normalized_project_relative_name(tmp_path, relative):
+    (tmp_path / "logs").mkdir()
+    with pytest.raises(storage.SharingStorageError, match="project-relative"):
+        storage._private_path(tmp_path, relative)
+
+
 def _upload(root, report):
     record = storage.queue_report(root, report)
     receipt = DeliveryReceipt(

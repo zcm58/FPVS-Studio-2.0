@@ -28,7 +28,7 @@ from fpvs_studio.core.data_sharing import (
     _utc,
     _uuid,
 )
-from fpvs_studio.core.paths import filesystem_path
+from fpvs_studio.core.paths import filesystem_path, validate_project_relative_path
 from fpvs_studio.core.serialization import atomic_text_write
 from fpvs_studio.data_sharing.errors import DataSharingCancelled
 
@@ -149,26 +149,35 @@ class OutboxRecord(SharingModel):
 
 
 def _private_path(root: Path, relative: str) -> Path:
+    try:
+        parts = Path(validate_project_relative_path(relative)).parts
+    except ValueError as exc:
+        raise SharingStorageError("Sharing paths must be project-relative.") from exc
     root = filesystem_path(Path(root))
     if not root.is_dir():
         raise SharingStorageError("Sharing requires an existing active project directory.")
-    path = root / relative
+
+    # The validated relative name cannot escape lexically. Reject every linked
+    # component so resolving the same ancestors again is unnecessary.
     candidates = [root]
-    for component in Path(relative).parts:
+    for component in parts:
         candidates.append(candidates[-1] / component)
+    path = candidates[-1]
     for candidate in candidates:
         try:
             info = candidate.lstat()
         except FileNotFoundError:
-            continue
+            if candidate == root:
+                raise SharingStorageError(
+                    "Sharing requires an existing active project directory."
+                ) from None
+            break
         if stat.S_ISLNK(info.st_mode) or getattr(info, "st_file_attributes", 0) & 0x400:
             raise SharingStorageError("Sharing paths cannot contain links or reparse points.")
         directory = candidate != path or not path.suffix
         regular = stat.S_ISDIR(info.st_mode) if directory else stat.S_ISREG(info.st_mode)
         if not regular or (not directory and info.st_nlink != 1):
             raise SharingStorageError("Sharing metadata must be a private regular project file.")
-    if not path.resolve().is_relative_to(root.resolve()):
-        raise SharingStorageError("Sharing path escapes the active project directory.")
     return path
 
 

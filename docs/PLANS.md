@@ -27,6 +27,9 @@ explicit Experiment Test Mode and to measure updater cancellation from the
 request. See [Results reporting](exec-plans/active/remote-experiment-results-reporting.md)
 for archive-volume follow-up.
 
+The November 20 follow-up completed the 1,500-session test under its original
+watchdog and matched every retained report payload, receipt and capture.
+
 ## Active Work and Acceptance
 
 | Plan | Current scope or remaining gate |

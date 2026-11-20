@@ -418,9 +418,11 @@ devices' individual reports.
 | `logs/data-sharing/archive/<UUID>/report.json` | Archived acknowledged record |
 | `logs/data-sharing/archive/<UUID>/capture.json` | Finalized private mapping or reviewed excluded capture evidence |
 
-Files stay beneath the active project root, reject links/reparse points and require
-private regular files. Settings are bounded to 16 KiB, each intent/outbox record to
-256 KiB, the subject map to 1 MiB/10,000 identities, and each active collection to 512 records.
+Files use validated project-relative names beneath the active project root.
+Storage checks each existing path component for links or reparse points and
+requires private regular files. Settings are bounded to 16 KiB, each intent/outbox
+record to 256 KiB, the subject map to 1 MiB/10,000 identities, and each active
+collection to 512 records.
 Reads reject malformed data
 visibly; no pending report is silently skipped or discarded. Recovery reads at most
 64 MiB of committed condition history. Atomic replacements and the existing project

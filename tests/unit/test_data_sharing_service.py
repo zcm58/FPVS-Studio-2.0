@@ -22,7 +22,7 @@ from tests.unit.test_data_sharing_client import (
     study_choice,
 )
 
-from fpvs_studio.core.data_sharing import SharingSettings
+from fpvs_studio.core.data_sharing import DeliveryReceipt, SharingSettings
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.data_sharing.client import DataSharingClient
@@ -39,6 +39,7 @@ from fpvs_studio.data_sharing.service import (
     sync_startup_project,
 )
 from fpvs_studio.data_sharing.storage import (
+    OutboxRecord,
     SharingStorageError,
     list_records,
     load_settings,
@@ -88,13 +89,15 @@ def test_1500_acknowledged_sessions_retire_exact_history_and_keep_latest(tmp_pat
     research.parent.mkdir()
     research.write_bytes(b"original participant data")
     accepted = {}
+    captures = {}
 
     def transport(method, url, body, headers, cancel):
         assert url.endswith("/reports")  # Delivery-only never asks for a comparison.
         key = json.loads(body)["report_id"]
         assert key not in accepted
-        accepted[key] = body
-        return receipt_bytes(body)
+        receipt = receipt_bytes(body)
+        accepted[key] = (body, DeliveryReceipt.model_validate_json(receipt))
+        return receipt
 
     backend = client(transport)
     base = report()
@@ -104,21 +107,29 @@ def test_1500_acknowledged_sessions_retire_exact_history_and_keep_latest(tmp_pat
             "completed_at": base.completed_at + timedelta(seconds=index),
         })
         queue_report(tmp_path, current)
-        _capture(tmp_path, current)
+        captures[current.report_id] = _capture(tmp_path, current).read_bytes()
         view = sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
         assert view.uploaded_count == 1 and view.pending_count == 0 and not view.error
     assert len(accepted) == 1500
-    assert list_records(tmp_path)[0].report_id == current.report_id
+    (latest,) = list_records(tmp_path)
+    assert latest.report_id == current.report_id
     assert view.latest_completed_at == current.completed_at.isoformat()
     archive = tmp_path / "logs/data-sharing/archive"
-    assert len(list(archive.iterdir())) == 1499
-    for folder in archive.iterdir():
-        receipt_record = json.loads((folder / "report.json").read_text())
-        assert receipt_record["payload_json"].encode() == accepted[folder.name]
-        assert receipt_record["state"] == "uploaded" and receipt_record["receipt"]
-        capture = json.loads((folder / "capture.json").read_text())
-        assert capture["state"] == "finalized" and capture["report_id"] == folder.name
-    assert len(list((tmp_path / "logs/data-sharing/intents").iterdir())) == 1
+    intents = tmp_path / "logs/data-sharing/intents"
+    (latest_capture,) = intents.iterdir()
+    assert latest_capture.name == f"{latest.report_id}.json"
+    assert {folder.name for folder in archive.iterdir()} == accepted.keys() - {latest.report_id}
+    for report_id, (payload, receipt) in accepted.items():
+        if report_id == latest.report_id:
+            record = latest
+            capture_path = latest_capture
+        else:
+            folder = archive / report_id
+            record = OutboxRecord.model_validate_json((folder / "report.json").read_bytes())
+            capture_path = folder / "capture.json"
+        assert record.report_id == report_id and record.state == "uploaded"
+        assert record.payload_json.encode() == payload and record.receipt == receipt
+        assert capture_path.read_bytes() == captures[report_id]
     assert research.read_bytes() == b"original participant data"
 
 

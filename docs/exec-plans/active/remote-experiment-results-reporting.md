@@ -27,8 +27,7 @@ flushing local participant results in the capacity and archive runtime case. Tha
 case passed on rerun with a 120-second watchdog. The separate 1,500-session storage
 fixture reached its 600-second watchdog during shared filesystem load. The last
 progress check observed 434 archived sessions. The same fixture reached its
-watchdog again in the macOS-focused Windows run. The full-volume result remains
-unverified.
+watchdog again in the macOS-focused Windows run.
 
 OpenFPVS `03fa4f3` passed 82 synthetic Results tests across reporting scope,
 intake, dashboard, session status and summary, with zero failures or skips.
@@ -39,9 +38,33 @@ protocol scope, revocation, cohort rules, and suppression of incompatible metric
 Forty-eight visible Windows Qt cases also passed for the Results dialog's
 layout, long content, and tabs across the registered sizes and states.
 
+## Archive performance follow-up (2026-11-20)
+
+An 80-session Windows profile traced the repeated archive timeouts to private
+path validation. Each check walked the existing components and then resolved
+the root and destination again. The second walk cost more when an archive
+destination did not yet exist. The fix uses the shared project-relative path
+validator and checks existing components for links, reparse points and private
+regular files. It preserves durable writes, receipt-first cleanup and the
+project reporting lock.
+
+The same profile ran in 10.10 seconds after the fix, down from 13.50 seconds.
+Private path validation fell from 8.63 to 3.66 seconds. Focused storage and
+reporting-lock tests passed (37 passed, one Windows symlink-permission skip).
+A Windows junction probe rejected a redirected project root and a redirected
+child directory, and a private file round-tripped inside a long project path.
+
+The four-worker branch-wide suite completed the full archive test in 378.71
+seconds against its original 600-second watchdog. The test matched all 1,500
+report payloads, delivery receipts and finalized capture bytes. It found
+exactly 1,499 archived report IDs and one active latest report and capture,
+and verified the research file byte-for-byte.
+The branch-wide run recorded 6,573 passes and 41 skips. Its one Windows
+project-save access denial cleared on rerun of all ten serialization tests.
+
 ## Remaining acceptance
 
-- [ ] Complete the local synthetic 1,500-session archive-retention check under
+- [x] Complete the local synthetic 1,500-session archive-retention check under
   its configured timeout and confirm that exact receipt history is preserved.
 - [ ] In an authorized isolated OpenFPVS study, separately enroll and approve two
   installed Studio 3.1.0 clients. Run controlled ordinary presentations with
