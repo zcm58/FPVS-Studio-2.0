@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+import unicodedata
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 
@@ -24,6 +25,10 @@ _QT_TEST_INDICATORS = (
 def _imports_pyside6(source: str) -> bool:
     """Return whether source contains a real PySide6 import, not just prose."""
 
+    # Python normalizes identifiers before parsing. Keep that behavior when
+    # skipping the AST walk for files that cannot import this module.
+    if "PySide6" not in unicodedata.normalize("NFKC", source):
+        return False
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -118,8 +123,8 @@ def find_qt_test_files(repo_root: Path) -> frozenset[str]:
         source = path.read_text(encoding="utf-8", errors="replace")
         if (
             relative_path.startswith("tests/gui/")
-            or _imports_pyside6(source)
             or any(pattern.search(source) for pattern in _QT_TEST_INDICATORS)
+            or _imports_pyside6(source)
         ):
             detected.add(relative_path)
     return frozenset(detected)

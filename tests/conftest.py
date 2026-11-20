@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -149,9 +150,13 @@ def pytest_ignore_collect(collection_path: Path, config: pytest.Config) -> bool 
 
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     registry = config._fpvs_studio_qt_test_registry
+
+    @cache
+    def is_registered(path: str) -> bool:
+        return repo_relative_path(Path(path), ROOT) in registry
+
     for item in items:
-        relative_path = repo_relative_path(Path(item.path), ROOT)
-        if relative_path in registry:
+        if is_registered(os.fspath(item.path)):
             item.add_marker(pytest.mark.qt)
 
 

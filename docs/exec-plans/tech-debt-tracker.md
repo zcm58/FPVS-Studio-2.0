@@ -104,14 +104,19 @@ skips), about 40% less time than the serial baseline (3,586 passed, 12 skips). T
 additional cases cover the new runner options. The history test itself took 219.25
 seconds under parallel load, so further worker-count increases need measurement.
 
+**Follow-up (2026-11-20, Windows):** Studio removed redundant path resolution
+while keeping the per-component private-path checks. The original 1,500-cycle
+test then passed in 378.71 seconds in a four-worker precommit run under its
+600-second watchdog. The strengthened fixture verified all stored payloads,
+receipts and captures. See the [Results verification record](active/remote-experiment-results-reporting.md#archive-performance-follow-up-2026-11-20).
+
 **Impact:** This single sequential test limits gains from additional pytest workers.
 Its 1,500 real delivery/archive cycles check that accepted history cannot fill the
 active outbox or capture budget and that exact receipts and research data survive.
 
-**Next action:** Profile redundant guarded-path work in
-`src/fpvs_studio/data_sharing/storage.py` within one locked operation. Consider a
-production optimization only with evidence that path freshness and link/reparse
-protection remain intact; there is no proven fixture-only shortcut yet.
+**Next action:** Measure a fresh baseline before changing worker counts or
+storage operations. Use matching filesystem and worker load when comparing
+durations. The test performs real archive moves and durable writes each cycle.
 
 **Constraints:** Retain all 1,500 cycles, exact payload/receipt assertions, archive
 moves and research-file preservation. Do not bypass filesystem safety checks, remove

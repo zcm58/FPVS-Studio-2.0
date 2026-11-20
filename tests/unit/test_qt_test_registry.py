@@ -32,9 +32,29 @@ def test_candidate_scan_detects_gui_directory_and_fixture_usage(tmp_path: Path) 
     fixture_test.parent.mkdir(parents=True)
     fixture_name = "qt" + "bot"
     fixture_test.write_text(f"def test_widget({fixture_name}):\n    pass\n", encoding="utf-8")
+    (fixture_test.parent / "test_import.py").write_text(
+        "from PySide6.QtCore import QObject\n", encoding="utf-8",
+    )
+    (fixture_test.parent / "test_unicode_import.py").write_text(
+        "from ＰｙＳｉｄｅ６.QtCore import QObject\n", encoding="utf-8",
+    )
+    (fixture_test.parent / "test_prose.py").write_text(
+        'description = "from PySide6.QtCore import QObject"\n', encoding="utf-8",
+    )
+    (fixture_test.parent / "test_escaped_prose.py").write_text(
+        r'description = "\u0050ySide6"' + "\n", encoding="utf-8",
+    )
+    (fixture_test.parent / "test_raw_prose.py").write_text(
+        'description = r"ＰｙＳｉｄｅ６"\n', encoding="utf-8",
+    )
 
     assert find_qt_test_files(tmp_path) == frozenset(
-        {"tests/gui/test_plain.py", "tests/unit/test_widget.py"}
+        {
+            "tests/gui/test_plain.py",
+            "tests/unit/test_import.py",
+            "tests/unit/test_unicode_import.py",
+            "tests/unit/test_widget.py",
+        }
     )
 
 
