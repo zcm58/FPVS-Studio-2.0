@@ -1,24 +1,31 @@
 # Cognitive Load FPVS
 
-## Create and replace the scaffold
+## Author a new cognitive-load study
 
-Choose **Create manually > Cognitive Load FPVS**, then continue to name the experiment
-and select its compatible template and save location. The built-in template
-creates three placeholder image conditions, each represented by a **No load** and
-**Cognitive load** variant. These six entries run once in randomized order. Each pair
-initially shares its base/oddball image sources and timing. Replace those sources in
-Setup > Conditions and check both variants before collecting data; subsequent edits to
-condition timing or source assignments remain ordinary independent condition edits.
+Choose **Create manually > FPVS-Oddball** and set up the image or word conditions.
+Add a condition pre-task to each load condition. For backward counting, open
+**FPVS Condition Modifiers** from **Setup > Conditions**, expand **Advanced modifiers**,
+and assign **Backward counting** to the load conditions. The modifier includes the
+start prompt, endpoint question, and optional session baseline.
 
-The default is 6 Hz, an oddball every fifth image, and 108 cycles: 90 seconds of
+## Existing Cognitive Load FPVS projects
+
+Existing projects open with their saved category, conditions, and tasks. The original
+scaffold created three placeholder image conditions with **No load** and **Cognitive load**
+variants. The six entries ran once in randomized order. Each pair initially shared
+its base and oddball sources and timing. In an existing scaffold, replace those
+sources in **Setup > Conditions** and review both variants before collecting data.
+You can edit each variant’s sources and timing independently.
+
+The scaffold defaults to 6 Hz, an oddball every fifth image, and 108 cycles for 90 seconds of
 image presentation at a compatible display rate. Timing & Display controls adjust
 that duration. Fixation response monitoring and the tutorial are disabled, with a
 visible fixation cross and zero pre-stream lead-in. These are editable study defaults.
-The six variants use condition trigger codes 1–6; the ordinary oddball marker is 55.
+The six variants use condition trigger codes 1–6. The ordinary oddball marker is 55.
 
-Placeholder circles, squares, and triangles are generated locally as 512×512 PNGs
+The scaffold used locally generated 512×512 PNGs of circles, squares, and triangles
 with ordinary hashes, resolution metadata, and project-relative manifest paths.
-They are scaffolding assets, not validated experimental stimuli.
+These placeholders require replacement with experimental stimuli before collection.
 
 ## Simran & Sarah pilot settings
 
@@ -51,7 +58,7 @@ subtraction step, number range, optional baseline duration, participant wording,
 condition assignments in one place. New defaults remain subtract 13, 120 seconds,
 and an inclusive starting range of 1000–9999. Existing saved settings are retained.
 
-The new scaffold assigns counting to the three load variants. Its requested baseline
+The original scaffold assigned counting to the three load variants. Its requested baseline
 runs once before the first selected session entry, even when randomization places a
 no-load condition first. A no-load-only test has no baseline request from unselected
 modifiers. Existing standalone baseline bindings retain their saved occurrence rules.
@@ -103,11 +110,13 @@ cross-layer changes. Registered GUI tests are not run in ordinary local verifica
 
 Visible acceptance in a safe Windows session:
 
-1. Create the category at the creation dialog's 760×500 size. Check all category
-   choices and template details; cancel a second creation and check no project exists.
-2. At Setup 1120×820 inspect all six conditions, shared initial sources, 90-second
-   durations and fixation defaults. Open FPVS Condition Modifiers at its documented
-   minimum size and check the longest labels, settings, and assignment scope for clipping.
+1. At 760×500 and 800×500, verify the **FPVS-Oddball** and disabled **Standard FPVS (Coming Soon)**
+   cards. Create an FPVS-Oddball with load and no-load conditions. Assign **Backward counting**
+   to the load condition and check that saving retains the assignment.
+2. Open an existing scaffold at Setup 1120×820 and inspect its six conditions, shared
+   initial sources, 90-second durations and fixation defaults. Open FPVS Condition
+   Modifiers at its documented minimum size and check the longest labels, settings, and
+   assignment scope for clipping.
 3. Shorten baseline and image duration in a disposable copy. Run a hardware-free test
    through baseline and both variants. Check Space gates, timed baseline offset,
    whole-number entry/Enter, immediate endpoint prompt and absence of counting during

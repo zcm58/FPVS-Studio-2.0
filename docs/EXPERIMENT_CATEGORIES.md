@@ -5,21 +5,23 @@ experiment. Supported values and behavior are:
 
 | Category | Authoring and playback |
 | --- | --- |
-| Standard FPVS | Base-only concept; disabled Coming soon choice. Creation and compilation are blocked. |
-| FPVS Oddball Paradigm | Existing image/word oddball protocols, presentation modes, tasks and runtime behavior. |
-| Cognitive Load FPVS | Three paired image conditions with/without backward counting, a session-first baseline and reusable pre/post modules; see [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md). |
+| Standard FPVS | Base-only concept shown as a disabled **Coming Soon** choice. Creation and compilation are blocked. |
+| FPVS-Oddball | Image and word oddball protocols, presentation modes, and condition tasks. |
+| Cognitive Load FPVS | Existing projects retain their paired image conditions and backward-counting tasks. See [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md). |
 | Attentional-Blink | Five-second bursts of white letters, green T1 digits and white T2 digits at 100, 300, and 500 ms SOAs. Image pairs are unsupported. |
 
 ## Creation and shared Setup
 
-After choosing manual creation, new-experiment Setup offers FPVS Oddball Paradigm,
-Cognitive Load FPVS and the disabled Standard FPVS Coming soon choice. Attentional-Blink
-is not a manual creation choice. Nothing is selected initially.
-Name, folder and compatible experiment-template choices follow on the next page;
-Cancel creates no project. Category becomes locked when the
-experiment is created and appears read-only on Project. Changing category requires
-creating a new experiment. Templates carry their own category and cannot change an
-experiment's category. Editing a template preserves that category and its cadence.
+Manual creation shows **FPVS-Oddball** and a disabled **Standard FPVS (Coming Soon)**
+card. Neither is selected initially. For a new cognitive-load study, create an
+FPVS-Oddball experiment and assign the [Backward counting modifier](CONDITION_MODIFIERS.md#backward-counting)
+or a condition pre-task. Existing Cognitive Load FPVS and supported Attentional-Blink
+projects retain their saved categories and settings.
+
+Name, folder and compatible experiment-template choices follow on the next page.
+Cancel creates no project. The category locks when the experiment is created and
+appears read-only on Project. Changing category requires a new experiment.
+Templates carry their own category and preserve it and their cadence when edited.
 
 The nine guided steps are Project, Demographics, Conditions, Timing, Display & Session,
 Image Size, Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size

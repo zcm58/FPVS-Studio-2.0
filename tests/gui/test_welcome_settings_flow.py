@@ -2351,7 +2351,7 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     assert dialog.category_stack.currentWidget() is dialog.details_page
     assert dialog.condition_profile_combo.count() == 3
     assert dialog.condition_profile_combo.currentData() == "studio-default-v1"
-    assert dialog.category_summary_label.text() == "FPVS Oddball Paradigm"
+    assert dialog.category_summary_label.text() == "FPVS-Oddball"
     assert_visible_children_within_parent(dialog)
 
     qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
@@ -2368,21 +2368,17 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     assert dialog.result() == QDialog.DialogCode.Rejected
 
 
-def test_create_dialog_forwards_selected_attentional_blink_category(
-    qtbot, controller: StudioController, monkeypatch
+def test_open_existing_attentional_blink_keeps_native_settings(
+    qtbot, controller: StudioController, tmp_path: Path,
 ) -> None:
-    def accept_ab(dialog: CreateProjectDialog) -> int:
-        dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
-        dialog.accept()
-        dialog.project_name_edit.setText("Target Recognition")
-        dialog.accept()
-        return int(dialog.result())
-
-    monkeypatch.setattr(CreateProjectDialog, "exec", accept_ab)
-    controller.show_create_project_dialog()
+    scaffold = create_project(
+        tmp_path, "Target Recognition", experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
+    )
+    document = controller.open_project(scaffold.project_root)
+    assert document is not None
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
-    document = controller.main_window.document
+    assert controller.main_window.document is document
     assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert document.project.settings.protocol.base_hz == 10.0
     assert document.project.settings.protocol.oddball_every_n == 50
@@ -2398,31 +2394,18 @@ def test_create_dialog_forwards_selected_attentional_blink_category(
     assert persisted.conditions == document.project.conditions
 
 
-def test_create_dialog_cognitive_choice_scaffolds_and_saves_paired_conditions(
-    qtbot, controller: StudioController, monkeypatch
+def test_open_existing_cognitive_load_keeps_paired_conditions(
+    qtbot, controller: StudioController, tmp_path: Path,
 ) -> None:
-    def accept_cognitive(dialog: CreateProjectDialog) -> int:
-        qtbot.addWidget(dialog)
-        dialog.show()
-        qtbot.mouseClick(dialog.manual_button, Qt.MouseButton.LeftButton)
-        qtbot.mouseClick(
-            dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS],
-            Qt.MouseButton.LeftButton,
-        )
-        continue_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
-        assert continue_button is not None
-        qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-        assert dialog.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
-        dialog.project_name_edit.setText("New Cognitive Load Study")
-        assert not (dialog.parent_directory / "new-cognitive-load-study").exists()
-        qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-        return int(dialog.result())
-
-    monkeypatch.setattr(CreateProjectDialog, "exec", accept_cognitive)
-    controller.show_create_project_dialog()
+    scaffold = create_project(
+        tmp_path, "Cognitive Load Study",
+        experiment_category=ExperimentCategory.COGNITIVE_LOAD_FPVS,
+    )
+    document = controller.open_project(scaffold.project_root)
+    assert document is not None
     assert controller.main_window is not None
     qtbot.addWidget(controller.main_window)
-    document = controller.main_window.document
+    assert controller.main_window.document is document
     project = document.project
     assert project.experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS
     assert project.settings.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID

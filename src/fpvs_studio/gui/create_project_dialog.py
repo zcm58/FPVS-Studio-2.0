@@ -29,7 +29,6 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.core.condition_template_profiles import is_supported_condition_template
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.experiment_categories import experiment_category_label
 from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import slugify_project_name, validate_project_id
 from fpvs_studio.gui.components import (
@@ -115,12 +114,8 @@ class CreateProjectDialog(QDialog):
         self.category_button_group.setExclusive(True)
         self.category_buttons: dict[ExperimentCategory, QPushButton] = {}
         choices = (
-            (ExperimentCategory.FPVS, "Standard FPVS\nComing soon"),
-            (ExperimentCategory.FPVS_ODDBALL, "FPVS Oddball Paradigm\nBase images and oddballs"),
-            (
-                ExperimentCategory.COGNITIVE_LOAD_FPVS,
-                "Cognitive Load FPVS\nWith and without counting",
-            ),
+            (ExperimentCategory.FPVS, "Standard FPVS\n(Coming Soon)"),
+            (ExperimentCategory.FPVS_ODDBALL, "FPVS-Oddball\nBase images and oddballs"),
         )
         for index, (category, text) in enumerate(choices):
             button = QPushButton(text, self.category_page)
@@ -280,7 +275,8 @@ class CreateProjectDialog(QDialog):
 
     def select_category(self, category: ExperimentCategory) -> None:
         """Select one available category without creating or changing any project."""
-        if category == ExperimentCategory.FPVS:
+        selected_button = self.category_buttons.get(category)
+        if selected_button is None or not selected_button.isEnabled():
             return
         if self.category_stack.currentWidget() is self.source_page:
             self._show_category_page()
@@ -290,7 +286,7 @@ class CreateProjectDialog(QDialog):
             button.setChecked(value == category)
             button.setProperty("primaryActionRole", "true" if value == category else "false")
             refresh_widget_style(button)
-        self.category_summary_label.setText(experiment_category_label(category))
+        self.category_summary_label.setText(selected_button.text().splitlines()[0])
         self.set_condition_template_profiles(
             self._condition_profiles, preserve_selection=preserve_selection,
         )

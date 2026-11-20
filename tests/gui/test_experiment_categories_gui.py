@@ -180,7 +180,7 @@ def test_changing_experiments_waits_for_image_workers(
 
 @pytest.mark.parametrize("size", [(760, 500), (800, 500)])
 @pytest.mark.parametrize("dark", [False, True])
-def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot, dark, size):
+def test_creation_offers_only_oddball_and_disabled_standard_fpvs(qtbot, dark, size):
     from PySide6.QtGui import QColor, QPalette
     from PySide6.QtWidgets import QApplication
     from tests.gui.helpers import assert_visible_children_within_parent
@@ -204,23 +204,16 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
     assert (dialog.width(), dialog.height()) == size
     assert set(dialog.category_buttons) == {
         ExperimentCategory.FPVS, ExperimentCategory.FPVS_ODDBALL,
-        ExperimentCategory.COGNITIVE_LOAD_FPVS,
     }
-    assert dialog.category_buttons[ExperimentCategory.FPVS].text() == "Standard FPVS\nComing soon"
-    assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
-    oddball = dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL]
-    assert oddball.text().splitlines()[0] == "FPVS Oddball Paradigm"
-    assert oddball.isEnabled()
     standard = dialog.category_buttons[ExperimentCategory.FPVS]
+    assert standard.text() == "Standard FPVS\n(Coming Soon)"
+    assert not standard.isEnabled()
+    oddball = dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL]
+    assert oddball.text().splitlines()[0] == "FPVS-Oddball"
+    assert oddball.isEnabled()
     assert standard.geometry().right() < oddball.geometry().left()
     assert standard.y() == oddball.y()
     assert standard.height() == oddball.height()
-    cognitive = dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS]
-    assert cognitive.text().splitlines()[0] == "Cognitive Load FPVS"
-    assert cognitive.isEnabled()
-    assert oddball.geometry().right() < cognitive.geometry().left()
-    assert cognitive.y() == oddball.y()
-    assert cognitive.height() == oddball.height()
     assert_visible_children_within_parent(dialog)
     for button in dialog.category_buttons.values():
         assert button.isVisible()
@@ -228,9 +221,20 @@ def test_creation_names_categories_and_hides_injected_image_pair_templates(qtbot
         assert button.height() >= button.fontMetrics().height() * len(button.text().splitlines())
         assert max(button.fontMetrics().horizontalAdvance(line)
                    for line in button.text().splitlines()) + 12 <= button.width()
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
-    assert dialog.condition_profile_combo.count() == 1
-    assert dialog.condition_profile_combo.currentText() == "Five-second digit recall"
+    for category in (
+        ExperimentCategory.FPVS, ExperimentCategory.ATTENTIONAL_BLINK,
+        ExperimentCategory.COGNITIVE_LOAD_FPVS,
+    ):
+        dialog.select_category(category)
+        dialog.accept()
+        assert dialog.category_stack.currentWidget() is dialog.category_page
+        assert dialog.category_button_group.checkedButton() is None
+
+    oddball.click()
+    dialog.accept()
+    assert dialog.category_stack.currentWidget() is dialog.details_page
+    assert dialog.experiment_category == ExperimentCategory.FPVS_ODDBALL
+    assert dialog.condition_profile_combo.findData(retired.profile_id) == -1
     assert_visible_children_within_parent(dialog)
 
 
@@ -238,11 +242,13 @@ def test_cognitive_load_uses_image_design_and_shared_condition_pairs(qtbot, tmp_
     from fpvs_studio.gui.design_setup_step import DesignSetupStep
     from fpvs_studio.gui.image_sources_editor import ImageSourcesEditor
 
-    document = ProjectDocument.create_new(
+    historical = ProjectDocument.create_new(
         parent_dir=tmp_path,
         project_name="Cognitive Load FPVS",
         experiment_category=ExperimentCategory.COGNITIVE_LOAD_FPVS,
     )
+    document = ProjectDocument.open_existing(historical.project_root)
+    assert document.project.experiment_category == ExperimentCategory.COGNITIVE_LOAD_FPVS
     conditions = ConditionSetupStep(document)
     qtbot.addWidget(conditions)
     conditions.resize(1000, 560)

@@ -11,8 +11,8 @@ from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QFileDial
 from tests.gui.helpers import assert_visible_children_within_parent
 
 from fpvs_studio.core.condition_template_profiles import (
-    ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
     COGNITIVE_LOAD_PROFILE_ID,
+    STUDIO_DEFAULT_PROFILE_ID,
     built_in_condition_template_profiles,
 )
 from fpvs_studio.core.enums import ExperimentCategory
@@ -94,7 +94,7 @@ def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> Non
     dialog.manual_button.click()
     assert dialog.category_stack.currentWidget() is dialog.category_page
     assert dialog.back_button.isVisible()
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL].click()
     dialog.accept()
     dialog.project_name_edit.setText("Recognition Study")
     dialog.condition_profile_combo.setCurrentIndex(1)
@@ -115,104 +115,66 @@ def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> Non
     assert list(tmp_path.iterdir()) == []
 
 
-def test_creation_cognitive_choice_filters_templates_and_preserves_selection(qtbot) -> None:
+def test_creation_oddball_filters_templates_and_preserves_selection(qtbot) -> None:
     profiles = built_in_condition_template_profiles()
     cognitive = next(
         profile for profile in profiles if profile.profile_id == COGNITIVE_LOAD_PROFILE_ID
     )
-    custom = cognitive.model_copy(update={
+    legacy = cognitive.model_copy(update={
         "profile_id": "lab-counting-study", "display_name": "Lab counting study", "built_in": False,
     })
-    dialog = CreateProjectDialog(condition_template_profiles=[*profiles, custom])
+    dialog = CreateProjectDialog(condition_template_profiles=[*profiles, legacy])
     qtbot.addWidget(dialog)
     dialog.show()
     qtbot.mouseClick(dialog.manual_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(
-        dialog.category_buttons[ExperimentCategory.COGNITIVE_LOAD_FPVS], Qt.MouseButton.LeftButton,
+        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton,
     )
     continue_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
     assert continue_button is not None
     qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-    assert dialog.category_summary_label.text() == "Cognitive Load FPVS"
-    assert dialog.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
+    assert dialog.category_summary_label.text() == "FPVS-Oddball"
+    assert dialog.condition_profile_id == STUDIO_DEFAULT_PROFILE_ID
     assert {
         dialog.condition_profile_combo.itemData(index)
         for index in range(dialog.condition_profile_combo.count())
-    } == {COGNITIVE_LOAD_PROFILE_ID, custom.profile_id}
-    dialog.condition_profile_combo.setCurrentIndex(
-        dialog.condition_profile_combo.findData(custom.profile_id)
+    } == {
+        profile.profile_id for profile in profiles
+        if profile.experiment_category == ExperimentCategory.FPVS_ODDBALL
+    }
+    dialog.condition_profile_combo.setCurrentIndex(1)
+    selected = next(
+        profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
     )
     qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
     qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-    assert dialog.condition_profile_id == custom.profile_id
-    assert dialog.template_description_label.text() == custom.description
-    qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(
-        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton,
-    )
-    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-    assert dialog.condition_profile_combo.findData(COGNITIVE_LOAD_PROFILE_ID) == -1
-    assert dialog.condition_profile_combo.findData(custom.profile_id) == -1
-
-
-@pytest.mark.parametrize("size", [(760, 500), (800, 500)])
-@pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_creation_cognitive_details_fit_with_long_content(qtbot, size, background) -> None:
-    profile = next(
-        profile for profile in built_in_condition_template_profiles()
-        if profile.profile_id == COGNITIVE_LOAD_PROFILE_ID
-    ).model_copy(update={
-        "display_name": "Paired image conditions with backward counting and baseline",
-        "description": (
-            "Three image conditions with paired no-load and backward-counting variants. "
-            "Replace the placeholder images and review each pair before collecting data."
-        ),
-    })
-    dialog = CreateProjectDialog(condition_template_profiles=[profile])
-    qtbot.addWidget(dialog)
-    palette = dialog.palette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(background))
-    dialog.setPalette(palette)
-    dialog.select_category(ExperimentCategory.COGNITIVE_LOAD_FPVS)
-    dialog.accept()
-    dialog.project_name_edit.setText("Cognitive Load Visual Recognition Follow Up Study")
-    dialog.project_root_edit.setText(
-        "C:/Users/Researcher/OneDrive - Mississippi State University/Research Projects/"
-        "Cognitive Load and Visual Recognition/FPVS Studio Project Root"
-    )
-    dialog.resize(*size)
-    dialog.show()
-    _assert_details_fit(dialog)
-    assert (dialog.width(), dialog.height()) == size
-    assert dialog.category_summary_label.text() == "Cognitive Load FPVS"
-    assert dialog.condition_profile_id == COGNITIVE_LOAD_PROFILE_ID
-    assert dialog.condition_profile_combo.toolTip() == profile.display_name
-    assert dialog.template_description_label.text() == profile.description
+    assert dialog.condition_profile_id == selected.profile_id
+    assert dialog.template_description_label.text() == selected.description
 
 
 @pytest.mark.parametrize("size", [(760, 500), (800, 500)])
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_creation_details_fit_with_long_content(qtbot, size, background) -> None:
     profiles = built_in_condition_template_profiles()
-    stream = next(
-        profile for profile in profiles if profile.profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
+    profile = next(
+        profile for profile in profiles if profile.profile_id == STUDIO_DEFAULT_PROFILE_ID
     ).model_copy(
         update={
-            "display_name": "Digits and letter targets with several target intervals",
+            "display_name": "Paired image conditions with backward counting and baseline",
             "description": (
-                "A rapid digit stream with two letter targets. Compare target recognition "
-                "at several onset-to-onset intervals while keeping the same character pools."
+                "Three image conditions with paired no-load and backward-counting variants. "
+                "Review the stimulus sources and pre-tasks for each pair before collecting data."
             ),
         }
     )
-    dialog = CreateProjectDialog(condition_template_profiles=[stream])
+    dialog = CreateProjectDialog(condition_template_profiles=[profile])
     qtbot.addWidget(dialog)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
-    dialog.project_name_edit.setText("Attentional Blink Target Recognition Follow Up Study")
+    dialog.project_name_edit.setText("Visual Recognition Follow Up Study")
     full_path = (
         "C:/Users/Researcher/OneDrive - Mississippi State University/Research Projects/"
         "Attention and Visual Cognition/FPVS Studio Project Root"
@@ -223,15 +185,15 @@ def test_creation_details_fit_with_long_content(qtbot, size, background) -> None
 
     _assert_details_fit(dialog)
     assert (dialog.width(), dialog.height()) == size
-    assert dialog.category_summary_label.text() == "Attentional-Blink"
-    assert dialog.template_description_label.text() == stream.description
+    assert dialog.category_summary_label.text() == "FPVS-Oddball"
+    assert dialog.template_description_label.text() == profile.description
     assert dialog.template_description_label.textFormat() == Qt.TextFormat.PlainText
-    assert dialog.condition_profile_combo.toolTip() == stream.display_name
+    assert dialog.condition_profile_combo.toolTip() == profile.display_name
     assert dialog.folder_hint_label.text() == (
-        "New folder: attentional-blink-target-recognition-follow-up-study"
+        "New folder: visual-recognition-follow-up-study"
     )
     assert dialog.folder_hint_label.toolTip() == str(
-        Path(full_path) / "attentional-blink-target-recognition-follow-up-study"
+        Path(full_path) / "visual-recognition-follow-up-study"
     )
     assert dialog.project_root_edit.toolTip() == full_path
     assert full_path in dialog.project_root_edit.accessibleDescription()
@@ -258,10 +220,10 @@ def test_creation_summaries_follow_name_template_and_category(qtbot) -> None:
     profiles = built_in_condition_template_profiles()
     dialog = CreateProjectDialog(condition_template_profiles=profiles)
     qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
     dialog.show()
-    assert dialog.condition_profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
+    assert dialog.condition_profile_id == STUDIO_DEFAULT_PROFILE_ID
     empty_hint = dialog.folder_hint_label.text()
     assert empty_hint and "New folder:" not in empty_hint
     dialog.project_name_edit.setText("  Recognition Study 2  ")
@@ -269,7 +231,7 @@ def test_creation_summaries_follow_name_template_and_category(qtbot) -> None:
     dialog.project_name_edit.clear()
     assert dialog.folder_hint_label.text() == empty_hint
 
-    assert dialog.condition_profile_combo.count() == 1
+    assert dialog.condition_profile_combo.count() > 1
     selected = next(
         profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
     )
@@ -296,14 +258,14 @@ def test_creation_template_summary_refreshes_after_managing_templates(qtbot) -> 
     profile = next(
         profile
         for profile in built_in_condition_template_profiles()
-        if profile.profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
+        if profile.profile_id == STUDIO_DEFAULT_PROFILE_ID
     )
-    updated = profile.model_copy(update={"description": "Updated target intervals for this study."})
+    updated = profile.model_copy(update={"description": "Updated presentation for this study."})
     dialog = CreateProjectDialog(
         condition_template_profiles=[profile], on_manage_templates=lambda: [updated]
     )
     qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
     dialog.show()
     qtbot.mouseClick(dialog.manage_templates_button, Qt.MouseButton.LeftButton)
@@ -317,7 +279,7 @@ def test_creation_tab_order_follows_visible_field_order(qtbot) -> None:
         condition_template_profiles=profiles, on_manage_templates=lambda: profiles
     )
     qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
     dialog.show()
     QApplication.processEvents()
@@ -341,7 +303,7 @@ def test_creation_folder_preview_and_cancel_do_not_create_files(
     dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
     qtbot.addWidget(dialog)
     dialog.set_parent_directory(tmp_path)
-    dialog.select_category(ExperimentCategory.ATTENTIONAL_BLINK)
+    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
     dialog.project_name_edit.setText("Recognition Study")
     dialog.show()

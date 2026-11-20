@@ -419,13 +419,12 @@ without requiring a project to be open. Canceling either step leaves the configu
 root unchanged.
 
 Creating an experiment first offers **Create manually** or **Download from library**.
-Downloading opens the Library without creating a blank project. Manual creation next
-offers FPVS Oddball Paradigm, Cognitive Load FPVS and a disabled Standard FPVS Coming
-soon choice. Cognitive Load uses the existing paired-condition scaffold.
+Downloading opens the Library without creating a blank project. Manual creation shows
+**FPVS-Oddball** and a disabled **Standard FPVS (Coming Soon)** card. For cognitive-load
+studies, add a pre-task or the **Backward counting** modifier to an FPVS-Oddball condition.
 Name, parent folder and compatible template follow on the details page. Back returns
-through category to the source choice
-while retaining the manual draft. Category is locked when the experiment
-is created; changing it requires a new experiment. See
+through category to the source choice while retaining the manual draft. The category
+locks when the experiment is created. See
 [Experiment categories](EXPERIMENT_CATEGORIES.md) for persistence and legacy separation.
 
 The creation dialog has a `760x500` minimum and `800x500` default size. Its final
@@ -436,6 +435,10 @@ Save Location remains editable and exposes the full path by tooltip. A **New fol
 hint previews the project folder name beneath that location without creating files.
 Back sits at the lower left, with the standard Create Experiment/Cancel pair at the
 lower right. Keyboard navigation follows the field order.
+
+For visible acceptance at both dialog sizes in Light and Dark, choose **Create manually**,
+check both card labels for clipping, and confirm that only **FPVS-Oddball** is selectable.
+Continue to the details page and use **Back** to verify that the selection is retained.
 
 Opening projects reloads the configured FPVS Studio Root Folder and lists current FPVS
 project folders discovered beneath that root. Discovery excludes the reserved
@@ -712,8 +715,8 @@ Home elides long project titles to the available width while keeping the complet
 in a tooltip and accessible description. Its launch panel reserves the height needed
 by wrapped descriptions, metrics and the launch button in both themes.
 
-Cognitive Load FPVS creation, placeholder replacement, reusable backward-counting
-task controls and visible acceptance are documented in
+Cognitive-load authoring, existing paired-condition scaffolds, and reusable
+backward-counting tasks are documented in
 [Cognitive Load FPVS](COGNITIVE_LOAD_FPVS.md).
 
 ### Trigger Tester
