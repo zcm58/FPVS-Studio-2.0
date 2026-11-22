@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 import tempfile
 from collections.abc import Callable
 from dataclasses import replace
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from fpvs_studio.core.run_spec import RunSpec
 
 
 def _verification_palette(*, dark: bool) -> Any:
@@ -168,7 +172,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     runtime_dependency_report = _runtime_dependency_report()
     runtime_dependencies_ok = runtime_dependency_report["ok"]
 
-    return {
+    report = {
         "ok": (
             version_match
             and styled
@@ -208,6 +212,9 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         "runtime_dependencies_ok": runtime_dependencies_ok,
         "runtime_dependency_report": runtime_dependency_report,
     }
+    if os.environ.get("FPVS_PACKAGED_PLAYBACK_SMOKE") == "1":
+        report["packaged_playback"] = _packaged_playback_report(smoke_root / "playback-project")
+    return report
 
 
 def _isolate_qt_settings(smoke_root: Path) -> dict[str, str]:
@@ -402,7 +409,8 @@ def _settings_layout_report(app: Any, settings: Any, smoke_root: Path) -> dict[s
 
 def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
     """Render synthetic dialog states without a controller, credentials or HTTP."""
-    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtCore import Qt, QTimer, QUrl
+    from PySide6.QtGui import QTextDocument
     from PySide6.QtWidgets import QDialog, QMessageBox
 
     from fpvs_studio.core.data_sharing import SharingStudyChoice
@@ -479,6 +487,32 @@ def _online_workflow_report(app: Any, smoke_root: Path) -> dict[str, Any]:
         })
         library.set_busy(False)
     library.close()
+
+    demo = LibraryDialog()
+    demo_item = item.model_copy(update={
+        "item_id": "color-oddball-demo",
+        "version": "1.0.0",
+        "title": "Color Oddball Demo",
+        "filename": "color-oddball-demo.fpvsbundle",
+    })
+    demo.set_public_catalog(LibraryCatalog(
+        schema_version="1.0", library_name="Public projects", items=[demo_item],
+    ))
+    demo.resize(900, 640)
+    demo.show()
+    app.processEvents()
+    preview_document = demo.details.document()
+    preview_sources = [QUrl(url) for url in re.findall(
+        r'<img\b[^>]*\bsrc="([^"]+)"', preview_document.toHtml(),
+    )]
+    record(demo, "color-oddball-preview", (900, 640), {
+        "bundled_images_rendered": (
+            [url.fileName() for url in preview_sources] == ["red.png", "green.png"]
+            and all(preview_document.resource(QTextDocument.ResourceType.ImageResource, url)
+                    for url in preview_sources)
+        ),
+    })
+    demo.close()
 
     origin = LibraryProjectOrigin(
         service_url="https://openfpvs.com", item_id=item.item_id,
@@ -676,6 +710,7 @@ def _runtime_dependency_report() -> dict[str, Any]:
         "psychopy.visual.backends.glfwbackend",
         "psychopy.visual.line",
         "psychopy.hardware.keyboard",
+        "psychopy.monitors",
         "psychtoolbox",
         "pyglet",
         "sounddevice",
@@ -698,7 +733,123 @@ def _runtime_dependency_report() -> dict[str, Any]:
         else:
             imports.append({"module": module_name, "ok": True})
 
-    return {
-        "ok": ok,
-        "imports": imports,
+    try:
+        monitors = import_module("psychopy.monitors")
+        calibration = monitors.Monitor("testMonitor")
+        monitor_size = list(calibration.getSizePix() or ())
+        monitor_ok = (
+            "testMonitor" in monitors.getAllMonitors()
+            and len(monitor_size) == 2 and all(value > 0 for value in monitor_size)
+        )
+        monitor_report = {"ok": monitor_ok, "test_monitor_pixels": monitor_size}
+    except Exception as error:
+        monitor_report = {"ok": False, "error": f"{type(error).__name__}: {error}"}
+    return {"ok": ok and monitor_report["ok"], "imports": imports, "monitors": monitor_report}
+
+
+def _compile_packaged_playback(project_root: Path) -> RunSpec:
+    """Compile a tiny local two-pool condition without importing a renderer."""
+    from PIL import Image
+
+    from fpvs_studio.core.compiler import compile_run_spec
+    from fpvs_studio.core.enums import DutyCycleMode
+    from fpvs_studio.core.models import (
+        Condition,
+        FixationTaskSettings,
+        ImageResolution,
+        ProjectFile,
+        ProjectMeta,
+        ProjectSettings,
+        StimulusSet,
+    )
+    from fpvs_studio.core.paths import stimulus_originals_dir
+
+    size = (64, 64)
+    sets = []
+    for role, colors in (("base", ((120, 120, 120), (150, 150, 150))),
+                         ("oddball", ((150, 60, 40), (50, 110, 80)))):
+        source = stimulus_originals_dir(project_root, role)
+        source.mkdir(parents=True)
+        for index, color in enumerate(colors):
+            Image.new("RGB", size, color).save(source / f"{role}-{index}.png")
+        sets.append(StimulusSet(
+            set_id=role, name=role.title(), source_dir=source.relative_to(project_root).as_posix(),
+            resolution=ImageResolution(width_px=size[0], height_px=size[1]),
+            image_count=len(colors),
+        ))
+    project = ProjectFile(
+        meta=ProjectMeta(project_id="packaged-playback", name="Packaged playback smoke",
+                         template_id="fpvs_6hz_every5_v1"),
+        settings=ProjectSettings(fixation_task=FixationTaskSettings(
+            enabled=False, accuracy_task_enabled=False, participant_tutorial_enabled=False,
+        )),
+        stimulus_sets=sets,
+        conditions=[Condition(
+            condition_id="playback", name="Playback", base_stimulus_set_id="base",
+            oddball_stimulus_set_id="oddball", sequence_count=1,
+            oddball_cycle_repeats_per_sequence=1, duty_cycle_mode=DutyCycleMode.CONTINUOUS,
+        )],
+    )
+    return compile_run_spec(
+        project, project_root=project_root, refresh_hz=60.0, random_seed=12,
+        run_id="packaged-playback-smoke",
+    )
+
+
+def _known_host_graphics_failure(error: BaseException) -> bool:
+    """Identify only Pyglet's explicit unsupported display/context errors."""
+    current: BaseException | None = error
+    while current is not None:
+        error_type = type(current)
+        if error_type.__module__.startswith("pyglet.") and error_type.__name__ in {
+            "NoSuchDisplayException", "NoSuchConfigException", "ContextException",
+        }:
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _packaged_playback_report(project_root: Path) -> dict[str, Any]:
+    """Exercise frozen fullscreen rendering without enrolling a participant or emitting triggers."""
+    report: dict[str, Any] = {
+        "status": "failed", "stage": "fixture", "fullscreen": True, "experiment_test_mode": True,
     }
+    try:
+        run_spec = _compile_packaged_playback(project_root)
+        report.update(planned_frames=run_spec.display.total_frames, stage="engine initialization")
+        from fpvs_studio.engines.psychopy_engine import PsychoPyEngine
+        from fpvs_studio.triggers.null_backend import NullBackend
+
+        engine = PsychoPyEngine()
+    except Exception as error:
+        return {**report, "error": f"{type(error).__name__}: {error}"}
+
+    options = {
+        "fullscreen": True, "display_index": 0, "experiment_test_mode": True,
+        "strict_timing": False, "strict_timing_warmup": False,
+    }
+    try:
+        report["stage"] = "open presentation window"
+        engine.open_session(runtime_options=options)
+        report["stage"] = "playback"
+        display_size = engine.current_display_size_px()
+        if display_size is None:
+            raise RuntimeError("PsychoPy did not report the fullscreen display size.")
+        report["display_size_px"] = display_size
+        summary = engine.run_condition(
+            run_spec, project_root, runtime_options=options, trigger_backend=NullBackend(),
+        )
+        report.update(completed_frames=summary.completed_frames, aborted=summary.aborted)
+        if summary.aborted or summary.completed_frames != run_spec.display.total_frames:
+            raise RuntimeError("The synthetic condition did not complete every compiled frame.")
+        report["status"] = "passed"
+    except Exception as error:
+        if report["stage"] == "open presentation window" and _known_host_graphics_failure(error):
+            report["status"] = "host_graphics_unavailable"
+        report["error"] = f"{type(error).__name__}: {error}"
+    finally:
+        try:
+            engine.close_session()
+        except Exception as error:
+            report.update(status="failed", cleanup_error=f"{type(error).__name__}: {error}")
+    return report

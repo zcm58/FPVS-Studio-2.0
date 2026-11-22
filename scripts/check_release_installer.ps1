@@ -20,6 +20,9 @@ $checkout = git -C $SourceRoot rev-parse --verify HEAD
 if ($LASTEXITCODE -ne 0 -or $checkout -cne $receipt.source_commit) {
     throw 'The candidate checkout does not match the authenticated source commit.'
 }
+$smokeSource = Join-Path $SourceRoot 'src/fpvs_studio/gui/packaged_smoke.py'
+$supportsPlaybackSmoke = (Test-Path -LiteralPath $smokeSource -PathType Leaf) -and
+    (Select-String -LiteralPath $smokeSource -Pattern 'FPVS_PACKAGED_PLAYBACK_SMOKE' -SimpleMatch -Quiet)
 if ($receipt.target_inventory_sha256 -notmatch '^[0-9a-f]{64}$') {
     throw 'The receipt is missing the expected target inventory SHA-256.'
 }
@@ -101,12 +104,17 @@ function Invoke-Setup([string]$Executable, [string]$Phase) {
     }
 }
 
-function Invoke-NativeSmoke([string]$Executable, [string]$Option, [string]$ReportPath, [int]$TimeoutMilliseconds) {
+function Invoke-NativeSmoke(
+    [string]$Executable, [string]$Option, [string]$ReportPath, [int]$TimeoutMilliseconds,
+    [switch]$Playback
+) {
     $savedPath = $env:PATH
     $savedQt = $env:FPVS_ALLOW_QT_TESTS
+    $savedPlayback = $env:FPVS_PACKAGED_PLAYBACK_SMOKE
     try {
         $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
         $env:FPVS_ALLOW_QT_TESTS = '1'
+        $env:FPVS_PACKAGED_PLAYBACK_SMOKE = if ($Playback) { '1' } else { $null }
         $run = Start-Process -FilePath $Executable -ArgumentList @($Option, ('"' + $ReportPath + '"')) -PassThru
         try {
             if (-not $run.WaitForExit($TimeoutMilliseconds)) {
@@ -123,6 +131,7 @@ function Invoke-NativeSmoke([string]$Executable, [string]$Option, [string]$Repor
     } finally {
         $env:PATH = $savedPath
         $env:FPVS_ALLOW_QT_TESTS = $savedQt
+        $env:FPVS_PACKAGED_PLAYBACK_SMOKE = $savedPlayback
     }
 }
 
@@ -174,7 +183,9 @@ function Test-Target([string]$Phase, [string]$BaselinePhase) {
     }
 
     $studioReport = Join-Path $work "$Phase-studio-smoke.json"
-    $studioExit = Invoke-NativeSmoke $app '--packaged-smoke-output' $studioReport 180000
+    $playbackEnabled = $Phase -ceq 'fresh' -and $supportsPlaybackSmoke
+    $studioExit = Invoke-NativeSmoke $app '--packaged-smoke-output' $studioReport 180000 `
+        -Playback:$playbackEnabled
     $smoke = Get-Content -LiteralPath $studioReport -Raw | ConvertFrom-Json
     if ($smoke.app_version -cne $receipt.target_version -or $smoke.metadata_version -cne $receipt.target_version -or
         $smoke.frozen -ne $true -or $smoke.runtime_dependency_report.ok -ne $true -or
@@ -195,6 +206,20 @@ function Test-Target([string]$Phase, [string]$BaselinePhase) {
             throw "$Phase installed Studio has an unexpected smoke failure (exit $studioExit)."
         }
         Write-Output "$Phase installed Studio runtime passed with the hosted Library size cap (1028 x 749)."
+    }
+    if ($playbackEnabled) {
+        $playback = $smoke.packaged_playback
+        if ($null -eq $playback) { throw 'Fresh setup did not report the fullscreen Test Mode probe.' }
+        $playback | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $work 'fresh-playback-smoke.json')
+        if ($playback.status -ceq 'host_graphics_unavailable') {
+            Write-Warning "Hosted fullscreen playback remains unverified. $($playback.error)"
+        } elseif ($playback.status -cne 'passed') {
+            throw "Fresh fullscreen playback failed at $($playback.stage). $($playback.error) $($playback.cleanup_error)"
+        } elseif ($playback.fullscreen -ne $true -or $playback.experiment_test_mode -ne $true -or
+            $playback.aborted -ne $false -or $playback.planned_frames -le 0 -or
+            $playback.completed_frames -ne $playback.planned_frames) {
+            throw 'Fresh fullscreen Test Mode did not complete every compiled frame.'
+        }
     }
 
     $updaterReport = Join-Path $work "$Phase-updater-smoke.json"

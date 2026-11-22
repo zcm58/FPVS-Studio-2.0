@@ -277,6 +277,10 @@ and selects the Matplotlib WXAgg backend used by PsychoPy's monitor tools. Expli
 selection prevents PyInstaller from collecting TkAgg through ImageIO's standalone TIFF
 viewer.
 
+The Windows Studio bundle filters PsychoPy's `psychopy/demos/builder/` examples
+after PyInstaller's hooks collect package data. It retains PsychoPy playback and
+monitor resources, Coder demos, and Studio's own Color Oddball Demo preview.
+
 The spec also removes top-level `icuuc.dll` and `icudt*.dll` files discovered through
 the build host's `PATH`. On supported Windows versions, Qt uses the operating system's
 unversioned ICU shim. Bundling an unrelated application's version-suffixed ICU runtime
@@ -368,7 +372,9 @@ passed. That check launches the bundled executable in a bounded diagnostic mode 
 verifies that the bundled package metadata matches `pyproject.toml`, the update dialog
 has the shared theme applied, `Remind Me Later` dismisses an update prompt,
 update-dialog action buttons fit their labels, and PsychoPy/runtime dependency imports
-needed by packaged launch are present.
+needed by packaged launch are present. The check also reads the shipped PsychoPy
+monitor calibration in an isolated profile and opens both bundled Color Oddball Demo
+preview images in the Library.
 
 To run that smoke check against an existing bundle:
 

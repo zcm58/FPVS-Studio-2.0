@@ -1,6 +1,6 @@
 # Remove upstream Builder examples from the Windows bundle
 
-Status: Planned
+Status: Active
 
 Date: 2026-11-22
 
@@ -35,3 +35,18 @@ points in the [packaging contract](../../PACKAGING.md#build-the-app).
 - In an approved native smoke session, exercise Studio startup, fullscreen
   Test/Pilot playback, PsychoPy monitor tools, and the Library color oddball demo
   preview with the frozen candidate.
+
+## Implementation
+
+Filter the component-exact Windows subtree from `Analysis.datas` after the
+PsychoPy hook runs. Spec tests exercise Windows, macOS, and Linux and preserve
+the order of every other item. The packaged diagnostic reads PsychoPy's test
+monitor calibration and checks that the Library loads both real preview images
+through Qt. The hosted fresh install also requests one fullscreen Test Mode
+condition with synthetic images and the null trigger backend. Its fixture
+compiled to 50 frames in source checks. Exact installer comparison and the
+disposable install lifecycle use the 3.1.5 release candidate.
+
+Packaging focused verification passed 216 tests. Updates passed 377 tests
+with four Windows symlink-permission skips. Docs, verification configuration,
+and the changed diagnostic's Windows type check passed.

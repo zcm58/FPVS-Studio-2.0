@@ -250,11 +250,21 @@ def test_pyinstaller_rejects_path_resolved_host_icu_dlls() -> None:
     assert "a.binaries = [" in PYINSTALLER_SPEC_TEXT
 
 
-@pytest.mark.parametrize("platform", ["win32", "linux"])
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
 def test_studio_spec_keeps_platform_dependency_boundaries(
     monkeypatch: pytest.MonkeyPatch, platform: str,
 ) -> None:
     hooks = ModuleType("PyInstaller.utils.hooks")
+    builder_demos = [
+        (r"psychopy\demos\builder\example.psyexp", "upstream/example.psyexp", "DATA"),
+        ("PsychoPy/Demos/Builder/nested/photo.jpg", "upstream/photo.jpg", "DATA"),
+    ]
+    other_hook_data = [
+        ("psychopy/demos/coder/example.png", "upstream/example.png", "DATA"),
+        ("psychopy/demos/builder_notes/readme.txt", "upstream/readme.txt", "DATA"),
+        ("psychopy/monitors/psychopy.ico", "upstream/psychopy.ico", "DATA"),
+        ("fpvs_studio/assets/oddball-demo/red.png", "studio/red.png", "DATA"),
+    ]
     developer_modules = [
         "fpvs_studio.developer",
         "fpvs_studio.developer.library_publisher",
@@ -289,7 +299,13 @@ def test_studio_spec_keeps_platform_dependency_boundaries(
             assert "fpvs_studio.developer" not in kwargs["excludes"]
             assert "fpvs_studio.gui.library_publisher_controller" not in kwargs["excludes"]
             assert "fpvs_studio.gui.library_publisher_dialog" not in kwargs["excludes"]
-        return SimpleNamespace(pure=[], scripts=[], binaries=[], zipfiles=[], datas=kwargs["datas"])
+        spec_data = [
+            (f"{destination}/{Path(source).name}", source, "DATA")
+            for source, destination in kwargs["datas"]
+        ]
+        # Analysis adds the standard PsychoPy hook's data to the spec's own inputs.
+        collected_data = spec_data + builder_demos + other_hook_data
+        return SimpleNamespace(pure=[], scripts=[], binaries=[], zipfiles=[], datas=collected_data)
 
     result = runpy.run_path(
         str(REPO_ROOT / "packaging" / "pyinstaller" / "fpvs_studio.spec"),
@@ -298,7 +314,7 @@ def test_studio_spec_keeps_platform_dependency_boundaries(
             "Analysis": analysis,
             "PYZ": lambda pure: pure,
             "EXE": lambda *args, **kwargs: None,
-            "COLLECT": lambda *args, **kwargs: None,
+            "COLLECT": lambda _exe, _binaries, _zipfiles, datas, **kwargs: datas,
         },
     )
     assert ("keyring.backends.SecretService" in result["hiddenimports"]) == (platform == "linux")
@@ -306,6 +322,12 @@ def test_studio_spec_keeps_platform_dependency_boundaries(
     assert (("SecretStorage", "metadata") in result["datas"]) == (platform == "linux")
     assert "fpvs_studio.library.client" in result["hiddenimports"]
     assert set(developer_modules).issubset(result["hiddenimports"])
+    expected_spec_data = [
+        (f"{destination}/{Path(source).name}", source, "DATA")
+        for source, destination in result["datas"]
+    ]
+    expected_builder_demos = [] if platform == "win32" else builder_demos
+    assert result["coll"] == expected_spec_data + expected_builder_demos + other_hook_data
 
 
 def test_bundled_open_sans_font_and_license_are_packaged_assets() -> None:

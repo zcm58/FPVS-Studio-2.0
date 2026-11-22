@@ -34,6 +34,7 @@ watchdog and matched every retained report payload, receipt and capture.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Windows Builder demo bundle size](exec-plans/active/windows-builder-demo-bundle-size.md) | Exclude upstream Builder examples from the Windows bundle and verify the exact 3.1.5 payload. |
 | [Windows release patches and acceptance](exec-plans/active/windows-release-patches-and-acceptance.md) | Limit direct patches to five preceding patch numbers within the same major and minor version. Qualify the reusable installer workflow on a hosted release draft. |
 | [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Recorder 2 digit sends verified. Qualify physical automatic discovery and BioSemi reconnect in ActiView. |
@@ -66,8 +67,6 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 
 These future changes came out of the November 22 optimization review.
 
-- [Windows Builder demo bundle size](exec-plans/planned/windows-builder-demo-bundle-size.md)
-  removes upstream Builder examples from the Windows installer after verifying packaged workflows.
 
 ## Plan Rules and History
 

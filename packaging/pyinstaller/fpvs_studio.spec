@@ -157,6 +157,12 @@ a = Analysis(
     noarchive=False,
 )
 a.binaries = [binary for binary in a.binaries if not _is_host_icu_binary(binary)]
+if sys.platform == "win32":
+    # PyInstaller's PsychoPy hook also collects these Builder application examples.
+    a.datas = [
+        data for data in a.datas
+        if not PureWindowsPath(data[0]).is_relative_to("psychopy/demos/builder")
+    ]
 pyz = PYZ(a.pure)
 
 exe = EXE(
