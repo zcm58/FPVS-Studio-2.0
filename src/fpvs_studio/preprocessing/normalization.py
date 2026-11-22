@@ -356,7 +356,9 @@ def _scan_stimulus_set(
             unsupported_files.append(path.name)
             continue
         with Image.open(path, formats=("JPEG", "PNG", "BMP", "TIFF")) as image:
-            width, height = ImageOps.exif_transpose(image).size
+            # Keep the full decode and orientation check without copying unrotated pixels.
+            ImageOps.exif_transpose(image, in_place=True)
+            width, height = image.size
         resolutions.add((width, height))
         file_types.add(_canonical_file_type(suffix))
         image_count += 1

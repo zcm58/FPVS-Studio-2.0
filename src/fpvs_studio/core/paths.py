@@ -73,6 +73,11 @@ def validate_project_relative_path(value: str) -> str:
     if ":" in value:
         raise ValueError("Persisted paths may not contain Windows drive or stream syntax.")
 
+    # With drive and backslash syntax excluded, nonempty POSIX components with
+    # no dot segments are already normalized and cannot have a Windows anchor.
+    if type(value) is str and all(part and part not in (".", "..") for part in value.split("/")):
+        return value
+
     posix_path = PurePosixPath(value)
     windows_path = PureWindowsPath(value)
     if posix_path.is_absolute() or posix_path.anchor or windows_path.anchor:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections import Counter
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
@@ -176,10 +177,12 @@ def _identity(record: Mapping[str, Any]) -> tuple[Any, ...]:
 
 def _add_history(
     visits: dict[str, dict[str, Any]],
+    identities: Counter[tuple[Any, ...]],
     record: Mapping[str, Any],
     source_key: str,
 ) -> None:
-    pid, number, session = _identity(record)
+    identity = _identity(record)
+    pid, number, session = identity
     if not pid or pid in {"0", "00"} or record.get("test_mode") or record.get("pilot_mode"):
         return
     execution_id = record.get("execution_id")
@@ -187,7 +190,7 @@ def _add_history(
         [pid, number, session, None if number else source_key]
     )
     if execution_id and key in visits:
-        if _identity(visits[key]) != _identity(record):
+        if _identity(visits[key]) != identity:
             raise ValueError(f"Participant results disagree with execution {key}.")
         version = record.get("protocol_version_id")
         if version and visits[key]["protocol_version_id"] not in (None, version):
@@ -197,12 +200,10 @@ def _add_history(
             if visits[key]["setup_id"] and "missing_as_run_protocol" in visits[key]["issues"]:
                 visits[key]["issues"].remove("missing_as_run_protocol")
         return
-    if (
-        not execution_id
-        and number
-        and any(_identity(v) == _identity(record) for v in visits.values())
-    ):
+    if not execution_id and number and identities[identity]:
         return
+    if key in visits:
+        identities[_identity(visits[key])] -= 1
     visits[key] = {
         "visit_id": key,
         "execution_id": execution_id,
@@ -222,6 +223,7 @@ def _add_history(
         ),
         "issues": ["missing_acquisition_evidence", "missing_as_run_protocol"],
     }
+    identities[identity] += 1
 
 
 def build_study_handoff(project_root: Path) -> dict[str, Any]:
@@ -373,6 +375,7 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
             if not setup or not visit["protocol_version_id"]:
                 visit["issues"].append("missing_as_run_protocol")
             visits[key] = visit
+        identities = Counter(_identity(visit) for visit in visits.values())
         for path in _local_files(root, "logs/.participant-results", "*.json"):
             record = json.loads(path.read_text(encoding="utf-8"))
             if record.get("schema_version") != 1 or record.get("project_id") != project_id:
@@ -380,7 +383,7 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
             if record.get("test_mode") or record.get("pilot_mode"):
                 tests_and_pilots.add(_identity(record))
             elif _identity(record) not in tests_and_pilots:
-                _add_history(visits, record, path.name)
+                _add_history(visits, identities, record, path.name)
         for label, summary in _iter_session_history_summaries(root, strict=True):
             if summary.project_id and summary.project_id != project_id:
                 raise ValueError("Participant session history belongs to a different project.")
@@ -401,6 +404,7 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                 continue
             _add_history(
                 visits,
+                identities,
                 {
                     "participant_number": summary.participant_number,
                     "session_id": summary.session_id,

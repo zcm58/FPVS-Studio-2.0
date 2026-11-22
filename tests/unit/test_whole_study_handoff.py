@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -32,6 +33,7 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
     folder.mkdir()
     version_1, version_2 = str(uuid4()), str(uuid4())
     identity = get_study(root).study_id
+    history = [("009", 1, "older"), ("009", 2, "older")]
     for name, pid, number, version in [
         ("biosemi", "007", 1, version_1),
         ("unicorn", "007", 2, version_1),
@@ -66,6 +68,7 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
         )
         write_json_file(folder / f"{key}.acquisition-v1.json", evidence)
         retain_session_snapshot(root, config)
+        history.append((pid, number, evidence.session_id))
 
     records = root / "logs" / ".participant-results"
     records.mkdir()
@@ -87,6 +90,12 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
             ),
             encoding="utf-8",
         )
+    with (root / "logs/session_condition_history.csv").open(
+        "w", encoding="utf-8", newline=""
+    ) as stream:
+        writer = csv.writer(stream)
+        writer.writerow(["participant_number", "participant_session_number", "session_id"])
+        writer.writerows(history)
     destination = tmp_path / "cohort.fpvsconfig"
     with pytest.raises(ValueError, match="Mark collection complete"):
         export_study_handoff(root, destination)
@@ -96,7 +105,7 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
     payload = json.loads(first)
     assert payload["study_id"] == identity
     visits = payload["visits"]
-    assert len(visits) == 4
+    assert len(visits) == 5
     assert [
         v["participant_session_number"] for v in visits if v["participant_number"] == "007"
     ] == [1, 2]
@@ -114,8 +123,11 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
     assert updated["compiled_refresh_hz"] == 60.02
     assert updated["protocol_change_reason"] == "Updated length"
     assert not updated["issues"]
-    historical = visits[-1]
-    assert historical["issues"] and historical["setup_id"] is None
+    old_visits = [visit for visit in visits if visit["participant_number"] == "009"]
+    assert [
+        (visit["participant_session_number"], visit["execution_id"]) for visit in old_visits
+    ] == [(2, None), (1, "saved-009")]
+    assert all(visit["issues"] and visit["setup_id"] is None for visit in old_visits)
     assert b"private answer" not in first and b"task_assets" not in first
     export_study_handoff(root, destination)
     assert destination.read_bytes() == first

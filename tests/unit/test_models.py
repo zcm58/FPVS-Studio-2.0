@@ -172,12 +172,14 @@ def test_project_schema_version_does_not_expand_unrelated_contracts() -> None:
         "/outside.png",
         "C:/outside.png",
         "C:outside.png",
+        "./C://outside.png",
         "//server/share/outside.png",
         "\\\\server\\share\\outside.png",
         "\\rooted\\outside.png",
         "stimuli\\outside.png",
         "../outside.png",
         "stimuli/../outside.png",
+        "stimuli//./../outside.png",
         "stimuli/file.png:alternate-stream",
     ],
 )
@@ -194,6 +196,8 @@ def test_project_relative_path_rejects_cross_platform_escape_forms(value: str) -
             "stimuli/original-images/base set/image 01.png",
         ),
         ("./stimuli/.hidden/image.png", "stimuli/.hidden/image.png"),
+        ("./stimuli//é/./画像.png/", "stimuli/é/画像.png"),
+        ("././", "."),
         ("runs/P0001/session_summary.json", "runs/P0001/session_summary.json"),
     ],
 )

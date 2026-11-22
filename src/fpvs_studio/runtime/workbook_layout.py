@@ -13,6 +13,7 @@ import unicodedata
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, datetime, time
+from functools import lru_cache
 from typing import Any
 
 from openpyxl.styles import Alignment, Font  # type: ignore[import-untyped]
@@ -64,29 +65,35 @@ class _MeasuredCell:
         return max(_MIN_ROW_HEIGHT, lines * self.size * 1.5 + _ROW_PADDING)
 
 
+@lru_cache(maxsize=512)
+def _character_width(character: str) -> float:
+    """Estimate glyph width in default-font digit units."""
+
+    if unicodedata.combining(character):
+        return 0.0
+    if character == "\t":
+        return 4.0
+    if unicodedata.east_asian_width(character) in {"W", "F"}:
+        return 2.2
+    if character in "MWmw@%&":
+        return 1.6
+    if character.isspace():
+        return 0.65
+    if character.isupper():
+        return 1.15
+    if character.isdigit():
+        return 1.05
+    if unicodedata.category(character).startswith("P"):
+        return 0.75
+    return 1.0
+
+
 def _text_width(text: str) -> float:
-    """Estimate width in default-font digit units, conservatively for wide glyphs."""
+    """Accumulate widths in text order to preserve the rounding of fitted dimensions."""
 
     width = 0.0
     for character in text:
-        if unicodedata.combining(character):
-            continue
-        if character == "\t":
-            width += 4.0
-        elif unicodedata.east_asian_width(character) in {"W", "F"}:
-            width += 2.2
-        elif character in "MWmw@%&":
-            width += 1.6
-        elif character.isspace():
-            width += 0.65
-        elif character.isupper():
-            width += 1.15
-        elif character.isdigit():
-            width += 1.05
-        elif unicodedata.category(character).startswith("P"):
-            width += 0.75
-        else:
-            width += 1.0
+        width += _character_width(character)
     return width
 
 

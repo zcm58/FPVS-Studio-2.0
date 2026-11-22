@@ -924,26 +924,31 @@ def _sheet(workbook: Any, name: str, headers: list[str], rows: list[list[object]
     worksheet.append(headers)
     for row in rows:
         worksheet.append(row)
+    centered = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    header_font = Font(bold=True)
     for row in worksheet.iter_rows():
         for cell in row:
             if isinstance(cell.value, str):
                 cell.data_type = "s"  # Participant-entered text is never an Excel formula.
-            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+            cell.alignment = centered
             if cell.row == 1:
-                cell.font = Font(bold=True)
+                cell.font = header_font
     worksheet.freeze_panes = "C2" if name != "Results Notes" else "A2"
     worksheet.auto_filter.ref = worksheet.dimensions
+    number_formats = {
+        "Reaction Time (s)": "0.000",
+        "Accuracy (%)": "0.00",
+        "Mean Reaction Time (ms)": "0.00",
+    }
     for index, header in enumerate(headers, 1):
-        worksheet.column_dimensions[get_column_letter(index)].alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True,
-        )
-        for cell in worksheet.iter_cols(min_col=index, max_col=index, min_row=2):
-            for item in cell:
-                if isinstance(item.value, (int, float)):
-                    if header == "Reaction Time (s)":
-                        item.number_format = "0.000"
-                    elif header in {"Accuracy (%)", "Mean Reaction Time (ms)"}:
-                        item.number_format = "0.00"
+        worksheet.column_dimensions[get_column_letter(index)].alignment = centered
+        number_format = number_formats.get(header)
+        if number_format is None:
+            continue
+        for column in worksheet.iter_cols(min_col=index, max_col=index, min_row=2):
+            for cell in column:
+                if isinstance(cell.value, (int, float)):
+                    cell.number_format = number_format
 
 
 def add_participant_results_sheets(

@@ -75,6 +75,38 @@ def test_normalization_scan_detects_uniform_non_square_images(tmp_path: Path) ->
     assert scan.mixed_resolution is False
 
 
+def test_normalization_scan_uses_exif_oriented_dimensions(tmp_path: Path) -> None:
+    source_dir = tmp_path / "images"
+    _write_image(source_dir / "landscape.jpg", (96, 64))
+    exif = Image.Exif()
+    exif[274] = 6
+    Image.new("RGB", (64, 96)).save(source_dir / "portrait.jpg", exif=exif)
+
+    scan = scan_stimulus_sets_for_normalization(
+        project_root=tmp_path,
+        stimulus_sets=[_stimulus_set("base-set", "images")],
+    )
+
+    assert scan.image_count == 2
+    assert scan.mixed_resolution is False
+    assert [resolution.as_tuple() for resolution in scan.sets[0].resolutions] == [(96, 64)]
+
+
+def test_normalization_scan_rejects_truncated_pixel_data(tmp_path: Path) -> None:
+    source_dir = tmp_path / "images"
+    path = source_dir / "truncated.jpg"
+    _write_image(path, (64, 96))
+    path.write_bytes(path.read_bytes()[:-25])
+    with Image.open(path) as image:
+        assert image.size == (64, 96)
+
+    with pytest.raises(OSError, match="image file is truncated"):
+        scan_stimulus_sets_for_normalization(
+            project_root=tmp_path,
+            stimulus_sets=[_stimulus_set("base-set", "images")],
+        )
+
+
 def test_normalization_scan_detects_unsupported_and_empty_folders(tmp_path: Path) -> None:
     source_dir = tmp_path / "stimuli" / "original-images" / "base-set"
     source_dir.mkdir(parents=True)
