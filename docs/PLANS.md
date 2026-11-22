@@ -34,9 +34,6 @@ watchdog and matched every retained report payload, receipt and capture.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
-| [Studio 3.1.5 release](exec-plans/active/release-3.1.5.md) | Build the Windows installer and qualifying patches, then verify exact source and installer lifecycle before publication. |
-| [Windows Builder demo bundle size](exec-plans/active/windows-builder-demo-bundle-size.md) | Exclude upstream Builder examples from the Windows bundle and verify the exact 3.1.5 payload. |
-| [Windows release patches and acceptance](exec-plans/active/windows-release-patches-and-acceptance.md) | Limit direct patches to five preceding patch numbers within the same major and minor version. Qualify the reusable installer workflow on a hosted release draft. |
 | [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Recorder 2 digit sends verified. Qualify physical automatic discovery and BioSemi reconnect in ActiView. |
 | [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Native 60.02 Hz advisory and keyboard actions passed. Qualify the fixed 60/120 Hz display switch. |
@@ -99,6 +96,12 @@ These future changes came out of the November 22 optimization review.
   shares the legacy source default across Studio and Toolbox model validation.
 - [Responsive Assets stimulus import](exec-plans/completed/assets-stimulus-import-responsiveness.md)
   keeps the compatibility view responsive during source intake and preserves imported files and saved state.
+- [Windows Builder demo bundle size](exec-plans/completed/windows-builder-demo-bundle-size.md)
+  removes the upstream examples and saves 17.08 MB on the full 3.1.5 installer.
+- [Windows release patches and acceptance](exec-plans/completed/windows-release-patches-and-acceptance.md)
+  limits direct patches to five preceding patch numbers within the same major and minor version.
+- [Studio 3.1.5 release](exec-plans/completed/release-3.1.5.md)
+  records the published installers and verification results.
 - [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
   restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
 - [Image Equalizer in-place rounding](exec-plans/completed/image-equalizer-in-place-rounding.md)

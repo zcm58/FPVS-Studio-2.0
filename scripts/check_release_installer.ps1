@@ -173,6 +173,23 @@ function Test-RemovedBaselineFiles([string]$BaselinePhase, [string]$Phase) {
     }
 }
 
+function Test-HostedOpenGlVersionLimit($Playback) {
+    # PsychoPy 2026.1.1's Pyglet backend throws this exact text for driver OpenGL below 2.
+    $reportedError = 'RuntimeError: OpenGL version 2.0 or higher is required! Please update your ' +
+        'graphics drivers or use a different backend.'
+    return (
+        $Playback.status -ceq 'failed' -and
+        $Playback.stage -ceq 'open presentation window' -and
+        $Playback.error -ceq $reportedError -and
+        [string]::IsNullOrEmpty($Playback.cleanup_error) -and
+        $null -eq $Playback.completed_frames -and
+        ($Playback.planned_frames -is [long] -or $Playback.planned_frames -is [int]) -and
+        $Playback.planned_frames -eq 50 -and
+        $Playback.fullscreen -is [bool] -and $Playback.fullscreen -and
+        $Playback.experiment_test_mode -is [bool] -and $Playback.experiment_test_mode
+    )
+}
+
 function Test-Target([string]$Phase, [string]$BaselinePhase) {
     Test-InstalledInventory $Phase $receipt.target_version $receipt.target_inventory_sha256
     if ($BaselinePhase) {
@@ -211,7 +228,8 @@ function Test-Target([string]$Phase, [string]$BaselinePhase) {
         $playback = $smoke.packaged_playback
         if ($null -eq $playback) { throw 'Fresh setup did not report the fullscreen Test Mode probe.' }
         $playback | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $work 'fresh-playback-smoke.json')
-        if ($playback.status -ceq 'host_graphics_unavailable') {
+        if ($playback.status -ceq 'host_graphics_unavailable' -or
+            (Test-HostedOpenGlVersionLimit $playback)) {
             Write-Warning "Hosted fullscreen playback remains unverified. $($playback.error)"
         } elseif ($playback.status -cne 'passed') {
             throw "Fresh fullscreen playback failed at $($playback.stage). $($playback.error) $($playback.cleanup_error)"

@@ -1,6 +1,6 @@
 # Windows release patches and acceptance
 
-Status: Active
+Status: Completed
 
 ## Release workflow
 
@@ -60,3 +60,17 @@ existing releases and version metadata unchanged.
   passed 377 with four Windows symlink-permission skips, and docs passed 13.
 - Exercise the workflow against a new draft in hosted CI before the first
   release using this policy. Record the exact assets and run link.
+
+## Hosted 3.1.5 qualification
+
+The [hosted acceptance run](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/45052929017)
+authenticated all 14 draft assets and five published baselines. It verified a
+fresh install, a full upgrade from 3.1.4, one direct upgrade from each of 3.1.0
+through 3.1.4, and uninstall after all seven routes. Every target installation
+matched the same 6,918 owned files and preserved the project, settings, and
+unrelated-file sentinels.
+
+The full installer is 282,494,129 bytes. The five direct patches range from
+72,779,424 to 73,000,976 bytes. Release evidence and the target inventory hash
+are in the [3.1.5 release record](release-3.1.5.md). The production updater
+selected all five exact-baseline patches and verified full fallback and repair.
