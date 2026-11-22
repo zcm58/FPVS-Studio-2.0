@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 from copy import copy
 
 import pytest
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font
 
+from fpvs_studio.runtime import workbook_layout
 from fpvs_studio.runtime.workbook_layout import (
     MAX_COLUMN_WIDTH,
     MAX_ROW_HEIGHT,
@@ -28,6 +30,91 @@ def _sheet(rows):
     for cell in sheet[1]:
         cell.font = Font(size=11, bold=True)
     return sheet
+
+
+@pytest.fixture
+def wrap_calculations(monkeypatch):
+    calls = Counter()
+    original_wrap = workbook_layout._wrapped_lines
+
+    def count_wrap(text, available):
+        calls[text, available] += 1
+        return original_wrap(text, available)
+
+    monkeypatch.setattr(workbook_layout, "_wrapped_lines", count_wrap)
+    return calls
+
+
+def test_wrap_cache_keys_use_rendered_text_and_available_width(wrap_calculations):
+    sheet = _sheet([
+        ["N", "M"], [1.25, 1.25], ["1.25", "1.25"], [1.251, 1.251], [1.25, 1.25],
+    ])
+    for cell in sheet["B"][1:]:
+        cell.font = Font(size=11.01)
+    for column in "AB":
+        sheet[f"{column}2"].number_format = "0.00"
+        sheet[f"{column}4"].number_format = "0.00"
+        sheet[f"{column}5"].number_format = "0.000"
+
+    assert autofit_worksheet(sheet) == []
+
+    fitted_width = sheet.column_dimensions["A"].width
+    assert fitted_width == sheet.column_dimensions["B"].width
+    width_without_padding = fitted_width - workbook_layout._COLUMN_PADDING
+    exact_widths = {
+        width_without_padding / (sheet[f"{column}2"].font.sz / workbook_layout._DEFAULT_FONT_SIZE)
+        for column in "AB"
+    }
+    assert len(exact_widths) == 2
+    assert len({round(width, 2) for width in exact_widths}) == 1
+    displayed_numbers = {
+        key: count for key, count in wrap_calculations.items() if key[0].startswith("1.25")
+    }
+    assert displayed_numbers == {
+        (text, width): 1 for text in ("1.25", "1.250") for width in exact_widths
+    }
+
+
+def test_wrap_cache_spans_workbook_and_disclosure_only_for_the_current_fit(wrap_calculations):
+    repeated_line = "x" * 20
+    overflowing_text = "\n".join([repeated_line] * 40)
+    sheet = _sheet([["Text"], [overflowing_text]])
+    book = sheet.parent
+    other = book.create_sheet("Other")
+    other.append(["Text"])
+    other.append([repeated_line])
+    other["A2"].alignment = Alignment(wrap_text=True)
+
+    assert autofit_workbook(book) == ["Sheet!A2"]
+
+    disclosure = book["Full Text"]
+    assert "".join(value for (value,) in disclosure.iter_rows(
+        min_row=2, min_col=5, max_col=5, values_only=True,
+    )) == overflowing_text
+    assert sheet["A2"].hyperlink.location == "'Full Text'!E2"
+    key = (repeated_line, other.column_dimensions["A"].width - workbook_layout._COLUMN_PADDING)
+    assert wrap_calculations[key] == 1
+
+    assert autofit_worksheet(other) == []
+    assert autofit_worksheet(other) == []
+    assert wrap_calculations[key] == 3
+    assert autofit_workbook(_sheet([["Text"], [repeated_line]]).parent) == []
+    assert wrap_calculations[key] == 4
+
+
+def test_wrap_cache_releases_old_entries_and_does_not_retain_long_lines(wrap_calculations):
+    anchor = "anchor"
+    long_line = "x" * 513
+    sheet = _sheet([
+        ["W" * 80], [anchor], *([str(index)] for index in range(1025)), [anchor],
+        [long_line], [long_line],
+    ])
+
+    assert autofit_worksheet(sheet) == []
+
+    available = sheet.column_dimensions["A"].width - workbook_layout._COLUMN_PADDING
+    assert wrap_calculations[anchor, available] > 1
+    assert wrap_calculations[long_line, available] > 1
 
 
 def test_new_result_grows_columns_and_multiline_rows_without_changing_data(tmp_path):

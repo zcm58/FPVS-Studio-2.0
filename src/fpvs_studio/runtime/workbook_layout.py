@@ -11,6 +11,7 @@ import math
 import re
 import unicodedata
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date, datetime, time
 from functools import lru_cache
@@ -28,6 +29,8 @@ _COLUMN_PADDING = 3.0
 _ROW_PADDING = 6.0
 _MIN_ROW_HEIGHT = 18.0
 _DEFAULT_FONT_SIZE = 11.0
+_WRAP_CACHE_ENTRIES = 1024
+_WRAP_CACHE_MAX_TEXT = 512
 _TOKENS = re.compile(r"\S+|\s+")
 _DECIMALS = re.compile(r"[0#?][.]([0#?]+)")
 _FULL_TEXT_SHEET = "Full Text"
@@ -56,12 +59,17 @@ class _MeasuredCell:
     def natural_width(self) -> float:
         return max((_text_width(line) for line in self.text.split("\n")), default=0) * self.scale
 
-    def height(self, width: float) -> float:
+    def height(self, width: float, wrapped_lines: Callable[[str, float], int]) -> float:
         available = max(1.0, (width - _COLUMN_PADDING) / self.scale)
-        lines = sum(
-            _wrapped_lines(line, available) if self.wrap else 1
-            for line in self.text.split("\n")
-        )
+        text_lines = self.text.split("\n")
+        if self.wrap:
+            lines = sum(
+                wrapped_lines(line, available)
+                if len(line) <= _WRAP_CACHE_MAX_TEXT else _wrapped_lines(line, available)
+                for line in text_lines
+            )
+        else:
+            lines = len(text_lines)
         return max(_MIN_ROW_HEIGHT, lines * self.size * 1.5 + _ROW_PADDING)
 
 
@@ -169,6 +177,11 @@ def autofit_worksheet(worksheet: Any) -> list[str]:
     fit at Excel's maximum column width and row height.
     """
 
+    wrapped_lines = lru_cache(maxsize=_WRAP_CACHE_ENTRIES)(_wrapped_lines)
+    return _fit_worksheet(worksheet, wrapped_lines)
+
+
+def _fit_worksheet(worksheet: Any, wrapped_lines: Callable[[str, float], int]) -> list[str]:
     columns: dict[int, list[_MeasuredCell]] = defaultdict(list)
     for row in worksheet.iter_rows():
         for cell in row:
@@ -194,7 +207,7 @@ def autofit_worksheet(worksheet: Any) -> list[str]:
             MIN_COLUMN_WIDTH, min(PREFERRED_MAX_COLUMN_WIDTH, natural), unwrapped,
         ))
         while width < MAX_COLUMN_WIDTH and any(
-            cell.height(width) > MAX_ROW_HEIGHT for cell in cells
+            cell.height(width, wrapped_lines) > MAX_ROW_HEIGHT for cell in cells
         ):
             width = min(MAX_COLUMN_WIDTH, max(width + 12.0, width * 1.25))
         width = math.ceil(width * 100) / 100
@@ -202,7 +215,7 @@ def autofit_worksheet(worksheet: Any) -> list[str]:
         dimension.width = width
         dimension.bestFit = True
         for cell in cells:
-            height = cell.height(width)
+            height = cell.height(width, wrapped_lines)
             row_heights[cell.row] = max(row_heights.get(cell.row, _MIN_ROW_HEIGHT),
                                         min(MAX_ROW_HEIGHT, math.ceil(height * 100) / 100))
             if (height > MAX_ROW_HEIGHT
@@ -313,11 +326,13 @@ def autofit_workbook(workbook: Any) -> list[str]:
     Returns qualified addresses of the original oversized cells, never their values.
     """
 
+    # Reuse exact measurements only within this fit and its generated disclosures.
+    wrapped_lines = lru_cache(maxsize=_WRAP_CACHE_ENTRIES)(_wrapped_lines)
     if _remove_previous_full_text(workbook):
         _remove_previous_full_text_note(workbook)
     oversized: list[tuple[Any, str]] = []
     for sheet in workbook:
-        oversized.extend((sheet, coordinate) for coordinate in autofit_worksheet(sheet))
+        oversized.extend((sheet, coordinate) for coordinate in _fit_worksheet(sheet, wrapped_lines))
     if not oversized:
         return []
 
@@ -361,6 +376,6 @@ def autofit_workbook(workbook: Any) -> list[str]:
         notes, first_row=1 if new_notes else note_number,
         last_row=None if new_notes else note_number, preserve_freeze=not new_notes,
     )
-    if autofit_worksheet(full) or autofit_worksheet(notes):
+    if _fit_worksheet(full, wrapped_lines) or _fit_worksheet(notes, wrapped_lines):
         raise ValueError("A generated full-text display part exceeds Excel's visible cell limits.")
     return [f"{sheet.title}!{coordinate}" for sheet, coordinate in oversized]

@@ -66,8 +66,6 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 
 These future changes came out of the November 22 optimization review.
 
-- [Participant workbook wrap cache](exec-plans/planned/participant-workbook-wrap-cache.md)
-  avoids repeated row-height calculations during a single export.
 - [Responsive Assets stimulus import](exec-plans/planned/assets-stimulus-import-responsiveness.md)
   moves file preparation out of the desktop event loop.
 - [Image Equalizer in-place rounding](exec-plans/planned/image-equalizer-in-place-rounding.md)
@@ -101,6 +99,8 @@ These future changes came out of the November 22 optimization review.
   one-click source repair, SciPy selection, accurate dependency errors and deployed
   automatic completion reports; affected-Mac acceptance remains under macOS Phase 1.
 - [Project import progress](exec-plans/completed/import-progress-clarity.md)
+- [Participant workbook wrap cache](exec-plans/completed/participant-workbook-wrap-cache.md)
+  reuses text-wrap calculations within a single fit, with byte-identical exports and measured speedups.
 - [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
   restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
 - [Public Experiment Library](exec-plans/completed/public-experiment-library.md)
