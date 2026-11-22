@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from pathlib import Path
+from collections.abc import Callable, Iterable
+from itertools import chain, islice
+from operator import methodcaller
+from pathlib import Path, WindowsPath
+
+_WINDOWS_INVENTORY_MIN_ENTRIES = 64
 
 
 def is_finder_metadata_file(path: Path) -> bool:
@@ -27,8 +31,19 @@ def source_image_directory_files(
 ) -> list[Path]:
     """Return regular source entries, omitting only recognized Finder metadata."""
 
+    paths: Iterable[Path] = source_dir.iterdir()
+    is_file: Callable[[Path], bool] = methodcaller("is_file")
+    if type(source_dir) is WindowsPath:
+        # Avoid native initialization for the small authoring pools Studio commonly scans.
+        start = list(islice(paths, _WINDOWS_INVENTORY_MIN_ENTRIES))
+        if len(start) == _WINDOWS_INVENTORY_MIN_ENTRIES:
+            from fpvs_studio.preprocessing.windows_source_files import source_file_probe
+
+            is_file = source_file_probe(source_dir)
+            paths = chain(start, paths)
+        else:
+            paths = start
     return sorted(
-        (path for path in source_dir.iterdir()
-         if path.is_file() and not is_finder_metadata_file(path)),
+        (path for path in paths if is_file(path) and not is_finder_metadata_file(path)),
         key=sort_key,
     )
