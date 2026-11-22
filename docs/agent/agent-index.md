@@ -51,6 +51,26 @@ Audits require PowerShell (`pwsh` on macOS). Non-Qt tiers support `-Workers 4`
 (default one). See [test performance](../ENVIRONMENT.md#test-performance) for
 isolation, Windows test paths and `-Durations`.
 
+## Performance and output parity
+
+- Use the affected entry point with the same project, assets, resolved seeds,
+  settings, refresh rate and cache state on both builds. Check deterministic
+  results bit for bit, including affected stimulus derivatives, compiled frame
+  schedules, fixation events and trigger sequences. For runtime scoring and
+  exports, replay the same recorded inputs and preserve the observed timing data.
+- Count costly operations where they happen. For example, compiling repeated
+  entries that share task images should hash each unique image once per compile.
+  Exercise a subsequent compile after changing an image to verify fresh validation.
+  Preserve independent per-entry schedules and launch preflight checks.
+  [Compilation input preparation](../SESSION_PLAN.md#compilation-input-preparation)
+- Measure the affected user action end to end, including GUI stalls and any
+  work moved into launch or playback. Compare relevant first and repeated uses
+  and repeat noisy timings. Physical display and EEG timing claims require
+  hardware evidence. For a less efficient design, quantify its cost against
+  the alternative and explain the architectural, integrity or resource benefit.
+  A measured slowdown requires the user's explicit approval even when another
+  workflow improves.
+
 ## Skill Routing
 
 | Task | Read this repo-local skill |

@@ -10,6 +10,12 @@ completed studies to Toolbox. Windows supports acquisition. macOS has experiment
   and focused verification. Use [architecture](ARCHITECTURE.md) for ownership.
 - Preserve unrelated edits, untracked files, retained output, formats and workflows.
   Maintain an [execution plan](docs/PLANS.md) for feature-sized or cross-layer work.
+- Preserve deterministic outputs bit for bit unless changing them is explicitly in
+  scope. Choose the most efficient viable design that preserves scientific, timing
+  and integrity contracts. Justify extra work against a concrete alternative.
+  Fix any regression in processing speed, GUI responsiveness or presentation timing,
+  or obtain the user's explicit approval for that specific tradeoff before keeping,
+  committing or pushing it. [Performance verification](docs/agent/agent-index.md#performance-and-output-parity)
 - Use the [shared desktop guidance](docs/DESIGN.md#shared-openfpvs-desktop-experience)
   for independent release planning, audience and interaction decisions.
 
