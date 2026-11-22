@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -627,6 +628,172 @@ def test_legacy_plan_requires_operator_confirmation(execution):
     assert build_recovery_session_plan(root, record, allow_unverified=True).total_runs == 1
 
 
+def test_legacy_discovery_reuses_reads_for_unmatched_receipts(execution, monkeypatch):
+    root, plan = execution
+    receipts = [_acquisition(root, plan, mode=None, participant=f"01{index}") for index in range(3)]
+    for index in range(4):
+        write_json_file(
+            root / "runs" / f"nonmatch-{index}" / "session_plan.json",
+            plan.model_copy(update={"session_id": f"other-session-{index}"}),
+        )
+    malformed = root / "runs/malformed/session_plan.json"
+    malformed.parent.mkdir()
+    malformed.write_text("{unfinished", encoding="utf-8")
+    before = _files(root)
+    read = Mock(wraps=condition_recovery._bounded_read)
+    monkeypatch.setattr(condition_recovery, "_bounded_read", read)
+
+    report = query_condition_recovery(root)
+
+    assert len(report.records) == len(receipts)
+    assert all(not item.can_rerun for item in report.records)
+    assert report.warnings == tuple(
+        f"Original schedule or protocol unavailable for {execution_id}."
+        for execution_id in sorted(receipt.evidence.execution_id for receipt in receipts)
+    )
+    plan_read_folders = [
+        call.args[0].parent.name for call in read.call_args_list if call.args[1] is SessionPlan
+    ]
+    assert sorted(plan_read_folders) == ["malformed"] * len(receipts) + [
+        f"nonmatch-{index}" for index in range(4)
+    ]
+    assert _files(root) == before
+
+
+def test_legacy_discovery_keeps_first_match_and_dedicated_plan_precedence(execution, monkeypatch):
+    root, plan = execution
+    legacy = _acquisition(root, plan, mode=None)
+    project_names = {"first-written": "First legacy plan", "second-written": "Second legacy plan"}
+    for folder, name in project_names.items():
+        write_json_file(root / "runs" / folder / "session_plan.json",
+                        plan.model_copy(update={"project_name": name}))
+    expected_first = next((root / "runs").glob("*/session_plan.json")).parent.name
+    dedicated = _checkpoint(root, plan.model_copy(update={"project_name": "Dedicated plan"}))
+    invalid = _checkpoint(root, plan)
+    invalid_path = root / "logs/.condition-recovery" / f"{invalid.execution_id}.plan.json"
+    invalid_path.write_text("{unfinished", encoding="utf-8")
+    read = Mock(wraps=condition_recovery._bounded_read)
+    monkeypatch.setattr(condition_recovery, "_bounded_read", read)
+
+    report = query_condition_recovery(root)
+
+    records = {record.execution_id: record for record in report.records}
+    assert report.warnings == (
+        f"Original schedule or protocol unavailable for {invalid.execution_id}.",
+    )
+    assert not records[invalid.execution_id].can_rerun
+    legacy_plan_reads = [
+        call.args[0].parent.name for call in read.call_args_list
+        if call.args[1] is SessionPlan and call.args[0].name == "session_plan.json"
+    ]
+    assert legacy_plan_reads == [expected_first]
+    legacy_rerun = build_recovery_session_plan(
+        root, records[legacy.evidence.execution_id], allow_unverified=True,
+    )
+    assert legacy_rerun.project_name == project_names[expected_first]
+    assert legacy_rerun.ordered_entries()[0].run_spec == plan.ordered_entries()[0].run_spec
+    assert build_recovery_session_plan(root, records[dedicated.execution_id]).project_name == (
+        "Dedicated plan"
+    )
+
+
+@pytest.mark.parametrize("change", ["same-size replacement", "outside redirect"])
+def test_legacy_discovery_rechecks_candidate_changes_during_and_between_queries(
+    execution, tmp_path, monkeypatch, change,
+):
+    root, plan = execution
+    receipts = sorted(
+        [_acquisition(root, plan, mode=None, participant=f"01{index}") for index in range(2)],
+        key=lambda receipt: receipt.evidence.execution_id,
+    )
+    first, second = receipts
+    relative = root / "runs/legacy/session_plan.json"
+
+    def point_legacy_folder(target):
+        link = relative.parent
+        link.parent.mkdir(exist_ok=True)
+        if os.name == "nt":
+            from _winapi import CreateJunction
+
+            if link.exists():
+                link.rmdir()
+            try:
+                CreateJunction(str(target), str(link))
+            except OSError as error:
+                pytest.skip(f"Windows directory junctions are unavailable: {error}")
+        else:
+            link.unlink(missing_ok=True)
+            link.symlink_to(target, target_is_directory=True)
+
+    if change == "outside redirect":
+        inside = root / "legacy-source"
+        outside = tmp_path / "outside"
+        for target in (inside, outside):
+            write_json_file(target / "session_plan.json", plan)
+        point_legacy_folder(inside)
+        outside_before = (outside / "session_plan.json").read_bytes()
+    else:
+        write_json_file(relative, plan)
+        suffix = "0" if plan.session_id[-1] != "0" else "1"
+        replacement = plan.model_copy(update={"session_id": plan.session_id[:-1] + suffix})
+
+    original_read = condition_recovery._bounded_read
+
+    def change_before_second_receipt(path, model, **kwargs):
+        if model is AcquisitionEvidence and path.name == second.path.name:
+            if change == "outside redirect":
+                point_legacy_folder(outside)
+            else:
+                previous_size = relative.stat().st_size
+                write_json_file(relative, replacement)
+                assert relative.stat().st_size == previous_size
+        return original_read(path, model, **kwargs)
+
+    with monkeypatch.context() as patch:
+        patch.setattr(condition_recovery, "_bounded_read", change_before_second_receipt)
+        report = query_condition_recovery(root)
+
+    records = {record.execution_id: record for record in report.records}
+    selected = records[first.evidence.execution_id]
+    assert selected.can_rerun
+    if change == "outside redirect":
+        assert list(records) == [first.evidence.execution_id]
+        assert report.warnings == (f"Could not inspect acquisition record {second.path.name}.",)
+        assert (outside / "session_plan.json").read_bytes() == outside_before
+    else:
+        assert not records[second.evidence.execution_id].can_rerun
+        assert report.warnings == (
+            f"Original schedule or protocol unavailable for {second.evidence.execution_id}.",
+        )
+    assert not any(record.can_rerun for record in query_condition_recovery(root).records)
+    with pytest.raises(ValueError, match="unavailable"):
+        build_recovery_session_plan(root, selected, allow_unverified=True)
+
+
+def test_legacy_rerun_reloads_the_plan_after_its_own_discovery(execution, monkeypatch):
+    root, plan = execution
+    receipt = _acquisition(root, plan, mode=None)
+    candidate = root / "runs/legacy/session_plan.json"
+    write_json_file(candidate, plan)
+    (record,) = query_condition_recovery(root).records
+    assert record.can_rerun
+    original_read = condition_recovery._bounded_read
+    receipt_reads = 0
+
+    def invalidate_after_discovery(path, model, **kwargs):
+        nonlocal receipt_reads
+        if model is AcquisitionEvidence and path.name == receipt.path.name:
+            receipt_reads += 1
+            if receipt_reads == 2:
+                candidate.write_text("{unfinished", encoding="utf-8")
+        return original_read(path, model, **kwargs)
+
+    monkeypatch.setattr(condition_recovery, "_bounded_read", invalidate_after_discovery)
+    with pytest.raises(ValueError, match="The original compiled session plan is unavailable"):
+        build_recovery_session_plan(root, record, allow_unverified=True)
+    assert receipt_reads == 2
+
+
 def test_malformed_record_is_visible_as_warning_and_never_modified(tmp_path):
     folder = tmp_path / "logs" / ".condition-recovery"
     folder.mkdir(parents=True)
@@ -851,7 +1018,8 @@ def test_acknowledgement_is_idempotent_and_does_not_need_original_plan(execution
     (root / "logs" / ".condition-recovery" / f"{record.execution_id}.plan.json").unlink()
     with monkeypatch.context() as patch:
         patch.setattr(
-            condition_recovery, "_original_plan", Mock(side_effect=AssertionError("No plan read")),
+            condition_recovery, "_original_plan_available",
+            Mock(side_effect=AssertionError("No plan read")),
         )
         report = query_condition_recovery(root, include_acknowledged=False)
     assert report.records == report.warnings == ()

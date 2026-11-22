@@ -7,6 +7,7 @@ import hashlib
 import logging
 import stat
 import sys
+from collections.abc import Iterator
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +26,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.serialization import write_json_file
 from fpvs_studio.core.session_plan import SessionBlock, SessionEntry, SessionPlan
 from fpvs_studio.core.study_lifecycle import read_study
-from fpvs_studio.core.study_versions import current_version
+from fpvs_studio.core.study_versions import _asset_stamp, current_version
 
 RecoveryStage = Literal[
     "setup",
@@ -43,6 +44,10 @@ _DIRECTORY = "logs/.condition-recovery"
 _CONTENTION = {errno.EACCES, errno.EAGAIN, errno.EDEADLK}
 _Model = TypeVar("_Model", bound=BaseModel)
 _LOGGER = logging.getLogger(__name__)
+_MAX_LEGACY_PLAN_SIGNATURES = 256
+_MAX_LEGACY_SIGNATURE_TEXT = 16384
+_PlanSignature = tuple[str, str | None, tuple[tuple[str, str, str], ...]]
+_LegacyPlanInventory = dict[Path, tuple[str, _PlanSignature | None]]
 
 
 @dataclass(frozen=True)
@@ -300,36 +305,99 @@ def _labels(runs: list[_Run], ids: tuple[str, ...]) -> tuple[str, ...]:
     )
 
 
-def _original_plan(
+def _original_plan_candidates(
     project_root: Path, source: _Checkpoint | AcquisitionEvidence
-) -> SessionPlan | None:
+) -> Iterator[tuple[Path, _PlanSignature, bool]]:
     path = resolve_project_relative_path(
         project_root, f"{_DIRECTORY}/{source.execution_id}.plan.json"
     )
-    candidates = [path] if path.exists() else []
+    dedicated = path.exists()
+    candidates = [path] if dedicated else []
     runs = resolve_project_relative_path(project_root, "runs")
     if not candidates and runs.exists():
         candidates.extend(runs.glob("*/session_plan.json"))
-    expected = [(run.run_id, run.condition_id, run.condition_name) for run in source.runs]
-    if len({run[0] for run in expected}) != len(expected):
+    expected_runs = tuple((run.run_id, run.condition_id, run.condition_name) for run in source.runs)
+    if len({run[0] for run in expected_runs}) != len(expected_runs):
         raise ValueError("Recovery run identifiers must be unique.")
+    expected = (source.project_id, source.session_id, expected_runs)
     for candidate in candidates:
         relative = to_project_relative_posix(project_root, candidate)
         checked = resolve_project_relative_path(project_root, relative)
-        try:
-            plan = _bounded_read(checked, SessionPlan, limit=128 * 1024 * 1024)
-        except (OSError, ValueError):
-            continue
-        entries = plan.ordered_entries()
-        if (
-            plan.project_id == source.project_id
-            and plan.session_id == source.session_id
-            and [(entry.run_id, entry.condition_id, entry.condition_name) for entry in entries]
-            == expected
-            and all(entry.run_spec.project_id == source.project_id for entry in entries)
-        ):
+        yield checked, expected, not dedicated
+
+
+def _read_original_plan(path: Path) -> SessionPlan | None:
+    try:
+        return _bounded_read(path, SessionPlan, limit=128 * 1024 * 1024)
+    except (OSError, ValueError):
+        return None
+
+
+def _original_plan_signature(plan: SessionPlan) -> _PlanSignature | None:
+    entries = plan.ordered_entries()
+    if any(entry.run_spec.project_id != plan.project_id for entry in entries):
+        return None
+    return (
+        plan.project_id,
+        plan.session_id,
+        tuple((entry.run_id, entry.condition_id, entry.condition_name) for entry in entries),
+    )
+
+
+def _original_plan(
+    project_root: Path, source: _Checkpoint | AcquisitionEvidence,
+) -> SessionPlan | None:
+    for path, expected, _legacy in _original_plan_candidates(project_root, source):
+        plan = _read_original_plan(path)
+        if plan is not None and _original_plan_signature(plan) == expected:
             return plan
     return None
+
+
+def _legacy_plan_stamp(path: Path) -> str | None:
+    try:
+        info = path.stat()
+        if stat.S_ISREG(info.st_mode) and info.st_ino:
+            return _asset_stamp(path, info)
+    except OSError:
+        pass
+    return None
+
+
+def _legacy_signature_fits(signature: _PlanSignature | None) -> bool:
+    if signature is None:
+        return True
+    project, session, runs = signature
+    characters = len(project) + len(session or "") + sum(
+        len(run_id) + len(condition_id) + len(name) for run_id, condition_id, name in runs
+    )
+    return characters <= _MAX_LEGACY_SIGNATURE_TEXT
+
+
+def _original_plan_available(
+    project_root: Path, source: _Checkpoint | AcquisitionEvidence, inventory: _LegacyPlanInventory,
+) -> bool:
+    for path, expected, legacy in _original_plan_candidates(project_root, source):
+        stamp = _legacy_plan_stamp(path) if legacy else None
+        cached = inventory.get(path) if stamp is not None else None
+        if cached is not None and cached[0] == stamp:
+            if cached[1] == expected:
+                return True
+            continue
+        plan = _read_original_plan(path)
+        if plan is None:
+            continue
+        signature = _original_plan_signature(plan)
+        if (
+            stamp is not None
+            and len(inventory) < _MAX_LEGACY_PLAN_SIGNATURES
+            and _legacy_signature_fits(signature)
+            and stamp == _legacy_plan_stamp(path)
+        ):
+            inventory[path] = (stamp, signature)
+        if signature == expected:
+            return True
+    return False
 
 
 def _acknowledgement_path(project_root: Path, record: InterruptedCondition) -> Path:
@@ -442,6 +510,7 @@ def query_condition_recovery(
     """Inspect known project records without creating, rewriting or deleting any file."""
     records: list[InterruptedCondition] = []
     warnings: list[str] = []
+    legacy_plans: _LegacyPlanInventory = {}
 
     def add_record(record: InterruptedCondition, source: _Checkpoint | AcquisitionEvidence) -> None:
         try:
@@ -454,7 +523,7 @@ def query_condition_recovery(
                 f"{record.execution_id}."
             )
         if include_acknowledged or record.acknowledged_at is None:
-            frozen_available = _original_plan(project_root, source) is not None
+            frozen_available = _original_plan_available(project_root, source, legacy_plans)
             version_id = None
             try:
                 version_id = _frozen_protocol_version(project_root, source)

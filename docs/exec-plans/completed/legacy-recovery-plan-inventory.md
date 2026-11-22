@@ -1,6 +1,6 @@
 # Legacy Recovery Plan Inventory
 
-Status: Planned
+Status: Completed
 
 ## Workflow and Evidence
 
@@ -34,6 +34,34 @@ retained state to discovery and keep the authoritative plan recheck in
 - Check that a recovered occurrence preserves its exact compiled schedule.
   Use the [runtime recovery contract][contract], existing [condition recovery
   tests][tests], focused runtime verification and safe precommit checks.
+
+## Implementation and results
+
+Discovery keeps a bounded cache of validated legacy match signatures for one
+query. Each candidate still goes through the original path checks in the same
+order. A cache hit requires an unchanged filesystem stamp, including native
+change time on Windows. Invalid or unstampable files still go through the
+reader. The rerun builder reads the selected plan afresh.
+
+With 24 real legacy plan files of approximately 2.8 MB and eight unmatched
+requests, bounded reads fell from 192 to 24 and median discovery time fell from
+17.496 to 2.656 seconds across eight paired trials. Recovery reports and
+warnings matched exactly. Single dedicated-plan and early legacy-match timings
+were within measurement noise. Peak traced allocations rose from 143,791,889
+to 143,839,584 bytes in the large case.
+
+Regression cases cover dedicated and first legacy match precedence, malformed
+files, Windows junction redirects, same-size replacement, and a plan changed
+between discovery and the authoritative rerun. A Windows probe also confirmed
+cache invalidation after an in-place rewrite that preserved file size and restored
+mtime. Runtime focused verification passed 1,180 tests, including the existing
+recovered-schedule assertions, with four Windows symlink-permission skips.
+
+Repo precommit passed both platform type checks, repository audits, and 6,619
+unit tests with 41 skips. The existing Windows serialization test recorded an
+extra retry from the real file replacement, as in the previous workbook change.
+All 10 serialization tests passed on immediate focused rerun. Docs focused
+verification passed all 13 checks.
 
 [recovery]: ../../../src/fpvs_studio/runtime/condition_recovery.py
 [contract]: ../../RUNTIME_EXECUTION.md#interrupted-condition-recovery
