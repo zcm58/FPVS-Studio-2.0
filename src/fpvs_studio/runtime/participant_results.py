@@ -233,21 +233,21 @@ def _legacy_definitions(plan: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _legacy_full_records(
-    root: Path, history_rows: list[dict[str, str]],
+    project_paths: ProjectPathResolver, history_rows: list[dict[str, str]],
 ) -> list[tuple[dict[str, Any], str]]:
     records = []
     directories = dict.fromkeys(row.get("output_dir", "") for row in history_rows)
     for directory in directories:
         if not directory:
             continue
-        summary_path = resolve_project_relative_path(root, f"{directory}/session_summary.json")
-        plan_path = resolve_project_relative_path(root, f"{directory}/session_plan.json")
+        summary_path = project_paths.resolve(f"{directory}/session_summary.json")
+        plan_path = project_paths.resolve(f"{directory}/session_plan.json")
         if not summary_path.is_file():
             continue
         summary = _json(summary_path)
         metadata = summary.get("runtime_metadata") or {}
         definitions = _legacy_definitions(_json(plan_path)) if plan_path.is_file() else []
-        responses_path = resolve_project_relative_path(root, f"{directory}/task_responses.csv")
+        responses_path = project_paths.resolve(f"{directory}/task_responses.csv")
         responses_by_run: dict[str | None, list[dict[str, Any]]] = {}
         for row in _csv(responses_path):
             run_id = row.get("session_run_id") or row.get("run_id")
@@ -257,9 +257,7 @@ def _legacy_full_records(
             run_id = str(run.get("run_id", ""))
             selected = list(responses_by_run.get(run_id, ()))
             if not responses_path.is_file():
-                journal = resolve_project_relative_path(
-                    root, f"{directory}/{run_id}/task_responses.jsonl",
-                )
+                journal = project_paths.resolve(f"{directory}/{run_id}/task_responses.jsonl")
                 if journal.is_file():
                     from fpvs_studio.runtime.task_runner import read_task_response_journal
 
@@ -301,17 +299,16 @@ def freeze_legacy_participant_results(project_root: Path) -> list[Path]:
 def _freeze_legacy_participant_results_unlocked(project_root: Path) -> list[Path]:
     """Freeze legacy research while the caller owns the project reporting lock."""
 
-    history = _csv(resolve_project_relative_path(
-        project_root, "logs/session_condition_history.csv",
-    ))
-    records = _records(project_root, history)
+    project_paths = ProjectPathResolver(project_root)
+    history = _csv(project_paths.resolve("logs/session_condition_history.csv"))
+    records = _records(project_paths, history)
     _answer_rows(records)
     _demographic_answer_rows(records)
     _fixation_response_rows(records)
     written = []
-    for record, source in _legacy_full_records(project_root, history):
+    for record, source in _legacy_full_records(project_paths, history):
         key = hashlib.sha256(source.encode("utf-8")).hexdigest()
-        path = resolve_project_relative_path(project_root, f"{_DIRECTORY}/legacy-{key}.json")
+        path = project_paths.resolve(f"{_DIRECTORY}/legacy-{key}.json")
         payload = {**record, "schema_version": 1, "legacy_source": source}
         if path.is_file():
             previous = _json(path)
@@ -324,20 +321,22 @@ def _freeze_legacy_participant_results_unlocked(project_root: Path) -> list[Path
     return written
 
 
-def _records(root: Path, history_rows: list[dict[str, str]]) -> list[tuple[dict[str, Any], str]]:
+def _records(
+    project_paths: ProjectPathResolver, history_rows: list[dict[str, str]],
+) -> list[tuple[dict[str, Any], str]]:
     records: list[tuple[dict[str, Any], str]] = []
-    directory = resolve_project_relative_path(root, _DIRECTORY)
+    directory = project_paths.resolve(_DIRECTORY)
     if directory.is_dir():
         for candidate in sorted(directory.glob("*.json")):
-            path = resolve_project_relative_path(root, f"{_DIRECTORY}/{candidate.name}")
+            path = project_paths.resolve(f"{_DIRECTORY}/{candidate.name}")
             record = _json(path)
             if record.get("schema_version") != 1:
                 raise ValueError("Unsupported participant results record version.")
-            _merge_pending_journals(root, record)
+            _merge_pending_journals(project_paths, record)
             records.append((record, f"{_DIRECTORY}/{candidate.name}"))
-    records.extend(_legacy_full_records(root, history_rows))
-    records.extend(_legacy_post_context_records(root))
-    compact_rows = _csv(resolve_project_relative_path(root, "logs/task_responses.csv"))
+    records.extend(_legacy_full_records(project_paths, history_rows))
+    records.extend(_legacy_post_context_records(project_paths))
+    compact_rows = _csv(project_paths.resolve("logs/task_responses.csv"))
     for index, row in enumerate(compact_rows):
         records.append(({
             **row, "definitions": [], "finalized": True,
@@ -347,20 +346,22 @@ def _records(root: Path, history_rows: list[dict[str, str]]) -> list[tuple[dict[
     return records
 
 
-def _legacy_post_context_records(root: Path) -> list[tuple[dict[str, Any], str]]:
+def _legacy_post_context_records(
+    project_paths: ProjectPathResolver,
+) -> list[tuple[dict[str, Any], str]]:
     """Recover historical post answers/labels from immutable context and journals."""
 
     from fpvs_studio.runtime.post_condition_responses import _ExecutionContext
     from fpvs_studio.runtime.task_runner import read_task_response_journal
 
     records: list[tuple[dict[str, Any], str]] = []
-    directory = resolve_project_relative_path(root, _POST_CONTEXT_DIRECTORY)
+    directory = project_paths.resolve(_POST_CONTEXT_DIRECTORY)
     if not directory.is_dir():
         return records
     journals: dict[str, list[dict[str, Any]]] = {}
     for candidate in sorted(directory.glob("*.json")):
         source = f"{_POST_CONTEXT_DIRECTORY}/{candidate.name}"
-        context_path = resolve_project_relative_path(root, source)
+        context_path = project_paths.resolve(source)
         context = _ExecutionContext.model_validate(_json(context_path))
         definitions = []
         runs = []
@@ -380,7 +381,7 @@ def _legacy_post_context_records(root: Path) -> list[tuple[dict[str, Any], str]]
             first = entry.questionnaires[0]
             definitions.append({"run_id": entry.run_id, "condition_id": first.condition_id,
                                 "condition_name": first.condition_name, "tasks": tasks})
-            journal = resolve_project_relative_path(root, entry.journal_path)
+            journal = project_paths.resolve(entry.journal_path)
             if entry.journal_path not in journals:
                 journals[entry.journal_path] = [response.model_dump(mode="json") for response in
                     read_task_response_journal(journal)] if journal.is_file() else []
@@ -404,7 +405,7 @@ def _legacy_post_context_records(root: Path) -> list[tuple[dict[str, Any], str]]
     return records
 
 
-def _merge_pending_journals(root: Path, record: dict[str, Any]) -> None:
+def _merge_pending_journals(project_paths: ProjectPathResolver, record: dict[str, Any]) -> None:
     if record.get("finalized", True):
         return
     from fpvs_studio.runtime.task_runner import read_task_response_journal
@@ -413,7 +414,7 @@ def _merge_pending_journals(root: Path, record: dict[str, Any]) -> None:
     definitions = {entry["run_id"]: entry for entry in record.get("definitions", [])}
     journals: dict[str, list[dict[str, Any]]] = {}
     for run_id, relative in record.get("journal_paths", {}).items():
-        path = resolve_project_relative_path(root, relative)
+        path = project_paths.resolve(relative)
         if not path.is_file():
             continue
         if relative not in journals:
@@ -443,9 +444,10 @@ def _merge_pending_journals(root: Path, record: dict[str, Any]) -> None:
 
 def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
     """Identify real data, including a partial visit, independently of upload status."""
-    rows = _csv(resolve_project_relative_path(project_root, "logs/session_condition_history.csv"))
+    project_paths = ProjectPathResolver(project_root)
+    rows = _csv(project_paths.resolve("logs/session_condition_history.csv"))
     visits: dict[str, set[str]] = {}
-    records = _records(project_root, rows)
+    records = _records(project_paths, rows)
     accounted: set[str] = set()
 
     def identity_of(record: Mapping[str, Any]) -> tuple[str, str, str]:
@@ -503,14 +505,12 @@ def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
                 f"{number} · {row.get('participant_session_number') or session}"
             )
     # Acquisition can outlive an interrupted or legacy workbook checkpoint.
-    directory = resolve_project_relative_path(project_root, "logs/acquisition")
+    directory = project_paths.resolve("logs/acquisition")
     for candidate in directory.glob("*.acquisition-v1.json"):
         execution = candidate.name.removesuffix(".acquisition-v1.json")
         if execution in accounted:
             continue
-        evidence = _json(
-            resolve_project_relative_path(project_root, f"logs/acquisition/{candidate.name}")
-        )
+        evidence = _json(project_paths.resolve(f"logs/acquisition/{candidate.name}"))
         number, session, ordinal = identity_of(evidence)
         if (
             not number
@@ -526,9 +526,7 @@ def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
             continue
         key, test = modes.get((number, session, ordinal), ("", False))
         if not test:
-            snapshot = resolve_project_relative_path(
-                project_root, f"logs/acquisition/{execution}.study-run-v1.json"
-            )
+            snapshot = project_paths.resolve(f"logs/acquisition/{execution}.study-run-v1.json")
             if snapshot.exists():
                 run_settings = _json(snapshot)
                 if run_settings.get("execution_id") != execution or identity_of(
@@ -967,7 +965,7 @@ def add_participant_results_sheets(
     the caller atomically saves the workbook, preserving the previous workbook.
     """
 
-    records = _records(project_root, history_rows)
+    records = _records(ProjectPathResolver(project_root), history_rows)
     _sheet(workbook, "Demographics", _DEMOGRAPHICS_HEADERS,
            _demographic_rows(records, history_rows))
     _sheet(workbook, DEMOGRAPHIC_ANSWERS_SHEET_NAME, _DEMOGRAPHIC_ANSWER_HEADERS,

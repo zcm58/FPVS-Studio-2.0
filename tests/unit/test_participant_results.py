@@ -6,6 +6,7 @@ import csv
 import json
 import os
 from copy import copy
+from pathlib import Path
 
 import pytest
 from openpyxl import Workbook, load_workbook
@@ -21,6 +22,7 @@ from fpvs_studio.core.execution import (
     RuntimeMetadata,
     SessionExecutionSummary,
 )
+from fpvs_studio.core.paths import ProjectPathResolver, filesystem_path
 from fpvs_studio.core.post_questions import compile_post_question_context, make_post_questionnaire
 from fpvs_studio.core.task_models import (
     TaskModuleSpec,
@@ -124,6 +126,21 @@ def _history(plan, summary, **extra):
     }
 
 
+def _point_directory_link(link, target):
+    if os.name == "nt":
+        from _winapi import CreateJunction
+
+        if link.exists():
+            link.rmdir()
+        try:
+            CreateJunction(str(target), str(link))
+        except OSError as error:
+            pytest.skip(f"Windows directory junctions are unavailable: {error}")
+    else:
+        link.unlink(missing_ok=True)
+        link.symlink_to(target, target_is_directory=True)
+
+
 def test_capture_retry_preserves_labels_and_individual_responses(tmp_path, results):
     plan, summary = results
     first = capture_participant_results(tmp_path, plan, summary)
@@ -217,7 +234,9 @@ def test_legacy_full_csv_retains_response_order_and_run_id_fallback(tmp_path):
         "session_run_id,run_id,answer\nb,a,first b\n,a,first a\nb,,second b\n,a,second a\n",
         encoding="utf-8",
     )
-    ((record, _source),) = _legacy_full_records(tmp_path, [{"output_dir": "runs/legacy"}])
+    ((record, _source),) = _legacy_full_records(
+        ProjectPathResolver(tmp_path), [{"output_dir": "runs/legacy"}],
+    )
     responses = [run["responses"] for run in record["runs"]]
     assert [[row["answer"] for row in run] for run in responses] == [
         ["first a", "second a"], ["first b", "second b"], ["first a", "second a"], [],
@@ -265,44 +284,123 @@ def test_pending_capture_recovers_partial_journal_before_any_history(tmp_path, r
     assert set(participant_results_source_paths(tmp_path)) == {capture, journal}
 
 
-def test_results_source_scan_checks_current_journal_target(tmp_path):
+def test_workbook_reuses_one_root_resolution_for_all_sources(tmp_path, results, monkeypatch):
+    plan, summary = results
+    summary.output_dir = "runs/old"
+    write_session_artifacts(tmp_path / summary.output_dir, plan, summary)
+    append_session_condition_history(tmp_path, plan, summary, refresh_reports=False)
+    append_compact_task_responses(tmp_path, plan, summary)
+    response = summary.run_results[0].task_responses[0]
+    journal = tmp_path / "logs/answers.jsonl"
+    append_task_response_checkpoint(journal, response)
+    capture_participant_results(tmp_path, plan, summary, finalized=False,
+                                journal_paths={response.run_id: journal})
+    original_resolve = Path.resolve
+    root_arguments = {tmp_path, filesystem_path(tmp_path)}
+    root_lookups = []
+
+    def track_root_resolve(path, *args, **kwargs):
+        if path in root_arguments:
+            root_lookups.append(path)
+        return original_resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "resolve", track_root_resolve)
+    workbook_path = write_participant_summary(tmp_path)
+    assert len(root_lookups) == 2  # One for the reporting lock and one for source reads.
+    workbook = load_workbook(workbook_path)
+    try:
+        answer, = _rows(workbook, "Task Answers")
+        assert answer["Answer"] == "Original yes"
+    finally:
+        workbook.close()
+
+
+def test_each_workbook_rebuild_resolves_the_current_project_root(tmp_path, results):
+    plan, summary = results
+    first = tmp_path / "first-project"
+    second = tmp_path / "second-project"
+    capture_participant_results(first, plan, summary)
+    second_plan = plan.model_copy(deep=True)
+    question = second_plan.ordered_entries()[0].pre_tasks[0].steps[0].questions[0]
+    question.options[0].label = "Second yes"
+    capture_participant_results(second, second_plan, summary)
+    link = tmp_path / "project"
+    _point_directory_link(link, first)
+    first_output = write_participant_summary(link).resolve()
+    assert first_output.is_relative_to(first.resolve())
+    first_bytes = first_output.read_bytes()
+
+    _point_directory_link(link, second)
+    second_output = write_participant_summary(link).resolve()
+
+    assert second_output.is_relative_to(second.resolve())
+    assert first_output.read_bytes() == first_bytes
+    workbook = load_workbook(second_output)
+    try:
+        answer, = _rows(workbook, "Task Answers")
+        assert answer["Answer"] == "Second yes"
+    finally:
+        workbook.close()
+
+
+def test_results_source_scan_and_workbook_check_current_journal_target(tmp_path, results):
     root = tmp_path / "project"
-    capture = root / "logs/.participant-results/partial.json"
-    capture.parent.mkdir(parents=True)
-    capture.write_text(json.dumps({
-        "finalized": False,
-        "journal_paths": {"run": "logs/current/answers.jsonl"},
-    }), encoding="utf-8")
+    plan, summary = results
+    response = summary.run_results[0].task_responses[0]
+    link = root / "logs/current"
+    capture = capture_participant_results(
+        root, plan, summary.model_copy(update={"run_results": []}), finalized=False,
+        journal_paths={response.run_id: link / "answers.jsonl"},
+    )
     inside = root / "logs/inside"
     outside = tmp_path / "outside"
     for folder in (inside, outside):
-        folder.mkdir()
-        (folder / "answers.jsonl").touch()
-    link = root / "logs/current"
-
-    if os.name == "nt":
-        import _winapi
-
-        try:
-            _winapi.CreateJunction(str(inside), str(link))
-        except OSError as exc:
-            pytest.skip(f"Windows directory junctions are unavailable: {exc}")
-    else:
-        link.symlink_to(inside, target_is_directory=True)
+        append_task_response_checkpoint(folder / "answers.jsonl", response)
+    _point_directory_link(link, inside)
 
     assert participant_results_source_paths(root) == [
         capture.resolve(), (inside / "answers.jsonl").resolve(),
     ]
-
-    if os.name == "nt":
-        link.rmdir()
-        _winapi.CreateJunction(str(outside), str(link))
-    else:
-        link.unlink()
-        link.symlink_to(outside, target_is_directory=True)
+    workbook_path = write_participant_summary(root)
+    before = workbook_path.read_bytes()
+    _point_directory_link(link, outside)
 
     with pytest.raises(ValueError, match="Project-relative path escapes the project root"):
         participant_results_source_paths(root)
+    with pytest.raises(ValueError, match="Project-relative path escapes the project root"):
+        write_participant_summary(root)
+    assert workbook_path.read_bytes() == before
+
+
+def test_unreadable_optional_journal_does_not_replace_the_workbook(tmp_path, results, monkeypatch):
+    plan, summary = results
+    response = summary.run_results[0].task_responses[0]
+    journal = tmp_path / "logs/answers.jsonl"
+    capture_participant_results(
+        tmp_path, plan, summary.model_copy(update={"run_results": []}), finalized=False,
+        journal_paths={response.run_id: journal},
+    )
+    workbook_path = write_participant_summary(tmp_path)
+    workbook = load_workbook(workbook_path)
+    try:
+        assert _rows(workbook, "Task Answers") == []
+    finally:
+        workbook.close()
+    before = workbook_path.read_bytes()
+    append_task_response_checkpoint(journal, response)
+    original_read = Path.read_bytes
+    denied = PermissionError("Task-response journal is unreadable")
+
+    def read_with_unreadable_journal(path):
+        if filesystem_path(path) == filesystem_path(journal):
+            raise denied
+        return original_read(path)
+
+    monkeypatch.setattr(Path, "read_bytes", read_with_unreadable_journal)
+    with pytest.raises(PermissionError) as error:
+        write_participant_summary(tmp_path)
+    assert error.value is denied
+    assert workbook_path.read_bytes() == before
 
 
 def test_demographic_answers_keep_original_question_order_and_visit_identity(tmp_path, results):
