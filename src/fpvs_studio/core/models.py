@@ -923,6 +923,16 @@ class AttentionalBlinkStreamSettings(FPVSBaseModel):
         return validate_presentation_text_color(value)
 
 
+def with_legacy_isi_source(value: object) -> object:
+    """Keep the Base set as the ISI source in legacy within-slot payloads."""
+    if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
+        settings = value.get("attentional_blink")
+        if (isinstance(settings, dict) and "isi_mode" not in settings
+                and settings.get("layout", "within_slot") == "within_slot"):
+            return {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
+    return value
+
+
 class Condition(FPVSBaseModel):
     """Editable condition definition."""
 
@@ -990,12 +1000,7 @@ class Condition(FPVSBaseModel):
     @model_validator(mode="before")
     @classmethod
     def preserve_legacy_isi_source(cls, value: object) -> object:
-        if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
-            settings = value.get("attentional_blink")
-            if (isinstance(settings, dict) and "isi_mode" not in settings
-                    and settings.get("layout", "within_slot") == "within_slot"):
-                value = {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
-        return value
+        return with_legacy_isi_source(value)
 
     @field_validator("t2_stimulus_set_id", "isi_stimulus_set_id")
     @classmethod

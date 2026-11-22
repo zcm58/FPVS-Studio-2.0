@@ -71,6 +71,7 @@ from fpvs_studio.core.models import (
     validate_project_relative_path,
     validate_slug,
     with_inferred_experiment_category,
+    with_legacy_isi_source,
 )
 from fpvs_studio.core.paths import (
     cache_dir,
@@ -213,12 +214,7 @@ class ProjectConfigCondition(FPVSBaseModel):
     @model_validator(mode="before")
     @classmethod
     def preserve_legacy_isi_source(cls, value: object) -> object:
-        if isinstance(value, dict) and "isi_stimulus_set_id" not in value:
-            settings = value.get("attentional_blink")
-            if (isinstance(settings, dict) and "isi_mode" not in settings
-                    and settings.get("layout", "within_slot") == "within_slot"):
-                value = {**value, "isi_stimulus_set_id": value.get("base_stimulus_set_id")}
-        return value
+        return with_legacy_isi_source(value)
 
     @field_validator("t2_stimulus_set_id", "isi_stimulus_set_id")
     @classmethod

@@ -70,8 +70,6 @@ These future changes came out of the November 22 optimization review.
   moves file preparation out of the desktop event loop.
 - [Windows Builder demo bundle size](exec-plans/planned/windows-builder-demo-bundle-size.md)
   removes upstream Builder examples from the Windows installer after verifying packaged workflows.
-- [Legacy Attentional Blink ISI validator](exec-plans/planned/legacy-attentional-blink-isi-validator.md)
-  shares one legacy default between the two model boundaries.
 
 ## Plan Rules and History
 
@@ -99,6 +97,8 @@ These future changes came out of the November 22 optimization review.
   reads unchanged legacy plans once per search and revalidates the selected plan for rerun.
 - [Passive fixation key filter](exec-plans/completed/passive-fixation-key-filter.md)
   builds one Escape filter per timed step and preserves each frame and key poll.
+- [Legacy Attentional Blink ISI validator](exec-plans/completed/legacy-attentional-blink-isi-validator.md)
+  shares the legacy source default across Studio and Toolbox model validation.
 - [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
   restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
 - [Image Equalizer in-place rounding](exec-plans/completed/image-equalizer-in-place-rounding.md)
