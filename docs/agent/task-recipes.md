@@ -1,11 +1,38 @@
 # Optional Task Recipes
 
-Search headings or symbols here only when the scope table does not locate the
-affected behavior. This is an entry-point map, not another contract or mandatory
-reading list. Module paths below are relative to `src/fpvs_studio/`; test paths are
-repository-relative. Select affected focused scopes, then repo precommit for shared
-behavior. Qt and real hardware/service checks retain their existing approval and
-evidence boundaries.
+Consult the quality checks when a change affects those areas. Search the other
+headings or symbols when the scope table does not locate the behavior. Module paths
+below are relative to `src/fpvs_studio/` and test paths are repository-relative.
+Select affected focused scopes, then repo precommit for shared behavior. Qt and
+real hardware/service checks retain their existing approval and evidence boundaries.
+
+## Software quality checks
+
+Choose the rows the change can affect. Use existing checks where they provide
+evidence and match verification depth to the impact. For optimizations or a
+plausible regression, compare the affected entry point before and after on the
+same representative workload. Check related costs when work or resources move
+between stages. Use the existing [performance and output parity rules](agent-index.md#performance-and-output-parity).
+
+| Area | Evidence to look for |
+| --- | --- |
+| Processing speed and throughput | End-to-end duration and counts of expensive operations on first and repeated use. |
+| GUI responsiveness | Time until the surface is usable, event-loop stalls, and cancel or close behavior during background work. |
+| Memory, compute and energy | Peak memory, retained resources, and CPU, GPU or energy measurements where relevant. |
+| I/O and data movement | File opens, database or network requests, bytes transferred, and freshness when sources change. |
+| Scale and concurrency | Growth across realistic workload sizes, bounded workers and caches, and behavior under contention. |
+| Timing predictability | Slow outliers, dropped frames, or trigger jitter. Use hardware evidence for physical display and EEG claims. |
+| Startup and distribution | Cold startup, installer and update size, dependency footprint, and supported install or upgrade behavior. |
+| Reliability and recovery | Failures, retries, cancellation, and preservation of data and prior output after interrupted work. |
+| Maintainability | Simpler ownership and control flow, verified dead-code removal, and compatibility with existing callers. |
+| Build, test and release | Feedback time, flaky checks, and release effort while preserving meaningful coverage. |
+| Operating cost | Compute, storage and transfer usage for the affected workload. Use current rates when claiming monetary savings. |
+
+Retain the owning contracts for security, privacy, accessibility and platform
+behavior. Put concrete budgets in the owning contract with the workload and
+measurement setup. Report evidenced issues outside the task and use the
+[technical debt tracker](../exec-plans/tech-debt-tracker.md#tracking-rules) for
+findings that meet its tracking rules.
 
 ## GUI, Setup and Project Paths
 
