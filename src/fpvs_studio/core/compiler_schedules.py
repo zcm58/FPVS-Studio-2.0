@@ -862,6 +862,14 @@ def plan_no_repeat_role_bag_keys(
             raise CompileError(f"The {role} balanced bag requires at least one item.")
         role_bag_counts[role] = Counter(key(item) for item in source_pool)
 
+    # Each distinct key in a role contributes a state factor of at least two.
+    # Skip constructing and ordering the union once that lower bound exceeds the cap.
+    if (
+        len(role_bag_counts["base"]) + len(role_bag_counts["oddball"])
+        >= _MAX_EXACT_ROLE_BAG_STATE_ESTIMATE.bit_length()
+    ):
+        return None
+
     all_keys = tuple(sorted(role_bag_counts["base"] | role_bag_counts["oddball"], key=str))
     estimated_state_count = _capped_state_product(
         (

@@ -20,7 +20,11 @@ from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from fpvs_studio.core.demographics import DemographicsAnswer
 from fpvs_studio.core.execution import SessionExecutionSummary
-from fpvs_studio.core.paths import resolve_project_relative_path, to_project_relative_posix
+from fpvs_studio.core.paths import (
+    ProjectPathResolver,
+    resolve_project_relative_path,
+    to_project_relative_posix,
+)
 from fpvs_studio.core.serialization import atomic_text_write
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
@@ -549,39 +553,42 @@ def has_captured_participant_results(project_root: Path) -> bool:
 def participant_results_source_paths(project_root: Path) -> list[Path]:
     """Return changing research sources used to decide workbook refresh staleness."""
 
+    project_paths = ProjectPathResolver(project_root)
     paths = []
-    directory = resolve_project_relative_path(project_root, _DIRECTORY)
+    directory = project_paths.resolve(_DIRECTORY)
     if directory.is_dir():
         for candidate in sorted(directory.glob("*.json")):
-            path = resolve_project_relative_path(project_root, f"{_DIRECTORY}/{candidate.name}")
+            path = project_paths.resolve(f"{_DIRECTORY}/{candidate.name}")
             paths.append(path)
             record = _json(path)
             if not record.get("finalized", True):
-                paths.extend(resolve_project_relative_path(project_root, relative)
-                             for relative in record.get("journal_paths", {}).values())
-    paths.append(resolve_project_relative_path(project_root, "logs/task_responses.csv"))
-    context_directory = resolve_project_relative_path(project_root, _POST_CONTEXT_DIRECTORY)
+                paths.extend(
+                    project_paths.resolve(relative)
+                    for relative in record.get("journal_paths", {}).values()
+                )
+    paths.append(project_paths.resolve("logs/task_responses.csv"))
+    context_directory = project_paths.resolve(_POST_CONTEXT_DIRECTORY)
     if context_directory.is_dir():
         for candidate in context_directory.glob("*.json"):
-            path = resolve_project_relative_path(
-                project_root, f"{_POST_CONTEXT_DIRECTORY}/{candidate.name}",
-            )
+            path = project_paths.resolve(f"{_POST_CONTEXT_DIRECTORY}/{candidate.name}")
             paths.append(path)
             context = _json(path)
-            paths.extend(resolve_project_relative_path(project_root, entry["journal_path"])
-                         for entry in context.get("entries", []))
-    history = resolve_project_relative_path(project_root, "logs/session_condition_history.csv")
+            paths.extend(
+                project_paths.resolve(entry["journal_path"])
+                for entry in context.get("entries", [])
+            )
+    history = project_paths.resolve("logs/session_condition_history.csv")
     for output in dict.fromkeys(row.get("output_dir", "") for row in _csv(history)):
         if not output:
             continue
-        directory = resolve_project_relative_path(project_root, output)
+        directory = project_paths.resolve(output)
         names = ("session_summary.json", "session_plan.json", "task_responses.csv")
-        paths.extend(resolve_project_relative_path(project_root, f"{output}/{name}")
-                     for name in names)
+        paths.extend(project_paths.resolve(f"{output}/{name}") for name in names)
         if directory.is_dir():
-            paths.extend(resolve_project_relative_path(
-                project_root, f"{output}/{candidate.parent.name}/task_responses.jsonl",
-            ) for candidate in directory.glob("*/task_responses.jsonl"))
+            paths.extend(
+                project_paths.resolve(f"{output}/{candidate.parent.name}/task_responses.jsonl")
+                for candidate in directory.glob("*/task_responses.jsonl")
+            )
     return [path for path in dict.fromkeys(paths) if path.is_file()]
 
 

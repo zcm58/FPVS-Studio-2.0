@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 from PIL import Image
@@ -14,6 +15,7 @@ from fpvs_studio.core.execution import RunExecutionSummary
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.engines.base import FixationTutorialAttemptResult, PresentationEngine
+from fpvs_studio.runtime import preflight
 from fpvs_studio.runtime.display_mode import NativeDisplayMode
 from fpvs_studio.runtime.preflight import (
     PreflightError,
@@ -182,9 +184,10 @@ def test_preflight_rejects_trigger_events_outside_run_duration(
         preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
 
 
-def test_default_preflight_does_not_decode_image_assets(
+def test_default_preflight_checks_presentation_once_without_decoding_image_assets(
     sample_project,
     sample_project_root,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     run_spec = compile_run_spec(
         sample_project,
@@ -201,7 +204,12 @@ def test_default_preflight_does_not_decode_image_assets(
                 update={"image_path": "stimuli/original-images/base-set/bad.png"}
             )
 
+    presentation = Mock(wraps=preflight.event_presentation)
+    monkeypatch.setattr(preflight, "event_presentation", presentation)
+
     preflight_run_spec(sample_project_root, run_spec, engine=_PreflightEngine())
+
+    assert presentation.call_count == len(run_spec.stimulus_sequence)
 
 
 def test_full_preflight_rejects_corrupt_image_assets_before_engine_launch(

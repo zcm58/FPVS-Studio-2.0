@@ -130,14 +130,12 @@ def _read_project_management_entry(
 ) -> ProjectManagementEntry:
     """Read display metadata without consulting live document or widget state."""
 
-    from fpvs_studio.core.study_lifecycle import read_study
-    from fpvs_studio.core.study_versions import saved_version_count
+    from fpvs_studio.core.study_versions import read_study_and_saved_version_count
 
     is_current = project_root == current_root
     try:
         project = load_project_file(project_json_path(project_root))
-        state = read_study(project_root)
-        saved_versions = saved_version_count(project_root)
+        state, saved_versions = read_study_and_saved_version_count(project_root)
     except Exception:
         return ProjectManagementEntry(
             name=project_root.name,

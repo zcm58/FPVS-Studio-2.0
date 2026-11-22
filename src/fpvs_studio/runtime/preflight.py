@@ -567,23 +567,35 @@ def _validate_image_assets(
     *,
     decode: bool,
 ) -> None:
-    image_references: dict[str, set[tuple[str, int, int]]] = {}
+    image_references: dict[str, set[tuple[str, int, int]] | None] = {}
     if run_spec.scene_stream is not None:
         for visual in run_spec.scene_stream.visuals:
             if visual.image_path is not None:
-                image_references.setdefault(visual.image_path, set())
-    for event in run_spec.stimulus_sequence:
-        if event.stimulus_modality != StimulusModality.IMAGE or event.image_path is None:
-            continue
-        expected_resolutions = image_references.setdefault(event.image_path, set())
-        role_presentation = event_presentation(run_spec, event)
-        if role_presentation is None:
-            continue
-        if role_presentation.image_geometry is None:
-            continue
-        source_resolution = role_presentation.image_geometry.source_resolution
-        expected_resolutions.add(
-            (event.role, source_resolution.width_px, source_resolution.height_px)
+                image_references[visual.image_path] = None
+    if decode:
+        for event in run_spec.stimulus_sequence:
+            if event.stimulus_modality != StimulusModality.IMAGE or event.image_path is None:
+                continue
+            expected_resolutions = image_references.get(event.image_path)
+            if expected_resolutions is None:
+                expected_resolutions = image_references[event.image_path] = set()
+            role_presentation = event_presentation(run_spec, event)
+            if role_presentation is None:
+                continue
+            if role_presentation.image_geometry is None:
+                continue
+            source_resolution = role_presentation.image_geometry.source_resolution
+            expected_resolutions.add(
+                (event.role, source_resolution.width_px, source_resolution.height_px)
+            )
+    else:
+        # Routine preflight needs paths here; payload validation still checks presentation.
+        image_references.update(
+            dict.fromkeys(
+                event.image_path for event in run_spec.stimulus_sequence
+                if event.stimulus_modality == StimulusModality.IMAGE
+                and event.image_path is not None
+            )
         )
     missing_assets: list[str] = []
     unloadable_assets: list[str] = []
@@ -602,9 +614,8 @@ def _validate_image_assets(
         except (OSError, ValueError) as exc:
             unloadable_assets.append(f"{image_path} ({exc})")
             continue
-        for role, expected_width_px, expected_height_px in sorted(
-            image_references[image_path]
-        ):
+        expected_resolutions = image_references[image_path]
+        for role, expected_width_px, expected_height_px in sorted(expected_resolutions or ()):
             if (decoded_width_px, decoded_height_px) == (
                 expected_width_px,
                 expected_height_px,

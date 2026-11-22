@@ -1278,6 +1278,27 @@ def test_text_height_fallback_preserves_seeded_forced_height_lookahead() -> None
     }
 
 
+@pytest.mark.parametrize(
+    ("base", "oddball"),
+    [(list(range(9)), list(range(9, 18))), (list(range(17)), [0])],
+    ids=["disjoint", "overlapping"],
+)
+def test_exact_role_bag_planner_skips_sorting_oversized_pools(monkeypatch, base, oddball) -> None:
+    def reject_sort(*args, **kwargs):
+        pytest.fail("The ineligible role bags were sorted for exact search.")
+
+    monkeypatch.setattr(compiler_schedules, "sorted", reject_sort, raising=False)
+
+    assert compiler_schedules.plan_no_repeat_role_bag_keys(
+        {"base": base, "oddball": oddball},
+        total_stimuli=20,
+        oddball_every_n=5,
+        random_seed=19,
+        random_namespace="test",
+        key=float,
+    ) is None
+
+
 def test_text_height_schedule_looks_ahead_to_fixed_oddball_height() -> None:
     values = build_interleaved_text_height_values(
         {

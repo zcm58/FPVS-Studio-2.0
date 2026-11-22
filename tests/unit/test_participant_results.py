@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from copy import copy
 
 import pytest
@@ -262,6 +263,46 @@ def test_pending_capture_recovers_partial_journal_before_any_history(tmp_path, r
     assert demographic_answer["Answer"] is False
     assert demographic_answer["Session Aborted"] == "Not finalized"
     assert set(participant_results_source_paths(tmp_path)) == {capture, journal}
+
+
+def test_results_source_scan_checks_current_journal_target(tmp_path):
+    root = tmp_path / "project"
+    capture = root / "logs/.participant-results/partial.json"
+    capture.parent.mkdir(parents=True)
+    capture.write_text(json.dumps({
+        "finalized": False,
+        "journal_paths": {"run": "logs/current/answers.jsonl"},
+    }), encoding="utf-8")
+    inside = root / "logs/inside"
+    outside = tmp_path / "outside"
+    for folder in (inside, outside):
+        folder.mkdir()
+        (folder / "answers.jsonl").touch()
+    link = root / "logs/current"
+
+    if os.name == "nt":
+        import _winapi
+
+        try:
+            _winapi.CreateJunction(str(inside), str(link))
+        except OSError as exc:
+            pytest.skip(f"Windows directory junctions are unavailable: {exc}")
+    else:
+        link.symlink_to(inside, target_is_directory=True)
+
+    assert participant_results_source_paths(root) == [
+        capture.resolve(), (inside / "answers.jsonl").resolve(),
+    ]
+
+    if os.name == "nt":
+        link.rmdir()
+        _winapi.CreateJunction(str(outside), str(link))
+    else:
+        link.unlink()
+        link.symlink_to(outside, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="Project-relative path escapes the project root"):
+        participant_results_source_paths(root)
 
 
 def test_demographic_answers_keep_original_question_order_and_visit_identity(tmp_path, results):

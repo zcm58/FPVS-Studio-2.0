@@ -50,6 +50,14 @@ def _read(db: sqlite3.Connection) -> StudyState:
     return StudyState(row[0], bool(row[1]), bool(row[2]), row[3])
 
 
+def _read_optional_study(db: sqlite3.Connection) -> StudyState | None:
+    if not db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='study'"
+    ).fetchone():
+        return None
+    return _read(db)
+
+
 def read_study(root: Path) -> StudyState | None:
     """Legacy projects appear active without writing during discovery."""
     path = database_path(root)
@@ -57,11 +65,7 @@ def read_study(root: Path) -> StudyState | None:
         return None
     with closing(sqlite3.connect(path)) as db:
         db.execute("PRAGMA query_only=ON")
-        if not db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='study'"
-        ).fetchone():
-            return None
-        return _read(db)
+        return _read_optional_study(db)
 
 
 def get_study(root: Path) -> StudyState:

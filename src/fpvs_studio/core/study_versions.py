@@ -26,7 +26,14 @@ from .paths import (
     validate_project_id,
 )
 from .serialization import load_project_file, read_json_file, save_project_file
-from .study_lifecycle import database_path, get_study, study_transaction
+from .study_lifecycle import (
+    StudyState,
+    _read_optional_study,
+    database_path,
+    get_study,
+    read_study,
+    study_transaction,
+)
 
 if sys.platform == "win32":
     import ctypes
@@ -182,14 +189,50 @@ def list_versions(root: Path) -> list[StudyVersion]:
         ]
 
 
-def saved_version_count(root: Path) -> int:
-    path = database_path(root)
+def _saved_version_count(db: sqlite3.Connection) -> int:
+    if not _has_table(db, "versions"):
+        return 0
+    return int(db.execute("SELECT COUNT(*) FROM versions").fetchone()[0])
+
+
+def _saved_version_count_from_path(path: Path) -> int:
     if not path.is_file():
         return 0
     with closing(sqlite3.connect(path)) as db:
-        if not _has_table(db, "versions"):
-            return 0
-        return int(db.execute("SELECT COUNT(*) FROM versions").fetchone()[0])
+        return _saved_version_count(db)
+
+
+def saved_version_count(root: Path) -> int:
+    return _saved_version_count_from_path(database_path(root))
+
+
+def read_study_and_saved_version_count(root: Path) -> tuple[StudyState | None, int]:
+    """Read the collection state and saved version count for project discovery."""
+    path = database_path(root)
+    try:
+        before = path.stat()
+    except FileNotFoundError:
+        return None, saved_version_count(root)
+    except (OSError, ValueError):
+        return read_study(root), saved_version_count(root)
+
+    with closing(sqlite3.connect(path)) as db:
+        db.execute("PRAGMA query_only=ON")
+        state = _read_optional_study(db)
+        # Resolve the path again at the version read boundary. Each SELECT runs
+        # independently so commits made between the reads remain visible.
+        current = database_path(root)
+        if current == path and before.st_ino:
+            try:
+                after = current.stat()
+            except FileNotFoundError:
+                return state, 0
+            except (OSError, ValueError):
+                pass
+            else:
+                if stat.S_ISREG(after.st_mode) and os.path.samestat(before, after):
+                    return state, _saved_version_count(db)
+    return state, _saved_version_count_from_path(current)
 
 
 def has_pending_setup_save(root: Path) -> bool:

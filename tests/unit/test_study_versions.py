@@ -3,13 +3,21 @@
 import hashlib
 import json
 import os
+import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
+from fpvs_studio.core import study_versions
 from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.core.serialization import load_project_file, save_project_file
-from fpvs_studio.core.study_lifecycle import get_study, read_study, set_collection_complete
+from fpvs_studio.core.study_lifecycle import (
+    database_path,
+    get_study,
+    read_study,
+    set_collection_complete,
+)
 from fpvs_studio.core.study_versions import (
     ProtocolReviewRequired,
     accepted_stimulus_digests,
@@ -26,11 +34,113 @@ from fpvs_studio.core.study_versions import (
     name_version,
     prepare_change,
     prepare_setup_change,
+    read_study_and_saved_version_count,
     read_version_protocol,
     restore_version,
     saved_version_count,
 )
 from fpvs_studio.runtime.participant_results import research_visits_by_version
+
+
+@pytest.mark.parametrize(
+    "schema", ["missing", "versions", "study", "both", "corrupt", "directory"],
+)
+def test_project_discovery_study_metadata_matches_separate_reads(tmp_path, monkeypatch, schema):
+    path = database_path(tmp_path)
+    if schema != "missing":
+        path.parent.mkdir()
+    if schema in {"corrupt", "directory"}:
+        if schema == "corrupt":
+            path.write_bytes(b"invalid study database" * 64)
+        else:
+            path.mkdir()
+        with pytest.raises(sqlite3.DatabaseError) as previous:
+            read_study(tmp_path), saved_version_count(tmp_path)
+        with pytest.raises(type(previous.value)) as current:
+            read_study_and_saved_version_count(tmp_path)
+        assert str(current.value) == str(previous.value)
+        return
+    if schema != "missing":
+        with closing(sqlite3.connect(path)) as db, db:
+            if schema in {"study", "both"}:
+                db.execute("CREATE TABLE study(study_id,collection_complete,archived,created_from)")
+                db.execute("INSERT INTO study VALUES ('original',1,0,NULL)")
+            if schema in {"versions", "both"}:
+                db.execute("CREATE TABLE versions(version_id)")
+                db.execute("INSERT INTO versions VALUES ('v1'), ('v2')")
+    expected = read_study(tmp_path), saved_version_count(tmp_path)
+    opens = []
+    connect = sqlite3.connect
+
+    def counted_connect(db_path, *args, **kwargs):
+        opens.append(db_path)
+        return connect(db_path, *args, **kwargs)
+
+    monkeypatch.setattr(sqlite3, "connect", counted_connect)
+    assert read_study_and_saved_version_count(tmp_path) == expected
+    if schema == "missing":
+        assert not opens and not path.parent.exists()
+    elif path.stat().st_ino:
+        assert opens == [path]
+
+
+def test_project_discovery_reads_versions_committed_after_study_state(tmp_path, monkeypatch):
+    path = database_path(tmp_path)
+    path.parent.mkdir()
+    with closing(sqlite3.connect(path)) as db, db:
+        db.execute("CREATE TABLE study(study_id,collection_complete,archived,created_from)")
+        db.execute("INSERT INTO study VALUES ('original',1,0,NULL)")
+    read = study_versions._read_optional_study
+
+    def read_then_commit(db):
+        state = read(db)
+        with closing(sqlite3.connect(path)) as writer, writer:
+            writer.execute("CREATE TABLE versions(version_id)")
+            writer.execute("INSERT INTO versions VALUES ('v1')")
+        return state
+
+    monkeypatch.setattr(study_versions, "_read_optional_study", read_then_commit)
+    assert read_study_and_saved_version_count(tmp_path) == (read_study(tmp_path), 1)
+
+
+def test_project_discovery_reopens_a_retargeted_study_database(tmp_path, monkeypatch):
+    link = tmp_path / ".fpvs-study"
+    old, new = tmp_path / "original-db", tmp_path / "replacement-db"
+    for parent, count in ((old, 1), (new, 2)):
+        parent.mkdir()
+        path = parent / "study.sqlite3"
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute("CREATE TABLE study(study_id,collection_complete,archived,created_from)")
+            db.execute("INSERT INTO study VALUES (?,0,0,NULL)", (parent.name,))
+            db.execute("CREATE TABLE versions(version_id)")
+            db.executemany("INSERT INTO versions VALUES (?)", [(str(i),) for i in range(count)])
+    if os.name == "nt":
+        from _winapi import CreateJunction
+
+        def link_to(directory):
+            CreateJunction(str(directory), str(link))
+
+        unlink = link.rmdir
+    else:
+        def link_to(directory):
+            link.symlink_to(directory, target_is_directory=True)
+
+        unlink = link.unlink
+    try:
+        link_to(old)
+    except OSError as exc:
+        pytest.skip(f"Directory links are unavailable: {exc}")
+    prior_state = read_study(tmp_path)
+    read = study_versions._read_optional_study
+
+    def read_then_redirect(db):
+        state = read(db)
+        unlink()
+        link_to(new)
+        return state
+
+    monkeypatch.setattr(study_versions, "_read_optional_study", read_then_redirect)
+    assert read_study_and_saved_version_count(tmp_path) == (prior_state, 2)
 
 
 def test_save_restore_and_fork_exact_image_and_protocol(
