@@ -452,9 +452,9 @@ Do not use a wildcard deletion of `{app}` or `_internal`, and do not set
 `UninstallLogMode=overwrite`. The installer is self-contained: reconciliation does not
 require installed Python, PowerShell, or a separate maintenance application.
 
-Upload the setup EXE to the matching GitHub Release after smoke testing fresh install,
-launch, update-over-old-version install, and uninstall behavior. The clean-PC or clean-VM
-release check is:
+Stage the setup EXE on the matching GitHub release draft and complete
+[hosted installer acceptance](#hosted-windows-installer-acceptance) before publishing.
+For an interactive check on a clean PC or VM, follow these steps.
 
 - install on a Windows x64-compatible machine without system Python
 - launch FPVS Studio from the Start Menu or Desktop shortcut
@@ -467,32 +467,44 @@ release check is:
 
 ## Direct Patch Releases
 
-v1.5.1 adds patch-aware updating. Earlier app versions still select the full installer;
-therefore every release retains `FPVS-Studio-Setup-<version>.exe`. A manually downloaded
-patch can bootstrap an exact earlier installation. Patches use the same Inno application
-identity and installation folder, without reinstalling unchanged dependencies.
+Every Windows release retains `FPVS-Studio-Setup-<version>.exe`. A stable release may
+offer direct patches from the same major and minor version for the five preceding
+patch numbers. Use the numeric difference between patch numbers even when some
+versions were never published. Each baseline must be a previously published immutable
+stable Windows x64 release with an authenticated ownership inventory. Offer a patch
+only when its compiled installer is strictly smaller than setup.
+
+For 3.1.5, versions 3.1.0 through 3.1.4 are eligible when they meet those conditions.
+Updating from 3.1.0 to 3.2.0 crosses a minor version and uses full setup. Updating
+from 3.1.0 to 3.1.6 exceeds the cutoff and also uses full setup. Same-version repair
+uses full setup. Each patch goes directly from one exact baseline to the target.
+Patch-aware updating starts at v1.5.1. Patches use the same Inno application identity
+and installation folder and carry only changed and added files.
 
 `build_release.ps1` builds one complete target bundle, its full installer, optional
 patch installers, and `FPVS-Studio-Update-<version>.json`. Set the version in
-`pyproject.toml` first. For each supported baseline provide the exact ownership manifest
-extracted from its authenticated published installer and the manifest's SHA-256. Preserve
-published bundles/installers and dependency versions; rebuilding an old source tag does
-not establish an identical baseline. Runtime dependencies should remain pinned to the
-preserved build environment when producing a small application fix.
+`pyproject.toml` first. For each baseline, use the exact ownership inventory extracted
+from its authenticated immutable installer or captured by its release acceptance.
+Verify each baseline installer against its release attestation and keep the ownership
+inventory SHA-256 with the release evidence. Reuse the preserved build environment
+and retain the published bundles and installers. Rebuilding a source tag cannot
+establish the published baseline inventory.
 
 ```powershell
 .\scripts\build_release.ps1 -SkipInstall -AllowVisibleGui `
-  -BuildLabel release-1.5.2 `
-  -BaselineInventory build/release-1.5.2-baseline/published-v1.5.1-current-owned-files.txt `
-  -BaselineInventorySha256 9961840684982e9c4ff1f1cce253a6a50250ed40777da77babf46b9e84f85073
+  -BuildLabel release-candidate `
+  -BaselineInventory $verifiedBaselineInventories `
+  -BaselineInventorySha256 $verifiedInventoryHashes
 ```
 
 `-SkipInstall` preserves the current environment and requires its installed FPVS Studio
 metadata to match the release version. Refresh the editable app metadata separately with
-`python -m pip install --no-deps -e .` when needed. Multiple baselines use matching ordered
-arrays of manifest paths and hashes. `-AllowVisibleGui` requires an approved native
-Windows session for packaged checks; offscreen execution is rejected. `-SkipSmoke` may
-stage artifacts while that check is pending, but does not establish release acceptance.
+`python -m pip install --no-deps -e .` when needed. Pass matching ordered arrays of
+inventory paths and SHA-256 hashes. Omit both arguments for a full-only release. If a
+compiled patch is at least as large as full setup, omit its baseline and regenerate
+the release artifacts before staging. Use `-AllowVisibleGui` in an approved native
+Windows session or stage artifacts with `-SkipSmoke` and run the hosted acceptance
+below.
 
 Before uploading, run the DLL origin check from the build checkout with the
 same Python environment and build label. For an unlabeled build, omit
@@ -509,17 +521,19 @@ matching TOC and release asset hashes. If the receipt is missing or a file
 differs, rebuild through the standard executable and installer stages.
 Keep the receipt as local build evidence.
 
-Upload the verified full installer, every patch installer, update JSON, and
-SHA-256 sidecars to the same GitHub release, initially as a draft. Example assets:
+Upload the verified full installer, update JSON, any eligible patches and their
+SHA-256 sidecars to the same GitHub release draft. A 3.1.5 release offering a patch
+from 3.1.4 includes these assets and a `.sha256` sidecar for each.
 
 ```text
-FPVS-Studio-Setup-1.5.2.exe
-FPVS-Studio-Patch-1.5.1-to-1.5.2.exe
-FPVS-Studio-Update-1.5.2.json
+FPVS-Studio-Setup-3.1.5.exe
+FPVS-Studio-Patch-3.1.4-to-3.1.5.exe
+FPVS-Studio-Update-3.1.5.json
 ```
 
 Publish only after all assets are present and their GitHub sizes/SHA-256 digests match
-local artifacts. Do not replace published bytes under an existing version. The JSON
+local artifacts and [hosted acceptance](#hosted-windows-installer-acceptance) passes.
+Do not replace published bytes under an existing version. The JSON
 contains `schema_version: 1`, `target_version`, `platform: "windows-x64"`, and `patches`.
 Each entry binds `from_version`, `source_inventory_sha256`, `asset_name`, `size_bytes`,
 and `sha256`. Full installer metadata continues to come directly from GitHub. The app
@@ -571,6 +585,38 @@ uses synthetic bundles and unique test application identities beneath `build/`; 
 shortcuts, application launch, production app closing, and production updater-cache hooks.
 Never treat `/DIR` alone as isolation when running a production installer: its AppId and
 uninstall registration still belong to the user's installed application.
+
+### Hosted Windows Installer Acceptance
+
+Run **Windows installer acceptance** in GitHub Actions after staging the stable
+draft and pushing its annotated tag. Supply the exact build commit and the
+SHA-256 of the locally built full setup, update JSON and target ownership
+inventory. The pinned JSON also binds the hash and size of each offered patch.
+
+```powershell
+gh workflow run windows-installer-acceptance.yml -f tag=$tag -f source_commit=$sourceCommit `
+  -f setup_sha256=$setupSha256 -f update_sha256=$updateSha256 `
+  -f target_inventory_sha256=$targetInventorySha256
+```
+
+Take the three hashes from the build with `Get-FileHash -Algorithm SHA256`.
+The workflow checks the draft asset names, sizes, hashes, sidecars and patch cutoff.
+It authenticates the previous stable Windows installer and the published installer
+for each offered patch baseline, then runs these checks on disposable Windows x64.
+
+- Full upgrade from the previous stable Windows release, then uninstall. That release
+  can be from a different minor version.
+- Fresh full setup, then uninstall.
+- For each offered direct patch, install its exact baseline, apply the patch, and
+  uninstall. Start each patch case from its own fresh baseline installation.
+
+The job captures the exact draft asset inventory, installed-file parity,
+preservation of settings and file sentinels, and native Studio and updater
+reports. Download the evidence artifact for the release record and retain the
+accepted target ownership inventory for future builds. Recheck that the
+draft's asset identities and hashes still match before publishing. Run exact-source
+CI, the DLL origin check, and post-publication attestation and updater checks
+through their existing routes.
 
 ## In-App Update Flow
 

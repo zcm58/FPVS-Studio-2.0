@@ -34,6 +34,7 @@ watchdog and matched every retained report payload, receipt and capture.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Windows release patches and acceptance](exec-plans/active/windows-release-patches-and-acceptance.md) | Limit direct patches to five preceding patch numbers within the same major and minor version. Qualify the reusable installer workflow on a hosted release draft. |
 | [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Recorder 2 digit sends verified. Qualify physical automatic discovery and BioSemi reconnect in ActiView. |
 | [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Native 60.02 Hz advisory and keyboard actions passed. Qualify the fixed 60/120 Hz display switch. |
@@ -62,6 +63,27 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
   Optional question styling remains a separate slice.
 - [Named local recording profiles](exec-plans/planned/lab-independent-recording-setup.md)
   builds reusable per-computer profiles on the current Recording settings and selected-display preflight.
+
+These future changes came out of the November 22 optimization review.
+
+- [Participant workbook wrap cache](exec-plans/planned/participant-workbook-wrap-cache.md)
+  avoids repeated row-height calculations during a single export.
+- [Responsive Assets stimulus import](exec-plans/planned/assets-stimulus-import-responsiveness.md)
+  moves file preparation out of the desktop event loop.
+- [Image Equalizer in-place rounding](exec-plans/planned/image-equalizer-in-place-rounding.md)
+  removes a full-size temporary pixel array.
+- [Participant workbook source resolution](exec-plans/planned/participant-workbook-source-resolution.md)
+  reuses one project-root resolver for an export.
+- [Legacy recovery plan inventory](exec-plans/planned/legacy-recovery-plan-inventory.md)
+  reuses plan reads within a recovery search.
+- [Passive fixation key filter](exec-plans/planned/passive-fixation-key-filter.md)
+  avoids rebuilding the same Escape filter after every flip.
+- [Windows Builder demo bundle size](exec-plans/planned/windows-builder-demo-bundle-size.md)
+  removes upstream Builder examples from the Windows installer after verifying packaged workflows.
+- [Normalization promotion recovery](exec-plans/planned/normalization-promotion-recovery.md)
+  protects existing normalized images when a replacement batch fails.
+- [Legacy Attentional Blink ISI validator](exec-plans/planned/legacy-attentional-blink-isi-validator.md)
+  shares one legacy default between the two model boundaries.
 
 ## Plan Rules and History
 
