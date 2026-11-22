@@ -267,12 +267,12 @@ def equalize_image_folders(
         pixels -= before.mean
         pixels *= target_std / before.standard_deviation
         pixels += TARGET_MEAN
-        # The shared analytical bound prevents clipping. Only round to 8-bit PNG.
-        rounded = np.rint(pixels)
-        if rounded.min() < 0 or rounded.max() > 255:
+        # The analytical bound prevents clipping. Round into the private float32 array.
+        np.rint(pixels, out=pixels)
+        if pixels.min() < 0 or pixels.max() > 255:
             raise ImageEqualizationError(f"Calculated intensity is out of range: {source}")
         buffer = io.BytesIO()
-        Image.fromarray(rounded.astype(np.uint8)).save(buffer, format="PNG")
+        Image.fromarray(pixels.astype(np.uint8)).save(buffer, format="PNG")
         write_new(destination, buffer.getvalue())
         saved_pixels, output_digest = _read_grayscale(destination)
         after = _statistics(saved_pixels)

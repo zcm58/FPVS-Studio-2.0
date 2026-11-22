@@ -68,8 +68,6 @@ These future changes came out of the November 22 optimization review.
 
 - [Responsive Assets stimulus import](exec-plans/planned/assets-stimulus-import-responsiveness.md)
   moves file preparation out of the desktop event loop.
-- [Image Equalizer in-place rounding](exec-plans/planned/image-equalizer-in-place-rounding.md)
-  removes a full-size temporary pixel array.
 - [Participant workbook source resolution](exec-plans/planned/participant-workbook-source-resolution.md)
   reuses one project-root resolver for an export.
 - [Legacy recovery plan inventory](exec-plans/planned/legacy-recovery-plan-inventory.md)
@@ -103,6 +101,8 @@ These future changes came out of the November 22 optimization review.
   reuses text-wrap calculations within a single fit, with byte-identical exports and measured speedups.
 - [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
   restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
+- [Image Equalizer in-place rounding](exec-plans/completed/image-equalizer-in-place-rounding.md)
+  lowers peak working memory while preserving exact PNG and report bytes.
 - [Public Experiment Library](exec-plans/completed/public-experiment-library.md)
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):
   added the authored rate and verified two fullscreen runs on the Lenovo's 60.020425 Hz signal.
