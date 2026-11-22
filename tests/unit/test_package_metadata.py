@@ -281,6 +281,11 @@ def test_studio_spec_keeps_platform_dependency_boundaries(
     def analysis(_entries: list[str], **kwargs: object) -> SimpleNamespace:
         if "hiddenimports" in kwargs:
             assert ("threadpoolctl" in kwargs["excludes"]) == (platform == "win32")
+            assert "tkinter" in kwargs["excludes"]
+            assert "_tkinter" in kwargs["excludes"]
+            assert "PIL.ImageTk" in kwargs["excludes"]
+            assert "PIL._imagingtk" in kwargs["excludes"]
+            assert kwargs["hooksconfig"]["matplotlib"]["backends"] == "WXAgg"
             assert "fpvs_studio.developer" not in kwargs["excludes"]
             assert "fpvs_studio.gui.library_publisher_controller" not in kwargs["excludes"]
             assert "fpvs_studio.gui.library_publisher_dialog" not in kwargs["excludes"]
@@ -870,6 +875,7 @@ def test_updater_is_self_contained_windowed_and_keeps_a_narrow_dependency_graph(
     entries, analysis = actual["calls"]["analysis"]
     assert entries == [str(REPO_ROOT / "src" / "fpvs_studio" / "updater_main.py")]
     assert analysis["datas"][0] == ("fpvs-studio", "metadata")
+    assert {"tkinter", "_tkinter"}.issubset(analysis["excludes"])
     arguments, options = actual["calls"]["exe"]
     assert options["name"] == "FPVS Studio Updater"
     assert options["console"] is False

@@ -55,6 +55,8 @@ a = Analysis(
         "PyQt5",
         "PyQt6",
         "PySide2",
+        "tkinter",
+        "_tkinter",
         "numpy",
         # components exposes these unrelated authoring-page classes lazily;
         # updater surfaces use only its direct dialog/theme primitives.

@@ -127,7 +127,15 @@ for package in (
 ):
     binaries += _collect_binaries(package)
 
-excludedimports = ["PyQt5", "PyQt6", "PySide2"]
+excludedimports = [
+    "PyQt5",
+    "PyQt6",
+    "PySide2",
+    "tkinter",
+    "_tkinter",
+    "PIL.ImageTk",
+    "PIL._imagingtk",
+]
 if sys.platform == "win32":
     # Preserve the published Windows runtime's OpenMP policy. This optional
     # diagnostic/controller module changes KMP_DUPLICATE_LIB_OK on import.
@@ -141,7 +149,9 @@ a = Analysis(
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
-    hooksconfig={},
+    # PsychoPy's monitor tools use WXAgg. Automatic discovery also picks up
+    # the TkAgg backend used by ImageIO's standalone TIFF viewer.
+    hooksconfig={"matplotlib": {"backends": "WXAgg"}},
     runtime_hooks=[],
     excludes=excludedimports,
     noarchive=False,

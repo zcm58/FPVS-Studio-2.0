@@ -272,6 +272,11 @@ If PyInstaller reports multiple Qt bindings, keep `PySide6` and remove or exclud
 unrelated Qt bindings such as `PyQt5` or `PyQt6` from the build environment. The checked
 in spec already excludes those bindings for the local build.
 
+The Studio and updater specs exclude Tcl/Tk. Studio also excludes Pillow's Tk adapter
+and selects the Matplotlib WXAgg backend used by PsychoPy's monitor tools. Explicit
+selection prevents PyInstaller from collecting TkAgg through ImageIO's standalone TIFF
+viewer.
+
 The spec also removes top-level `icuuc.dll` and `icudt*.dll` files discovered through
 the build host's `PATH`. On supported Windows versions, Qt uses the operating system's
 unversioned ICU shim. Bundling an unrelated application's version-suffixed ICU runtime
@@ -421,6 +426,8 @@ from exact checksum-authenticated public installers through 1.3.0; it covers old
 files carried forward by multiple upgrades, not just a fresh 1.3.0 installation.
 See `packaging/inventory/README.md` for provenance and safe regeneration instructions.
 No historical installers or extractor tools are downloaded on end-user machines.
+The legacy inventory retains path and hash records for Tcl/Tk files so upgrades can
+remove obsolete copies from installations that shipped them.
 
 The installed ownership record is `fpvs-owned-files-v1.txt`.
 Empty historical `.dist-info` directories may remain;
