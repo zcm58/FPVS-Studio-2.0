@@ -420,16 +420,19 @@ def test_only_scene_backed_timed_tasks_resolve_frame_duration(
     assert resolved.clear_after_duration is (native_scene and terminal)
 
 
-@pytest.mark.parametrize("duration_seconds", [1.0, 2.0])
-@pytest.mark.parametrize("frame_duration", [False, True])
-@pytest.mark.parametrize("terminal", [False, True])
-def test_timed_scene_screen_presents_exact_frames_without_changing_ordinary_tasks(
-    tmp_path, monkeypatch, duration_seconds, frame_duration, terminal,
-) -> None:
+def _timed_scene_trace(renderer, tmp_path, monkeypatch, duration_seconds, frame_duration,
+                       terminal, abort):
     from types import SimpleNamespace
 
-    draws = []
-    monkeypatch.setattr(psychopy_tasks, "_draw_step", lambda **kwargs: draws.append(kwargs))
+    trace = []
+    polls = []
+    constructions = []
+    original_key_list = renderer._key_list_for_step
+
+    def make_key_list(step):
+        keys = original_key_list(step)
+        constructions.append(keys)
+        return keys
 
     class Window:
         flip_count = 0
@@ -443,27 +446,46 @@ def test_timed_scene_screen_presents_exact_frames_without_changing_ordinary_task
         def flip(self):
             self.flip_count += 1
             assert self.flip_count < 180, "Timed screen did not finish"
+            trace.append(("flip", self.flip_count))
             callbacks, self.callbacks = self.callbacks, []
             for callback in callbacks:
                 callback()
 
     window = Window()
+    monkeypatch.setattr(renderer, "_draw_step", lambda **_: trace.append(
+        ("draw", window.flip_count + 1),
+    ))
+    monkeypatch.setattr(renderer, "_key_list_for_step", make_key_list)
 
     class Clock:
         onset_frame = 0
 
+        def __init__(self, name="task"):
+            self.name = name
+
         def reset(self):
             self.onset_frame = window.flip_count
+            trace.append((f"{self.name} clock reset", self.onset_frame))
 
         def getTime(self):
             return (window.flip_count - self.onset_frame) / 60
 
-    keyboard = SimpleNamespace(clock=Clock(), clearEvents=lambda: None, getKeys=lambda **_: [])
+    def poll_keys(*, keyList, waitRelease, clear):
+        trace.append(("poll", window.flip_count))
+        polls.append((keyList, waitRelease, clear))
+        return ["escape"] if abort == "escape" and window.flip_count == 7 else []
+
+    keyboard = SimpleNamespace(
+        clock=Clock("keyboard"),
+        clearEvents=lambda: trace.append(("clear events", window.flip_count)),
+        getKeys=poll_keys,
+    )
     frame_count = int(duration_seconds * 60)
-    result = render_task_step(
+    result = renderer.render_task_step(
         visual=object(), core=SimpleNamespace(Clock=Clock), event=object(),
         window=window, keyboard=keyboard, project_root=tmp_path,
-        is_aborted=lambda: False, set_aborted=lambda: None,
+        is_aborted=lambda: abort == "external" and window.flip_count == 7,
+        set_aborted=lambda: trace.append(("escape abort", window.flip_count)),
         step=ResolvedTaskStep(
             task_id="masking", step_id="timed", kind="timed_feedback", response_kind="none",
             duration_s=duration_seconds,
@@ -471,12 +493,42 @@ def test_timed_scene_screen_presents_exact_frames_without_changing_ordinary_task
             clear_after_duration=frame_duration and terminal,
         ),
     )
-    expected_flips = frame_count if frame_duration else frame_count + 1
-    assert window.flip_count == expected_flips + int(frame_duration and terminal)
-    assert len(draws) == expected_flips
-    assert result.reaction_time_s == pytest.approx((expected_flips - 1) / 60)
-    assert not result.timed_out
-    assert not result.aborted
+    return result, trace, polls, constructions
+
+
+@pytest.mark.parametrize(
+    ("duration_seconds", "frame_duration", "terminal", "abort"),
+    [
+        (duration, frames, terminal, None)
+        for duration in (1.0, 2.0)
+        for frames in (False, True)
+        for terminal in (False, True)
+    ] + [(2.0, True, True, "escape"), (2.0, True, True, "external")],
+)
+def test_timed_scene_screen_preserves_frame_and_input_order(
+    tmp_path, monkeypatch, duration_seconds, frame_duration, terminal, abort,
+) -> None:
+    result, trace, polls, constructions = _timed_scene_trace(
+        psychopy_tasks, tmp_path, monkeypatch, duration_seconds, frame_duration, terminal, abort,
+    )
+    frames = 7 if abort else int(duration_seconds * 60) + int(not frame_duration)
+    expected = [("draw", 1), ("flip", 1), ("clear events", 1), ("keyboard clock reset", 1),
+                ("task clock reset", 1), ("poll", 1)]
+    for frame in range(2, frames + 1):
+        expected.extend([("draw", frame), ("flip", frame), ("poll", frame)])
+    if abort == "escape":
+        expected.append(("escape abort", frames))
+    if abort is None and frame_duration and terminal:
+        expected.append(("flip", frames + 1))
+
+    assert trace == expected
+    assert polls == [(["escape"], False, True)] * frames
+    (expected_keys,) = constructions
+    assert all(keys is expected_keys for keys, _wait_release, _clear in polls)
+    assert result == TaskEngineInput(
+        aborted=abort is not None, key="escape" if abort == "escape" else None,
+        reaction_time_s=(frames - 1) / 60,
+    )
 
 
 @pytest.mark.parametrize("native_scene, aborted", [(True, False), (True, True), (False, False)])

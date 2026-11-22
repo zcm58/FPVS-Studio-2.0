@@ -248,6 +248,11 @@ def _render_prepared_task_step(
         if step.background_rgb is not None:
             window.colorSpace = "rgb"
             window.color = step.background_rgb
+        passive_key_list = (
+            _key_list_for_step(step)
+            if step.duration_s is not None and step.response_kind == "none"
+            else None
+        )
         while True:
             elapsed_s = float(task_clock.getTime())
             if is_aborted():
@@ -285,6 +290,7 @@ def _render_prepared_task_step(
                 response_text=response_text,
                 selected_item_ids=selected_item_ids,
                 native_text_input=text_box is not None,
+                passive_key_list=passive_key_list,
             )
             response_text = _text_box_value(text_box, fallback=str(key_result["response_text"]))
             response_text = response_text[: step.maximum_text_length]
@@ -921,9 +927,12 @@ def _handle_keys(
     response_text: str,
     selected_item_ids: list[str],
     native_text_input: bool = False,
+    passive_key_list: list[str] | None = None,
 ) -> _KeyResult:
     text_input = step.response_kind in _TEXT_RESPONSE_KINDS
-    key_list = None if text_input else _key_list_for_step(step)
+    key_list = passive_key_list
+    if key_list is None and not text_input:
+        key_list = _key_list_for_step(step)
     keys = keyboard.getKeys(keyList=key_list, waitRelease=False, clear=True)
     submitted_key: str | None = None
     response_key: str | None = None

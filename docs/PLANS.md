@@ -68,8 +68,6 @@ These future changes came out of the November 22 optimization review.
 
 - [Responsive Assets stimulus import](exec-plans/planned/assets-stimulus-import-responsiveness.md)
   moves file preparation out of the desktop event loop.
-- [Passive fixation key filter](exec-plans/planned/passive-fixation-key-filter.md)
-  avoids rebuilding the same Escape filter after every flip.
 - [Windows Builder demo bundle size](exec-plans/planned/windows-builder-demo-bundle-size.md)
   removes upstream Builder examples from the Windows installer after verifying packaged workflows.
 - [Legacy Attentional Blink ISI validator](exec-plans/planned/legacy-attentional-blink-isi-validator.md)
@@ -99,6 +97,8 @@ These future changes came out of the November 22 optimization review.
   reuses the resolved project root while checking each source path independently.
 - [Legacy recovery plan inventory](exec-plans/completed/legacy-recovery-plan-inventory.md)
   reads unchanged legacy plans once per search and revalidates the selected plan for rerun.
+- [Passive fixation key filter](exec-plans/completed/passive-fixation-key-filter.md)
+  builds one Escape filter per timed step and preserves each frame and key poll.
 - [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
   restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
 - [Image Equalizer in-place rounding](exec-plans/completed/image-equalizer-in-place-rounding.md)

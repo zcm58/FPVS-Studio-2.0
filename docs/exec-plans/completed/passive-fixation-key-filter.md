@@ -1,6 +1,6 @@
 # Reuse the key filter during timed passive fixation
 
-Status: Planned
+Status: Completed
 
 Date: 2026-11-22
 
@@ -33,3 +33,22 @@ resolved step under the [task rendering contract](../../ENGINE_INTERFACE.md#modu
 - Run engine focused verification and repo precommit. Treat the measured
   construction count as source evidence. Quantify display jitter or EEG timing
   only with physical timing evidence.
+
+## Implementation and results
+
+Each timed passive step prepares its Escape list before the render loop. The
+renderer passes it to the existing poll after each frame flip. The supported
+PsychoPy keyboard backends read the list without mutating it. Response-driven,
+untimed, and text steps keep their original key filters.
+
+Ten fake-window comparisons against the previous renderer matched the exact
+result fields, first-flip clear and clock resets, draw/flip/poll order, poll
+arguments, and terminal blanks. The cases include eight normal completions,
+keyboard Escape, and external abort. A scheduled 120-frame fixation still
+polled 120 times and built the Escape list once. All 77 runtime-task tests and
+651 engine focused tests passed. These checks used fake clocks, windows,
+and keyboards.
+
+Repo precommit passed the Windows and Darwin type checks, repository audits,
+and 6,622 unit tests with 41 platform or permission skips. Docs focused
+verification passed all 13 checks.
