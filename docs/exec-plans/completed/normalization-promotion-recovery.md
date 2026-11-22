@@ -1,6 +1,6 @@
 # Image Normalization Promotion Recovery
 
-Status: Planned
+Status: Completed
 
 Baseline reviewed against Studio 3.1.4 on 2026-11-22.
 
@@ -40,3 +40,37 @@ normalized folder missing.
   some sets and none in others. Assert original file hashes, path ownership,
   surfaced errors and cleanup. Run the `preprocessing` and `project-io` focused
   routes and safe precommit for the changed failure behavior.
+
+## Implemented behavior and evidence
+
+The backend holds an advisory lock under the project cache while inspecting,
+staging and promoting the batch. Existing folders move into the batch's staging
+directory by rename. If a later step fails, the backend unwinds the completed
+renames in reverse order and raises the original error. If a rollback rename
+fails, it logs the retained recovery directory.
+
+The document action preserved both prior normalized image sets, the project
+model and the manifest after an injected second promotion failure. The retry
+published both new source references and rebuilt the manifest once. The test
+used the document mixin without importing Qt.
+
+An independent process attempting to normalize the same project was refused
+before writing output. Its retry succeeded after the project lock released.
+
+Before-and-after runs matched the relative paths, image counts, dimensions,
+conversion order, authored sources and PNG bytes. The exact-byte cases
+included EXIF orientation, ICC profiles, grayscale, transparency and CMYK
+sources. The leaner staging layout and resize path reduced the overhead of
+the recovery work. In 48 alternating comparisons of a warmed four-image
+replacement, the median paired overhead was 6.3 ms. The user approved that
+tradeoff on November 22, 2026.
+
+In six balanced pairs replacing an 80-image batch across two sets, wall-time
+medians were 3.95 seconds before and 3.80 seconds after. The second run of each
+pair was faster regardless of order, so the test establishes byte parity and
+shows no consistent large-batch slowdown. GUI event-loop timing was unmeasured.
+
+The Windows preprocessing scope passed 112 tests. Project I/O passed 921 with
+three symlink-permission skips. Safe repo precommit passed Windows and Darwin
+type checks, repository audits and 6,609 tests with 41 platform or permission
+skips.

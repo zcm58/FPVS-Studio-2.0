@@ -7,27 +7,37 @@ results structured for GUI worker integration.
 
 from __future__ import annotations
 
+import errno
+import logging
+import os
 import shutil
-from collections.abc import Callable, Iterable
+import stat
+import sys
+from collections.abc import Callable, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from hashlib import sha256
 from pathlib import Path
+from tempfile import mkdtemp
 
 from PIL import Image, ImageOps
 
 from fpvs_studio.core.enums import StimulusModality
-from fpvs_studio.core.models import ImageResolution, StimulusSet
+from fpvs_studio.core.models import ImageResolution, StimulusSet, validate_slug
 from fpvs_studio.core.paths import (
+    ProjectPathResolver,
+    cache_dir,
     filesystem_path,
     stimulus_normalized_dir,
     stimulus_normalized_images_root,
-    to_project_relative_posix,
 )
 from fpvs_studio.preprocessing.source_files import source_image_directory_files
 
 NORMALIZATION_INPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 COMPILER_READY_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
 SUPPORTED_NORMALIZATION_SIZES = (256, 512, 1024)
+_LOGGER = logging.getLogger(__name__)
+_LOCK_CONTENTION_ERRORS = frozenset({errno.EACCES, errno.EAGAIN, errno.EDEADLK})
 
 
 class ImageNormalizationError(ValueError):
@@ -175,8 +185,25 @@ def normalize_stimulus_sets(
 
     _validate_target_size(target_size)
 
-    project_root = filesystem_path(project_root)
+    project_root = filesystem_path(filesystem_path(project_root).resolve())
     selected_sets = _unique_stimulus_sets(stimulus_sets)
+    with _normalization_lock(project_root):
+        return _normalize_locked(
+            project_root, selected_sets, target_size, cancel_flag or (lambda: False),
+        )
+
+
+def _normalize_locked(
+    project_root: Path,
+    selected_sets: tuple[StimulusSet, ...],
+    target_size: int,
+    cancel: Callable[[], bool],
+) -> ImageNormalizationResult:
+    paths = ProjectPathResolver(project_root)
+    sources = {
+        stimulus_set.set_id: filesystem_path(paths.resolve(_image_source_dir(stimulus_set)))
+        for stimulus_set in selected_sets
+    }
     scan = scan_stimulus_sets_for_normalization(
         project_root=project_root,
         stimulus_sets=selected_sets,
@@ -185,68 +212,170 @@ def normalize_stimulus_sets(
         raise ImageNormalizationError(_scan_blocker_message(scan))
 
     output_root = stimulus_normalized_images_root(project_root)
-    output_root.mkdir(parents=True, exist_ok=True)
-    temporary_results: list[tuple[StimulusSet, Path, Path, int]] = []
-    processed_count = 0
-    cancel = cancel_flag or (lambda: False)
+    _normalization_entry(output_root.parent, directory=True)
+    root_exists = _normalization_entry(output_root, directory=True) is not None
+    output_dirs: dict[str, Path] = {}
+    for stimulus_set in selected_sets:
+        set_id = validate_slug(stimulus_set.set_id, field_name="set_id")
+        output_dir = stimulus_normalized_dir(project_root, set_id)
+        if root_exists:
+            _normalization_entry(output_dir, directory=True)
+        output_dirs[set_id] = output_dir
+    if not root_exists:
+        output_root.mkdir(parents=True, exist_ok=True)
+        _require_normalization_dirs(output_root.parent, output_root)
+    if not selected_sets:
+        return ImageNormalizationResult(sets=(), processed_count=0)
 
+    transaction = Path(mkdtemp(prefix=".normalize-", dir=output_root))
+    transaction_dirs = (output_root.parent, output_root, transaction)
+    moves: list[tuple[Path, Path]] = []
+    normalized_sets: list[NormalizedStimulusSetResult] = []
+    retain_transaction = False
+    has_backups = False
+    committed = False
+    processed_count = 0
     try:
         for stimulus_set in selected_sets:
-            if cancel():
-                raise ImageNormalizationError("Image normalization was cancelled.")
-            source_dir = project_root / Path(_image_source_dir(stimulus_set))
-            temp_dir = output_root / f".tmp-{stimulus_set.set_id}"
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
-            temp_dir.mkdir(parents=True, exist_ok=True)
-            image_paths = _normalizable_image_paths(source_dir)
+            _check_normalization_cancel(cancel)
+            set_id = stimulus_set.set_id
+            temp_dir = transaction / f"new-{set_id}"
+            temp_dir.mkdir()
+            image_paths = _normalizable_image_paths(sources[set_id])
             if not image_paths:
                 raise ImageNormalizationError(
                     f"Stimulus set '{stimulus_set.name}' does not contain normalizable images."
                 )
             for image_path in image_paths:
-                if cancel():
-                    raise ImageNormalizationError("Image normalization was cancelled.")
+                _check_normalization_cancel(cancel)
                 destination = temp_dir / _normalized_filename(image_path)
                 _resize_center_crop_png(
                     image_path,
                     destination,
                     target_width=target_size,
                     target_height=target_size,
+                    destination_prepared=True,
                 )
                 processed_count += 1
-            temporary_results.append(
-                (
-                    stimulus_set,
-                    temp_dir,
-                    stimulus_normalized_dir(project_root, stimulus_set.set_id),
-                    len(image_paths),
-                )
-            )
-
-        normalized_sets: list[NormalizedStimulusSetResult] = []
-        for stimulus_set, temp_dir, output_dir, image_count in temporary_results:
-            if output_dir.exists():
-                shutil.rmtree(output_dir)
-            temp_dir.replace(output_dir)
             normalized_sets.append(
                 NormalizedStimulusSetResult(
-                    set_id=stimulus_set.set_id,
-                    source_dir=to_project_relative_posix(project_root, output_dir),
-                    image_count=image_count,
+                    set_id=set_id,
+                    source_dir=output_dirs[set_id].relative_to(project_root).as_posix(),
+                    image_count=len(image_paths),
                     resolution=ImageResolution(width_px=target_size, height_px=target_size),
                 )
             )
-    except Exception:
-        for _stimulus_set, temp_dir, _output_dir, _image_count in temporary_results:
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
+
+        for set_id, output_dir in output_dirs.items():
+            _check_normalization_cancel(cancel)
+            temp_dir = transaction / f"new-{set_id}"
+            _require_normalization_dirs(*transaction_dirs, temp_dir)
+            if _normalization_entry(output_dir, directory=True) is not None:
+                backup_dir = transaction / f"old-{set_id}"
+                _move_normalization_dir(output_dir, backup_dir)
+                moves.append((output_dir, backup_dir))
+                has_backups = True
+            _move_normalization_dir(temp_dir, output_dir)
+            moves.append((temp_dir, output_dir))
+        _check_normalization_cancel(cancel)
+        committed = True
+    except BaseException:
+        # Unwind promoted folders before restoring their predecessors.
+        for previous, current in reversed(moves):
+            try:
+                _require_normalization_dirs(*transaction_dirs, current)
+                _move_normalization_dir(current, previous)
+            except Exception:
+                retain_transaction = True
+                _LOGGER.exception(
+                    "Image normalization rollback failed; recovery retained at %s", transaction,
+                )
         raise
+    finally:
+        if not retain_transaction:
+            try:
+                _require_normalization_dirs(*transaction_dirs)
+                if committed and not has_backups:
+                    transaction.rmdir()
+                else:
+                    shutil.rmtree(transaction)
+            except Exception:
+                _LOGGER.exception("Could not remove image normalization staging at %s", transaction)
 
     return ImageNormalizationResult(
         sets=tuple(normalized_sets),
         processed_count=processed_count,
     )
+
+
+def _normalization_entry(path: Path, *, directory: bool) -> os.stat_result | None:
+    try:
+        info = path.lstat()
+    except FileNotFoundError:
+        return None
+    reparse = getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    tag = getattr(info, "st_reparse_tag", 0)
+    # Cloud placeholders can be real entries. Name-surrogate tags redirect I/O.
+    if stat.S_ISLNK(info.st_mode) or tag & 0x20000000 or (reparse and not tag):
+        raise ImageNormalizationError(f"Image normalization cannot use a redirected path: {path}")
+    if directory and not stat.S_ISDIR(info.st_mode):
+        raise NotADirectoryError(f"Image normalization requires a directory: {path}")
+    if not directory and (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1):
+        raise ImageNormalizationError(f"The image normalization lock is not a private file: {path}")
+    return info
+
+
+@contextmanager
+def _normalization_lock(project_root: Path) -> Iterator[None]:
+    """Serialize normalization in a project, including readers of prior outputs."""
+    # Keep the lock identity under project cache, outside portable stimulus assets.
+    directory = cache_dir(project_root)
+    if _normalization_entry(directory, directory=True) is None:
+        directory.mkdir(parents=True, exist_ok=True)
+        _require_normalization_dirs(directory)
+    lock_path = directory / ".normalization.lock"
+    try:
+        stream = lock_path.open("x+b")
+    except FileExistsError:
+        _normalization_entry(lock_path, directory=False)
+        stream = lock_path.open("r+b")
+    with stream:
+        identity = _normalization_entry(lock_path, directory=False)
+        if identity is None or not os.path.samestat(os.fstat(stream.fileno()), identity):
+            raise ImageNormalizationError("The image normalization lock changed before it opened.")
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+
+                msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as error:
+            if error.errno not in _LOCK_CONTENTION_ERRORS:
+                raise
+            raise ImageNormalizationError(
+                "Another image normalization is already running in this project."
+            ) from error
+        yield
+
+
+def _check_normalization_cancel(cancel: Callable[[], bool]) -> None:
+    if cancel():
+        raise ImageNormalizationError("Image normalization was cancelled.")
+
+
+def _require_normalization_dirs(*directories: Path) -> None:
+    for directory in directories:
+        if _normalization_entry(directory, directory=True) is None:
+            raise FileNotFoundError(f"Image normalization directory disappeared: {directory}")
+
+
+def _move_normalization_dir(source: Path, target: Path) -> None:
+    if _normalization_entry(target, directory=True) is not None:
+        raise FileExistsError(f"The image normalization destination already exists: {target}")
+    source.replace(target)
 
 
 def optimize_image_folder_for_fpvs(
@@ -393,10 +522,14 @@ def _resize_center_crop_png(
     *,
     target_width: int,
     target_height: int,
+    destination_prepared: bool = False,
 ) -> None:
-    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    if not destination_prepared:
+        destination_path.parent.mkdir(parents=True, exist_ok=True)
     with Image.open(source_path, formats=("JPEG", "PNG", "BMP", "TIFF")) as image:
-        image = ImageOps.exif_transpose(image).convert("RGB")
+        ImageOps.exif_transpose(image, in_place=True)
+        if image.mode != "RGB":
+            image = image.convert("RGB")
         original_width, original_height = image.size
         scale = max(target_width / original_width, target_height / original_height)
         resized_size = (round(original_width * scale), round(original_height * scale))

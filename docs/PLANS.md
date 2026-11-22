@@ -80,8 +80,6 @@ These future changes came out of the November 22 optimization review.
   avoids rebuilding the same Escape filter after every flip.
 - [Windows Builder demo bundle size](exec-plans/planned/windows-builder-demo-bundle-size.md)
   removes upstream Builder examples from the Windows installer after verifying packaged workflows.
-- [Normalization promotion recovery](exec-plans/planned/normalization-promotion-recovery.md)
-  protects existing normalized images when a replacement batch fails.
 - [Legacy Attentional Blink ISI validator](exec-plans/planned/legacy-attentional-blink-isi-validator.md)
   shares one legacy default between the two model boundaries.
 
@@ -103,6 +101,8 @@ These future changes came out of the November 22 optimization review.
   one-click source repair, SciPy selection, accurate dependency errors and deployed
   automatic completion reports; affected-Mac acceptance remains under macOS Phase 1.
 - [Project import progress](exec-plans/completed/import-progress-clarity.md)
+- [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
+  restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
 - [Public Experiment Library](exec-plans/completed/public-experiment-library.md)
 - [60.02 Hz display support](exec-plans/completed/60-02-hz-display-support.md):
   added the authored rate and verified two fullscreen runs on the Lenovo's 60.020425 Hz signal.

@@ -1190,7 +1190,10 @@ The authoring window is organized around two user-facing modes:
   - when users leave Conditions, FPVS Studio checks condition images for mixed
     sizes or unsupported runtime formats through a progress task; uniform rectangular
     sets are valid native inputs, while inconsistent folders can still be normalized to
-    project-local PNG copies before moving on
+    project-local PNG copies before moving on. Studio stages the selected image sets
+    together and restores prior normalized folders if replacing the batch fails.
+    If restoration is blocked, Studio retains the recovery files and records their
+    location in the log
   - conditions can be added, duplicated and edited manually. Existing condition records,
     variants and runtime transforms remain supported; no condition/assets migration
     or deletion is required

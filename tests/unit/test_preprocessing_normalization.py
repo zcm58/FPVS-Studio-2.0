@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 
 import pytest
 from PIL import Image
 
 from fpvs_studio.core.models import StimulusSet
+from fpvs_studio.preprocessing import normalization
 from fpvs_studio.preprocessing.normalization import (
     ImageNormalizationError,
     normalize_stimulus_sets,
@@ -28,6 +32,26 @@ def _stimulus_set(set_id: str, source_dir: str) -> StimulusSet:
         source_dir=source_dir,
         image_count=2,
     )
+
+
+def _file_contents(folder: Path) -> dict[str, bytes]:
+    return {
+        path.relative_to(folder).as_posix(): path.read_bytes()
+        for path in folder.rglob("*")
+        if path.is_file()
+    }
+
+
+def _redirect_directory(link: Path, target: Path) -> None:
+    try:
+        if os.name == "nt":
+            from _winapi import CreateJunction
+
+            CreateJunction(str(target), str(link))
+        else:
+            link.symlink_to(target, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"Directory redirection is unavailable: {error}")
 
 
 def test_normalization_scan_detects_uniform_images(tmp_path: Path) -> None:
@@ -241,6 +265,228 @@ def test_normalization_rejects_invalid_sizes_without_writing_outputs(tmp_path: P
         )
 
     assert not (tmp_path / "stimuli" / "normalized-images").exists()
+
+
+@pytest.mark.parametrize(
+    ("interruption", "converted_count"), [("cancel", 1), ("cancel", 2), ("decode", 1), ("save", 1)],
+)
+def test_normalization_cleans_interrupted_staging_and_preserves_previous_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, interruption: str, converted_count: int,
+) -> None:
+    source = tmp_path / "originals"
+    _write_image(source / "a.jpg", (64, 96))
+    _write_image(source / "b.png", (96, 64))
+    source_bytes = _file_contents(source)
+    output_root = tmp_path / "stimuli/normalized-images"
+    previous = output_root / "base"
+    _write_image(previous / "existing.png", (256, 256))
+    unrelated = output_root / ".tmp-base"
+    unrelated.mkdir()
+    (unrelated / "keep.txt").write_bytes(b"unrelated staging directory")
+    previous_bytes = _file_contents(previous)
+    sets = [_stimulus_set("base", "originals")]
+    converted: list[Path] = []
+    original_resize = normalization._resize_center_crop_png
+    conversion_error = OSError(f"simulated {interruption} failure")
+
+    def convert_with_possible_failure(image_path: Path, destination: Path, **sizes: int) -> None:
+        if interruption != "cancel" and converted:
+            if interruption == "save":
+                destination.write_bytes(b"partially written PNG")
+            raise conversion_error
+        original_resize(image_path, destination, **sizes)
+        assert destination.is_file()
+        converted.append(destination)
+
+    with monkeypatch.context() as injected:
+        injected.setattr(normalization, "_resize_center_crop_png", convert_with_possible_failure)
+        if interruption == "cancel":
+            with pytest.raises(ImageNormalizationError, match="cancelled"):
+                normalize_stimulus_sets(
+                    project_root=tmp_path, stimulus_sets=sets, target_size=512,
+                    cancel_flag=lambda: len(converted) == converted_count,
+                )
+        else:
+            with pytest.raises(OSError) as error:
+                normalize_stimulus_sets(project_root=tmp_path, stimulus_sets=sets, target_size=512)
+            assert error.value is conversion_error
+
+    assert len(converted) == converted_count
+    assert {path.name for path in output_root.iterdir() if path.is_dir()} == {"base", ".tmp-base"}
+    assert _file_contents(previous) == previous_bytes
+    assert _file_contents(unrelated) == {"keep.txt": b"unrelated staging directory"}
+    assert _file_contents(source) == source_bytes
+
+    first = normalize_stimulus_sets(project_root=tmp_path, stimulus_sets=sets, target_size=512)
+    first_bytes = _file_contents(previous)
+    repeated = normalize_stimulus_sets(project_root=tmp_path, stimulus_sets=sets, target_size=512)
+    assert first == repeated
+    assert first.processed_count == 2
+    assert first.sets[0].source_dir == "stimuli/normalized-images/base"
+    assert "existing.png" not in first_bytes
+    assert _file_contents(previous) == first_bytes
+    assert _file_contents(source) == source_bytes
+
+
+@pytest.mark.parametrize("deny_restore", [False, True])
+def test_normalization_unwinds_partial_promotion_and_keeps_unrestored_backup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, deny_restore: bool,
+) -> None:
+    set_ids = ("first", "new-set", "last")
+    for set_id in set_ids:
+        _write_image(tmp_path / f"originals/{set_id}/source.png", (64, 96))
+    sets = [_stimulus_set(set_id, f"originals/{set_id}") for set_id in set_ids]
+    output_root = tmp_path / "stimuli/normalized-images"
+    first = output_root / "first"
+    last = output_root / "last"
+    _write_image(first / "previous-first.png", (256, 256))
+    _write_image(last / "previous-last.png", (512, 512))
+    first_bytes = _file_contents(first)
+    last_bytes = _file_contents(last)
+    source_bytes = _file_contents(tmp_path / "originals")
+    original_replace = Path.replace
+    promotion_error = PermissionError("simulated last-set promotion failure")
+    failures: list[str] = []
+
+    def replace_with_failure(path: Path, target: Path) -> Path:
+        destination = Path(target)
+        if path.name == "new-last" and destination.name == "last":
+            assert first.is_dir() and _file_contents(first) != first_bytes
+            assert (output_root / "new-set").is_dir()
+            assert not last.exists()
+            failures.append("promote")
+            raise promotion_error
+        if deny_restore and path.name == "old-first" and destination.name == "first":
+            failures.append("restore")
+            raise PermissionError("simulated first-set restoration failure")
+        return original_replace(path, target)
+
+    with monkeypatch.context() as injected:
+        injected.setattr(Path, "replace", replace_with_failure)
+        with pytest.raises(PermissionError) as error:
+            normalize_stimulus_sets(project_root=tmp_path, stimulus_sets=sets, target_size=512)
+
+    assert error.value is promotion_error
+    assert failures == (["promote", "restore"] if deny_restore else ["promote"])
+    assert not (output_root / "new-set").exists()
+    assert _file_contents(last) == last_bytes
+    assert _file_contents(tmp_path / "originals") == source_bytes
+    if deny_restore:
+        retained = list(output_root.rglob("previous-first.png"))
+        assert len(retained) == 1
+        assert retained[0].parent != first
+        assert _file_contents(retained[0].parent) == first_bytes
+    else:
+        assert {path.name for path in output_root.iterdir() if path.is_dir()} == {"first", "last"}
+        assert _file_contents(first) == first_bytes
+        result = normalize_stimulus_sets(project_root=tmp_path, stimulus_sets=sets, target_size=512)
+        assert tuple(item.set_id for item in result.sets) == set_ids
+        assert result.processed_count == 3
+        assert _file_contents(tmp_path / "originals") == source_bytes
+
+
+def test_normalization_rejects_overlapping_calls_for_the_same_project(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _write_image(tmp_path / "source/a.png", (64, 96))
+    sets = [_stimulus_set("base", "source")]
+    entered, resume = Event(), Event()
+    original_resize = normalization._resize_center_crop_png
+
+    def wait_to_resize(image_path: Path, destination: Path, **sizes: int) -> None:
+        entered.set()
+        assert resume.wait(10), "First normalization did not resume"
+        original_resize(image_path, destination, **sizes)
+
+    monkeypatch.setattr(normalization, "_resize_center_crop_png", wait_to_resize)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        first = executor.submit(
+            normalize_stimulus_sets, project_root=tmp_path, stimulus_sets=sets, target_size=256,
+        )
+        try:
+            assert entered.wait(5), "First normalization did not reach staging"
+            overlapping = executor.submit(
+                normalize_stimulus_sets, project_root=tmp_path, stimulus_sets=sets, target_size=512,
+            )
+            with pytest.raises(ImageNormalizationError, match="already running in this project"):
+                overlapping.result(timeout=5)
+        finally:
+            resume.set()
+        result = first.result(timeout=5)
+
+    output_dir = tmp_path / result.sets[0].source_dir
+    assert result.processed_count == 1
+    with Image.open(next(output_dir.iterdir())) as image:
+        assert image.size == (256, 256)
+
+
+def test_normalization_can_reuse_its_existing_output_as_the_source(tmp_path: Path) -> None:
+    source = tmp_path / "originals"
+    _write_image(source / "a.jpg", (64, 96))
+    source_bytes = _file_contents(source)
+    initial = normalize_stimulus_sets(
+        project_root=tmp_path, stimulus_sets=[_stimulus_set("base", "originals")], target_size=256,
+    )
+    normalized_path = initial.sets[0].source_dir
+
+    resized = normalize_stimulus_sets(
+        project_root=tmp_path, stimulus_sets=[_stimulus_set("base", normalized_path)],
+        target_size=512,
+    )
+
+    assert resized.sets[0].source_dir == normalized_path
+    assert resized.processed_count == 1
+    (output_file,) = (tmp_path / normalized_path).iterdir()
+    with Image.open(output_file) as image:
+        assert image.size == (512, 512)
+    assert _file_contents(source) == source_bytes
+
+
+def test_normalization_accepts_a_source_redirect_within_the_project(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    _write_image(source / "a.jpg", (64, 96))
+    source_bytes = _file_contents(source)
+    _redirect_directory(tmp_path / "source-link", source)
+
+    result = normalize_stimulus_sets(
+        project_root=tmp_path, stimulus_sets=[_stimulus_set("base", "source-link")],
+        target_size=256,
+    )
+
+    assert result.processed_count == 1
+    assert result.sets[0].source_dir == "stimuli/normalized-images/base"
+    assert _file_contents(source) == source_bytes
+
+
+@pytest.mark.parametrize("redirected_path", ["source", "output-root", "destination"])
+def test_normalization_rejects_redirected_paths_outside_the_project(
+    tmp_path: Path, redirected_path: str,
+) -> None:
+    project_root = tmp_path / "project"
+    project_root.mkdir()
+    outside = tmp_path / "outside"
+    _write_image(outside / "keep.png", (64, 96))
+    outside_bytes = _file_contents(outside)
+    links = {
+        "source": project_root / "source",
+        "output-root": project_root / "stimuli/normalized-images",
+        "destination": project_root / "stimuli/normalized-images/base",
+    }
+    link = links[redirected_path]
+    if redirected_path != "source":
+        _write_image(project_root / "source/a.png", (64, 96))
+    link.parent.mkdir(parents=True, exist_ok=True)
+    _redirect_directory(link, outside)
+
+    message = "escapes the project root" if redirected_path == "source" else "redirected path"
+    with pytest.raises(ValueError, match=message):
+        normalize_stimulus_sets(
+            project_root=project_root, stimulus_sets=[_stimulus_set("base", "source")],
+            target_size=256,
+        )
+
+    assert link.resolve() == outside.resolve()
+    assert _file_contents(outside) == outside_bytes
 
 
 @pytest.mark.parametrize("target_size", [256, 512, 1024])
