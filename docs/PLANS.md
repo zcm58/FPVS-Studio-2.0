@@ -34,6 +34,7 @@ watchdog and matched every retained report payload, receipt and capture.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Studio 3.1.5 release](exec-plans/active/release-3.1.5.md) | Build the Windows installer and qualifying patches, then verify exact source and installer lifecycle before publication. |
 | [Windows Builder demo bundle size](exec-plans/active/windows-builder-demo-bundle-size.md) | Exclude upstream Builder examples from the Windows bundle and verify the exact 3.1.5 payload. |
 | [Windows release patches and acceptance](exec-plans/active/windows-release-patches-and-acceptance.md) | Limit direct patches to five preceding patch numbers within the same major and minor version. Qualify the reusable installer workflow on a hosted release draft. |
 | [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
