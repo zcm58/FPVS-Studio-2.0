@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 
 import pytest
 from PIL import Image
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QComboBox,
@@ -27,6 +28,8 @@ from tests.gui.helpers import (
 
 from fpvs_studio.core.enums import RunMode, StimulusVariant
 from fpvs_studio.core.execution import SessionExecutionSummary
+from fpvs_studio.core.paths import filesystem_path, stimulus_manifest_path
+from fpvs_studio.gui import assets_pages
 from fpvs_studio.gui.assets_pages import AssetsPage
 from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.controller import StudioController
@@ -53,14 +56,40 @@ def _stub_runtime_session_execution(monkeypatch, execute_session) -> None:
     )
 
 
+def _select_assets_source(page, condition_id, role):
+    table = page.assets_table
+    row = next(
+        index for index in range(table.rowCount())
+        if table.item(index, 2).data(Qt.ItemDataRole.UserRole) == (condition_id, role)
+    )
+    table.selectRow(row)
+    return row
+
+
+def _hold_assets_intake(monkeypatch):
+    intake = SimpleNamespace(entered=Event(), release=Event(), threads=[], prepared_roots=[])
+    original = assets_pages.import_fresh_stimulus_source_directory
+
+    def paused_intake(**kwargs):
+        intake.threads.append(QThread.currentThread())
+        intake.entered.set()
+        assert intake.release.wait(10), "Assets intake was not released"
+        result = original(**kwargs)
+        intake.prepared_roots.append(kwargs["project_root"])
+        return result
+
+    monkeypatch.setattr(assets_pages, "import_fresh_stimulus_source_directory", paused_intake)
+    return intake
+
+
 def test_assets_preprocessing_import_and_materialize_updates_status(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Assets Project")
-    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Assets Project")
+    condition_id = document.create_condition()
 
     base_dir = _write_image_directory(tmp_path / "asset-base")
     oddball_dir = _write_image_directory(tmp_path / "asset-oddball")
@@ -70,19 +99,27 @@ def test_assets_preprocessing_import_and_materialize_updates_status(
         lambda *args, **kwargs: next(selection),
     )
 
-    window.assets_page.refresh()
-    window.assets_page.assets_table.selectRow(0)
-    window.assets_page.import_source_button.click()
-    window.assets_page.assets_table.selectRow(1)
-    window.assets_page.import_source_button.click()
-    window.assets_page.materialize_button.click()
+    page = window.assets_page
+    page.refresh()
+    for role in ("base", "oddball"):
+        previous = document.get_condition_stimulus_set(condition_id, role)
+        row = _select_assets_source(page, condition_id, role)
+        page.import_source_button.click()
+        qtbot.waitUntil(lambda: not page.is_importing(), timeout=10000)
+        imported = document.get_condition_stimulus_set(condition_id, role)
+        assert imported.set_id != previous.set_id
+        assert imported.name == previous.name
+        page.refresh()
+        assert page.assets_table.item(row, 2).text() == imported.source_dir
+    page.materialize_button.click()
 
     qtbot.waitUntil(
-        lambda: StimulusVariant.GRAYSCALE
-        in window.document.project.stimulus_sets[0].available_variants
+        lambda: page.materialize_button.isEnabled() and StimulusVariant.GRAYSCALE
+        in document.project.stimulus_sets[0].available_variants,
+        timeout=10000,
     )
-    assert window.document.manifest is not None
-    status = window.assets_page.assets_status_text.toPlainText()
+    assert document.manifest is not None
+    status = page.assets_status_text.toPlainText()
     assert "Catalog:" in status
     assert "Enabled variants:" not in status
 
@@ -98,6 +135,9 @@ def test_assets_tools_fit_and_keep_full_source_path(
     page.resize(*size)
     page.show()
     QApplication.processEvents()
+    # Native Windows can constrain the initial show to the available desktop.
+    page.resize(*size)
+    QApplication.processEvents()
     assert "Add a condition in Setup" in page.assets_status_text.toPlainText()
     assert not page.import_source_button.isEnabled()
 
@@ -109,20 +149,91 @@ def test_assets_tools_fit_and_keep_full_source_path(
         assert page.assets_status_text.toPlainText() == (
             "Add stimulus sources in Setup → Conditions."
         )
+    condition = document.ordered_conditions()[0]
     page.refresh()
-    page.assets_table.selectRow(0)
+    row = _select_assets_source(page, condition.condition_id, "base")
     QApplication.processEvents()
 
-    assert page.size().toTuple() == size
-    source = page.assets_table.item(0, 2)
-    assert source.text() == document.condition_rows()[0].stimulus_set.source_dir
-    assert source.toolTip() == source.text()
+    def assert_assets_layout():
+        assert page.size().toTuple() == size
+        assert not page.shell.page_container.scroll_area.verticalScrollBar().isVisible()
+        _assert_visible_children_within_parent(page)
+        for button in (page.import_source_button, page.refresh_button, page.materialize_button):
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+
+    source_cell = page.assets_table.item(row, 2)
+    previous = document.get_condition_stimulus_set(condition.condition_id, "base")
+    assert source_cell.text() == previous.source_dir
+    assert source_cell.toolTip() == previous.source_dir
     assert page.import_source_button.isEnabled()
     assert page.assets_table.accessibleName() == "Stimulus sources"
-    assert not page.shell.page_container.scroll_area.verticalScrollBar().isVisible()
-    _assert_visible_children_within_parent(page)
-    for button in (page.import_source_button, page.refresh_button, page.materialize_button):
-        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
+    assert_assets_layout()
+
+    replacement = _write_image_directory(source_parent / "updated-source", count=4)
+    picked = []
+
+    def pick_replacement(*_args, **_kwargs):
+        picked.append(replacement)
+        return str(replacement)
+
+    monkeypatch.setattr(assets_pages.QFileDialog, "getExistingDirectory", pick_replacement)
+    intake = _hold_assets_intake(monkeypatch)
+    apply_threads = []
+    refreshes_during_apply = []
+    refresh_count = 0
+    original_apply = document.apply_designer_source
+    original_refresh = page.refresh
+
+    def count_refresh():
+        nonlocal refresh_count
+        refresh_count += 1
+        return original_refresh()
+
+    def apply_source(*args, **kwargs):
+        apply_threads.append(QThread.currentThread())
+        before_apply = refresh_count
+        result = original_apply(*args, **kwargs)
+        refreshes_during_apply.append(refresh_count - before_apply)
+        return result
+
+    monkeypatch.setattr(page, "refresh", count_refresh)
+    monkeypatch.setattr(document, "apply_designer_source", apply_source)
+    try:
+        page.import_source_button.click()
+        qtbot.waitUntil(intake.entered.is_set, timeout=5000)
+        ticks = []
+        QTimer.singleShot(0, lambda: ticks.append(True))
+        qtbot.waitUntil(lambda: bool(ticks), timeout=5000)
+        assert intake.threads[0] != QApplication.instance().thread()
+        assert page.is_importing()
+        for control in (page.import_source_button, page.refresh_button, page.materialize_button,
+                        page._variant_checkboxes[StimulusVariant.GRAYSCALE]):
+            assert not control.isEnabled()
+        assert page.assets_table.isEnabled()
+        page._import_selected_source()
+        assert picked == [replacement]
+        assert document.get_condition_stimulus_set(condition.condition_id, "base") == previous
+        assert_assets_layout()
+    finally:
+        intake.release.set()
+        qtbot.waitUntil(lambda: not page.is_importing(), timeout=10000)
+
+    current = document.get_condition_stimulus_set(condition.condition_id, "base")
+    assert apply_threads == [QApplication.instance().thread()]
+    assert refreshes_during_apply == [1]
+    before_notification = refresh_count
+    document.manifest_changed.emit()
+    assert refresh_count == before_notification + 1
+    assert current.set_id != previous.set_id
+    assert current.name == previous.name and current.image_count == 4
+    assert page._selected_binding() == (condition.condition_id, "base")
+    assert page.assets_table.item(row, 2).toolTip() == current.source_dir
+    assert page.import_source_button.isEnabled()
+    imported_folder = document.project_root / current.source_dir
+    assert {path.name: path.read_bytes() for path in imported_folder.iterdir()} == {
+        path.name: path.read_bytes() for path in replacement.iterdir()
+    }
+    assert_assets_layout()
 
 
 def test_assets_import_allows_mixed_resolution_for_later_normalization(
@@ -131,8 +242,8 @@ def test_assets_import_allows_mixed_resolution_for_later_normalization(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Invalid Assets Project")
-    qtbot.mouseClick(window.conditions_page.add_condition_button, Qt.MouseButton.LeftButton)
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Invalid Assets Project")
+    condition_id = document.create_condition()
 
     invalid_dir = tmp_path / "invalid-assets"
     _write_image_directory(invalid_dir, size=(96, 96))
@@ -150,14 +261,112 @@ def test_assets_import_allows_mixed_resolution_for_later_normalization(
 
     monkeypatch.setattr("fpvs_studio.gui.window_helpers.QMessageBox.exec", _capture_exec)
 
-    window.assets_page.refresh()
-    window.assets_page.assets_table.selectRow(0)
-    window.assets_page.import_source_button.click()
+    page = window.assets_page
+    page.refresh()
+    _select_assets_source(page, condition_id, "base")
+    page.import_source_button.click()
+    qtbot.waitUntil(lambda: not page.is_importing(), timeout=10000)
 
-    imported_set = window.document.project.stimulus_sets[0]
+    imported_set = document.get_condition_stimulus_set(condition_id, "base")
     assert messages == []
     assert imported_set.image_count == 4
     assert imported_set.resolution is None
+
+
+@pytest.mark.parametrize("cancel", [True, False], ids=["picker-cancelled", "import-failed"])
+def test_assets_import_preserves_current_source_on_cancel_or_failure(
+    qtbot, controller, tmp_path, monkeypatch, cancel,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Assets retry")
+    _prepare_compile_ready_project(window, tmp_path / "originals")
+    condition_id = document.ordered_conditions()[0].condition_id
+    original_source = document.get_condition_stimulus_set(condition_id, "base")
+    manifest_path = stimulus_manifest_path(document.project_root)
+    original_manifest = manifest_path.read_bytes()
+    page = window.assets_page
+    page.refresh()
+    _select_assets_source(page, condition_id, "base")
+    invalid_source = tmp_path / "selected-folder"
+    invalid_source.mkdir()
+    imports, messages = [], []
+
+    def fail_copy(**kwargs):
+        imports.append(kwargs["source_dir"])
+        raise PermissionError("The selected source could not be read.")
+
+    monkeypatch.setattr(assets_pages.QFileDialog, "getExistingDirectory",
+                        lambda *_args: "" if cancel else str(invalid_source))
+    monkeypatch.setattr(assets_pages, "import_fresh_stimulus_source_directory", fail_copy)
+    monkeypatch.setattr(assets_pages, "_show_error_dialog",
+                        lambda _page, title, error: messages.append((title, str(error))))
+
+    page.import_source_button.click()
+    qtbot.waitUntil(lambda: not page.is_importing(), timeout=10000)
+
+    assert imports == ([] if cancel else [invalid_source])
+    assert messages == ([] if cancel else [
+        ("Stimulus Import Error", "The selected source could not be read."),
+    ])
+    assert document.get_condition_stimulus_set(condition_id, "base") == original_source
+    assert manifest_path.read_bytes() == original_manifest
+    assert page.import_source_button.isEnabled()
+
+
+@pytest.mark.parametrize("change", ["source", "resolved-root"])
+def test_assets_import_blocks_project_handoff_and_rejects_stale_results(
+    qtbot, controller, tmp_path, monkeypatch, change,
+) -> None:
+    document, window = _open_created_project(controller, qtbot, tmp_path, "Assets handoff")
+    condition_id = document.create_condition()
+    page = window.assets_page
+    page.refresh()
+    _select_assets_source(page, condition_id, "base")
+    proposed = _write_image_directory(tmp_path / "proposed")
+    initial_root = document.project_root
+    redirected = tmp_path / "redirected"
+    redirected.mkdir()
+    physical_targets = [initial_root]
+    guarded = []
+
+    def record_busy_notice(_parent, title, _message):
+        guarded.append(title)
+        return QMessageBox.StandardButton.Ok
+
+    def resolve_simulated_alias(path):
+        return filesystem_path(physical_targets[0] if path == initial_root else path)
+
+    if change == "resolved-root":
+        monkeypatch.setattr(assets_pages, "filesystem_path", resolve_simulated_alias)
+    monkeypatch.setattr(QMessageBox, "information", record_busy_notice)
+    monkeypatch.setattr(assets_pages.QFileDialog, "getExistingDirectory", lambda *_: str(proposed))
+    intake = _hold_assets_intake(monkeypatch)
+
+    try:
+        page.import_source_button.click()
+        qtbot.waitUntil(intake.entered.is_set, timeout=5000)
+        assert not window.flush_pending_edits()
+        assert not window.prepare_project_handoff()
+        assert not window.close()
+        assert guarded == ["Images are still loading"] * 2
+        assert controller.main_window is window and window.isVisible()
+
+        if change == "source":
+            rebound = _write_image_directory(tmp_path / "rebound", count=1)
+            document.import_condition_stimulus_folder(condition_id, role="base", source_dir=rebound)
+        else:
+            physical_targets[0] = redirected
+        current = document.get_condition_stimulus_set(condition_id, "base")
+        manifest_path = stimulus_manifest_path(initial_root)
+        current_manifest = manifest_path.read_bytes()
+    finally:
+        intake.release.set()
+        qtbot.waitUntil(lambda: not page.is_importing(), timeout=10000)
+
+    assert intake.prepared_roots == [filesystem_path(initial_root).resolve()]
+    assert document.get_condition_stimulus_set(condition_id, "base") == current
+    assert manifest_path.read_bytes() == current_manifest
+    assert list(redirected.iterdir()) == []
+    assert page.import_source_button.isEnabled()
 
 
 def test_launch_collects_participant_prompt_before_backend_preflight(

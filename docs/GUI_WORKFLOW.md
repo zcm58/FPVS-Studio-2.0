@@ -177,6 +177,9 @@ instantly when Windows Animation effects are off or macOS Reduce motion is on.
 The guided Conditions editor refreshes its list from document changes. Timing
 retains drafts and validates them between steps, with table rows refreshed when
 Timing is visible. The compatibility Assets and Run views refresh when shown.
+Assets imports copy and inspect images in the background, then update the selected
+condition source and catalog. Finish an active import before closing or changing
+experiments.
 The older Conditions editor is created on request and retains its draft handling.
 
 Project has two sibling **Project details** and **Experiment setup** cards inside a

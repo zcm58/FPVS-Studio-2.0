@@ -66,8 +66,6 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 
 These future changes came out of the November 22 optimization review.
 
-- [Responsive Assets stimulus import](exec-plans/planned/assets-stimulus-import-responsiveness.md)
-  moves file preparation out of the desktop event loop.
 - [Windows Builder demo bundle size](exec-plans/planned/windows-builder-demo-bundle-size.md)
   removes upstream Builder examples from the Windows installer after verifying packaged workflows.
 
@@ -99,6 +97,8 @@ These future changes came out of the November 22 optimization review.
   builds one Escape filter per timed step and preserves each frame and key poll.
 - [Legacy Attentional Blink ISI validator](exec-plans/completed/legacy-attentional-blink-isi-validator.md)
   shares the legacy source default across Studio and Toolbox model validation.
+- [Responsive Assets stimulus import](exec-plans/completed/assets-stimulus-import-responsiveness.md)
+  keeps the compatibility view responsive during source intake and preserves imported files and saved state.
 - [Normalization promotion recovery](exec-plans/completed/normalization-promotion-recovery.md)
   restores prior normalized image folders after a failed batch and retains a recovery copy if restoration is blocked.
 - [Image Equalizer in-place rounding](exec-plans/completed/image-equalizer-in-place-rounding.md)

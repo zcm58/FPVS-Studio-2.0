@@ -95,6 +95,8 @@ def test_explicit_hidden_refresh_is_synchronous_and_prevents_duplicate_show_refr
     qtbot, tmp_path, monkeypatch, page_kind, validations_per_refresh,
 ):
     document = ProjectDocument.create_new(parent_dir=tmp_path, project_name="Explicit refresh")
+    if page_kind == "assets":
+        document.create_condition(name="Condition to validate")
     page = _page(document, page_kind)
     qtbot.addWidget(page)
     original_validation = document.validation_report

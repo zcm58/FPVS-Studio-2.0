@@ -243,6 +243,7 @@ class SetupWizardPage(QWidget):
         # Compatibility pages have no guided step. Keep their show-time refreshes
         # dormant until a caller explicitly shows them.
         self.assets_page = AssetsPage(document, self)
+        self.assets_page.importing_changed.connect(self.schedule_refresh)
         self.assets_page.hide()
         self.run_page = RunPage(document, parent=self)
         self.run_page.hide()
@@ -861,6 +862,7 @@ class SetupWizardPage(QWidget):
             or self._active_normalization_task is not None
             or self._image_prescan_pending_advance
             or self.condition_setup_step.is_busy()
+            or self.assets_page.is_importing()
         )
 
     def _next_navigation_busy(self) -> bool:
@@ -872,7 +874,7 @@ class SetupWizardPage(QWidget):
             return "Checking image readiness..."
         if self._active_normalization_task is not None:
             return "Normalizing condition images..."
-        if self.condition_setup_step.is_importing():
+        if self.condition_setup_step.is_importing() or self.assets_page.is_importing():
             return "Importing condition images..."
         return ""
 
@@ -939,6 +941,7 @@ class SetupWizardPage(QWidget):
             self._active_image_readiness_task is not None
             or self._active_normalization_task is not None
             or self.condition_setup_step.is_busy()
+            or self.assets_page.is_importing()
         ):
             return
         if not self._current_step_valid():

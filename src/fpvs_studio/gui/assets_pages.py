@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from functools import partial
 from pathlib import Path
+from typing import cast
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import QSignalBlocker, Qt, Signal
 from PySide6.QtGui import QShowEvent
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -23,24 +25,30 @@ from PySide6.QtWidgets import (
 )
 
 from fpvs_studio.core.enums import StimulusModality, StimulusVariant
-from fpvs_studio.core.models import StimulusSet
+from fpvs_studio.core.models import ProjectFile, StimulusSet
+from fpvs_studio.core.paths import filesystem_path
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
     NonHomePageShell,
     mark_primary_action,
 )
 from fpvs_studio.gui.document import ConditionStimulusRow, ProjectDocument
+from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.gui.window_helpers import (
     _coerce_exception,
     _resolution_text,
     _show_error_dialog,
     _variant_label,
 )
-from fpvs_studio.gui.workers import ProgressTask
+from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
+from fpvs_studio.preprocessing.importer import import_fresh_stimulus_source_directory
+from fpvs_studio.preprocessing.models import StimulusManifest, StimulusSetInspectionSummary
 
 
 class AssetsPage(QWidget):
     """Stimuli manager page."""
+
+    importing_changed = Signal(bool)
 
     def __init__(self, document: ProjectDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -48,6 +56,8 @@ class AssetsPage(QWidget):
         self._refresh_pending = False
         self._variant_checkboxes: dict[StimulusVariant, QCheckBox] = {}
         self._active_task: ProgressTask | None = None
+        self._active_import_task: BackgroundTask | None = None
+        self._import_refresh_state: tuple[ProjectFile | None, StimulusManifest | None] | None = None
         self._active_task_error_title = "Asset Task Error"
 
         controls_row = QWidget(self)
@@ -151,7 +161,16 @@ class AssetsPage(QWidget):
         if not self.isVisible():
             self._refresh_pending = True
             return
+        state = None
+        if self._import_refresh_state is not None:
+            previous_project, previous_manifest = self._import_refresh_state
+            project, manifest = self._document.project, self._document.manifest
+            if project is previous_project and manifest is previous_manifest:
+                return
+            state = project, manifest
         self.refresh()
+        if state is not None:
+            self._import_refresh_state = state
 
     def showEvent(self, event: QShowEvent) -> None:  # noqa: N802
         if self._refresh_pending:
@@ -160,10 +179,7 @@ class AssetsPage(QWidget):
 
     def refresh(self) -> None:
         self._refresh_pending = False
-        supported_variants = set(self._document.project.settings.supported_variants)
-        for variant, checkbox in self._variant_checkboxes.items():
-            with QSignalBlocker(checkbox):
-                checkbox.setChecked(variant in supported_variants)
+        self._refresh_variant_checkboxes()
 
         rows = self._document.condition_rows()
         with QSignalBlocker(self.assets_table):
@@ -210,6 +226,12 @@ class AssetsPage(QWidget):
         self._resize_table_columns()
         self.assets_status_text.setPlainText(self._build_status_text(rows))
         self._update_buttons()
+
+    def _refresh_variant_checkboxes(self) -> None:
+        supported_variants = set(self._document.project.settings.supported_variants)
+        for variant, checkbox in self._variant_checkboxes.items():
+            with QSignalBlocker(checkbox):
+                checkbox.setChecked(variant in supported_variants)
 
     def _resize_table_columns(self) -> None:
         self.assets_table.resizeColumnToContents(0)
@@ -278,8 +300,9 @@ class AssetsPage(QWidget):
         return None
 
     def _update_buttons(self) -> None:
-        is_busy = self._active_task is not None
-        stimulus_set = self._selected_stimulus_set()
+        importing = self.is_importing()
+        is_busy = self._active_task is not None or importing
+        stimulus_set = self._selected_stimulus_set() if not is_busy else None
         self.import_source_button.setEnabled(
             not is_busy
             and stimulus_set is not None
@@ -287,15 +310,24 @@ class AssetsPage(QWidget):
         )
         self.refresh_button.setEnabled(not is_busy)
         self.materialize_button.setEnabled(not is_busy)
+        for variant, checkbox in self._variant_checkboxes.items():
+            checkbox.setEnabled(not importing and variant != StimulusVariant.ORIGINAL)
 
     def _selected_stimulus_set(self) -> StimulusSet | None:
         binding = self._selected_binding()
         if binding is None:
             return None
         condition_id, role = binding
-        return self._document.get_condition_stimulus_set(condition_id, role)
+        try:
+            return self._document.get_condition_stimulus_set(condition_id, role)
+        except DocumentError:
+            # A hidden Assets table may still reflect the previous document state.
+            return None
 
     def _apply_supported_variants(self) -> None:
+        if self.is_importing():
+            self._refresh_variant_checkboxes()
+            return
         variants = [
             variant
             for variant, checkbox in self._variant_checkboxes.items()
@@ -307,9 +339,13 @@ class AssetsPage(QWidget):
             _show_error_dialog(self, "Stimulus Variants Error", error)
             self.refresh()
 
+    def is_importing(self) -> bool:
+        """Keep project handoff blocked until the import worker has finished."""
+        return self._active_import_task is not None
+
     def _import_selected_source(self) -> None:
         binding = self._selected_binding()
-        if binding is None:
+        if binding is None or self.is_importing() or self._active_task is not None:
             return
         directory = QFileDialog.getExistingDirectory(
             self,
@@ -319,14 +355,88 @@ class AssetsPage(QWidget):
         if not directory:
             return
         condition_id, role = binding
+        document = self._document
+        project_root = document.project_root
         try:
-            self._document.import_condition_stimulus_folder(
-                condition_id,
-                role=role,
-                source_dir=Path(directory),
+            previous_set = document.get_condition_stimulus_set(condition_id, role).model_copy(
+                deep=True,
             )
+            if previous_set.modality != StimulusModality.IMAGE:
+                raise DocumentError(
+                    "Image folders can only be imported for image-based conditions."
+                )
+            # Pin the destination while a junction alias can be retargeted.
+            import_root = filesystem_path(project_root).resolve()
         except Exception as error:
             _show_error_dialog(self, "Stimulus Import Error", error)
+            return
+
+        task = BackgroundTask(
+            parent_widget=self,
+            callback=partial(
+                import_fresh_stimulus_source_directory,
+                source_dir=Path(directory),
+                project_root=import_root,
+                set_id_prefix=f"{condition_id}-{role}",
+                set_name=previous_set.name,
+                strict=False,
+            ),
+        )
+        task.succeeded.connect(
+            lambda result: self._on_source_imported(
+                document, project_root, import_root, binding, previous_set, result,
+            )
+        )
+        task.failed.connect(self._on_source_import_failed)
+        task.finished.connect(self._on_source_import_finished)
+        self._active_import_task = task
+        self._update_buttons()
+        self.importing_changed.emit(True)
+        task.start()
+
+    def _on_source_imported(
+        self,
+        document: ProjectDocument,
+        project_root: Path,
+        import_root: Path,
+        binding: tuple[str, str],
+        previous_set: StimulusSet,
+        result: object,
+    ) -> None:
+        if document is not self._document or document.project_root != project_root:
+            return
+        condition_id, role = binding
+        try:
+            if filesystem_path(document.project_root).resolve() != import_root:
+                return
+            current_set = document.get_condition_stimulus_set(condition_id, role)
+        except DocumentError:
+            return
+        except Exception as error:
+            self._on_source_import_failed(error)
+            return
+        if current_set != previous_set:
+            return
+        summary, imported_set = cast(tuple[StimulusSetInspectionSummary, StimulusSet], result)
+        try:
+            # Applying a source publishes both models before notifying observers.
+            self._import_refresh_state = (None, None)
+            try:
+                document.apply_designer_source(
+                    condition_id, role=role, stimulus_set=imported_set, summary=summary,
+                )
+            finally:
+                self._import_refresh_state = None
+        except Exception as error:
+            self._on_source_import_failed(error)
+
+    def _on_source_import_failed(self, error: object) -> None:
+        _show_error_dialog(self, "Stimulus Import Error", _coerce_exception(error))
+
+    def _on_source_import_finished(self) -> None:
+        self._active_import_task = None
+        self._update_buttons()
+        self.importing_changed.emit(False)
 
     def _refresh_inspection(self) -> None:
         self._run_with_progress(
@@ -349,7 +459,7 @@ class AssetsPage(QWidget):
         *,
         error_title: str,
     ) -> None:
-        if self._active_task is not None:
+        if self._active_task is not None or self.is_importing():
             return
         self._active_task_error_title = error_title
         task = ProgressTask(parent_widget=self, label=label, callback=callback)
