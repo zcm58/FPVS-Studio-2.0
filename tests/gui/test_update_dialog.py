@@ -1314,13 +1314,14 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         assert dialog.download_size_label.isHidden()
         assert dialog.download_button.isEnabled()
     assert_visible_children_within_parent(dialog)
-    for button in (
-        dialog.check_button,
-        dialog.download_button,
-        dialog.close_button,
-        dialog.release_notes_button,
+    for button, height in (
+        (dialog.check_button, 32),
+        (dialog.download_button, 36),
+        (dialog.close_button, 36),
+        (dialog.release_notes_button, 32),
     ):
         if button.isVisible():
+            assert button.height() == height, button.text()
             assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 20
     for label in dialog.findChildren(QLabel):
         if not label.isVisible():

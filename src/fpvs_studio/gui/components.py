@@ -134,6 +134,7 @@ __all__ = [
     "image_size_preview_dialog_stylesheet",
     "mark_error_text",
     "mark_form_field_action",
+    "mark_compact_action",
     "mark_compact_info_action",
     "mark_launch_action",
     "mark_home_launch_action",
@@ -1158,7 +1159,7 @@ def refresh_widget_style(widget: QWidget) -> None:
     widget.update()
 
 
-def _set_widget_property(widget: QWidget, name: str, value: str) -> None:
+def _set_widget_property(widget: QWidget, name: str, value: str | None) -> None:
     widget.setProperty(name, value)
     refresh_widget_style(widget)
 
@@ -1186,6 +1187,12 @@ def mark_form_field_action(button: QPushButton) -> None:
     """Style a secondary action placed beside a form field."""
     mark_secondary_action(button)
     _set_widget_property(button, "formFieldAction", "true")
+
+
+def mark_compact_action(button: QPushButton, *, inline: bool = False, enabled: bool = True) -> None:
+    """Use a 36-pixel action or a 32-pixel inline action with the existing button style."""
+    density = "inline" if inline else "standard"
+    _set_widget_property(button, "compactAction", density if enabled else None)
 
 
 def mark_compact_info_action(button: QPushButton) -> None:
@@ -2201,6 +2208,18 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     }}
     QPushButton[formFieldAction="true"]:focus {{
         padding: 2px 11px;
+    }}
+    QPushButton[compactAction="standard"] {{
+        min-height: 22px;
+        max-height: 22px;
+    }}
+    QPushButton[compactAction="inline"] {{
+        min-height: 18px;
+        max-height: 18px;
+    }}
+    QPushButton[compactAction="inline"][formFieldAction="true"] {{
+        min-height: 24px;
+        max-height: 24px;
     }}
     QLabel[statusBadge="true"] {{
         border: 1px solid {color_border_soft};

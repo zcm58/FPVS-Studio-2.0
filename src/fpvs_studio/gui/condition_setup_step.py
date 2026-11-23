@@ -60,6 +60,7 @@ from fpvs_studio.gui.components import (
     SetupSourceCard,
     apply_dialog_theme,
     configure_setup_form,
+    mark_compact_action,
     mark_compact_info_action,
     mark_destructive_action,
     mark_primary_action,
@@ -420,6 +421,12 @@ class ConditionSetupStep(QWidget):
         self.remove_condition_button.setObjectName("setup_wizard_remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
         mark_destructive_action(self.remove_condition_button)
+        for button in (
+            self.add_condition_button,
+            self.duplicate_condition_button,
+            self.remove_condition_button,
+        ):
+            mark_compact_action(button)
 
         list_panel = QWidget(self)
         list_panel.setObjectName("setup_conditions_left_panel")
@@ -448,6 +455,7 @@ class ConditionSetupStep(QWidget):
         self.separate_conditions_button = QPushButton("Separate oddball conditions...", self)
         self.separate_conditions_button.setObjectName("setup_separate_conditions_button")
         mark_secondary_action(self.separate_conditions_button)
+        mark_compact_action(self.separate_conditions_button)
         self.separate_conditions_button.clicked.connect(self._separate_conditions)
         action_grid.addWidget(self.separate_conditions_button, 2, 0, 1, 2)
         action_grid.setColumnStretch(0, 1)
@@ -577,6 +585,7 @@ class ConditionSetupStep(QWidget):
         self.instructions_button.setObjectName("setup_wizard_condition_instructions_button")
         self.instructions_button.clicked.connect(self._open_instructions)
         mark_secondary_action(self.instructions_button)
+        mark_compact_action(self.instructions_button, inline=True)
         _configure_detail_field_widths(
             self.timing_template_combo,
             self.condition_name_edit,

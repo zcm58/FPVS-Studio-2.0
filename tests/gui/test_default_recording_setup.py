@@ -593,15 +593,20 @@ def test_recording_settings_fit_sidebar_sizes(
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
-    select_settings_category(dialog, "Recording")
     dialog.resize(*size)
     dialog.show()
     QApplication.processEvents()
+    general_close_size = dialog._close_button.size()
+    general_close_maximum_height = dialog._close_button.maximumHeight()
+    select_settings_category(dialog, "Recording")
+
     assert dialog.size().toTuple() == size
     assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     buttons = [button for button in dialog.findChildren(QPushButton) if button.isVisible()]
     assert len(buttons) == 6
-    assert len({button.size().toTuple() for button in buttons}) == 1
+    assert len({button.width() for button in buttons}) == 1
+    for button in (*dialog._recording_save_buttons, dialog._close_button):
+        assert button.height() == 36
     for button in buttons:
         assert button.width() >= button.sizeHint().width()
         assert button.height() >= button.sizeHint().height()
@@ -618,17 +623,28 @@ def test_recording_settings_fit_sidebar_sizes(
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
     assert dialog.use_default_recording_button.isEnabled() == (not uses_default)
-    for backend, action in (
-        ("brainproducts_triggerbox", editor.detect_ports_button),
-        ("brainproducts_parallel", editor.detect_parallel_ports_button),
+    for backend, action, expected_height in (
+        ("brainproducts_triggerbox", editor.detect_ports_button, 32),
+        (
+            "brainproducts_parallel", editor.detect_parallel_ports_button,
+            editor.parallel_port_selector.minimumHeight(),
+        ),
     ):
         editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
         QApplication.processEvents()
         assert action.isVisible()
-        assert action.size() == dialog.apply_recording_button.size()
+        assert action.width() == dialog.apply_recording_button.width()
+        assert action.height() == expected_height
+        assert action.height() >= action.sizeHint().height()
         assert_visible_children_within_parent(dialog, allow_scroll_content=True)
     if not uses_default:
         dialog.use_default_recording_button.click()
         assert resets == [True]
         assert not dialog.use_default_recording_button.isEnabled()
         assert dialog.recording_summary.text().startswith("Using computer default:")
+        assert dialog.recording_editor.detect_ports_button.height() == 32
+        assert dialog._close_button.height() == 36
+
+    select_settings_category(dialog, "General")
+    assert dialog._close_button.maximumHeight() == general_close_maximum_height
+    assert dialog._close_button.size() == general_close_size

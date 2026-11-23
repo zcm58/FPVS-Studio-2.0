@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 from fpvs_studio import __version__
 from fpvs_studio.gui.components import (
     apply_studio_theme,
+    mark_compact_action,
     mark_primary_action,
     mark_secondary_action,
     mark_text_role,
@@ -220,6 +221,10 @@ class UpdateDialog(QDialog):
         mark_secondary_action(self.check_button)
         mark_primary_action(self.download_button)
         mark_secondary_action(self.close_button)
+        mark_compact_action(self.release_notes_button, inline=True)
+        mark_compact_action(self.check_button, inline=True)
+        mark_compact_action(self.download_button)
+        mark_compact_action(self.close_button)
         self.release_notes_button.clicked.connect(self._open_release_notes)
         self.check_button.clicked.connect(self.start_update_check)
         self.download_button.clicked.connect(self.start_download)

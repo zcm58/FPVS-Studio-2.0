@@ -426,7 +426,8 @@ verify that **Tools > Image Equalizer** opens the dialog.
 without requiring a project to be open. Canceling either step leaves the configured
 root unchanged.
 
-Creating an experiment first offers **Create manually** or **Download from library**.
+Creating an experiment first offers **Create manually** or **Download from library**
+with 36-pixel-high buttons.
 Downloading opens the Library without creating a blank project. Manual creation shows
 **FPVS-Oddball** and a disabled **Standard FPVS (Coming Soon)** card. For cognitive-load
 studies, add a pre-task or the **Backward counting** modifier to an FPVS-Oddball condition.
@@ -543,7 +544,8 @@ Experiment Library access. The root path remains available in full through its t
 and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
 Saved project and computer settings are grouped above the editable controls. Port
-actions and save actions share the same button dimensions as Close on this page.
+and save actions share a width with Close. TriggerBox **Detect** is 32 logical pixels
+high. The save actions and **Close** are 36 pixels high on Recording.
 For a visible smoke check at both Settings sizes, open Recording with a project and
 without one, switch devices, and check that the saved summaries and port feedback wrap.
 Account is available from Welcome and an open project. In **OpenFPVS account**,
@@ -933,8 +935,10 @@ folder picker leaves the saved sources unchanged, and failed imports show an inl
 error that clears after a successful retry. Missing sources block progression.
 Image selection preserves the existing cycle and timing; frequency authoring remains
 in Timing. Default and short condition names are accepted under core's
-existing nonempty schema. Edit Instructions opens a modal text dialog; Save commits
-the text, empty Save clears it and Cancel preserves the previous instructions.
+existing nonempty schema. The condition list's Add, Duplicate, Remove and Separate
+actions are 36 logical pixels high. **Edit Instructions** is 32 pixels high and opens
+a modal text dialog. Save commits the text, empty Save clears it and Cancel preserves
+the previous instructions.
 
 The optional standalone image designer retains its visual cycle editor, thumbnail
 cache, quarter-speed preview and Timing & display details dialog. Preview reads run
@@ -1798,9 +1802,10 @@ or failed handoff keeps Studio open; setup failure opens the repair path without
 The update dialog has a `600x270` minimum and a `620x280` default size. Its summary
 shows the current and latest versions and the selected download's size when known.
 The download size tooltip can explain package selection. **Release Notes** opens
-the release page. Errors show the next action inline with technical details in a
-tooltip. The progress rail supplies motion during checks and downloads and honors
-the system animation setting.
+the release page. **Release Notes** and **Check Again** are 32 logical pixels high.
+The dismiss and install buttons are 36 pixels high. Errors show the next action
+inline with technical details in a tooltip. The progress rail supplies motion during
+checks and downloads and honors the system animation setting.
 
 The bundled **FPVS Studio Update & Repair** Start Menu entry uses the same dialog in a
 separate process, at a `600x300` minimum and `620x320` default. Its full-installer repair

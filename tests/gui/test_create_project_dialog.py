@@ -59,6 +59,7 @@ def test_creation_source_choice_fits_and_requires_an_explicit_route(
     ):
         assert button.isVisible() and button.isEnabled()
         assert button.text() == text
+        assert button.height() == 36
         assert button.width() >= button.sizeHint().width()
     dialog.accept()
     assert dialog.result() == QDialog.DialogCode.Rejected
@@ -66,6 +67,7 @@ def test_creation_source_choice_fits_and_requires_an_explicit_route(
     dialog.manual_button.setFocus()
     qtbot.keyClick(dialog.manual_button, Qt.Key.Key_Tab)
     assert dialog.focusWidget() is dialog.library_button
+    assert dialog.library_button.height() == 36
 
 
 @pytest.mark.parametrize("key", [None, Qt.Key.Key_Space, Qt.Key.Key_Return])

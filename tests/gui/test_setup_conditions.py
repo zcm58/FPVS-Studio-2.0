@@ -1570,8 +1570,16 @@ def _assert_manual_condition_actions_fit(window, step):
     bounds = []
     for button in buttons:
         assert button.isVisible()
+        assert button.height() == 36
         assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 16
         bounds.append(button.rect().translated(button.mapTo(step, button.rect().topLeft())))
+    if step.selected_condition_id() is not None:
+        instructions = step.instructions_button
+        assert instructions.isVisible()
+        assert instructions.height() == 32
+        assert instructions.width() >= instructions.fontMetrics().horizontalAdvance(
+            instructions.text()
+        ) + 16
     add_bounds, duplicate_bounds, remove_bounds = bounds
     assert add_bounds.top() == duplicate_bounds.top()
     assert add_bounds.right() < duplicate_bounds.left()

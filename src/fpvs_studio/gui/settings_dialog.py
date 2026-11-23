@@ -34,6 +34,7 @@ from fpvs_studio.gui.components import (
     DialogHeader,
     PathValueLabel,
     apply_dialog_theme,
+    mark_compact_action,
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
@@ -49,6 +50,8 @@ from fpvs_studio.gui.recording_dialog import (
 from fpvs_studio.gui.window_helpers import _show_error_dialog
 
 _LOGGER = logging.getLogger(__name__)
+_RECORDING_ACTION_HEIGHT = 36
+_TRIGGERBOX_DETECT_HEIGHT = 32
 
 
 def _section_title(text: str, parent: QWidget, *, subsection: bool = False) -> QLabel:
@@ -523,6 +526,7 @@ class AppSettingsDialog(QDialog):
         self.button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, parent=self)
         self.button_box.setObjectName("settings_button_box")
         self._close_button = self.button_box.button(QDialogButtonBox.StandardButton.Close)
+        self._close_maximum_height = self._close_button.maximumHeight()
         mark_secondary_action(self._close_button)
         self.button_box.rejected.connect(self.reject)
 
@@ -780,6 +784,8 @@ class AppSettingsDialog(QDialog):
         for checkbox in self.findChildren(QCheckBox):
             checkbox.setSizePolicy(QSizePolicy.Policy.Maximum, QSizePolicy.Policy.Preferred)
         apply_dialog_theme(self)
+        self._close_default_height = self._close_button.sizeHint().height()
+        self._recording_action_size = QSize()
         self._size_recording_actions()
         self.manage_account_button.ensurePolished()
         self.account_connection_button.ensurePolished()
@@ -800,9 +806,14 @@ class AppSettingsDialog(QDialog):
         self.pages.setCurrentIndex(index)
         category = self.navigation.item(index).text()
         self.page_title.setText(category)
-        self._close_button.setMinimumSize(
-            self._recording_action_size if category == "Recording" else QSize(0, 0),
-        )
+        recording = category == "Recording"
+        mark_compact_action(self._close_button, enabled=recording)
+        if recording:
+            self._close_button.setMinimumWidth(self._recording_action_size.width())
+            self._close_button.setFixedHeight(_RECORDING_ACTION_HEIGHT)
+        else:
+            self._close_button.setMaximumHeight(self._close_maximum_height)
+            self._close_button.setMinimumSize(0, self._close_default_height)
         first_control = self._category_focus_controls[index]
         QWidget.setTabOrder(self.navigation, first_control)
         if first_control is self.manage_account_button:
@@ -873,26 +884,35 @@ class AppSettingsDialog(QDialog):
 
     def _size_recording_actions(self) -> None:
         editor = self.recording_editor
-        buttons = (
-            *self._recording_save_buttons,
+        unchanged_port_buttons = (
             editor.biosemi_port_selector.refresh_button,
             editor.biosemi_port_selector.check_button,
-            editor.detect_ports_button,
             editor.detect_parallel_ports_button,
         )
-        size = QSize(0, 0)
-        for button in (*buttons, self._close_button):
-            button.ensurePolished()
-            size = size.expandedTo(button.sizeHint())
-        for button in buttons:
+        if not self._recording_action_size.isValid():
+            # Capture the existing row height and shared width before compact styling.
+            for button in (
+                *self._recording_save_buttons, *unchanged_port_buttons,
+                editor.detect_ports_button, self._close_button,
+            ):
+                button.ensurePolished()
+                self._recording_action_size = self._recording_action_size.expandedTo(
+                    button.sizeHint(),
+                )
+        size = self._recording_action_size
+        for button in unchanged_port_buttons:
             button.setFixedSize(size)
+        for button in self._recording_save_buttons:
+            mark_compact_action(button)
+            button.setFixedSize(size.width(), _RECORDING_ACTION_HEIGHT)
+        mark_compact_action(editor.detect_ports_button, inline=True)
+        editor.detect_ports_button.setFixedSize(size.width(), _TRIGGERBOX_DETECT_HEIGHT)
         for port_row in (
             editor.biosemi_port_selector,
             editor.brainproducts_port_row,
             editor.parallel_port_selector,
         ):
             port_row.setMinimumHeight(size.height())
-        self._recording_action_size = size
 
     def _reload_recording_editor(self) -> None:
         self.save_default_recording_button.reset_confirmation()
@@ -907,7 +927,6 @@ class AppSettingsDialog(QDialog):
         )
         self._recording_editor_layout.addWidget(self.recording_editor)
         self._size_recording_actions()
-        self._close_button.setMinimumSize(self._recording_action_size)
         self._category_focus_controls[1] = self.recording_editor.backend_combo
         if self.navigation.currentRow() == 1:
             QWidget.setTabOrder(self.navigation, self.recording_editor.backend_combo)

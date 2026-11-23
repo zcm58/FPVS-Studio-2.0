@@ -34,6 +34,7 @@ from fpvs_studio.core.paths import slugify_project_name, validate_project_id
 from fpvs_studio.gui.components import (
     DialogHeader,
     apply_dialog_theme,
+    mark_compact_action,
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
@@ -86,9 +87,9 @@ class CreateProjectDialog(QDialog):
         )
         self.library_button.clicked.connect(self._choose_library)
         for button in (self.manual_button, self.library_button):
-            button.setMinimumHeight(96)
             button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
             mark_secondary_action(button)
+            mark_compact_action(button)
             source_choices.addWidget(button, 1)
         source_layout.addLayout(source_choices)
         source_layout.addStretch(1)

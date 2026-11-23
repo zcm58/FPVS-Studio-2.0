@@ -1482,6 +1482,8 @@ def test_inline_recording_controls_and_save_actions_fit_settings(
         QApplication.processEvents()
         assert button.isVisible()
         assert button.width() >= button.sizeHint().width()
+        assert button.height() == 36
+        assert button.height() >= button.sizeHint().height()
         assert scroll.viewport().rect().contains(button.mapTo(
             scroll.viewport(), button.rect().center(),
         ))
