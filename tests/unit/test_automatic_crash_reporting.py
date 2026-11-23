@@ -10,7 +10,7 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from threading import Event
+from threading import Event, Thread
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -27,7 +27,11 @@ from fpvs_studio.support.crash_reporting import (
     process_alive,
     safe_frame,
 )
-from fpvs_studio.support.diagnostics import DiagnosticLogging, refresh_automatic_capture
+from fpvs_studio.support.diagnostics import (
+    DiagnosticLogging,
+    collect_diagnostics,
+    refresh_automatic_capture,
+)
 
 
 @pytest.fixture
@@ -499,6 +503,36 @@ def test_live_disclosure_enables_capture_and_preserves_session_facts(crash_store
     assert event.report.app_version == __version__ and event.report.os_version == "27.0"
     assert event.report.context.os_build == "26A7"
     assert "private" not in event.report.model_dump_json()
+
+
+def test_diagnostics_continue_when_optional_inventory_thread_cannot_start(crash_store, monkeypatch):
+    enabled(crash_store)
+    thread_start = Thread.start
+    rejected = Event()
+
+    def fail_inventory_start(thread: Thread) -> None:
+        if thread.name == "fpvs-crash-inventory":
+            rejected.set()
+            raise RuntimeError("can't start new thread")
+        thread_start(thread)
+
+    monkeypatch.setattr(Thread, "start", fail_inventory_start)
+    logging_session = DiagnosticLogging(crash_store.root, capture_native=True)
+    logging_session.start()
+    try:
+        assert rejected.wait(3)
+        assert logging_session.capture_enabled.is_set()
+        logging_session.logger.warning("Synthetic ordinary log after failed inventory startup")
+        logging_session.record_failure(RuntimeError("Synthetic crash"), "project")
+    finally:
+        logging_session.close()
+
+    assert "Synthetic ordinary log after failed inventory startup" in collect_diagnostics(
+        crash_store.root,
+    )
+    event, = crash_store.recover()
+    assert event.report.crash_type == "python_exception"
+    assert event.report.operation == "project" and event.report.context is None
 
 
 def test_disable_cancels_activation_discards_backlog_and_precedes_network(crash_store):

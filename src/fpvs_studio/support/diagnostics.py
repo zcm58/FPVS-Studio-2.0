@@ -297,11 +297,14 @@ class DiagnosticLogging:
 
     def start(self) -> None:
         global _active_logging
+        try:
+            self.thread.start()
+        except RuntimeError as error:
+            raise OSError("Could not start the diagnostic logging worker.") from error
         self.logger.addHandler(self.handler)
         self.logger.setLevel(logging.INFO)
         sys.excepthook = self._exception
         threading.excepthook = self._thread_exception
-        self.thread.start()
         _active_logging = self
         if self.capture_native:
             # Bootstrap calls this before importing Qt or creating its event loop.
@@ -418,10 +421,14 @@ class DiagnosticLogging:
                     )
                     if store.update_session(self._crash_session):
                         self.capture_enabled.set()
-                        threading.Thread(
+                        inventory_worker = threading.Thread(
                             target=self._collect_inventory, args=(family, build), daemon=True,
                             name="fpvs-crash-inventory",
-                        ).start()
+                        )
+                        try:
+                            inventory_worker.start()
+                        except RuntimeError:
+                            pass  # Optional hardware context must not stop capture or logging.
             session = self._crash_session
             if session is None:
                 return

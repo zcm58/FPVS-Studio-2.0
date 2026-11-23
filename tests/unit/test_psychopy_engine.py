@@ -995,6 +995,41 @@ def test_psychopy_engine_closes_partial_session_when_keyboard_creation_fails(mon
     assert engine._keyboard is None
 
 
+@pytest.mark.parametrize("operation", ["open_session", "measure_refresh_hz"])
+def test_failed_window_constructor_releases_native_locals_on_presentation_thread(
+    monkeypatch, operation: str,
+) -> None:
+    destructions = []
+    cause = OSError("cannot initialize graphics")
+    failure = RuntimeError("window construction failed")
+
+    class FailingWindow:
+        def __init__(self, **kwargs):
+            self.native_id = 123
+            assert kwargs["fullscr"] is True
+            raise failure from cause
+
+        def __del__(self):
+            destructions.append((get_ident(), self.native_id))
+
+    fake_psychopy = _build_fake_psychopy({}, flip_times=[])
+    fake_psychopy.visual.Window = FailingWindow
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        presentation_thread = executor.submit(get_ident).result(timeout=5)
+        error = executor.submit(getattr(engine, operation)).exception(timeout=5)
+
+    assert error is failure
+    assert failure.__cause__ is cause
+    assert str(failure) == "window construction failed"
+    assert "__init__" in [frame.name for frame in extract_tb(failure.__traceback__)]
+    assert engine._window is None
+    assert presentation_thread != get_ident()
+    assert destructions == [(presentation_thread, 123)]
+
+
 def test_psychopy_engine_uses_final_thanks_copy_and_preserves_duration(monkeypatch) -> None:
     captures: dict[str, object] = {}
     engine = PsychoPyEngine()

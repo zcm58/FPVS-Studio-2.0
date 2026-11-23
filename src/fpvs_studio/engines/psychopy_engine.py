@@ -87,6 +87,7 @@ from fpvs_studio.engines.psychopy_window import (
     build_window_kwargs,
     close_presentation_window,
     create_fixation_stim,
+    create_presentation_window,
     selected_macos_display_id,
     validate_macos_framebuffer,
 )
@@ -165,7 +166,9 @@ class PsychoPyEngine(PresentationEngine):
         """Measure the current display with a temporary fullscreen PsychoPy window."""
 
         visual = self._require_visual()
-        probe_window = visual.Window(**build_refresh_probe_window_kwargs(runtime_options))
+        probe_window = create_presentation_window(
+            visual, build_refresh_probe_window_kwargs(runtime_options),
+        )
         graphics_lifetime = None
         restore_presentation = None
         try:
@@ -218,7 +221,9 @@ class PsychoPyEngine(PresentationEngine):
             create_macos_test_keyboard(keyboard_module) if sys.platform == "darwin" else None
         )
         LOGGER.info("Opening presentation window")
-        self._window = visual.Window(**build_window_kwargs(self._runtime_options))
+        self._window = create_presentation_window(
+            visual, build_window_kwargs(self._runtime_options),
+        )
         try:
             presentation = (
                 prepare_macos_fullscreen_presentation()

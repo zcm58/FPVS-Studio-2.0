@@ -76,12 +76,7 @@ def run_gui_app(argv: list[str] | None = None) -> int:
             lifecycle.request_shutdown()
 
     QTimer.singleShot(0, _show_initial_window)
-    exit_code = app.exec()
-    # A direct QApplication.exit() can bypass the Quit event guard. Continue ordinary
-    # event processing until all workers finish; never block on thread.wait.
-    while lifecycle.has_active_jobs:
-        lifecycle.request_shutdown()
-        app.exec()
+    exit_code = lifecycle.run_event_loop()
     if startup_errors:
         raise startup_errors[0]
     return exit_code

@@ -1348,6 +1348,10 @@ def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(m
 
     class FakeLifecycle:
         has_active_jobs = True
+        run_event_loop = UpdateLifecycle.run_event_loop
+
+        def __init__(self, app):
+            self._app = app
 
         def begin_startup(self):
             calls.append("begin-startup")
@@ -1357,8 +1361,6 @@ def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(m
 
         def request_shutdown(self):
             calls.append("cancel")
-
-    lifecycle = FakeLifecycle()
 
     class FakeApp:
         def exec(self):
@@ -1383,7 +1385,9 @@ def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(m
             calls.append("root-setup")
             raise RuntimeError("Startup was interrupted.")
 
-    monkeypatch.setattr(application_module, "create_application", lambda _args: FakeApp())
+    app = FakeApp()
+    lifecycle = FakeLifecycle(app)
+    monkeypatch.setattr(application_module, "create_application", lambda _args: app)
     monkeypatch.setattr(application_module, "StudioController", FakeController)
     monkeypatch.setattr(application_module, "update_lifecycle", lambda _app: lifecycle)
     monkeypatch.setattr(

@@ -393,7 +393,7 @@ def test_online_job_stays_alive_until_native_cleanup_completes(
     assert outcomes[0].cancelled
 
 
-@pytest.mark.parametrize("kind", ["background", "progress", "presentation"])
+@pytest.mark.parametrize("kind", ["background", "progress", "presentation", "online"])
 @pytest.mark.parametrize("shutdown", ["quit", "exit"])
 def test_native_process_shutdown_drains_worker_threads(kind, shutdown) -> None:
     # A native abort cannot be tested safely in pytest's own QApplication process.
@@ -408,23 +408,25 @@ def test_native_process_shutdown_drains_worker_threads(kind, shutdown) -> None:
         app = QApplication([])
         window = QWidget()
         window.setWindowTitle("Studio synthetic worker shutdown")
+        app.setQuitOnLastWindowClosed(False)
         window.show()
+        lifecycle = update_lifecycle(app)
         kind = KIND
         callback = lambda: time.sleep(6 if kind == "presentation" else 0.5)
-        if kind == "background":
+        if kind == "online":
+            task = lifecycle.start_task(lambda _progress, _cancel: callback())
+        elif kind == "background":
             task = BackgroundTask(parent_widget=window, callback=callback)
+            task.start()
         else:
             task = ProgressTask(parent_widget=window, label="Synthetic task",
                 callback=callback, persistent_thread=kind == "presentation")
-        task.start()
+            task.start()
         QTimer.singleShot(50, window.deleteLater)
-        QTimer.singleShot(100, app.quit if SHUTDOWN == "quit" else lambda: app.exit(0))
-        app.exec()
-        while update_lifecycle(app).has_active_jobs:
-            update_lifecycle(app).request_shutdown()
-            app.exec()
-        assert not update_lifecycle(app).has_active_jobs
-        del window, task, app
+        QTimer.singleShot(100, app.quit if SHUTDOWN == "quit" else lambda: app.exit(23))
+        assert lifecycle.run_event_loop() == (0 if SHUTDOWN == "quit" else 23)
+        assert not lifecycle.has_active_jobs
+        del window, task, lifecycle, app
         print("shutdown complete", flush=True)
     ''').replace("KIND", repr(kind)).replace("SHUTDOWN", repr(shutdown))
     result = subprocess.run(

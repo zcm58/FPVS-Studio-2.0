@@ -1911,6 +1911,9 @@ preprocessing services but must not silently mutate the active project.
   deletion and native thread cleanup after `QThread.finished`. Only then are worker
   wrappers released and completion delivered. Presentation reuse remains unchanged;
   shutdown has no five-second cutoff and never abandons a running presentation.
+  Studio and the standalone updater keep processing events through worker cleanup
+  if a direct `QApplication.exit()` ends the initial event loop. Both return the
+  original exit code.
 - Startup offline cache-housekeeping and one-shot metadata-check orchestration live in
   `src/fpvs_studio/gui/controller.py`; housekeeping errors are nonfatal/logged, and the
   metadata check should stay silent unless a newer release is available.

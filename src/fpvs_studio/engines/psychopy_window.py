@@ -9,6 +9,7 @@ from importlib import import_module
 from typing import Any
 
 from fpvs_studio.core.run_spec import RunSpec
+from fpvs_studio.engines.psychopy_graphics_lifetime import release_failed_graphics_frames
 
 LOGGER = logging.getLogger(__name__)
 
@@ -91,6 +92,15 @@ def _resolve_display_index(runtime_options: Mapping[str, object]) -> int:
         return matching[0]
     except Exception as exc:
         raise RuntimeError(f"Could not select the presentation monitor: {exc}") from exc
+
+
+def create_presentation_window(visual: Any, kwargs: Mapping[str, object]) -> Any:
+    """Keep partial native resources out of a constructor error sent to another thread."""
+    try:
+        return visual.Window(**kwargs)
+    except BaseException as error:
+        release_failed_graphics_frames(error)
+        raise
 
 
 def close_presentation_window(window: Any) -> None:

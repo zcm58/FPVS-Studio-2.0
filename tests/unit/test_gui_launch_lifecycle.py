@@ -31,6 +31,24 @@ def _bind_methods(instance, filename, owner, names, **namespace):
         setattr(instance, name, MethodType(namespace[name], instance))
 
 
+@pytest.mark.parametrize("cleanup_cycles", [0, 1, 2])
+def test_application_exit_drains_active_workers_and_preserves_exit_status(cleanup_cycles):
+    events = []
+    worker_states = iter([True] * cleanup_cycles + [False])
+    lifecycle = SimpleNamespace(request_shutdown=lambda: events.append("shutdown"))
+
+    def run_events():
+        events.append("exec")
+        lifecycle.has_active_jobs = next(worker_states)
+        return 23 if len(events) == 1 else 0
+
+    lifecycle._app = SimpleNamespace(exec=run_events)
+    _bind_methods(lifecycle, "update_lifecycle.py", "UpdateLifecycle", ["run_event_loop"])
+
+    assert lifecycle.run_event_loop() == 23
+    assert events == ["exec", *(["shutdown", "exec"] * cleanup_cycles)]
+
+
 @pytest.fixture
 def wizard_steps():
     source = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/setup_wizard_page.py"

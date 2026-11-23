@@ -103,9 +103,10 @@ as PsychoPy. Runtime owns flow and calls engines through
   collection policy is otherwise unchanged.
 - Engine exception boundaries release completed traceback-frame locals on the
   presentation thread before closing the context or delivering errors to the GUI.
-  This also releases partial PsychoPy constructors whose direct display-list
-  finalizers are not managed by Pyglet. Exception messages and stack locations remain
-  available; native objects are not retained just to preserve traceback locals.
+  This covers failed PsychoPy window construction for both experiment playback and
+  refresh-rate measurement, as well as stimulus constructors with their own
+  display-list finalizers. Objects held by those frames can be released on the
+  presentation thread while preserving the original exception and stack locations.
 - Transition, feedback, break and completion screens create their heading, body and
   footer stimuli once per screen, update the countdown only when its displayed text
   changes, and release them on continue, cancellation and exceptions. They never

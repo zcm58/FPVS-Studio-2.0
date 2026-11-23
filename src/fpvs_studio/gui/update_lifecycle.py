@@ -229,6 +229,17 @@ class UpdateLifecycle(QObject):
     def is_shutting_down(self) -> bool:
         return self._shutdown_requested
 
+    def run_event_loop(self) -> int:
+        """Run the application and drain any workers still active after exit."""
+
+        exit_code = self._app.exec()
+        # QApplication.exit() bypasses the Quit event filter. Keep processing
+        # events so native thread completion can release app-owned workers.
+        while self.has_active_jobs:
+            self.request_shutdown()
+            self._app.exec()
+        return exit_code
+
     def start_task(
         self,
         callback: UpdateCallback,
@@ -335,8 +346,6 @@ class UpdateLifecycle(QObject):
 
     @Slot()
     def _about_to_quit(self) -> None:
-        # QApplication.exit() can bypass the Quit event filter. run_gui_app keeps an
-        # event loop available in that case until these jobs have really finished.
         self.request_shutdown()
 
     def _schedule_quit(self) -> None:

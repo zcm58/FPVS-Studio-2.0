@@ -408,7 +408,7 @@ def run_updater_gui(
     else:
         window = UpdaterWindow()
     window.show()
-    return app.exec()
+    return update_lifecycle(app).run_event_loop()
 
 
 def run_visible_smoke(app: QApplication, report: Path) -> int:
@@ -443,6 +443,7 @@ def run_visible_smoke(app: QApplication, report: Path) -> int:
     window.show()
     evidence: dict[str, object] = {"network": False, "installer": False, "passed": False}
     apply_window: ApplyUpdateDialog | None = None
+    finished = False
 
     def inspect(dialog: QDialog) -> None:
         layout = dialog.layout()
@@ -458,6 +459,9 @@ def run_visible_smoke(app: QApplication, report: Path) -> int:
                     raise RuntimeError(f"Updater button clipped: {button.text()}")
 
     def finish(error: Exception | None = None) -> None:
+        nonlocal finished
+        if finished:
+            return
         evidence["passed"] = error is None
         if error is not None:
             evidence["error"] = str(error)
@@ -465,6 +469,7 @@ def run_visible_smoke(app: QApplication, report: Path) -> int:
             report.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
         finally:
             app.exit(0 if error is None else 1)
+        finished = True
 
     def inspect_apply() -> None:
         try:
@@ -505,4 +510,4 @@ def run_visible_smoke(app: QApplication, report: Path) -> int:
 
     QTimer.singleShot(500, inspect_standalone)
     QTimer.singleShot(10_000, lambda: finish(RuntimeError("Visible updater smoke timed out.")))
-    return app.exec()
+    return update_lifecycle(app).run_event_loop()

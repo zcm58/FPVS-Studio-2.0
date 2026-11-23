@@ -72,6 +72,9 @@ These future changes came out of the November 22 optimization review.
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Studio startup and worker stability](exec-plans/completed/studio-stability-pass.md)
+  keeps optional diagnostics failures from blocking startup, releases failed graphics
+  constructors on the presentation thread, and drains the standalone updater on exit.
 - [Archived release drafts and proposals](references/archive/README.md)
 - [Master consolidation](exec-plans/completed/master-consolidation.md):
   merged ImageEqualizer, Library updates and pending work with current updater/Mac repair source.

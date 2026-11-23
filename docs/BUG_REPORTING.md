@@ -352,6 +352,9 @@ The thin `app/main.py` entry point installs a queue-backed log handler on the
 formatting, redaction, and writes occur on a daemon logging thread. Close drains
 the queue with a bounded wait only after the GUI event loop exits. No engine imports,
 hardware probes, project-file reads, or per-frame disk logging are introduced.
+Studio can still launch if the diagnostic logging thread cannot start. If the optional
+hardware inventory thread cannot start, application logging and crash capture continue
+without the inventory.
 `gui/qt_diagnostics.py` forwards Qt warnings to the same logger and preserves a small
 redacted fatal breadcrumb and thread tracebacks before Qt aborts (Windows fast-fail
 can bypass ordinary fault handlers). Bootstrap also enables Python's fault
