@@ -2115,20 +2115,10 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QLabel[processingStepLabel="true"][processingStepState="complete"] {{
         color: {color_success_text};
     }}
-    QLabel#update_dialog_title {{
-        color: {color_text_primary};
-        font-size: {FONT_SIZE_SECTION_TITLE}px;
-        font-weight: 700;
-    }}
-    QLabel#update_dialog_status,
-    QPlainTextEdit#update_dialog_notes {{
-        color: {color_text_primary};
-        font-size: {FONT_SIZE_BODY}px;
-    }}
-    QLabel#update_dialog_notes_heading {{
-        color: {color_text_primary};
-        font-size: {FONT_SIZE_CONTROL}px;
-        font-weight: 700;
+    QFrame#update_dialog_facts {{
+        background-color: {color_surface_elevated};
+        border: 1px solid {color_border_soft};
+        border-radius: {CARD_CORNER_RADIUS}px;
     }}
     QPushButton {{
         border: 1px solid {theme.control_border};
@@ -2142,6 +2132,11 @@ def studio_theme_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QPushButton:hover, QPushButton:pressed {{
         border-color: {theme.text_hint};
         background-color: {color_surface_alt};
+    }}
+    QPushButton#update_dialog_release_notes_button:enabled:!hover:!focus,
+    QPushButton#update_dialog_check_button:enabled:!hover:!focus {{
+        background-color: transparent;
+        border-color: transparent;
     }}
     QPushButton:disabled {{
         border-color: {color_border_soft};

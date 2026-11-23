@@ -88,17 +88,18 @@ class UpdaterWindow(UpdateDialog):
             "FPVS Studio Source Updates"
         )
         if self._installer_updates_enabled:
-            self.title_label.setText("FPVS Studio Update & Repair")
-            self.current_version_label.setText("Current version: checking installed application...")
-        self.setMinimumHeight(660)
-        self.resize(760, 680)
+            self._idle_title = "Update & Repair"
+            self.title_label.setText(self._idle_title)
+            self.current_version_label.setText("—")
+        self.setMinimumHeight(300)
+        self.resize(620, 320)
         self.repair_button = QPushButton("Repair / Reinstall", self.button_box)
         self.repair_button.setObjectName("updater_repair_button")
         mark_secondary_action(self.repair_button)
         self.repair_button.clicked.connect(self.start_repair_check)
         actions = self.button_box.layout()
         assert isinstance(actions, QGridLayout)
-        actions.addWidget(self.repair_button, 2, 0, 1, 2)
+        actions.addWidget(self.repair_button, 1, 0, 1, 2)
         self.repair_button.setVisible(self._installer_updates_enabled)
         self.repair_button.setEnabled(self._installer_updates_enabled)
         if not self._installer_updates_enabled:
@@ -150,13 +151,9 @@ class UpdaterWindow(UpdateDialog):
             self.download_button.setText("Download and Install")
             asset = result.installer_asset
             if asset is not None and asset.sha256 is not None:
-                size = f" ({asset.size_bytes / 1_000_000:.1f} MB)" if asset.size_bytes else ""
-                self.status_label.setText(
-                    f"Full installer{size} available to update or repair FPVS Studio.\n\n"
-                    "Close all Studio windows before installing. Projects, templates, settings, "
-                    "run history, and logs remain outside the install folder."
-                )
-                self._set_close_button_text("Close")
+                self.title_label.setText("Repair available")
+                self._set_status("Close all Studio windows before installing.")
+                self.close_button.setText("Close")
 
 
 class ApplyUpdateDialog(QDialog):
@@ -416,7 +413,6 @@ def run_visible_smoke(app: QApplication, report: Path) -> int:
     app.setQuitOnLastWindowClosed(False)
     window = UpdaterWindow(auto_check=False)
     window.setWindowTitle("FPVS Studio Updater — visible smoke check")
-    window.title_label.setText("Updater smoke check (synthetic data)")
     asset = InstallerAsset(
         name="FPVS-Studio-Setup-99.0.0.exe",
         download_url=(
@@ -439,7 +435,7 @@ def run_visible_smoke(app: QApplication, report: Path) -> int:
     )
     window._repair = True
     window.show_update_result(result)
-    window.resize(680, 660)
+    window.resize(window.minimumSize())
     window.show()
     evidence: dict[str, object] = {"network": False, "installer": False, "passed": False}
     apply_window: ApplyUpdateDialog | None = None

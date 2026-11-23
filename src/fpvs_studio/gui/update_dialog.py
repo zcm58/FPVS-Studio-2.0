@@ -8,15 +8,14 @@ import sys
 from collections.abc import Callable
 from threading import Event
 
-from PySide6.QtCore import QTimer, QUrl, Slot
-from PySide6.QtGui import QCloseEvent, QDesktopServices, QTextOption
+from PySide6.QtCore import Qt, QTimer, QUrl, Slot
+from PySide6.QtGui import QCloseEvent, QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
+    QFrame,
     QGridLayout,
-    QHBoxLayout,
     QLabel,
-    QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -27,6 +26,7 @@ from fpvs_studio.gui.components import (
     apply_studio_theme,
     mark_primary_action,
     mark_secondary_action,
+    mark_text_role,
 )
 from fpvs_studio.gui.update_lifecycle import (
     ProgressReporter,
@@ -51,11 +51,10 @@ from fpvs_studio.updates.models import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-_MINIMUM_SIZE = (680, 600)
-_DEFAULT_SIZE = (760, 620)
+_MINIMUM_SIZE = (600, 270)
+_DEFAULT_SIZE = (620, 280)
 SOURCE_UPDATE_INSTRUCTIONS = (
-    "To update this source checkout, close Studio, pull the latest changes from "
-    "the remote Git repository, then restart Studio."
+    "Close Studio, pull the latest changes from the remote Git repository, then restart Studio."
 )
 
 
@@ -123,7 +122,7 @@ class UpdateDialog(QDialog):
         self._close_pending = False
         self._close_result = int(QDialog.DialogCode.Rejected)
         self._result: UpdateCheckResult | None = None
-        self._notes_text = ""
+        self._idle_title = "Studio updates"
         self._downloaded_installer: DownloadedInstaller | None = None
         self._preparing_install = False
         self._disposed = Event()
@@ -142,55 +141,61 @@ class UpdateDialog(QDialog):
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(12)
 
-        self.title_label = QLabel("FPVS Studio updates", self)
+        self.title_label = QLabel(self._idle_title, self)
         self.title_label.setObjectName("update_dialog_title")
+        mark_text_role(self.title_label, "dialogTitle")
         layout.addWidget(self.title_label)
 
-        self.status_label = QLabel("Ready to check for updates.", self)
+        self.status_label = QLabel(self)
         self.status_label.setObjectName("update_dialog_status")
         self.status_label.setWordWrap(True)
+        self.status_label.setTextFormat(Qt.TextFormat.PlainText)
+        mark_text_role(self.status_label, "body")
+        self.status_label.hide()
         layout.addWidget(self.status_label)
 
-        versions_layout = QVBoxLayout()
-        versions_layout.setSpacing(4)
-        self.current_version_label = QLabel(f"Current version: {__version__}", self)
-        self.latest_version_label = QLabel("Latest version: Not checked yet", self)
-        self.current_version_label.setWordWrap(True)
-        self.latest_version_label.setWordWrap(True)
-        versions_layout.addWidget(self.current_version_label)
-        versions_layout.addWidget(self.latest_version_label)
-        layout.addLayout(versions_layout)
+        facts = QFrame(self)
+        facts.setObjectName("update_dialog_facts")
+        facts_layout = QGridLayout(facts)
+        facts_layout.setContentsMargins(16, 12, 16, 12)
+        facts_layout.setHorizontalSpacing(16)
+        facts_layout.setVerticalSpacing(4)
+        self.current_version_label = QLabel(__version__, facts)
+        self.latest_version_label = QLabel("—", facts)
+        self.download_size_heading = QLabel("Download size", facts)
+        self.download_size_label = QLabel(facts)
+        for column, (heading, value) in enumerate((
+            (QLabel("Current version", facts), self.current_version_label),
+            (QLabel("Latest version", facts), self.latest_version_label),
+            (self.download_size_heading, self.download_size_label),
+        )):
+            mark_text_role(heading, "metadata")
+            mark_text_role(value, "sectionTitle")
+            value.setTextFormat(Qt.TextFormat.PlainText)
+            facts_layout.addWidget(heading, 0, column)
+            facts_layout.addWidget(value, 1, column)
+        facts_layout.setColumnStretch(0, 1)
+        facts_layout.setColumnStretch(1, 1)
+        self._set_download_size(None)
+        layout.addWidget(facts)
 
-        self.notes_heading_label = QLabel("What's New", self)
-        self.notes_heading_label.setObjectName("update_dialog_notes_heading")
-        layout.addWidget(self.notes_heading_label)
-        self.notes_view = QPlainTextEdit(self)
-        self.notes_view.setObjectName("update_dialog_notes")
-        self.notes_view.setAccessibleName(self.notes_heading_label.text())
-        self.notes_view.setReadOnly(True)
-        self.notes_view.setTabChangesFocus(True)
-        self.notes_view.setWordWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
-        self._set_notes_text("Release notes will appear when an update is available.")
-        layout.addWidget(self.notes_view, 1)
+        self.detail_label = QLabel(self)
+        self.detail_label.setObjectName("update_dialog_detail")
+        self.detail_label.setWordWrap(True)
+        self.detail_label.setTextFormat(Qt.TextFormat.PlainText)
+        mark_text_role(self.detail_label, "supporting")
+        self.detail_label.hide()
+        layout.addWidget(self.detail_label)
 
         self.progress_bar = UpdateProgressBar(self, animate_download=True)
         self.progress_bar.setObjectName("update_dialog_progress")
         self.progress_bar.setAccessibleName("Update progress")
         self.progress_bar.setVisible(False)
         layout.addWidget(self.progress_bar)
-
-        button_row = QHBoxLayout()
-        button_row.setSpacing(8)
-        self.release_notes_button = QPushButton("View Full Release Notes", self)
-        self.release_notes_button.setObjectName("update_dialog_release_notes_button")
-        mark_secondary_action(self.release_notes_button)
-        self.release_notes_button.clicked.connect(self._open_release_notes)
-        button_row.addWidget(self.release_notes_button)
-        button_row.addStretch(1)
-        layout.addLayout(button_row)
+        layout.addStretch(1)
 
         self.button_box = QWidget(self)
         self.button_box.setObjectName("update_dialog_button_box")
@@ -198,26 +203,30 @@ class UpdateDialog(QDialog):
         actions_layout.setContentsMargins(0, 0, 0, 0)
         actions_layout.setHorizontalSpacing(8)
         actions_layout.setVerticalSpacing(8)
-        actions_layout.setColumnStretch(0, 1)
-        actions_layout.setColumnStretch(1, 1)
+        actions_layout.setColumnStretch(2, 1)
+        self.release_notes_button = QPushButton("Release Notes", self.button_box)
+        self.release_notes_button.setObjectName("update_dialog_release_notes_button")
         self.check_button = QPushButton("Check Again", self.button_box)
         self.check_button.setObjectName("update_dialog_check_button")
         self.download_button = QPushButton("Download and Install", self.button_box)
         self.download_button.setObjectName("update_dialog_download_button")
         self.close_button = QPushButton("Close", self.button_box)
         self.close_button.setObjectName("update_dialog_close_button")
-        actions_layout.addWidget(self.check_button, 0, 0)
-        actions_layout.addWidget(self.download_button, 0, 1)
-        actions_layout.addWidget(self.close_button, 1, 0, 1, 2)
+        actions_layout.addWidget(self.release_notes_button, 0, 0)
+        actions_layout.addWidget(self.check_button, 0, 1)
+        actions_layout.addWidget(self.close_button, 0, 3)
+        actions_layout.addWidget(self.download_button, 0, 4)
+        mark_secondary_action(self.release_notes_button)
         mark_secondary_action(self.check_button)
         mark_primary_action(self.download_button)
         mark_secondary_action(self.close_button)
+        self.release_notes_button.clicked.connect(self._open_release_notes)
         self.check_button.clicked.connect(self.start_update_check)
         self.download_button.clicked.connect(self.start_download)
         self.close_button.clicked.connect(self._dismiss_dialog)
         layout.addWidget(self.button_box)
         apply_studio_theme(self)
-        self._fit_action_buttons()
+        self.close_button.setFocus()
 
     @Slot()
     def start_update_check(self) -> None:
@@ -231,8 +240,14 @@ class UpdateDialog(QDialog):
             return
         self._result = None
         self._downloaded_installer = None
-        self._set_busy_state("Checking GitHub Releases...")
-        self.progress_bar.setVisible(False)
+        self.title_label.setText(self._idle_title)
+        self.latest_version_label.setText("—")
+        self._set_download_size(None)
+        self.release_notes_button.hide()
+        self.release_notes_button.setEnabled(False)
+        self._set_busy_state("Checking for updates…")
+        self.progress_bar.setRange(0, 0)
+        self.progress_bar.setVisible(True)
         check_callback = self._check_callback
         self._lifecycle.manual_check_requested.emit()
         self._start_task(
@@ -381,58 +396,30 @@ class UpdateDialog(QDialog):
         self._result = result
         self._downloaded_installer = None
         self.progress_bar.setVisible(False)
-        self.current_version_label.setText(f"Current version: {result.current_version}")
-        self.latest_version_label.setText(f"Latest version: {result.latest_version}")
-        self.release_notes_button.setEnabled(result.release_url is not None)
-        if result.release_notes_summary:
-            self._set_notes_text(result.release_notes_summary)
-        elif result.release_url is not None:
-            self._set_notes_text("No release notes were provided for this release.")
-        else:
-            self._set_notes_text("Release notes will appear when an update is available.")
-
+        self.current_version_label.setText(result.current_version)
+        self.latest_version_label.setText(result.latest_version)
+        has_release = result.release_url is not None
+        self.release_notes_button.setVisible(has_release)
+        self.release_notes_button.setEnabled(has_release)
+        self._set_detail("")
+        can_install = self._download_available()
+        self._set_download_size(
+            result.installer_size_bytes if can_install else None,
+            result.selection_reason,
+        )
+        current_title = (
+            "Studio is up to date" if self._installer_updates_enabled else "No newer release"
+        )
+        self.title_label.setText("Update available" if result.update_available else current_title)
         if not self._installer_updates_enabled:
-            availability = (
-                "A newer Studio release is available."
-                if result.update_available else "No newer published release was found."
-            )
-            self.latest_version_label.setText(f"Latest release: {result.latest_version}")
-            self.status_label.setText(f"{availability}\n\n{SOURCE_UPDATE_INSTRUCTIONS}")
-            self.download_button.setEnabled(False)
-            self._set_close_button_text("Remind Me Later" if result.update_available else "Close")
-        elif result.update_available:
-            asset = result.installer_asset
-            verified_asset = asset is not None and asset.sha256 is not None
-            if verified_asset:
-                assert asset is not None
-                download_kind = "Patch" if asset.kind == "patch" else "Full installer"
-                download_size = (
-                    f" ({asset.size_bytes / 1_000_000:.1f} MB)"
-                    if asset.size_bytes is not None
-                    else ""
-                )
-                selection = f"{download_kind}{download_size}."
-                if result.selection_reason:
-                    selection += f" {result.selection_reason}"
-                self.status_label.setText(
-                    f"A new FPVS Studio version is available. {selection}\n\n"
-                    "Updates replace app files only; "
-                    "projects, templates, settings, run history, and logs stay outside the "
-                    "install folder."
-                )
-            else:
-                self.status_label.setText(
-                    "A new FPVS Studio version is available, but in-app installation is "
-                    "unavailable because this release is missing information needed to "
-                    "verify the installer. "
-                    "Use View Full Release Notes to open the release page."
-                )
-            self.download_button.setEnabled(verified_asset)
-            self._set_close_button_text("Remind Me Later")
+            self._set_status(SOURCE_UPDATE_INSTRUCTIONS)
+        elif result.update_available and not can_install:
+            guidance = " See the release page for details." if result.release_url else ""
+            self._set_status(f"The installer could not be verified.{guidance}")
         else:
-            self.status_label.setText("FPVS Studio is up to date.")
-            self.download_button.setEnabled(False)
-            self._set_close_button_text("Close")
+            self._set_status("")
+        self.download_button.setEnabled(can_install)
+        self.close_button.setText("Later" if result.update_available else "Close")
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
 
@@ -447,11 +434,11 @@ class UpdateDialog(QDialog):
             )
             return
         self._downloaded_installer = result
-        self.status_label.setText("The update is verified and ready to install.")
+        self._set_status("The update is verified and ready to install.")
         self.download_button.setEnabled(True)
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
-        self._set_close_button_text("Close")
+        self.close_button.setText("Close")
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, PROGRESS_MAXIMUM)
         self.progress_bar.setValue(PROGRESS_MAXIMUM)
@@ -469,29 +456,28 @@ class UpdateDialog(QDialog):
         advice = explanation.advice if self._installer_updates_enabled else (
             "Check your internet connection and try Check Again."
         )
-        self.status_label.setText(
+        self._set_status(
             explanation.summary if self._installer_updates_enabled else
-            f"{explanation.summary}\n\n{SOURCE_UPDATE_INSTRUCTIONS}"
+            f"{explanation.summary}\n{SOURCE_UPDATE_INSTRUCTIONS}"
         )
-        self._set_notes_text(advice)
-        self.notes_view.setToolTip(f"{advice}\n\nTechnical details:\n{error}")
+        self._set_detail(advice)
+        self.detail_label.setToolTip(f"{advice}\n\nTechnical details:\n{error}")
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
         self.close_button.setEnabled(True)
-        self._set_close_button_text("Close")
+        self.close_button.setText("Close")
 
     @Slot(object, object)
     def _handle_download_progress(self, downloaded: object, total: object) -> None:
         if self._close_pending or self._job is None:
             return
         if isinstance(downloaded, UpdatePhase):
-            self.status_label.setText(downloaded.text)
+            self._set_status(downloaded.text)
             result = downloaded.result
             if result is not None and self._task_kind == "check":
-                self.current_version_label.setText(f"Current version: {result.current_version}")
-                self.latest_version_label.setText(f"Latest version: {result.latest_version}")
-                self._set_notes_text(result.release_notes_summary)
+                self.current_version_label.setText(result.current_version)
+                self.latest_version_label.setText(result.latest_version)
             self.progress_bar.setRange(0, 0)
             self.progress_bar.setVisible(True)
             return
@@ -505,16 +491,16 @@ class UpdateDialog(QDialog):
 
     def _handle_task_cancelled(self) -> None:
         self._downloaded_installer = None
-        self.status_label.setText(
+        self._set_status(
             "The update operation was canceled. Retry starts from zero."
             if self._installer_updates_enabled else
-            f"The update check was canceled.\n\n{SOURCE_UPDATE_INSTRUCTIONS}"
+            f"The update check was canceled.\n{SOURCE_UPDATE_INSTRUCTIONS}"
         )
         self.progress_bar.setVisible(False)
         self.check_button.setEnabled(True)
         self.download_button.setEnabled(self._download_available())
         self.close_button.setEnabled(True)
-        self._set_close_button_text("Close")
+        self.close_button.setText("Close")
 
     def _download_available(self) -> bool:
         asset = None if self._result is None else self._result.installer_asset
@@ -527,17 +513,16 @@ class UpdateDialog(QDialog):
         )
 
     def _set_idle_state(self) -> None:
+        self.release_notes_button.hide()
         self.release_notes_button.setEnabled(False)
         self.download_button.setEnabled(False)
         self.check_button.setEnabled(True)
         self.close_button.setEnabled(True)
-        self._set_close_button_text("Close")
 
     def _show_source_updates(self) -> None:
-        self.title_label.setText(
-            "macOS source updates" if sys.platform == "darwin" else "Source updates"
-        )
-        self.status_label.setText(SOURCE_UPDATE_INSTRUCTIONS)
+        self._idle_title = "macOS source updates" if sys.platform == "darwin" else "Source updates"
+        self.title_label.setText(self._idle_title)
+        self._set_status(SOURCE_UPDATE_INSTRUCTIONS)
         self.status_label.setToolTip(
             "After pulling, follow the updated checkout's setup instructions "
             "if dependencies changed. "
@@ -547,11 +532,12 @@ class UpdateDialog(QDialog):
         self.download_button.hide()
 
     def _set_busy_state(self, status_text: str) -> None:
-        self.status_label.setText(status_text)
+        self._set_status(status_text)
+        self._set_detail("")
         self.check_button.setEnabled(False)
         self.download_button.setEnabled(False)
         self.close_button.setEnabled(True)
-        self._set_close_button_text("Cancel and Close")
+        self.close_button.setText("Cancel and Close")
 
     @Slot()
     def _dismiss_dialog(self) -> None:
@@ -580,14 +566,8 @@ class UpdateDialog(QDialog):
         self.check_button.setEnabled(False)
         self.download_button.setEnabled(False)
         self.close_button.setEnabled(False)
-        self._set_close_button_text("Canceling...")
-        self.status_label.setText(
-            "Canceling the update operation and waiting for it to finish safely. "
-            "Incomplete downloads are discarded; a retry starts from zero. "
-            "A network check may need to reach its timeout."
-            if self._installer_updates_enabled else
-            "Canceling the release check. Waiting for the network request to stop safely."
-        )
+        self.close_button.setText("Canceling...")
+        self._set_status("The dialog will close when the operation stops.")
         if self._job is not None:
             self._job.cancel()
 
@@ -598,28 +578,21 @@ class UpdateDialog(QDialog):
         else:
             self.reject()
 
-    def _set_close_button_text(self, text: str) -> None:
-        self.close_button.setText(text)
-        self._fit_action_buttons()
+    def _set_status(self, text: str) -> None:
+        self.status_label.setText(text)
+        self.status_label.setVisible(bool(text))
 
-    def _fit_action_buttons(self) -> None:
-        buttons = (
-            self.check_button,
-            self.download_button,
-            self.close_button,
-        )
-        for button in buttons:
-            text_width = button.fontMetrics().horizontalAdvance(button.text())
-            button.setMinimumWidth(max(button.minimumSizeHint().width(), text_width + 36))
-        required_width = max(button.minimumWidth() for button in buttons) * 2 + 8 + 36
-        self.setMinimumWidth(max(_MINIMUM_SIZE[0], required_width))
+    def _set_detail(self, text: str) -> None:
+        self.detail_label.setText(text)
+        self.detail_label.setVisible(bool(text))
+        self.detail_label.setToolTip("")
 
-    def _set_notes_text(self, text: str) -> None:
-        # Check progress and completion can report the same notes. Keep the reading position.
-        if self._notes_text != text:
-            self._notes_text = text
-            self.notes_view.setPlainText(text)
-        self.notes_view.setToolTip("")
+    def _set_download_size(self, size_bytes: int | None, reason: str = "") -> None:
+        size = f"{size_bytes / 1_000_000:.1f} MB" if size_bytes else ""
+        self.download_size_label.setText(size)
+        self.download_size_label.setToolTip(reason if size else "")
+        self.download_size_label.setVisible(bool(size))
+        self.download_size_heading.setVisible(bool(size))
 
     def _open_release_notes(self) -> None:
         if self._result is None or self._result.release_url is None:

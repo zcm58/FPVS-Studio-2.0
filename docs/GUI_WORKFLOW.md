@@ -1756,12 +1756,11 @@ Moving a project to the Recycle Bin remains a controller-owned filesystem operat
 guarded by `project.json` validation, confirmation, a post-action path check, and a disk
 refresh of the manage list after each attempt. In packaged Windows builds,
 `Check for Updates` delegates to the independent updater through `HelperClient`, without
-blocking the GUI. It shows
-current/latest versions, a wrapping and scrollable What's New preview, and the candidate
-patch/full installer. **View Full Release Notes** opens the published release page.
+blocking the GUI. It shows the current and latest versions and the selected download's
+size. **Release Notes** opens the published release page.
 Download and Install verifies the package with progress and continues to installation
 from that one explicit click. There is no separate install button or redundant install
-confirmation. The dialog also supports this-launch-only `Remind Me Later`.
+confirmation. **Later** dismisses the update for this launch.
 Discovery and download do not scan installed payload files; final patch compatibility
 belongs to the native installer. A newer release without a trusted installer SHA-256
 digest is still shown as available, with an explanation that in-app installation is
@@ -1771,7 +1770,7 @@ check runs once after the Welcome window is shown; it stays silent unless an upd
 available. Independently, normal application startup schedules offline update-cache
 housekeeping before root-folder onboarding, even with no configured project root or
 network connection. Source checkouts and non-Windows platforms use metadata-only release
-checks for both startup and manual notices. Their dialog shows release notes and asks the
+checks for both startup and manual notices. Their dialog links to release notes and asks the
 user to close Studio, pull remote changes, and restart. Installer, repair and cache cleanup
 actions are unavailable; error and cancellation states retain source-update guidance.
 Studio does not run Git automatically. Cache ownership, retention and update routing
@@ -1796,16 +1795,15 @@ process to exit, installs under a separate installation lock, and restarts Studi
 after successful setup. It never force-closes Studio or edits project data. A canceled
 or failed handoff keeps Studio open; setup failure opens the repair path without restart.
 
-The update dialog has a `680x600` minimum and `760x620` default size. Its action grid
-keeps long button labels visible at both sizes. Versions and status text wrap; release
-notes and error details use an intentionally bounded, selectable preview. Each
-nonempty source line remains on its own line, preserving release-note bullets.
-The preview retains at most four lines and 240 characters, shortening individual
-lines without joining bullets. The full value remains in the tooltip and accessible
-description, and the full release page remains available by button.
+The update dialog has a `600x270` minimum and a `620x280` default size. Its summary
+shows the current and latest versions and the selected download's size when known.
+The download size tooltip can explain package selection. **Release Notes** opens
+the release page. Errors show the next action inline with technical details in a
+tooltip. The progress rail supplies motion during checks and downloads and honors
+the system animation setting.
 
 The bundled **FPVS Studio Update & Repair** Start Menu entry uses the same dialog in a
-separate process, at a `680x660` minimum and `760x680` default. Its full-installer repair
+separate process, at a `600x300` minimum and `620x320` default. Its full-installer repair
 action supports the currently installed version and requires all Studio windows to close
 before installation. The repair check remains separate; the selected installer uses
 the same Download and Install action. It works independently of Studio's authoring/runtime dependencies.
@@ -2090,13 +2088,11 @@ Run display calibration smoke checks in an approved visible session.
 
 Updater visible/manual smoke (run only in an approved visible Windows session):
 
-1. Open `Help > Check for Updates` and inspect the `680x600` minimum and `760x620`
-   default sizes with long versions, three short release-note bullets, long/many-line
-   notes, and error details. Confirm the preview keeps bullet lines intact, wraps long
-   text, and scrolls to the final line with the mouse and keyboard. Check that progress
-   and actions stay in view, Tab moves from the preview to the next enabled action, the
-   error tooltip exposes technical details, and **View Full Release Notes** opens the
-   release page.
+1. Open `Help > Check for Updates` and inspect the `600x270` minimum and `620x280`
+   default sizes with long versions, a known or missing download size, and error
+   details. Check that progress and actions stay in view, Tab reaches the enabled
+   actions in order, the error tooltip exposes technical details, and **Release Notes**
+   opens the release page.
 2. Using controlled offline callbacks (as in `tests/gui/test_update_dialog.py`), exercise
    current, newer/trusted, newer/missing-digest, busy, canceled, and failed states. A
    missing digest must disable Download and Install while preserving the newer-version copy.
@@ -2114,7 +2110,7 @@ Updater visible/manual smoke (run only in an approved visible Windows session):
    GUI thread, Save is called once, canceling Save retains the cached installer for
    the same-button retry, and an accepted fake handoff quits only after its worker
    finishes. Closing/disposal, shutdown, failure or cancellation must stop continuation.
-5. With offline service callbacks, inspect **Update & Repair** at `680x660` and `760x680`.
+5. With offline service callbacks, inspect **Update & Repair** at `600x300` and `620x320`.
    Check the separate repair lookup and combined Download and Install action, same-version
    full repair, unavailable metadata, package progress, and all button
    labels without clipping. Close before deferred startup and while work is pending.

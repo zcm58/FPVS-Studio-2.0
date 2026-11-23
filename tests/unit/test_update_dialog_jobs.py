@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import ast
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import IntEnum
 from pathlib import Path
 from threading import Event
@@ -46,8 +46,6 @@ class _Widget:
     def setText(self, text):
         self.text = text
 
-    setPlainText = setText
-
     def setToolTip(self, text):
         self.tooltip = text
 
@@ -56,6 +54,9 @@ class _Widget:
 
     def setVisible(self, visible):
         self.visible = visible
+
+    def hide(self):
+        self.setVisible(False)
 
     def setRange(self, minimum, maximum):
         self.range = (minimum, maximum)
@@ -78,9 +79,6 @@ class _DialogBase:
 
     def accept(self):
         self.done(int(self.DialogCode.Accepted))
-
-    def _fit_action_buttons(self):
-        pass
 
 
 _UNSET = object()
@@ -131,9 +129,11 @@ def update_flow(tmp_path):
     )
     methods = {
         "start_update_check", "start_download", "install_and_restart", "_start_task",
-        "_handle_task_finished", "_handle_download_result", "_handle_task_error",
-        "_handle_download_progress", "_handle_task_cancelled", "_download_available",
-        "_set_busy_state", "_set_close_button_text", "_set_notes_text", "reject", "done",
+        "_handle_task_finished", "_handle_check_result", "_handle_download_result",
+        "_handle_task_error", "_handle_download_progress", "_handle_task_cancelled",
+        "_download_available",
+        "_set_busy_state", "_set_status", "_set_detail",
+        "_set_download_size", "reject", "done",
         "_request_close",
         "_handle_application_shutdown",
     }
@@ -154,6 +154,7 @@ def update_flow(tmp_path):
     namespace = {
         "__name__": __name__, "dataclass": dataclass, "QDialog": _DialogBase,
         "DownloadedInstaller": DownloadedInstaller, "UpdatePhase": UpdatePhase,
+        "UpdateCheckResult": UpdateCheckResult,
         "PROGRESS_MAXIMUM": 1000, "_LOGGER": logging.getLogger(__name__),
         "sys": SimpleNamespace(platform="win32"),
         "explain_error": explain_error,
@@ -179,7 +180,7 @@ def update_flow(tmp_path):
     downloaded = DownloadedInstaller(tmp_path / "update.exe", 9, asset.sha256, asset)
     instance = namespace["UpdateDialog"]()
     instance._result = UpdateCheckResult("1.0", "2.0", True, None, "", asset, False)
-    instance._notes_text = ""
+    instance._idle_title = "Studio updates"
     instance._installer_updates_enabled = True
     instance._downloaded_installer = None
     instance._preparing_install = False
@@ -192,9 +193,14 @@ def update_flow(tmp_path):
     instance._lifecycle = lifecycle
     instance.result = None
     instance.visible = True
-    for name in ("check_button", "download_button", "close_button", "progress_bar",
-                 "status_label", "notes_view"):
+    for name in (
+        "check_button", "download_button", "close_button", "progress_bar", "title_label",
+        "status_label", "detail_label", "current_version_label", "latest_version_label",
+        "download_size_heading", "download_size_label", "release_notes_button",
+    ):
         setattr(instance, name, _Widget())
+    instance._check_callback = lambda _cancel: None
+    instance._check_task = None
     instance._download_callback = lambda *_args: events.append("download") or downloaded
     instance._installer_launcher = lambda *_args: events.append("launch")
     instance._on_before_install = lambda: events.append("save") or True
@@ -204,24 +210,48 @@ def update_flow(tmp_path):
     )
 
 
-def test_notes_preview_preserves_text_and_does_not_reload_unchanged_notes(update_flow):
-    dialog = update_flow.dialog
-    rendered = []
-    dialog.notes_view.setPlainText = rendered.append
-    dialog.notes_view.setToolTip("Technical details from previous check")
-    notes = (
-        "- Show <Space> in task prompts.\n\n"
-        "- Keep localized labels readable. " + "Release detail " * 26 + "\n"
-        "- Preserve recordings.\n- Update recovery messages.\n- Improve startup speed."
+def test_check_progress_clears_stale_details_and_updates_version_values(update_flow):
+    flow = update_flow
+    dialog = flow.dialog
+    result = replace(
+        dialog._result,
+        latest_version="3.0",
+        release_url="https://example.invalid/releases/v3.0",
+        release_notes_summary="Release notes are available on GitHub.",
+        installer_asset=replace(flow.downloaded.asset, size_bytes=31_400_000),
     )
+    dialog._handle_check_result(result)
+    dialog._handle_task_error(RuntimeError("Previous check failed"), "check")
+    assert dialog.detail_label.visible
+    assert "Previous check failed" in dialog.detail_label.tooltip
 
-    dialog._set_notes_text(notes)
-    dialog._set_notes_text(notes)
-    assert rendered == [notes]
-    assert dialog.notes_view.tooltip == ""
+    dialog.start_update_check()
 
-    dialog._set_notes_text("")
-    assert rendered == [notes, ""]
+    assert dialog.progress_bar.visible
+    assert dialog.progress_bar.range == (0, 0)
+    assert not dialog.release_notes_button.visible
+    assert not dialog.download_size_label.visible
+    assert not dialog.download_size_heading.visible
+    assert not dialog.detail_label.visible
+    assert dialog.detail_label.tooltip == ""
+
+    phase = UpdatePhase("Verifying the release information", result)
+    flow.jobs[0].progress_changed.emit(phase, None)
+
+    assert dialog.status_label.text == phase.text
+    assert dialog.current_version_label.text == result.current_version
+    assert dialog.latest_version_label.text == result.latest_version
+    assert not dialog.detail_label.visible
+
+    flow.jobs[0].finish(value=result)
+
+    assert dialog.title_label.text == "Update available"
+    assert dialog.download_size_label.visible
+    assert dialog.download_size_label.text == "31.4 MB"
+    assert dialog.release_notes_button.visible
+    assert not dialog.status_label.visible
+    assert not dialog.detail_label.visible
+    assert not dialog.progress_bar.visible
 
 
 def test_single_action_waits_for_download_and_install_worker_finish(update_flow):
@@ -367,7 +397,8 @@ def test_install_failure_invalidates_cached_download_before_retry(update_flow):
     assert flow.dialog._downloaded_installer is None
     assert flow.dialog.download_button.enabled
     assert flow.dialog.visible
-    assert "Installer verification failed" in flow.dialog.notes_view.tooltip
+    assert flow.dialog.detail_label.visible
+    assert "Installer verification failed" in flow.dialog.detail_label.tooltip
     flow.dialog.start_download()
     assert len(flow.jobs) == 3
     assert flow.dialog._task_kind == "download"

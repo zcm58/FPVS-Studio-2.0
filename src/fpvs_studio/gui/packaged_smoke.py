@@ -87,7 +87,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
                 "https://github.com/zcm58/FPVS-Studio-2.0/releases/download/"
                 "v999.0.0/FPVS-Studio-Setup-999.0.0.exe"
             ),
-            size_bytes=1,
+            size_bytes=742_800_000,
             sha256="a" * 64,
             version="999.0.0",
             asset_id=1,
@@ -99,8 +99,17 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     dialog.show()
     app.processEvents()
 
+    update_dialog_copy_ok = (
+        dialog.title_label.text() == "Update available"
+        and dialog.download_size_label.isVisible()
+        and dialog.download_size_label.text() == "742.8 MB"
+        and dialog.release_notes_button.isVisible()
+        and dialog.release_notes_button.isEnabled()
+    )
+
     button_reports = []
     for button in (
+        dialog.release_notes_button,
         dialog.check_button,
         dialog.download_button,
         dialog.close_button,
@@ -127,12 +136,20 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
     assert result.installer_asset is not None
     patch_result = replace(
         result,
-        installer_asset=replace(result.installer_asset, kind="patch"),
+        installer_asset=replace(
+            result.installer_asset, kind="patch", size_bytes=1_700_000, from_version=__version__,
+        ),
+        selection_reason="Smaller patch verified for your installed version.",
     )
     patch_dialog = UpdateDialog(auto_check=False, initial_result=patch_result)
     patch_dialog.show()
     app.processEvents()
-    patch_copy_ok = "Patch (" in patch_dialog.status_label.text()
+    patch_copy_ok = (
+        patch_dialog.title_label.text() == "Update available"
+        and patch_dialog.download_size_label.isVisible()
+        and patch_dialog.download_size_label.text() == "1.7 MB"
+        and patch_result.selection_reason in patch_dialog.download_size_label.toolTip()
+    )
     patch_dialog.close()
 
     toggled: list[bool] = []
@@ -176,6 +193,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         "ok": (
             version_match
             and styled
+            and update_dialog_copy_ok
             and buttons_fit
             and remind_later_dismissed
             and dist_info_count_ok
@@ -195,6 +213,7 @@ def collect_packaged_smoke_report() -> dict[str, Any]:
         "dist_info_count_ok": dist_info_count_ok,
         "dist_info_names": dist_info_names,
         "update_dialog_style_applied": styled,
+        "update_dialog_copy_ok": update_dialog_copy_ok,
         "remind_later_dismissed": remind_later_dismissed,
         "buttons_fit": buttons_fit,
         "button_reports": button_reports,

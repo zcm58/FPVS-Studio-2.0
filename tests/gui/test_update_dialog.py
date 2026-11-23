@@ -22,8 +22,8 @@ from PySide6.QtCore import (
     QThread,
     QTimer,
 )
-from PySide6.QtGui import QColor, QPalette, QTextCursor
-from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QWidget
+from PySide6.QtGui import QColor, QPalette
+from PySide6.QtWidgets import QApplication, QLabel, QMessageBox, QPlainTextEdit, QWidget
 from shiboken6 import isValid
 from tests.gui.helpers import assert_visible_children_within_parent, open_created_project
 
@@ -272,10 +272,10 @@ def test_startup_update_check_prompts_only_when_update_available(
     qtbot.waitUntil(lambda: bool(dialogs), timeout=5000)
 
     dialog = dialogs[0]
-    assert "A new FPVS Studio version is available." in dialog.status_label.text()
-    assert "projects, templates, settings, run history, and logs" in dialog.status_label.text()
+    assert dialog.title_label.text() == "Update available"
+    assert dialog.status_label.isHidden()
     assert dialog.download_button.isEnabled()
-    assert dialog.close_button.text() == "Remind Me Later"
+    assert dialog.close_button.text() == "Later"
 
 
 def test_update_dialog_initial_result_is_themed_and_remind_later_dismisses(qtbot) -> None:
@@ -283,7 +283,7 @@ def test_update_dialog_initial_result_is_themed_and_remind_later_dismisses(qtbot
     qtbot.addWidget(dialog)
     dialog.show()
 
-    qtbot.waitUntil(lambda: dialog.close_button.text() == "Remind Me Later")
+    qtbot.waitUntil(lambda: dialog.close_button.text() == "Later")
     assert "QDialog#update_dialog" in dialog.styleSheet()
     assert "QPushButton" in dialog.styleSheet()
 
@@ -320,7 +320,7 @@ def test_startup_update_prompt_remind_later_returns_to_welcome(
     qtbot.waitUntil(lambda: bool(dialog_versions), timeout=5000)
     qtbot.waitUntil(lambda: controller._startup_update_job is None, timeout=5000)
 
-    assert dialog_versions == ["Current version: 0.9.0b1"]
+    assert dialog_versions == ["0.9.0b1"]
     assert controller.welcome_window.isVisible()
 
 
@@ -440,13 +440,13 @@ def test_update_dialog_downloads_then_launches_installer(
 
     dialog.start_update_check()
     qtbot.waitUntil(lambda: dialog.download_button.isEnabled())
-    assert "A new FPVS Studio version is available." in dialog.status_label.text()
-    assert "projects, templates, settings, run history, and logs" in dialog.status_label.text()
+    assert dialog.title_label.text() == "Update available"
+    assert dialog.status_label.isHidden()
     assert "0.9.0b1" in dialog.current_version_label.text()
     assert "0.9.0b2" in dialog.latest_version_label.text()
-    assert "Improved update flow" in dialog.notes_view.toPlainText()
+    assert dialog.findChild(QPlainTextEdit) is None
     assert dialog.release_notes_button.isEnabled()
-    assert dialog.close_button.text() == "Remind Me Later"
+    assert dialog.close_button.text() == "Later"
 
     assert dialog.download_button.text() == "Download and Install"
     assert not hasattr(dialog, "install_button")
@@ -476,7 +476,7 @@ def test_update_dialog_reports_no_update(qtbot) -> None:
     dialog.show()
 
     dialog.start_update_check()
-    qtbot.waitUntil(lambda: dialog.status_label.text() == "FPVS Studio is up to date.")
+    qtbot.waitUntil(lambda: dialog.title_label.text() == "Studio is up to date")
 
     assert dialog.download_button.isEnabled() is False
     assert dialog.close_button.text() == "Close"
@@ -497,9 +497,9 @@ def test_update_dialog_reports_manual_server_error(qtbot) -> None:
         lambda: "online service" in dialog.status_label.text()
     )
 
-    assert "internet connection" in dialog.notes_view.toPlainText()
-    assert "network unavailable" not in dialog.notes_view.toPlainText()
-    assert "network unavailable" in dialog.notes_view.toolTip()
+    assert "internet connection" in dialog.detail_label.text()
+    assert "network unavailable" not in dialog.detail_label.text()
+    assert "network unavailable" in dialog.detail_label.toolTip()
     assert dialog.download_button.isEnabled() is False
     assert dialog.close_button.text() == "Close"
 
@@ -626,11 +626,11 @@ def test_new_release_without_trusted_installer_metadata_is_not_reported_as_curre
         lambda url: opened.append(url.toString()),
     )
 
-    assert "new FPVS Studio version is available" in dialog.status_label.text()
-    assert "in-app installation is unavailable" in dialog.status_label.text()
-    assert "missing information needed to verify the installer" in dialog.status_label.text()
-    assert "SHA-256" not in dialog.status_label.text()
-    assert "up to date" not in dialog.status_label.text()
+    assert dialog.title_label.text() == "Update available"
+    assert dialog.status_label.text() == (
+        "The installer could not be verified. See the release page for details."
+    )
+    assert dialog.download_size_label.isHidden()
     assert not dialog.download_button.isEnabled()
     assert dialog.release_notes_button.isEnabled()
     dialog.release_notes_button.click()
@@ -1172,9 +1172,9 @@ def test_failed_update_stays_recoverable_and_does_not_quit(
     assert quit_calls == []
 
 
-@pytest.mark.parametrize("size", [(680, 600), (760, 620)])
+@pytest.mark.parametrize("size", [(600, 270), (620, 280)])
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_update_dialog_preserves_release_note_bullet_lines(
+def test_update_dialog_opens_release_notes_without_an_inline_preview(
     qtbot, deferred_updates, monkeypatch, size, background,
 ) -> None:
     lifecycle, _jobs, _quit_calls = deferred_updates
@@ -1194,11 +1194,9 @@ def test_update_dialog_preserves_release_note_bullet_lines(
     qtbot.waitUntil(lambda: dialog.close_button.width() > 0)
     qtbot.wait(1)
 
-    assert dialog.notes_view.toPlainText() == notes
-    assert dialog.notes_view.isReadOnly()
-    assert dialog.notes_view.tabChangesFocus()
-    assert dialog.notes_view.accessibleName() == dialog.notes_heading_label.text()
-    assert dialog.notes_view.verticalScrollBar().maximum() == 0
+    assert dialog.findChild(QPlainTextEdit) is None
+    assert dialog.detail_label.isHidden()
+    assert dialog.release_notes_button.text() == "Release Notes"
     assert (dialog.width(), dialog.height()) == size
     assert_visible_children_within_parent(dialog)
     opened: list[str] = []
@@ -1211,7 +1209,7 @@ def test_update_dialog_preserves_release_note_bullet_lines(
     assert opened == [result.release_url]
 
 
-@pytest.mark.parametrize("size", [(680, 600), (760, 620)])
+@pytest.mark.parametrize("size", [(600, 270), (620, 280)])
 @pytest.mark.parametrize(
     "state",
     [
@@ -1219,6 +1217,7 @@ def test_update_dialog_preserves_release_note_bullet_lines(
         "patch",
         "full-required",
         "unverifiable",
+        "unknown-size",
         "busy",
         "canceling",
         "error",
@@ -1252,6 +1251,9 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     if state == "unverifiable":
         assert result.installer_asset is not None
         result = replace(result, installer_asset=replace(result.installer_asset, sha256=None))
+    elif state == "unknown-size":
+        assert result.installer_asset is not None
+        result = replace(result, installer_asset=replace(result.installer_asset, size_bytes=None))
     elif state == "patch":
         assert result.installer_asset is not None
         result = replace(
@@ -1281,7 +1283,7 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         assert not dialog.download_button.isEnabled()
         assert dialog.progress_bar.isVisible()
         if state == "checking-files":
-            assert dialog.latest_version_label.text() == f"Latest version: {result.latest_version}"
+            assert dialog.latest_version_label.text() == result.latest_version
     elif state in {"busy", "canceling"}:
         dialog.start_download()
         qtbot.waitUntil(lambda: jobs[-1].is_running)
@@ -1300,11 +1302,16 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
     assert dialog.width() == size[0]
     assert dialog.height() == size[1]
     if state == "patch":
-        assert "Patch (12.5 MB)" in dialog.status_label.text()
+        assert dialog.download_size_label.text() == "12.5 MB"
+        assert dialog.download_size_label.isVisible()
         assert dialog.download_button.isEnabled()
     elif state == "full-required":
-        assert "Full installer" in dialog.status_label.text()
-        assert result.selection_reason in dialog.status_label.text()
+        assert dialog.download_size_label.isVisible()
+        assert dialog.download_size_label.toolTip() == result.selection_reason
+        assert dialog.download_button.isEnabled()
+    elif state == "unknown-size":
+        assert dialog.download_size_heading.isHidden()
+        assert dialog.download_size_label.isHidden()
         assert dialog.download_button.isEnabled()
     assert_visible_children_within_parent(dialog)
     for button in (
@@ -1313,7 +1320,8 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
         dialog.close_button,
         dialog.release_notes_button,
     ):
-        assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 20
+        if button.isVisible():
+            assert button.width() >= button.fontMetrics().horizontalAdvance(button.text()) + 20
     for label in dialog.findChildren(QLabel):
         if not label.isVisible():
             continue
@@ -1321,25 +1329,13 @@ def test_update_dialog_long_content_fits_minimum_and_default_sizes(
             assert label.height() + 1 >= label.heightForWidth(label.width()), label.objectName()
         else:
             assert label.width() >= label.fontMetrics().horizontalAdvance(label.text())
-    notes_view = dialog.notes_view
+    assert dialog.findChild(QPlainTextEdit) is None
     if state == "error":
-        assert full_notes in notes_view.toolTip()
-        assert full_notes not in notes_view.toPlainText()
-        assert any(word in notes_view.toPlainText().lower() for word in ("try", "retry"))
-        assert notes_view.verticalScrollBar().maximum() == 0
+        assert full_notes in dialog.detail_label.toolTip()
+        assert full_notes not in dialog.detail_label.text()
+        assert any(word in dialog.detail_label.text().lower() for word in ("try", "retry"))
     else:
-        assert notes_view.toPlainText() == full_notes
-        assert notes_view.horizontalScrollBar().maximum() == 0
-        scroll = notes_view.verticalScrollBar()
-        assert scroll.maximum() > 0
-        qtbot.keyClick(notes_view, Qt.Key.Key_PageDown)
-        assert scroll.value() > 0
-        scroll.setValue(scroll.maximum())
-        last_bullet = QTextCursor(notes_view.document().lastBlock())
-        assert notes_view.viewport().rect().contains(notes_view.cursorRect(last_bullet).center())
-        if state == "checking-files":
-            jobs[-1].progress_changed.emit(UpdatePhase(dialog.status_label.text(), result), None)
-            assert scroll.value() == scroll.maximum()
+        assert dialog.detail_label.isHidden()
 
 
 def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(monkeypatch):
@@ -1404,7 +1400,7 @@ def test_application_starts_cache_work_before_root_setup_and_drains_on_failure(m
     assert not lifecycle.has_active_jobs
 
 
-@pytest.mark.parametrize("size", [(680, 660), (760, 680)])
+@pytest.mark.parametrize("size", [(600, 300), (620, 320)])
 def test_standalone_repair_uses_registered_version_and_full_installer(
     qtbot, deferred_updates, monkeypatch, size
 ):
@@ -1428,8 +1424,9 @@ def test_standalone_repair_uses_registered_version_and_full_installer(
     jobs[-1].finish()
     assert checks[-1]["repair"] is True
     assert checks[-1]["force_full"] is True
-    assert window.current_version_label.text() == "Current version: 0.9.0b2"
-    assert "repair" in window.status_label.text()
+    assert window.current_version_label.text() == "0.9.0b2"
+    assert window.title_label.text() == "Repair available"
+    assert window.status_label.text() == "Close all Studio windows before installing."
     assert window.download_button.text() == "Download and Install"
     assert window.download_button.isEnabled()
     assert window.repair_button.isEnabled()
@@ -1644,9 +1641,9 @@ def test_apply_cancel_waits_for_worker_before_close(qtbot, deferred_updates):
 @pytest.mark.parametrize("platform,frozen", [
     ("win32", False), ("darwin", False), ("darwin", True), ("linux", False),
 ])
-@pytest.mark.parametrize("size", [(680, 600), (760, 620)])
+@pytest.mark.parametrize("size", [(600, 270), (620, 280)])
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
-def test_source_update_prompt_preserves_notes_and_has_no_installer_action(
+def test_source_update_prompt_links_notes_and_has_no_installer_action(
     qtbot, monkeypatch, tmp_path, platform, frozen, size, background,
 ):
     monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform=platform, frozen=frozen))
@@ -1671,10 +1668,11 @@ def test_source_update_prompt_preserves_notes_and_has_no_installer_action(
     assert "pull the latest changes from the remote Git repository" in dialog.status_label.text()
     assert "restart Studio" in dialog.status_label.text()
     assert "2026.12.123rc10" in dialog.latest_version_label.text()
-    assert dialog.notes_view.toPlainText() == notes
+    assert dialog.release_notes_button.isVisible()
+    assert dialog.download_size_label.isHidden()
     assert dialog.download_button.isHidden() and not dialog.download_button.isEnabled()
     assert dialog.check_button.isVisible() and dialog.check_button.isEnabled()
-    assert dialog.close_button.text() == "Remind Me Later"
+    assert dialog.close_button.text() == "Later"
     assert_visible_children_within_parent(dialog)
     for label in dialog.findChildren(QLabel):
         if label.isVisible() and label.wordWrap():
@@ -1714,7 +1712,7 @@ def test_source_startup_update_prompts_to_pull_without_installer(
 
 
 @pytest.mark.parametrize("platform,frozen", [("win32", False), ("darwin", False), ("darwin", True)])
-@pytest.mark.parametrize("size", [(680, 660), (760, 680)])
+@pytest.mark.parametrize("size", [(600, 300), (620, 320)])
 def test_source_standalone_updates_never_check_registered_install_or_repair(
     qtbot, deferred_updates, monkeypatch, platform, frozen, size,
 ):
@@ -1793,18 +1791,17 @@ def test_source_failed_check_keeps_pull_guidance_without_installer_advice(
     monkeypatch.setattr(helper_client, "sys", SimpleNamespace(platform="darwin", frozen=False))
     dialog = UpdateDialog(auto_check=False)
     qtbot.addWidget(dialog)
-    dialog.resize(680, 600)
+    dialog.resize(600, 270)
     dialog.show()
     dialog._handle_task_error(error, "check")
     qtbot.wait(1)
     assert "pull the latest changes" in dialog.status_label.text()
-    assert "Check Again" in dialog.notes_view.toPlainText()
-    assert "installer" not in dialog.notes_view.toPlainText().lower()
-    assert "Repair" not in dialog.notes_view.toPlainText()
-    assert str(error) in dialog.notes_view.toolTip()
+    assert "Check Again" in dialog.detail_label.text()
+    assert "installer" not in dialog.detail_label.text().lower()
+    assert "Repair" not in dialog.detail_label.text()
+    assert str(error) in dialog.detail_label.toolTip()
     assert not dialog.download_button.isEnabled()
     assert_visible_children_within_parent(dialog)
     assert dialog.status_label.height() + 1 >= dialog.status_label.heightForWidth(
         dialog.status_label.width()
     )
-    assert dialog.notes_view.verticalScrollBar().maximum() == 0

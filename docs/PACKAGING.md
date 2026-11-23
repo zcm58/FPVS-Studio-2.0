@@ -71,10 +71,12 @@ The PyInstaller spec includes package metadata in the bundled app.
 The package distribution name is `fpvs-studio`; the GUI and executable still use the
 display name `FPVS Studio`.
 
-Use the exact package version in the GitHub tag and installer filename. Lead the
-release notes with a short user-facing bullet that fits Studio's What's New preview.
-Add detail in later bullets when it helps users understand the release. Record
-build and verification evidence in the release plan.
+Use the exact package version in the GitHub tag and installer filename. Write
+short release-note bullets about changes users can notice. Lead with the most
+important change. Group low-level
+efficiency changes under one bullet, "Minor backend optimizations."
+Record installer and patch sizes, build details, and verification evidence in
+the release plan.
 
 The [3.0.1 release record](exec-plans/completed/release-3.0.1.md) tracks manual
 physical screen width calibration and verified Windows publication.
