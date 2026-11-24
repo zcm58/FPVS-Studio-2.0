@@ -33,7 +33,7 @@ Common blockers are:
 - a condition has no base or oddball stimuli
 - a condition trigger code is missing or set to `0`
 - image files were moved, renamed, or deleted
-- the display refresh rate does not work with the selected timing template
+- the display refresh rate does not work with the configured presentation frequency
 
 ## Image Folders Need Cleanup
 
@@ -68,8 +68,7 @@ Confirm the hardware setup before running participants:
 - the EEG recording software is ready
 - the trigger cable is connected correctly
 
-New projects use a BioSemi-compatible serial trigger setup by default. The
-default port is `COM3`, and oddball onset markers use code `55`.
+Check the BioSemi device and the expected COM port in **Settings > Recording**.
 
 Software checks cannot prove that the physical EEG/status channel is wired
 correctly. Validate the full lab setup before data collection.
@@ -81,6 +80,6 @@ number. Check that the participant number is correct before continuing.
 
 ## Updates Do Not Appear
 
-Use **File > Check for Updates** first. If the in-app check cannot reach GitHub,
+Use **Help > Check for Updates** first. If the in-app check cannot reach GitHub,
 open the [GitHub Releases page](https://github.com/zcm58/FPVS-Studio-2.0/releases/latest)
 in a browser and compare the installed version with the latest release tag.

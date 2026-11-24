@@ -7,15 +7,12 @@ FPVS Studio can check GitHub Releases for newer Windows installers.
 Use:
 
 ```text
-File > Check for Updates
+Help > Check for Updates
 ```
 
-If a newer version is available, FPVS Studio shows the current version, the
-latest version, and a short release summary. Choose **Download Update** to
-download the installer.
-
-After the download, FPVS Studio asks before closing the app and starting the
-installer.
+If a newer version is available for your Windows installation, save your work
+and choose **Download and Install**. Studio downloads and verifies the patch or
+full installer, then closes to apply the update.
 
 ## Startup Checks
 
@@ -34,9 +31,8 @@ place.
 ## Projects With Repeat Participant Sessions
 
 Repeat participant sessions are available in FPVS Studio **1.5.3 and later**.
-Update every computer that shares a project before saving it in v1.5.3. Saved
-projects include the new setting even when it is disabled, and older builds do
-not recognize it. Existing projects keep repeat sessions disabled until you enable
+Update any computer that shares a project and still runs a version earlier than
+1.5.3. Existing projects keep repeat sessions disabled until you enable
 **Setup > Project > Allow repeat participant sessions** and save.
 
 See [Returning Participants](run-session.md#returning-participants) for the launch

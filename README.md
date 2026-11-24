@@ -27,7 +27,8 @@ For experimental **macOS source-only authoring and local tests**, see the
 Public user documentation is available at
 https://zcm58.github.io/FPVS-Studio-2.0/.
 
-Download the latest FPVS Studio installer from the GitHub Releases page.
+Download the Windows installer from the
+[latest FPVS Studio release](https://github.com/zcm58/FPVS-Studio-2.0/releases/latest).
 
 Run the installer, then launch FPVS Studio from the Start Menu or Desktop shortcut.
 You do not need to install Python or open the source code.
@@ -74,7 +75,7 @@ for first-run details, logs and recovery. Mac support remains experimental and e
 ## Create Your First Project
 
 1. Open FPVS Studio.
-2. Choose `Create New Project`.
+2. Choose `Create Project`.
 3. Enter a project name.
 4. Follow the Setup Wizard instructions :) 
 
@@ -130,7 +131,7 @@ logs\
 Use:
 
 ```text
-Open Projects
+Open Project
 ```
 
 After you've set up a project, FPVS Studio allows you to run those experiments in just a few clicks. 
@@ -144,10 +145,3 @@ Custom condition templates are stored in your FPVS Studio Root Folder.
 ## Updating FPVS Studio
 
 Use `Help > Check for Updates` inside FPVS Studio. You can download and install future updates from this screen.
-
-
-## Current Beta Notes
-
-FPVS Studio is currently in beta release and is only compatible with BioSemi systems for now. 
-
-Future updates will bring compatibility to other common EEG filetypes. 

@@ -6,7 +6,7 @@ Use this page when recording which FPVS Studio version was used for a study.
 
 - Name: FPVS Studio
 - Package name: `fpvs-studio`
-- Current package version: `1.3.0`
+- [Latest FPVS Studio release](https://github.com/zcm58/FPVS-Studio-2.0/releases/latest)
 - Repository: <https://github.com/zcm58/FPVS-Studio-2.0>
 - License: GPLv3 or later
 
@@ -16,11 +16,12 @@ For each study, save:
 
 - the FPVS Studio version
 - the GitHub Release tag
-- the installer file name, such as `FPVS-Studio-Setup-1.3.0.exe`
+- the exact Windows installer file name, which includes the version
 - the project `.fpvsconfig` export, if your lab uses it for handoff records
 - the final project folder, including `runs\` and `logs\`
 
-Use the release tag, not only the website URL, when documenting a study.
+Link to the specific release tag used in the study so readers can identify the
+same software version.
 
 ## Suggested Methods Wording
 
@@ -31,11 +32,10 @@ fullscreen PsychoPy-based runtime execution.
 Before submission, replace this general sentence with the exact version, release
 tag, trigger setup, display setup, and study-specific configuration details.
 
-## Current v1 Scope
+## Lab Timing Validation
 
-The current 1.3.0 package is a beta release intended for Windows 11 lab
-computers and BioSemi-compatible serial trigger workflows. It uses a fixed FPVS
-timing template with 6 Hz base stimulation and oddballs every 5th item.
+Record the configured presentation frequency, oddball spacing, and display
+refresh rate with your validation results.
 
 Lab timing precision still needs validation on the actual computer, display, EEG
 system, and cabling used for data collection.

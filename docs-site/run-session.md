@@ -9,23 +9,24 @@ Confirm that:
 - the intended project is open
 - the lab monitor is connected and set to the expected refresh rate
 - the display resolution matches the project display settings
-- the selected BioSemi or Unicorn recording setup is ready
+- the selected EEG recording setup is ready for acquisition
 - participant response devices are connected if fixation accuracy tracking is on
 - the project is not stored in a synced folder such as OneDrive or Dropbox
 
 ## Launch
 
-### Local recording choice
+### Recording Setup
 
-Settings includes a **Recording** tab with **Recording Setup…**. BioSemi retains the
-project's serial settings and existing recording prompt. The choice applies to this
-computer and does not change portable experiments. Review the effective output shown
-on Home and Run before launching.
+In **Settings > Recording**, choose BioSemi ActiveTwo or ActiveThree,
+Brain Products TriggerBox or TriggerBox Plus, Brain Products parallel output for
+actiCHamp, or Unicorn Recorder UDP. Use **Apply to Project** to save the choice
+for the open project. Projects without a saved recording configuration use the
+computer default. Review the device shown on Home and Run before launching.
 
 **Unicorn Recorder UDP sends real markers through the normal launch workflow.**
-Select it in Recording Setup and match its local UDP port to Recorder, initially
-`1000`. Experiment Test Mode and Pilot Study Mode send no markers, including with
-Unicorn selected.
+Select it under **Settings > Recording** and match its local UDP port to
+Recorder, initially `1000`. Experiment Test Mode and Pilot Study Mode send no
+markers, including with Unicorn selected.
 
 After **Launch Experiment** and participant entry, Studio automatically checks that
 Unicorn Recorder is open and writing a raw recording before opening presentation.
@@ -46,11 +47,10 @@ BDF+/Toolbox and physical timing validation remain pending; this does not block 
 ### Start the session
 
 1. Open FPVS Studio.
-2. Choose **Open Projects** and select the project.
+2. Choose **Open Project** and select the project.
 3. Prepare the EEG recording. For Unicorn, start Recorder's raw recording before launching.
-4. On Home, choose **Launch Experiment** and enter the participant details when prompted.
-5. For BioSemi, start the EEG recording when your lab protocol says to begin.
-6. Follow the fullscreen prompts.
+4. On Home, choose **Launch Experiment** and follow the recording and participant prompts.
+5. Follow the fullscreen prompts.
 
 The participant details prompt asks for:
 

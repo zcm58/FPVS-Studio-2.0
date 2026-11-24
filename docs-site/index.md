@@ -13,10 +13,10 @@ The app guides you through the main study setup:
 - launch fullscreen participant sessions
 - save run logs and participant summaries with the project
 
-The current 1.3.0 package is a beta release for Windows 11 lab machines and
-BioSemi-compatible trigger workflows. New projects use the fixed v1 FPVS timing
-template: 6 Hz base stimulation, with every 5th item as the oddball for a
-1.2 Hz oddball rate.
+New FPVS-Oddball projects default to a 6 Hz base rate with an oddball every fifth
+stimulus (1.2 Hz). You can change the presentation frequency and oddball spacing
+to match your protocol and display. See [Run a Session](run-session.md#recording-setup)
+for EEG recording options.
 
 ## Start Here
 

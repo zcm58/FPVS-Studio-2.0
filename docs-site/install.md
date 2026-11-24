@@ -4,7 +4,8 @@
 
 - Windows 11.
 - A local folder for FPVS Studio projects.
-- A lab computer configured for the current BioSemi-compatible trigger setup.
+- For EEG acquisition, a lab computer with a configured
+  [recording setup](run-session.md#recording-setup).
 
 FPVS Studio is distributed as a Windows installer. You do not need Python,
 PsychoPy, or developer tools on the computer that runs the installed app.
