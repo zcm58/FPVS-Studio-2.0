@@ -48,6 +48,8 @@ def _no_hardware_discovery(monkeypatch):
 
 
 def _configuration(backend: str, **values: object) -> dict[str, object]:
+    fixed_cap = {"serial": "biosemi64", "unicorn_udp": "unicorn8"}.get(backend)
+    values.setdefault("electrode_montage", fixed_cap)
     return ProjectRecordingSettings(recording_backend=backend, **values).model_dump(mode="json")
 
 
@@ -72,6 +74,9 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
     assert _PROMPT in [label.text() for label in dialog.findChildren(QLabel)]
     dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData(backend))
     assert dialog.selected_backend == backend
+    fixed = {"serial": "biosemi64", "unicorn_udp": "unicorn8"}
+    assert dialog.selected_montage == fixed.get(backend)
+    assert dialog.montage_combo.isEnabled() == (backend not in fixed)
     assert dialog.continue_button.isEnabled()
     dialog.continue_button.click()
     assert dialog.result() == QDialog.DialogCode.Accepted
@@ -87,11 +92,18 @@ def test_hardware_picker_fits_minimum_size(qtbot, background, error_message, bac
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
     dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData(backend))
+    preset = "brainproducts_acticap_gacs_128"
+    dialog.montage_combo.setCurrentIndex(dialog.montage_combo.findData(preset))
+    assert dialog.selected_montage == preset
     dialog.resize(640, 300)
     dialog.show()
     QApplication.processEvents()
     assert dialog.size().toTuple() == (640, 300)
     assert_visible_children_within_parent(dialog)
+    assert dialog.montage_combo.width() >= (
+        dialog.montage_combo.fontMetrics().horizontalAdvance(dialog.montage_combo.currentText())
+        + 30
+    )
     assert dialog.hardware_combo.width() >= (
         dialog.hardware_combo.fontMetrics().horizontalAdvance(dialog.hardware_combo.currentText())
         + 30

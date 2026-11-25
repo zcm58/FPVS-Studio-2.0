@@ -113,6 +113,10 @@ def capture_study_run(
             for spec in specs
         ],
     }
+    if evidence.recording.electrode_montage is not None:
+        payload["recording"] = evidence.recording.model_dump(
+            mode="json", include={"selected_backend", "electrode_montage"},
+        )
     path = resolve_project_relative_path(
         root,
         f"logs/acquisition/{evidence.execution_id}.study-run-v1.json",
@@ -326,12 +330,20 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                     )
             if key in snapshots:
                 snapshot = json.loads(snapshots[key].read_text(encoding="utf-8"))
+                recording = evidence.recording
+                declared_cap = (
+                    recording.model_dump(
+                        mode="json", include={"selected_backend", "electrode_montage"},
+                    )
+                    if recording.electrode_montage is not None else None
+                )
                 if (
                     snapshot["format_version"] != 1
                     or snapshot["project_id"] != project_id
                     or snapshot["execution_id"] != key
                     or _identity(snapshot) != _identity(visit)
                     or snapshot.get("study_id") not in (None, study.study_id)
+                    or snapshot.get("recording") != declared_cap
                     or (setup is not None and setup != snapshot["setup"])
                 ):
                     raise ValueError(f"As-run settings conflict with the retained visit {key}.")

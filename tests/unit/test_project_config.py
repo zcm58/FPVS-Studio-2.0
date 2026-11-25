@@ -134,19 +134,26 @@ def test_new_hardware_declares_selection_without_inventing_toolbox_profile(backe
     assert acquisition_profile_for_recording(backend) is None
 
 
-@pytest.mark.parametrize("backend", [
-    "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+@pytest.mark.parametrize("backend,montage", [
+    ("biosemi_active_three", None),
+    ("brainproducts_triggerbox", None),
+    ("brainproducts_parallel", None),
+    ("biosemi_active_three", "biosemi128"),
+    ("brainproducts_triggerbox", "brainproducts_acticap_gacs_64"),
+    ("brainproducts_parallel", "brainproducts_acticap_gacs_128"),
 ])
 def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
-    sample_project, sample_project_root, tmp_path, backend,
+    sample_project, sample_project_root, tmp_path, backend, montage,
 ):
-    sample_project.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+    sample_project.settings.recording = ProjectRecordingSettings(
+        recording_backend=backend, electrode_montage=montage,
+    )
     config = export_project_config(sample_project, sample_project_root)
     plan = compile_session_plan(
         sample_project, project_root=sample_project_root, refresh_hz=60.0, random_seed=12,
     )
     snapshot = RecordingSnapshot(
-        selected_backend=backend,
+        selected_backend=backend, electrode_montage=montage,
         effective_backend="serial" if backend == "biosemi_active_three" else backend,
         selection_source="project_settings", receiver_validation="not_applicable",
     )
@@ -169,12 +176,43 @@ def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
     loaded = read_project_config(path)
     assert loaded.toolbox.acquisition_profile is None
     assert loaded.completed_session.acquisition_evidence.recording.selected_backend == backend
+    assert loaded.completed_session.acquisition_evidence.recording.electrode_montage == montage
+    assert loaded.recording.electrode_montage == montage
+    imported = create_project_from_config(tmp_path / "imported", loaded)
+    reopened = load_project_file(imported.project_root / "project.json")
+    assert reopened.settings.recording == sample_project.settings.recording
+
+    if montage is not None:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        as_run = payload["completed_session"]["acquisition_evidence"]["recording"]
+        as_run["electrode_montage"] = "recorded"
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(ProjectConfigError, match="montage or recorder differs"):
+            read_project_config(path)
 
     evidence.recording.selected_backend = (
         "brainproducts_triggerbox" if backend == "biosemi_active_three" else "biosemi_active_three"
     )
     with pytest.raises(ProjectConfigError, match="hardware does not match"):
         completed_toolbox_config(config, sample_project_root, plan, evidence)
+
+
+def test_launch_rejects_montage_mismatch_before_writing_evidence(sample_project, tmp_path):
+    from fpvs_studio.runtime.acquisition_evidence import AcquisitionEvidenceRecorder
+
+    sample_project.settings.recording = ProjectRecordingSettings(
+        recording_backend="biosemi_active_three", electrode_montage="biosemi128",
+    )
+    setup = export_project_config(sample_project, None)
+    with pytest.raises(ProjectConfigError, match="hardware selection does not match"):
+        AcquisitionEvidenceRecorder(
+            tmp_path, [], project_id=sample_project.meta.project_id, participant_number="007",
+            runtime_options={
+                "recording_backend": "biosemi_active_three", "electrode_montage": "recorded",
+                "toolbox_handoff_config": setup.model_dump(mode="json"),
+            },
+        )
+    assert not (tmp_path / "logs" / "acquisition").exists()
 
 
 @pytest.fixture
@@ -403,6 +441,9 @@ def test_completed_config_exports_session_order_run_seeds_and_manifest_provenanc
     completed_dir = sample_project_root / "runs" / session_plan.session_id
     write_json_file(completed_dir / "session_plan.json", session_plan)
 
+    sample_project.settings.recording = ProjectRecordingSettings(
+        recording_backend="biosemi_active_three", electrode_montage="biosemi128",
+    )
     config = export_project_config(
         sample_project,
         sample_project_root,
@@ -410,6 +451,8 @@ def test_completed_config_exports_session_order_run_seeds_and_manifest_provenanc
         completed_session_dir=completed_dir,
     )
 
+    assert config.recording.electrode_montage is None
+    assert sample_project.settings.recording.electrode_montage == "biosemi128"
     assert config.completed_session is not None
     assert config.completed_session.session_seed == 77
     assert config.completed_session.block_orders == [

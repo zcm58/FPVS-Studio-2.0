@@ -38,7 +38,7 @@ from fpvs_studio.core.models import (
     normalize_manual_removed_electrodes,
     validate_project_relative_path,
 )
-from fpvs_studio.core.recording_hardware import AcquisitionProfile
+from fpvs_studio.core.recording_hardware import AcquisitionProfile, validate_electrode_montage
 from fpvs_studio.core.run_spec import RunRandomizationSpec
 from fpvs_studio.core.task_models import TaskResponseRecord
 
@@ -187,6 +187,19 @@ class RecordingSnapshot(FPVSBaseModel):
     physical_timing: Literal["uncharacterized"] = "uncharacterized"
     acquisition_status: Literal["unknown"] = "unknown"
     acquisition_profile: AcquisitionProfile | None = None
+    electrode_montage: str | None = None
+
+    @model_validator(mode="after")
+    def validate_montage(self) -> RecordingSnapshot:
+        validate_electrode_montage(self.selected_backend, self.electrode_montage)
+        return self
+
+    @model_serializer(mode="wrap")
+    def serialize_recording(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.electrode_montage is None:
+            payload.pop("electrode_montage", None)
+        return payload
 
 
 class RuntimeMetadata(FPVSBaseModel):

@@ -94,6 +94,37 @@ root. FPVS stimulus image libraries remain separate; hashed modular-task media
 retain their existing portable import behavior. See the
 [GUI workflow](GUI_WORKFLOW.md) for the config and bundle actions.
 
+### Recording system and electrode montage
+
+The Recording selection is stored in `recording.recording_backend`. A saved
+cap choice adds `recording.electrode_montage` to setup and completed configs.
+Studio restores both fields when importing a config. The accepted choices are
+listed below.
+
+| Recording system | Electrode montage IDs |
+| --- | --- |
+| BioSemi ActiveTwo 64 (`serial`) | `biosemi64` |
+| BioSemi ActiveThree (`biosemi_active_three`) | `biosemi128` for the radial A–D layout, or `recorded` |
+| Brain Products (`brainproducts_triggerbox` or `brainproducts_parallel`) | `brainproducts_acticap_gacs_64`, `brainproducts_acticap_gacs_128`, or `recorded` |
+| Unicorn Hybrid Black (`unicorn_udp`) | `unicorn8` for the factory layout |
+
+`recorded` instructs Toolbox to use available recording coordinates. Earlier
+configs may omit the montage. ActiveTwo and Unicorn may still identify their
+fixed layouts through an existing acquisition profile. An older ActiveThree or
+Brain Products selection leaves the cap unspecified.
+
+Completed configs repeat the launch selection in
+`completed_session.acquisition_evidence.recording.selected_backend` and
+`electrode_montage` on that same object. The whole-study export carries the
+corresponding pair on each `visits[].recording`. Editing the project after a
+visit cannot change its captured pair. Studio rejects conflicting setup and
+session declarations. Historical completed exports with only a session plan
+leave the electrode montage unspecified. A named declaration requires a
+consumer that recognizes the montage field. Toolbox validates the selected
+cap against the EEG file.
+The [runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff) describes
+acquisition profiles and the evidence captured at launch.
+
 ### Display cadence in the handoff
 
 Project saves retain the refresh target in `settings.display.preferred_refresh_hz`.

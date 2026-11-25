@@ -628,6 +628,7 @@ class StudioController(QObject):
             try:
                 self.save_default_recording_configuration({
                     "recording_backend": dialog.selected_backend,
+                    "electrode_montage": dialog.selected_montage,
                 })
             except (ValueError, OSError) as exc:
                 _LOGGER.warning("Could not save default recording configuration: %s", exc)

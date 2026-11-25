@@ -441,6 +441,9 @@ class DocumentRuntimeMixin:
                     recording_backend=cast(
                         str | None, recording_configuration.get("recording_backend"),
                     ),
+                    electrode_montage=cast(
+                        str | None, recording_configuration.get("electrode_montage"),
+                    ),
                     unicorn_udp_port=cast(
                         int, recording_configuration.get("unicorn_udp_port", 1000),
                     ),

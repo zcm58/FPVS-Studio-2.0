@@ -22,7 +22,10 @@ from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 
 def _recording(backend="serial"):
-    return ProjectRecordingSettings(recording_backend=backend).model_dump(mode="json")
+    fixed_cap = {"serial": "biosemi64", "unicorn_udp": "unicorn8"}.get(backend)
+    return ProjectRecordingSettings(
+        recording_backend=backend, electrode_montage=fixed_cap,
+    ).model_dump(mode="json")
 
 
 def _edit_recording(dialog, *, backend="serial", port="COM193"):

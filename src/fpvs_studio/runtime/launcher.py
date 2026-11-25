@@ -81,11 +81,14 @@ class LaunchSettings:
     toolbox_handoff_config: dict[str, object] | None = None
     studio_protocol_version_id: str | None = None
     studio_protocol_change_reason: str | None = None
+    electrode_montage: str | None = None
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
 
         options = asdict(self)
+        if self.electrode_montage is None:
+            options.pop("electrode_montage")
         if self.display_device_name is None:
             options.pop("display_device_name")
         if self.sharing_protocol_sha256 is None:

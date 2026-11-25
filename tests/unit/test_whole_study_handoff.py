@@ -42,6 +42,9 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
         config = read_project_config(FIXTURES / f"v2-completed-{name}.fpvsconfig")
         completed = config.completed_session
         evidence = completed.acquisition_evidence
+        if name == "unicorn-60-02":
+            config.recording.electrode_montage = "unicorn8"
+            evidence.recording.electrode_montage = "unicorn8"
         completed.participant_number = evidence.participant_number = pid
         completed.participant_session_number = evidence.participant_session_number = number
         key = evidence.execution_id
@@ -120,6 +123,11 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
         == 2
     )
     (updated,) = [v for v in visits if v["protocol_version_id"] == version_2]
+    assert updated["recording"]["electrode_montage"] == "unicorn8"
+    assert all(
+        "electrode_montage" not in v["recording"] for v in visits
+        if v["protocol_version_id"] == version_1
+    )
     assert updated["compiled_refresh_hz"] == 60.02
     assert updated["protocol_change_reason"] == "Updated length"
     assert not updated["issues"]
@@ -133,6 +141,12 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
     assert destination.read_bytes() == first
     (records / "009.json").unlink()
     assert build_study_handoff(root)["roster_revision"] != payload["roster_revision"]
+    launch_path = folder / f"{updated['execution_id']}.study-run-v1.json"
+    launch = json.loads(launch_path.read_text(encoding="utf-8"))
+    del launch["recording"]
+    launch_path.write_text(json.dumps(launch), encoding="utf-8")
+    with pytest.raises(ValueError, match="As-run settings conflict"):
+        build_study_handoff(root)
 
 
 def test_older_session_is_readable_and_mismatched_local_evidence_blocks_export(tmp_path):

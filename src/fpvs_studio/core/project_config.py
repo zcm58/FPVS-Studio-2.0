@@ -43,7 +43,7 @@ from fpvs_studio.core.enums import (
     StimulusVariant,
     TriggerBackendKind,
 )
-from fpvs_studio.core.execution import AcquisitionEvidence
+from fpvs_studio.core.execution import AcquisitionEvidence, RecordingSnapshot
 from fpvs_studio.core.experiment_categories import require_valid_experiment_category
 from fpvs_studio.core.library_origin import load_library_origin
 from fpvs_studio.core.models import (
@@ -576,6 +576,34 @@ class ProjectConfigFile(FPVSBaseModel):
             raise ValueError(f"Handoff kind must be {expected!r} for its completion content.")
         return self
 
+    def matches_recording(self, snapshot: RecordingSnapshot) -> bool:
+        """Compare the authored device, cap and profile with the launch declaration."""
+        selected = self.recording.recording_backend if self.recording else "serial"
+        montage = self.recording.electrode_montage if self.recording else None
+        return (
+            selected == snapshot.selected_backend
+            and montage == snapshot.electrode_montage
+            and self.toolbox.acquisition_profile == snapshot.acquisition_profile
+            and snapshot.acquisition_profile == acquisition_profile_for_recording(selected)
+        )
+
+    @model_validator(mode="after")
+    def validate_montage_declaration(self) -> ProjectConfigFile:
+        montage = self.recording.electrode_montage if self.recording else None
+        evidence = self.completed_session.acquisition_evidence if self.completed_session else None
+        if montage is not None and self.completed_session and evidence is None:
+            raise ValueError("A completed session montage requires captured recording evidence.")
+        if (self.recording and montage is not None
+                and self.toolbox.acquisition_profile != self.recording.acquisition_profile):
+            raise ValueError("The recording montage and Toolbox acquisition profile disagree.")
+        if evidence and (montage is not None or evidence.recording.electrode_montage is not None):
+            if (not self.matches_recording(evidence.recording)
+                    or evidence.acquisition_profile != self.toolbox.acquisition_profile):
+                raise ValueError(
+                    "The recording montage or recorder differs from the captured session."
+                )
+        return self
+
     @model_validator(mode="after")
     def validate_task_asset_inventory(self) -> ProjectConfigFile:
         if any(task.simple_post_questions for task in self.task_modules):
@@ -689,6 +717,12 @@ def export_project_config(
     session_plan = (
         _read_completed_session_plan(completed_session_dir) if completed_session_dir else None
     )
+    recording = (
+        project.settings.recording.model_copy(deep=True) if project.settings.recording else None
+    )
+    if recording is not None and session_plan is not None:
+        # Historical plan-only exports have no launch snapshot for the operator's cap.
+        recording.electrode_montage = None
     return ProjectConfigFile(
         format=HANDOFF_FORMAT,
         format_version=HANDOFF_FORMAT_VERSION,
@@ -763,10 +797,7 @@ def export_project_config(
         task_assets=_portable_task_assets(project, project_root),
         display=_display_config(project.settings.display),
         presentation=project.settings.presentation.model_copy(deep=True),
-        recording=(
-            project.settings.recording.model_copy(deep=True)
-            if project.settings.recording is not None else None
-        ),
+        recording=recording,
         protocol=ProjectConfigProtocol(
             base_hz=project.settings.protocol.base_hz,
             oddball_every_n=project.settings.protocol.oddball_every_n,
@@ -814,14 +845,8 @@ def completed_toolbox_config(
         raise ProjectConfigError(
             "Test/Pilot sessions do not produce a completed recording handoff."
         )
-    selected_backend = config.recording.recording_backend if config.recording else "serial"
-    declared_profile = acquisition_profile_for_recording(selected_backend)
-    if (
-        evidence.recording.selected_backend != selected_backend
-        or evidence.acquisition_profile != declared_profile
-        or evidence.recording.acquisition_profile != declared_profile
-        or config.toolbox.acquisition_profile != declared_profile
-    ):
+    if (not config.matches_recording(evidence.recording)
+            or evidence.acquisition_profile != config.toolbox.acquisition_profile):
         raise ProjectConfigError(
             "Completed handoff hardware does not match its prelaunch snapshot."
         )
@@ -1105,14 +1130,10 @@ def read_retained_session_config(path: Path, project_id: str) -> ProjectConfigFi
         run.state != "completed" for run in evidence.runs
     ):
         raise ProjectConfigError("Retained recording handoff was not successfully completed.")
-    selected = config.recording.recording_backend if config.recording is not None else "serial"
-    profile = acquisition_profile_for_recording(selected)
     if (
         evidence.recording.effective_backend == "null"
-        or evidence.recording.selected_backend != selected
-        or evidence.recording.acquisition_profile != profile
-        or evidence.acquisition_profile != profile
-        or config.toolbox.acquisition_profile != profile
+        or not config.matches_recording(evidence.recording)
+        or evidence.acquisition_profile != config.toolbox.acquisition_profile
     ):
         raise ProjectConfigError("Retained completed handoff recording identity does not match.")
     return config

@@ -13,6 +13,8 @@ import pytest
 from tests.platform_adapters import platform_sys
 
 from fpvs_studio.core.models import ProjectRecordingSettings
+from fpvs_studio.runtime.launcher import LaunchSettings
+from fpvs_studio.runtime.recording import RecordingConfigurationError, recording_snapshot
 
 _KEY = "recording/default_configuration"
 _BACKENDS = (
@@ -109,9 +111,10 @@ def _controller(settings=None, *, dialog_factory=None, main_window=True, **names
     return controller
 
 
-def _dialog(backend="serial", *, accepted=True):
+def _dialog(backend="serial", *, accepted=True, montage=None):
     return SimpleNamespace(
         selected_backend=backend,
+        selected_montage=montage,
         DialogCode=SimpleNamespace(Accepted=1),
         exec=Mock(return_value=int(accepted)),
     )
@@ -275,15 +278,21 @@ def test_existing_valid_default_skips_picker_and_writes():
     controller._app.quit.assert_not_called()
 
 
-@pytest.mark.parametrize("backend", _BACKENDS)
-def test_first_picker_saves_only_selected_hardware_without_guessing_amplifier(backend):
-    factory = Mock(return_value=_dialog(backend))
+@pytest.mark.parametrize("backend, montage", [
+    ("serial", "biosemi64"), ("biosemi_active_three", "biosemi128"),
+    ("biosemi_active_three", None), ("brainproducts_triggerbox", "brainproducts_acticap_gacs_64"),
+    ("brainproducts_parallel", "brainproducts_acticap_gacs_128"), ("unicorn_udp", "unicorn8"),
+])
+def test_first_picker_saves_selected_hardware_and_cap_without_guessing_amplifier(backend, montage):
+    factory = Mock(return_value=_dialog(backend, montage=montage))
     controller = _controller(dialog_factory=factory, main_window=False)
 
     assert controller.ensure_default_recording_configured() is True
 
     factory.assert_called_once_with(parent=controller.welcome_window, error_message="")
-    expected = ProjectRecordingSettings(recording_backend=backend).model_dump(mode="json")
+    expected = ProjectRecordingSettings(
+        recording_backend=backend, electrode_montage=montage,
+    ).model_dump(mode="json")
     assert controller.load_default_recording_configuration() == expected
     assert expected["brainproducts_amplifier"] == (
         "actichamp" if backend == "brainproducts_parallel" else None
@@ -302,6 +311,48 @@ def test_picker_cancel_exits_without_selecting_or_saving_hardware():
     assert controller._settings.mutations == []
     controller._app.quit.assert_called_once()
     controller.main_window.document.set_default_recording_configuration.assert_not_called()
+
+
+@pytest.mark.parametrize("backend, montage, effective", [
+    ("serial", "biosemi64", "serial"),
+    ("biosemi_active_three", "biosemi128", "serial"),
+    ("biosemi_active_three", "recorded", "serial"),
+    ("brainproducts_triggerbox", "brainproducts_acticap_gacs_64", "brainproducts_triggerbox"),
+    ("brainproducts_parallel", "brainproducts_acticap_gacs_128", "brainproducts_parallel"),
+    ("unicorn_udp", "unicorn8", "unicorn_udp"),
+])
+def test_launch_snapshot_retains_cap_across_transports(backend, montage, effective):
+    saved = ProjectRecordingSettings(recording_backend=backend, electrode_montage=montage)
+    reopened = ProjectRecordingSettings.model_validate_json(saved.model_dump_json())
+    launch = LaunchSettings(
+        recording_backend=reopened.recording_backend, electrode_montage=reopened.electrode_montage,
+        brainproducts_parallel_address=0x378, brainproducts_amplifier="actichamp",
+        brainproducts_sampling_rate_hz=500,
+    )
+    options = launch.as_runtime_options()
+    snapshot = recording_snapshot(options)
+    assert snapshot.selected_backend == backend
+    assert snapshot.electrode_montage == montage
+    assert snapshot.effective_backend == effective
+    assert snapshot.model_dump(mode="json")["electrode_montage"] == montage
+    assert recording_snapshot({**options, "experiment_test_mode": True}).effective_backend == "null"
+
+
+def test_unspecified_cap_stays_absent_and_cross_recorder_montages_are_rejected():
+    for backend in _BACKENDS:
+        saved = ProjectRecordingSettings(recording_backend=backend)
+        assert "electrode_montage" not in saved.model_dump()
+        options = LaunchSettings(
+            recording_backend=backend, brainproducts_parallel_address=0x378,
+            brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+        ).as_runtime_options()
+        assert "electrode_montage" not in options
+        assert "electrode_montage" not in recording_snapshot(options).model_dump()
+    invalid = {"recording_backend": "serial", "electrode_montage": "biosemi128"}
+    with pytest.raises(ValueError, match="montage"):
+        ProjectRecordingSettings.model_validate(invalid)
+    with pytest.raises(RecordingConfigurationError, match="montage"):
+        recording_snapshot(invalid)
 
 
 def test_corrupt_preference_is_repaired_through_explicit_picker():

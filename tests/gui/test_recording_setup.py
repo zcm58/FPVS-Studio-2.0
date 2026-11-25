@@ -301,10 +301,34 @@ def test_recording_setup_apply_and_keyboard_cancel(qtbot):
     assert dialog.result() == int(QDialog.DialogCode.Accepted)
     assert dialog.configuration == {
         "recording_backend": "unicorn_udp", "unicorn_udp_port": 65535,
+        "electrode_montage": "unicorn8",
         "brainproducts_serial_port": "COM3", "brainproducts_pulse_width_ms": 10,
         "brainproducts_parallel_address": None,
         "brainproducts_amplifier": None, "brainproducts_sampling_rate_hz": None,
     }
+
+
+def test_named_cap_selection_tracks_device_and_keeps_brainvision_transport_independent(qtbot):
+    dialog = RecordingSetupDialog(_triggerbox_configuration(
+        electrode_montage="brainproducts_acticap_gacs_128",
+    ))
+    qtbot.addWidget(dialog)
+    dialog.show()
+    QApplication.processEvents()
+    cap = dialog.editor.montage_combo
+    assert cap.currentData() == "brainproducts_acticap_gacs_128"
+    assert cap.width() >= cap.fontMetrics().horizontalAdvance(cap.currentText()) + 30
+    _assert_labels_fit(dialog)
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("brainproducts_parallel"))
+    assert cap.currentData() == "brainproducts_acticap_gacs_128"
+    dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("biosemi_active_three"))
+    assert cap.currentData() is None
+    cap.setCurrentIndex(cap.findData("biosemi128"))
+    dialog.apply_button.click()
+    assert dialog.configuration["electrode_montage"] == "biosemi128"
+    reopened = RecordingSetupDialog(dialog.configuration)
+    qtbot.addWidget(reopened)
+    assert reopened.editor.montage_combo.currentData() == "biosemi128"
 
 
 @pytest.mark.parametrize("address, rate, pulse, valid", [
@@ -1906,6 +1930,7 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
     qtbot.waitUntil(lambda: window._session_seed_ready)
     document.set_recording_configuration({
         "recording_backend": "unicorn_udp", "unicorn_udp_port": 1000,
+        "electrode_montage": "unicorn8",
     })
     page = window if entrypoint == "home" else window.run_page
     trace = []
@@ -1940,6 +1965,7 @@ def test_ready_unicorn_reaches_runtime_execution_on_both_launch_surfaces(
         trace.append("execute")
         options = kwargs["runtime_options"]
         assert options["recording_backend"] == "unicorn_udp"
+        assert options["electrode_montage"] == "unicorn8"
         assert not options["recording_operator_confirmed"]
         assert options["recording_association"] is None
         return SessionExecutionSummary(

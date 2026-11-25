@@ -639,9 +639,9 @@ overlap and asynchronous reset/cleanup failures surface explicitly and prevent a
 successful completed handoff. A successful event write alone does not qualify the
 later electrical reset or recorded marker timing.
 
-Snapshots record the actual COM port, fixed baudrate and requested pulse width;
-optional amplifier/rate declarations are retained in project/config transfers and
-recording snapshots without assigning a Toolbox montage or claiming observed settings.
+Snapshots record the configured COM port, fixed baudrate and requested pulse width.
+Project/config transfers and recording snapshots also carry the amplifier, sampling
+rate and electrode montage when declared by the operator.
 New-device receiver validation remains `pending`, physical timing `uncharacterized`.
 Inspect saved markers for boundary values, repeated codes, counts/order and the
 shortest event spacing, then characterize physical onset timing on the actual
@@ -948,11 +948,13 @@ writers omit that redundant config marker.
 | BioSemi ActiveTwo 64 | `biosemi_active_two_64` / `biosemi64` / `biosemi_edge` | `biosemi_exg_pair_then_average` |
 | Unicorn Hybrid Black | `unicorn_hybrid_black` / `unicorn8` / `unicorn_sample` | `average_scalp` |
 
-ActiveThree and Brain Products TriggerBox selections currently declare no
-Toolbox acquisition profile. Completed configs preserve their exact selected hardware
-and marker evidence with an absent profile; Toolbox must support/configure the actual
-montage and decoder before analysis. Studio never substitutes ActiveTwo 64 metadata
-or guesses a Brain Products amplifier/montage from its trigger interface.
+ActiveThree and Brain Products use separate recorder and montage declarations.
+Their configs may specify an ActiveThree radial 128 or an actiCAP slim/snap
+GACS 64 or 128. These selections leave the versioned acquisition profile
+absent. The optional `electrode_montage` field is frozen with the selected
+recorder at launch. Older recordings retain their original declarations.
+See the [config contract](PROJECT_CONFIG.md#recording-system-and-electrode-montage)
+for the fields in setup, completed-session and study exports.
 
 The Unicorn definition declares `EEG 1` through `EEG 8` as Fz, C3, Cz, C4, Pz,
 PO7, Oz, PO8 using `source_to_canonical` and `label_mapping_evidence.status="declared"`.

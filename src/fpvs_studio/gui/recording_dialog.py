@@ -26,6 +26,7 @@ from fpvs_studio.core.brainproducts import (
     supported_sampling_rates_hz,
 )
 from fpvs_studio.core.models import ProjectRecordingSettings
+from fpvs_studio.core.recording_hardware import recording_montage_choices
 from fpvs_studio.gui.biosemi_port_selector import BioSemiPortSelector
 from fpvs_studio.gui.components import (
     DialogHeader,
@@ -69,6 +70,30 @@ RECORDING_HARDWARE_CHOICES = (
 )
 
 
+class _ElectrodeMontageCombo(QComboBox):
+    """Offer the selected recorder's cap layouts without guessing variable wiring."""
+
+    def set_recording(
+        self, backend: str | None, saved: object = None, *, show_invalid: bool = False,
+    ) -> None:
+        choices = recording_montage_choices(backend or "")
+        self.blockSignals(True)
+        try:
+            self.clear()
+            if len(choices) != 1:
+                self.addItem("Not specified", None)
+            for montage_id, label in choices:
+                self.addItem(label, montage_id)
+            index = self.findData(saved)
+            if saved is not None and index < 0 and show_invalid:
+                self.addItem("Invalid saved montage — choose again", saved)
+                index = self.count() - 1
+            self.setCurrentIndex(max(0, index))
+            self.setEnabled(len(choices) > 1 or self.count() > 1)
+        finally:
+            self.blockSignals(False)
+
+
 class DefaultRecordingHardwareDialog(QDialog):
     """Choose this computer's hardware before Welcome, at 640x300."""
 
@@ -91,6 +116,12 @@ class DefaultRecordingHardwareDialog(QDialog):
         for label, backend in RECORDING_HARDWARE_CHOICES:
             self.hardware_combo.addItem(label, backend)
         layout.addWidget(self.hardware_combo)
+        self.montage_combo = _ElectrodeMontageCombo(self)
+        self.montage_combo.setAccessibleName("Default electrode montage")
+        self.montage_combo.set_recording(None)
+        form = QFormLayout()
+        form.addRow("Electrode montage", self.montage_combo)
+        layout.addLayout(form)
         self.error_label = QLabel(error_message, self)
         self.error_label.setWordWrap(True)
         self.error_label.setTextFormat(Qt.TextFormat.PlainText)
@@ -109,9 +140,7 @@ class DefaultRecordingHardwareDialog(QDialog):
         self.continue_button.clicked.connect(self.accept)
         buttons.addWidget(self.continue_button)
         layout.addLayout(buttons)
-        self.hardware_combo.currentIndexChanged.connect(
-            lambda: self.continue_button.setEnabled(self.selected_backend is not None),
-        )
+        self.hardware_combo.currentIndexChanged.connect(self._recording_changed)
         apply_dialog_theme(self)
 
     @property
@@ -121,6 +150,14 @@ class DefaultRecordingHardwareDialog(QDialog):
             isinstance(value, str)
             and value in {backend for _, backend in RECORDING_HARDWARE_CHOICES}
         ) else None
+
+    def _recording_changed(self) -> None:
+        self.montage_combo.set_recording(self.selected_backend, self.montage_combo.currentData())
+        self.continue_button.setEnabled(self.selected_backend is not None)
+
+    @property
+    def selected_montage(self) -> str | None:
+        return cast(str | None, self.montage_combo.currentData())
 
     def accept(self) -> None:
         if self.selected_backend is not None:
@@ -211,6 +248,11 @@ class RecordingSetupEditor(QWidget):
             index = self.backend_combo.count() - 1
         self.backend_combo.setCurrentIndex(index)
         self.backend_combo.setToolTip(str(backend) if backend is not None else "Legacy serial")
+        self.montage_combo = _ElectrodeMontageCombo(self)
+        self.montage_combo.setAccessibleName("Electrode montage")
+        self.montage_combo.set_recording(
+            str(backend), configuration.get("electrode_montage"), show_invalid=True,
+        )
         self.port_edit = QLineEdit(str(configuration.get("unicorn_udp_port", 1000)), self)
         self.port_edit.setObjectName("unicorn_udp_port_edit")
         self.port_edit.setValidator(QIntValidator(1, 65535, self.port_edit))
@@ -299,6 +341,7 @@ class RecordingSetupEditor(QWidget):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(10)
         form.addRow("Recording device", self.backend_combo)
+        form.addRow("Electrode montage", self.montage_combo)
         self.unicorn_port_label = QLabel("Unicorn UDP port", self)
         form.addRow(self.unicorn_port_label, self.port_edit)
         self.biosemi_port_label = QLabel("BioSemi serial port", self)
@@ -333,6 +376,7 @@ class RecordingSetupEditor(QWidget):
             mark_text_role(self.guidance_label, "supporting")
         layout.addWidget(self.guidance_label)
         self.backend_combo.currentIndexChanged.connect(self._backend_changed)
+        self.montage_combo.currentIndexChanged.connect(self._refresh)
         self.port_edit.textChanged.connect(self._refresh)
         self.biosemi_port_selector.port_changed.connect(self._refresh)
         self.parallel_port_selector.address_changed.connect(self._refresh)
@@ -372,6 +416,9 @@ class RecordingSetupEditor(QWidget):
         return cast(str | None, self.brainproducts_amplifier_combo.currentData())
 
     def _backend_changed(self) -> None:
+        self.montage_combo.set_recording(
+            self.backend_combo.currentData(), self.montage_combo.currentData(),
+        )
         self._populate_sampling_rates(self.brainproducts_sampling_rate_combo.currentData())
         self._refresh()
 
@@ -626,6 +673,7 @@ class RecordingSetupEditor(QWidget):
     def _draft(self) -> dict[str, object]:
         selected = self.backend_combo.currentData()
         brainproducts = selected in ("brainproducts_triggerbox", "brainproducts_parallel")
+        montage = self.montage_combo.currentData()
         text = self.port_edit.text()
         # Parse decimal digits only; preserve malformed saved text for validation.
         port: object = int(text) if len(text) <= 5 and text.isascii() and text.isdecimal() else text
@@ -637,6 +685,7 @@ class RecordingSetupEditor(QWidget):
         )
         return {
             "recording_backend": selected,
+            **({"electrode_montage": montage} if montage is not None else {}),
             "unicorn_udp_port": port if selected == "unicorn_udp" else self._valid_udp_port,
             "brainproducts_serial_port": (
                 self.brainproducts_port_edit.text().strip()

@@ -4,6 +4,18 @@ Status: Active
 
 Date: 2026-10-12
 
+## Recorder and cap handoff
+
+Studio's Recording settings can declare the cap used with a recorder. The
+[exchange contract](../../PROJECT_CONFIG.md#recording-system-and-electrode-montage)
+covers setup import, completion and the per-visit study declaration. Source
+validation covers the named ActiveThree and actiCAP layouts, the retained
+Unicorn factory declaration, and older visits without a selected cap. Tests
+check that mismatched setup and captured declarations fail and that a later
+project edit cannot supply a missing historical montage. Installed acceptance
+should compare the montage displayed after importing a setup and a completed
+study against the cap originally selected in Studio.
+
 ## Current baseline on November 19, 2026
 
 [Studio 3.1.0](../completed/release-3.1.0.md) ships the whole-study handoff and

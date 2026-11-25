@@ -82,13 +82,23 @@ def build_handoff_fixtures(project_root: Path) -> dict[str, ProjectConfigFile]:
         )],
     )
     result = {"v2-setup.fpvsconfig": export_project_config(project, None)}
-    for backend, label, refresh_hz in (
-        ("serial", "biosemi", 60.0),
-        ("unicorn_udp", "unicorn", 60.0),
-        ("unicorn_udp", "unicorn-60-02", 60.02),
+    radial = project.model_copy(deep=True)
+    radial.settings.recording = ProjectRecordingSettings(
+        recording_backend="biosemi_active_three", electrode_montage="biosemi128",
+    )
+    result["v2-setup-active-three-radial.fpvsconfig"] = export_project_config(radial, None)
+    for backend, label, refresh_hz, montage in (
+        ("serial", "biosemi", 60.0, None),
+        ("unicorn_udp", "unicorn", 60.0, None),
+        ("unicorn_udp", "unicorn-60-02", 60.02, None),
+        ("brainproducts_parallel", "acticap-128", 60.0, "brainproducts_acticap_gacs_128"),
     ):
         selected = project.model_copy(deep=True)
-        selected.settings.recording = ProjectRecordingSettings(recording_backend=backend)
+        selected.settings.recording = ProjectRecordingSettings(
+            recording_backend=backend, electrode_montage=montage,
+        )
+        if montage is not None:
+            selected.conditions[0].oddball_cycle_repeats_per_sequence = 42
         if refresh_hz == 60.02:
             selected.settings.display.preferred_refresh_hz = refresh_hz
             selected.conditions[0].oddball_cycle_repeats_per_sequence = 144
@@ -104,6 +114,7 @@ def build_handoff_fixtures(project_root: Path) -> dict[str, ProjectConfigFile]:
             session_id=plan.session_id, acquisition_profile=profile,
             recording=RecordingSnapshot(
                 selected_backend=backend, effective_backend=backend,
+                electrode_montage=montage,
                 selection_source="project_settings", receiver_validation="pending",
                 acquisition_profile=profile,
             ),

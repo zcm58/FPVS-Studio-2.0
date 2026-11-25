@@ -398,7 +398,8 @@ After the root is configured, a `Default EEG Hardware` picker asks: "Please sele
 your default EEG hardware. You can change this choice later." It lists BioSemi
 ActiveTwo, BioSemi ActiveThree, Brain Products TriggerBox / Plus,
 Brain Products parallel port (actiCHamp), and Unicorn Hybrid Black.
-Continue requires an explicit choice. The picker is
+Its electrode montage choices follow the selected recording device. Continue requires
+an explicit device choice. The picker is
 `640x300` at minimum/default size and uses no hardware probes. Existing installations
 without this preference also see it once, after their saved root is validated.
 Exit retains the root but leaves hardware unset, so setup resumes on next launch.
@@ -1345,7 +1346,12 @@ persisted `launch/require_biosemi_recording_confirmation` and
 
 Studio validates recording configuration before participant collection. **Settings > Recording**
 edits the project's BioSemi ActiveTwo/ActiveThree, Brain Products TriggerBox/Plus,
-actiCHamp parallel, or Unicorn Recorder UDP selection. BioSemi uses a serial-port
+actiCHamp parallel, or Unicorn Recorder UDP selection. **Electrode montage** records the
+cap used for the study. ActiveTwo 64 and Unicorn Hybrid Black factory 8 have fixed layouts.
+ActiveThree offers the BioSemi 128 radial cap, and both Brain Products marker connections
+offer actiCAP slim/snap GACS 64 and 128. For other variable layouts, choose **Use recording
+coordinates** when the EEG recording supplies positions, or leave the montage unspecified.
+BioSemi uses a serial-port
 selector, TriggerBox uses its own detected-port list, parallel uses an I/O address,
 and Unicorn uses a loopback port. Both Brain Products options expose sampling rate
 and pulse width. **Apply to Project** atomically saves `settings.recording` and, for
@@ -1361,9 +1367,9 @@ preferences remain ignored.
 at `recording/default_configuration` in the app's
 local user-profile QSettings store. Root-folder changes do not reset this preference.
 This action is also available without a project and never saves the project's BioSemi
-serial port. Its tooltip explains that scope. The first-time picker chooses hardware
-only; the inline editor can save Brain Products amplifier and EEG sampling rate to
-prefill project setup. Settings no longer opens nested project/default recording editors.
+serial port. Its tooltip explains that scope. The first-time picker chooses the recording
+device and electrode montage. The inline editor can save the Brain Products amplifier and EEG
+sampling rate to prefill project setup. Settings no longer opens nested project/default recording editors.
 
 An explicit project's `settings.recording` overrides the computer default. An unset
 field inherits it dynamically; changing the default updates an inheriting open
@@ -1397,6 +1403,9 @@ Visible acceptance: at Home's `760x520` minimum and `1120x720` default in both t
 activate the recording text by mouse and by Tab/Enter. Confirm Settings opens on
 Recording with the hardware fields already visible. Apply saves the current project;
 closing without applying preserves it.
+At the 640×300 first-run picker and 700×640 Recording Setup dialog, select Brain Products
+GACS 128, switch between TriggerBox and parallel, then switch to ActiveThree and select
+the radial 128 cap. Apply and reopen the project to check the chosen cap and full labels.
 Check long device names, missing setup and the Mac/Test/Pilot summaries without clipping;
 changing hardware should refresh the Home link after Apply to Project.
 Projects without `settings.recording` inherit the computer default in the native app.

@@ -48,6 +48,7 @@ from fpvs_studio.core.paths import validate_project_relative_path
 from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
     acquisition_profile_for_recording,
+    validate_electrode_montage,
 )
 from fpvs_studio.core.task_models import (
     TaskBinding,
@@ -753,6 +754,14 @@ class ProjectRecordingSettings(FPVSBaseModel):
     brainproducts_amplifier: BrainProductsAmplifier | None = None
     brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)
     acquisition_profile: AcquisitionProfile | None = None
+    electrode_montage: StrictStr | None = None
+
+    @model_serializer(mode="wrap")
+    def serialize_recording(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload: dict[str, Any] = handler(self)
+        if self.electrode_montage is None:
+            payload.pop("electrode_montage", None)
+        return payload
 
     @field_validator("brainproducts_serial_port")
     @classmethod
@@ -764,6 +773,7 @@ class ProjectRecordingSettings(FPVSBaseModel):
 
     @model_validator(mode="after")
     def resolve_hardware_declaration(self) -> ProjectRecordingSettings:
+        validate_electrode_montage(self.recording_backend, self.electrode_montage)
         if self.recording_backend == "brainproducts_parallel":
             if self.brainproducts_amplifier not in (None, "actichamp"):
                 raise ValueError("Parallel-port output supports actiCHamp / actiCHamp Plus only.")

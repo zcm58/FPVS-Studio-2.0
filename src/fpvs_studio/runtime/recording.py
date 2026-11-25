@@ -7,7 +7,10 @@ from typing import cast
 
 from fpvs_studio.core.brainproducts import AMPLIFIER_LABELS, minimum_pulse_width_ms
 from fpvs_studio.core.execution import RecordingSnapshot
-from fpvs_studio.core.recording_hardware import acquisition_profile_for_recording
+from fpvs_studio.core.recording_hardware import (
+    acquisition_profile_for_recording,
+    validate_electrode_montage,
+)
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
 
@@ -49,6 +52,12 @@ def validate_recording_configuration(options: Mapping[str, object] | None = None
 
     values = options or {}
     effective = resolve_recording_backend(values)
+    try:
+        validate_electrode_montage(
+            str(values.get("recording_backend") or "serial"), values.get("electrode_montage"),
+        )
+    except ValueError as exc:
+        raise RecordingConfigurationError(str(exc)) from exc
     if not isinstance(values.get("serial_enabled", True), bool):
         raise RecordingConfigurationError("serial_enabled must be a boolean.")
     if (effective == "serial" and values.get("recording_backend") is None
@@ -226,6 +235,7 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
     return RecordingSnapshot.model_validate(
         {
             "selected_backend": selected,
+            "electrode_montage": values.get("electrode_montage"),
             "acquisition_profile": acquisition_profile_for_recording(selected),
             "effective_backend": effective,
             "selection_source": (
