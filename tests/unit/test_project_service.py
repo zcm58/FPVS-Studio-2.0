@@ -6,7 +6,12 @@ import json
 
 import pytest
 
-from fpvs_studio.core.condition_template_profiles import get_condition_template_profile
+from fpvs_studio.core.condition_template_profiles import (
+    desktop_starter_condition_profile,
+    get_condition_template_profile,
+    list_condition_template_profiles,
+)
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.models import ProjectFile
 from fpvs_studio.core.paths import (
     APP_DATA_DIRNAME,
@@ -15,7 +20,12 @@ from fpvs_studio.core.paths import (
     project_json_path,
     stimulus_manifest_path,
 )
-from fpvs_studio.core.project_service import create_project, discover_project_roots, rename_project
+from fpvs_studio.core.project_service import (
+    build_starter_project,
+    create_project,
+    discover_project_roots,
+    rename_project,
+)
 from fpvs_studio.core.serialization import load_project_file, read_json_file
 from fpvs_studio.preprocessing.models import StimulusManifest
 
@@ -147,11 +157,45 @@ def test_project_scaffolding_creates_expected_directories_and_files(tmp_path) ->
     assert project.settings.protocol.base_hz == 6.0
     assert project.settings.protocol.oddball_every_n == 5
     assert project.settings.protocol.oddball_hz == 1.2
+    assert project.settings.condition_profile_id is None
     assert project.settings.fixation_task.enabled is True
     assert project.settings.fixation_task.accuracy_task_enabled is True
     assert project.settings.fixation_task.participant_tutorial_enabled is True
+    assert project.settings.fixation_task.target_count_mode == "fixed"
     assert project.settings.supported_variants[0].value == "original"
     assert manifest.project_id == project.meta.project_id
+
+
+@pytest.mark.parametrize(
+    ("category", "initial_conditions"),
+    [
+        (ExperimentCategory.FPVS_ODDBALL, 0),
+        (ExperimentCategory.ATTENTIONAL_BLINK, 3),
+        (ExperimentCategory.COGNITIVE_LOAD_FPVS, 6),
+    ],
+)
+def test_desktop_category_starter_matches_previous_default(
+    tmp_path, category, initial_conditions,
+) -> None:
+    # The old chooser selected the first compatible entry in the normalized library.
+    previous_profile = list_condition_template_profiles(
+        tmp_path / "legacy", experiment_category=category,
+    )[0]
+    previous = build_starter_project(
+        "Study", experiment_category=category, condition_template_profile=previous_profile,
+    )
+    scaffold = create_project(
+        tmp_path / "current", "Study", experiment_category=category,
+        condition_template_profile=desktop_starter_condition_profile(category),
+    )
+    current = load_project_file(project_json_path(scaffold.project_root))
+    # Each creation generates an independent session seed.
+    previous.settings.session.session_seed = current.settings.session.session_seed
+    assert current.settings == previous.settings
+    assert current.stimulus_sets == previous.stimulus_sets
+    assert current.conditions == previous.conditions
+    assert len(current.conditions) == initial_conditions
+    assert not condition_template_library_path(tmp_path / "current").exists()
 
 
 def test_project_without_protocol_fields_loads_current_timing_defaults(tmp_path) -> None:

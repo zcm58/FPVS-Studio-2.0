@@ -104,7 +104,6 @@ __all__ = [
     "SetupProgressStepper",
     "SetupSourceCard",
     "StatusBadgeLabel",
-    "apply_condition_template_details_header_style",
     "apply_attentional_blink_stream_theme",
     "apply_dialog_theme",
     "apply_action_palette_theme",
@@ -120,7 +119,6 @@ __all__ = [
     "apply_setup_wizard_theme",
     "apply_studio_theme",
     "apply_welcome_window_theme",
-    "condition_template_details_header_stylesheet",
     "create_double_spin_box",
     "create_home_project_icon",
     "create_resolution_spin_box",
@@ -1437,6 +1435,9 @@ def _apply_palette_stylesheet(
     observer.apply()
 
 
+_FORM_CONTROL_CORNER_RADIUS = 6
+
+
 def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     """Shared compact fields; native dropdown and spinner affordances stay intact."""
 
@@ -1446,7 +1447,7 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
         color: {theme.text_primary};
         background-color: {theme.surface_elevated};
         border: 1px solid {theme.control_border};
-        border-radius: 6px;
+        border-radius: {_FORM_CONTROL_CORNER_RADIUS}px;
         padding: 3px 6px;
         font-size: {FONT_SIZE_CONTROL}px;
         selection-background-color: {theme.primary};
@@ -2672,10 +2673,12 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
         color: {theme.text_primary};
         font-size: {FONT_SIZE_BODY}px;
     }}
+    QWidget#setup_wizard_page QPushButton[formFieldAction="true"],
+    QTableWidget#condition_frequency_table QPushButton {{
+        border-radius: {_FORM_CONTROL_CORNER_RADIUS}px;
+    }}
     QPushButton#setup_wizard_condition_presentation_button,
     QPushButton#setup_wizard_condition_task_button,
-    QPushButton#apply_profile_to_conditions_button,
-    QPushButton#project_manage_templates_button,
     QPushButton#image_size_full_screen_preview_button,
     QPushButton#configure_project_presentation_button {{
         min-height: 24px;
@@ -2781,15 +2784,3 @@ def error_text_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
 
 def apply_error_text_style(label: QLabel) -> None:
     _apply_palette_stylesheet(label, error_text_stylesheet)
-
-
-def condition_template_details_header_stylesheet() -> str:
-    return """
-    font-size: 18px;
-    font-weight: 700;
-    text-decoration: underline;
-    """
-
-
-def apply_condition_template_details_header_style(label: QLabel) -> None:
-    label.setStyleSheet(condition_template_details_header_stylesheet())

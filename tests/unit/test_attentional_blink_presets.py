@@ -376,17 +376,6 @@ def test_add_duplicate_and_recreate_keep_stream_layout_and_shared_pools(study, t
     assert len(document._project.stimulus_sets) == 3
 
 
-def test_stream_rejects_legacy_template_without_mutation(study):
-    document = _Document(study, Path("unused"))
-    legacy = ConditionTemplateProfile(
-        profile_id=ATTENTIONAL_BLINK_PROFILE_ID, display_name="Old image pairs",
-        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-    )
-    with pytest.raises(ValueError, match="no longer supported"):
-        document.apply_condition_template_profile(legacy)
-    assert document._project == study
-
-
 @pytest.mark.parametrize("settings", [AttentionalBlinkSettings(), {"isi_ms": 50}])
 def test_direct_condition_edit_cannot_change_layout(study, settings):
     document = _Document(study, Path("unused"))

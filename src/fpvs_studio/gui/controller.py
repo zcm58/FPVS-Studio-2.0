@@ -31,19 +31,11 @@ from PySide6.QtWidgets import (
 from shiboken6 import isValid
 
 from fpvs_studio import __version__
-from fpvs_studio.core.condition_template_profiles import (
-    get_condition_template_profile,
-    list_condition_template_profiles,
-    normalize_condition_template_profile_root,
-)
+from fpvs_studio.core.condition_template_profiles import desktop_starter_condition_profile
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.library_origin import LibraryProjectOrigin
 from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile, ProjectRecordingSettings
-from fpvs_studio.core.paths import (
-    condition_template_library_path,
-    filesystem_path,
-    project_json_path,
-)
+from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
     BundleImportStage,
@@ -61,7 +53,6 @@ from fpvs_studio.gui.bundle_import_dialog import (
     BundleImportReviewDialog,
 )
 from fpvs_studio.gui.components import apply_studio_reduce_motion
-from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.import_display_settings_dialog import ImportDisplaySettingsDialog
@@ -193,14 +184,6 @@ def _read_project_management_entries(
     return sorted(entries, key=lambda entry: entry.name.casefold())
 
 
-def _condition_template_library_signature(root_dir: Path) -> tuple[int, int, int] | None:
-    try:
-        file_stat = condition_template_library_path(root_dir).stat()
-    except OSError:
-        return None
-    return file_stat.st_mtime_ns, file_stat.st_ctime_ns, file_stat.st_size
-
-
 def experiment_test_mode_available() -> bool:
     """Return whether local experiment testing is supported on this host."""
 
@@ -263,14 +246,6 @@ class StudioController(QObject):
         self._import_bundle_progress_bridge: ProgressSignalBridge | None = None
         self._import_bundle_processing_window: StudioMainWindow | None = None
         self._import_bundle_processing_dialog: BundleImportProgressDialog | None = None
-        self._condition_template_profiles_cache: (
-            tuple[
-                Path,
-                tuple[int, int, int] | None,
-                tuple[ConditionTemplateProfile, ...],
-            ]
-            | None
-        ) = None
 
     def show_welcome(self) -> None:
         """Show the welcome window."""
@@ -486,7 +461,6 @@ class StudioController(QObject):
         self._settings.sync()
         self._fpvs_root_dir = root_dir
         self._projects_parent_dir = root_dir
-        self._normalize_fpvs_root_layout()
 
     def load_theme_mode(self) -> str:
         """Read the authoring appearance preference; Auto follows the operating system."""
@@ -727,7 +701,7 @@ class StudioController(QObject):
         """Require a valid FPVS Studio root folder before normal workflows are shown."""
 
         loaded_root_dir = self.load_fpvs_root_dir()
-        if loaded_root_dir is not None and self._normalize_fpvs_root_layout():
+        if loaded_root_dir is not None:
             return self.ensure_default_recording_configured()
 
         parent = self.main_window if self.main_window is not None else self.welcome_window
@@ -745,8 +719,7 @@ class StudioController(QObject):
             if selected_path is None:
                 continue
             self.save_fpvs_root_dir(selected_path)
-            if self._normalize_fpvs_root_layout():
-                return self.ensure_default_recording_configured()
+            return self.ensure_default_recording_configured()
 
     def show_root_folder_setup(self, parent: QWidget | None = None) -> Path | None:
         """Show root-folder guidance and optionally choose a different root folder."""
@@ -768,9 +741,7 @@ class StudioController(QObject):
         if selected_path is None:
             return None
         self.save_fpvs_root_dir(selected_path)
-        if self._normalize_fpvs_root_layout():
-            return selected_path
-        return None
+        return selected_path
 
     def _choose_fpvs_root_dir(
         self,
@@ -800,16 +771,10 @@ class StudioController(QObject):
 
         if not self.ensure_fpvs_root_configured():
             return
-        if not self._normalize_fpvs_root_layout():
-            return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         if self._fpvs_root_dir is None:
             return
-        dialog = CreateProjectDialog(
-            condition_template_profiles=self._load_condition_template_profiles(),
-            on_manage_templates=self._show_condition_template_manager,
-            parent=parent,
-        )
+        dialog = CreateProjectDialog(parent=parent)
         dialog.set_parent_directory(self._projects_parent_dir)
         if dialog.exec() != dialog.DialogCode.Accepted:
             return
@@ -819,16 +784,14 @@ class StudioController(QObject):
         self.create_project(
             dialog.project_name,
             dialog.parent_directory,
-            condition_profile_id=dialog.condition_profile_id,
             experiment_category=dialog.experiment_category,
+            starter_profile=desktop_starter_condition_profile(dialog.experiment_category),
         )
 
     def show_open_project_dialog(self) -> None:
         """Open an existing project directory."""
 
         if not self.ensure_fpvs_root_configured():
-            return
-        if not self._normalize_fpvs_root_layout():
             return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         directory = QFileDialog.getExistingDirectory(
@@ -848,8 +811,6 @@ class StudioController(QObject):
             self._manage_projects_dialog.activateWindow()
             return
         if not self.ensure_fpvs_root_configured():
-            return
-        if not self._normalize_fpvs_root_layout():
             return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         dialog = ManageProjectsDialog(
@@ -938,30 +899,16 @@ class StudioController(QObject):
         project_name: str,
         parent_dir: Path,
         *,
-        condition_profile_id: str | None = None,
         experiment_category: ExperimentCategory = ExperimentCategory.FPVS_ODDBALL,
+        starter_profile: ConditionTemplateProfile | None = None,
     ) -> ProjectDocument | None:
         """Scaffold and open a new project."""
 
-        if not self._normalize_fpvs_root_layout():
-            return None
-        condition_profile: ConditionTemplateProfile | None = None
-        root_dir = self._fpvs_root_dir
-        if condition_profile_id is not None and root_dir is not None:
-            try:
-                condition_profile = get_condition_template_profile(root_dir, condition_profile_id)
-            except KeyError as error:
-                _show_error(
-                    self.main_window or self.welcome_window,
-                    "Create Project Error",
-                    ValueError(str(error)),
-                )
-                return None
         try:
             document = ProjectDocument.create_new(
                 parent_dir=Path(parent_dir),
                 project_name=project_name,
-                condition_template_profile=condition_profile,
+                condition_template_profile=starter_profile,
                 experiment_category=experiment_category,
                 randomized_blocks=True,
             )
@@ -974,8 +921,6 @@ class StudioController(QObject):
     def open_project(self, project_location: Path) -> ProjectDocument | None:
         """Open an existing project directory or `project.json` path."""
 
-        if not self._normalize_fpvs_root_layout():
-            return None
         try:
             document = ProjectDocument.open_existing(Path(project_location))
         except Exception as error:
@@ -1005,13 +950,10 @@ class StudioController(QObject):
         dialog.setMinimumWidth(420)
         dialog.setToolTip(str(project_location))
         self._project_open_dialog = dialog
-        root_dir = self._fpvs_root_dir
 
         def read_project(
             _progress: ProgressReporter, cancel: Event,
         ) -> tuple[Path, ProjectFile, StimulusManifest | None] | None:
-            if root_dir is not None:
-                normalize_condition_template_profile_root(root_dir)
             if cancel.is_set():
                 return None
             return ProjectDocument.read_existing(Path(project_location))
@@ -1051,8 +993,6 @@ class StudioController(QObject):
         """Show application-level settings, including the FPVS Studio root folder."""
 
         if not self.ensure_fpvs_root_configured():
-            return
-        if not self._normalize_fpvs_root_layout():
             return
         parent = self.main_window if self.main_window is not None else self.welcome_window
         root_dir = self._fpvs_root_dir
@@ -1096,7 +1036,6 @@ class StudioController(QObject):
             automatic_crash_reports_status=automatic_reports.status,
             on_automatic_crash_reports_changed=automatic_reports.configure,
             on_show_root_folder_setup=self.show_root_folder_setup,
-            on_manage_condition_templates=self._show_condition_template_manager,
             on_show_library=self.show_library,
             detailed_run_exports_enabled=self.detailed_run_exports_enabled(),
             on_detailed_run_exports_changed=self.set_detailed_run_exports_enabled,
@@ -1330,8 +1269,6 @@ class StudioController(QObject):
             on_request_library_publish=(
                 self.show_library_publisher if self._developer_mode.active else None
             ),
-            on_load_condition_template_profiles=self._load_condition_template_profiles,
-            on_manage_condition_templates=self._show_condition_template_manager,
             on_load_fpvs_root_dir=self.load_fpvs_root_dir,
         )
         if (
@@ -1381,32 +1318,10 @@ class StudioController(QObject):
         self._project_versions().opened(target_window)
         self._data_sharing().opened(target_window)
 
-    def _load_condition_template_profiles(self) -> list[ConditionTemplateProfile]:
-        root_dir = self._fpvs_root_dir
-        if root_dir is None:
-            self._condition_template_profiles_cache = None
-            return []
-        cached = self._condition_template_profiles_cache
-        signature = _condition_template_library_signature(root_dir)
-        if cached is None or cached[0] != root_dir or cached[1] != signature:
-            profiles = tuple(list_condition_template_profiles(root_dir))
-            refreshed_signature = _condition_template_library_signature(root_dir)
-            if refreshed_signature != signature:
-                profiles = tuple(list_condition_template_profiles(root_dir))
-            self._condition_template_profiles_cache = (
-                root_dir,
-                refreshed_signature,
-                profiles,
-            )
-            return list(profiles)
-        return list(cached[2])
-
     def show_import_project_config_dialog(self) -> None:
         """Import a Studio `.fpvsconfig` file as a new project shell."""
 
         if not self.ensure_fpvs_root_configured():
-            return
-        if not self._normalize_fpvs_root_layout():
             return
         root_dir = self._fpvs_root_dir
         if root_dir is None:
@@ -1562,8 +1477,6 @@ class StudioController(QObject):
                 )
             return None, None
         if not self.ensure_fpvs_root_configured():
-            return None, None
-        if not self._normalize_fpvs_root_layout():
             return None, None
         root_dir = self._fpvs_root_dir
         if root_dir is None:
@@ -1785,18 +1698,6 @@ class StudioController(QObject):
         document.save()
         return True
 
-    def _show_condition_template_manager(self) -> list[ConditionTemplateProfile]:
-        if not self.ensure_fpvs_root_configured():
-            return []
-        root_dir = self._fpvs_root_dir
-        if root_dir is None:
-            return []
-        parent = self.main_window if self.main_window is not None else self.welcome_window
-        dialog = ConditionTemplateManagerDialog(root_dir=root_dir, parent=parent)
-        dialog.exec()
-        self._condition_template_profiles_cache = None
-        return self._load_condition_template_profiles()
-
     def load_manageable_project_entries(self) -> list[ProjectManagementEntry]:
         """Return projects contained by the configured FPVS Studio root."""
 
@@ -1960,21 +1861,6 @@ class StudioController(QObject):
     @staticmethod
     def _normalize_path(path: Path) -> Path:
         return Path(path).expanduser().resolve()
-
-    def _normalize_fpvs_root_layout(self) -> bool:
-        root_dir = self._fpvs_root_dir
-        if root_dir is None:
-            return True
-        try:
-            normalize_condition_template_profile_root(root_dir)
-        except Exception as error:
-            _show_error(
-                self.main_window or self.welcome_window,
-                "FPVS Root Layout Error",
-                error,
-            )
-            return False
-        return True
 
 
 class _SHFILEOPSTRUCTW(ctypes.Structure):

@@ -66,6 +66,7 @@ def _assert_fit(qtbot, window, step):
     add_bounds, duplicate_bounds, catch_bounds, remove_bounds = bounds
     assert add_bounds.top() == duplicate_bounds.top()
     assert catch_bounds.top() == remove_bounds.top()
+    assert len({button.height() for button in action_buttons}) == 1
     assert catch_bounds.top() > add_bounds.bottom()
     assert catch_bounds.right() < remove_bounds.left()
     assert catch_bounds.left() == add_bounds.left()

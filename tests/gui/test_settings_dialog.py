@@ -180,7 +180,6 @@ def test_settings_categories_fit_minimum_and_default_sizes(
         attentional_blink_pilot_mode_available=pilot_mode,
         on_show_library=(lambda: None) if library else None,
         on_show_root_folder_setup=lambda _: None,
-        on_manage_condition_templates=lambda: None,
         automatic_crash_reports_status=(
             "Crash reporting is enabled. The last report could not be sent while this "
             "computer was offline. It will be retried when a connection is available."
@@ -252,6 +251,7 @@ def test_settings_categories_fit_minimum_and_default_sizes(
             assert dialog.root_folder_value.isVisible()
             assert dialog.library_button.isVisible() is library
             assert dialog.library_button.text() == "Manage Library Access…"
+            assert page.findChild(QPushButton, "manage_condition_templates_button") is None
         if category == "Diagnostics":
             assert not page.findChildren(QLabel)
             assert dialog.crash_reports_checkbox.isVisible()

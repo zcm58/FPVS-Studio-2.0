@@ -32,11 +32,12 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
         row = QWidget(self)
         row_layout = QHBoxLayout(row)
         row_layout.setContentsMargins(0, 0, 0, 0)
+        row_layout.setSpacing(8)
         row_layout.addWidget(self.character_height_edit)
         row_layout.addWidget(self.character_unit_combo)
         row_layout.addStretch(1)
         self.form_layout.insertRow(0, "Character height", row)
-        configure_setup_form(self.form_layout)
+        configure_setup_form(self.form_layout, stacked=True)
         self.size_validation_label = QLabel(self)
         self.size_validation_label.setWordWrap(True)
         mark_error_text(self.size_validation_label)
@@ -53,10 +54,7 @@ class AttentionalBlinkCharacterSizeEditor(ImageDisplaySizeEditor):
         for control in (
             self.geometry_mode_combo, self.width_degrees_spin, self.height_degrees_spin,
         ):
-            control.hide()
-            label = self.form_layout.labelForField(control)
-            assert label is not None
-            label.hide()
+            self.form_layout.setRowVisible(control, False)
         self.full_screen_preview_button.hide()
         self.preview_value_label.hide()
         self.configure_presentation_button.hide()

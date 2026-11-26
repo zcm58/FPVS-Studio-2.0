@@ -15,6 +15,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QFormLayout,
     QFrame,
     QHeaderView,
     QLabel,
@@ -33,7 +34,10 @@ from tests.gui.helpers import (
     record_setup_validation_dialogs,
 )
 
-from fpvs_studio.core.demographics import default_demographics_questions
+from fpvs_studio.core.demographics import (
+    DEMOGRAPHICS_OPTION_COUNT_LIMIT,
+    default_demographics_questions,
+)
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.components import (
     home_page_stylesheet,
@@ -516,9 +520,34 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             QApplication.processEvents()
             _assert_visible_children_within_parent(wizard.project_step_surface)
         elif step_key == "conditions":
-            assert wizard.condition_setup_step.presentation_button.isVisible()
+            step = wizard.condition_setup_step
+            form = step.condition_details_section.findChild(QFormLayout)
+            assert form is not None
+            assert form.labelAlignment() & Qt.AlignmentFlag.AlignLeft
+            left_edge = step.condition_scope_label.x()
+            for row in range(form.rowCount()):
+                item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+                label = item.widget() if item is not None else None
+                if isinstance(label, QLabel) and label.isVisible():
+                    assert label.mapTo(step.condition_details_section, QPoint()).x() == left_edge
+            appearance, modifiers = step.presentation_button, step.task_button
+            assert appearance.isVisible() and modifiers.isVisible()
+            assert appearance.text().replace("&&", "&") == "Size, Position, & Transforms"
+            assert appearance.width() == modifiers.width()
+            assert appearance.width() >= max(
+                appearance.sizeHint().width(), modifiers.sizeHint().width(),
+            )
+            assert appearance.mapTo(step, appearance.rect().topRight()).x() == (
+                modifiers.mapTo(step, modifiers.rect().topRight()).x()
+            )
             assert wizard.condition_setup_step.base_import_button.isVisible()
             assert wizard.condition_setup_step.oddball_import_button.isVisible()
+            source_actions = (
+                wizard.condition_setup_step.base_import_button,
+                wizard.condition_setup_step.oddball_import_button,
+            )
+            assert source_actions[0].height() == source_actions[1].height()
+            assert source_actions[0].height() < wizard.setup_wizard_next_button.height()
         elif step_key == "experiment":
             assert wizard.condition_timing_table.isVisible()
             assert wizard.runtime_settings_editor.timing_controls.isVisible()
@@ -528,6 +557,18 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             timing_table = wizard.condition_timing_table.table
             assert timing_table.rowCount() == 5
             assert timing_table.verticalScrollBar().maximum() == 0
+            timing = wizard.condition_timing_table
+            assert timing.apply_button.height() == timing.discard_button.height()
+            assert timing.apply_button.height() < wizard.setup_wizard_next_button.height()
+            for row in range(timing_table.rowCount()):
+                for column in range(1, timing_table.columnCount()):
+                    cell = timing_table.cellWidget(row, column)
+                    assert cell is not None
+                    bounds = timing_table.visualRect(timing_table.model().index(row, column))
+                    assert bounds.contains(cell.geometry()), (row, column, bounds, cell.geometry())
+                    assert cell.width() >= cell.minimumWidth()
+                    if isinstance(cell, (QPushButton, QLabel)):
+                        assert cell.width() >= cell.sizeHint().width()
             assert timing_table.visualItemRect(timing_table.item(4, 0)).bottom() <= (
                 timing_table.viewport().rect().bottom()
             )
@@ -553,6 +594,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             check_button = wizard.runtime_settings_editor.detect_refresh_button
             assert check_button.text() == "Check refresh rate"
             assert check_button.width() >= check_button.sizeHint().width()
+            assert check_button.height() < wizard.setup_wizard_next_button.height()
             assert wizard.session_structure_editor.isVisible()
             assert not wizard.condition_timing_table.isVisible()
             assert wizard.runtime_settings_editor.isVisible()
@@ -585,8 +627,16 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
             assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()
 
+        if step_key == "response":
+            response_action = wizard.fixation_response_editor.response_key_button
+            assert response_action.height() < wizard.setup_wizard_next_button.height()
         surface = wizard.step_stack.currentWidget()
         if step_key == "review":
+            for section in wizard._review_summary_widgets:
+                for button in (section.fixation_edit_button, section.edit_button):
+                    if button.isVisible():
+                        assert button.height() < wizard.review_save_button.height()
+                        assert button.width() >= button.sizeHint().width()
             first_panel = next(item.section for item in wizard._review_summary_widgets
                                if item.section.isVisible())
         else:
@@ -1117,10 +1167,7 @@ def test_all_categories_use_nine_setup_steps_without_constructing_design(
     monkeypatch.setattr(
         "fpvs_studio.gui.design_setup_step.DesignSetupStep.__init__", unexpected_editor,
     )
-    guide = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    guide = SetupWizardPage(document)
     qtbot.addWidget(guide)
     guide.resize(1120, 820)
     guide.show()
@@ -1321,10 +1368,12 @@ def test_demographics_builder_validates_drafts_and_keeps_controls_visible(
     )
 
     editor._option_edits[1].setText("Second")
-    for option in range(12):
+    for option in range(2, DEMOGRAPHICS_OPTION_COUNT_LIMIT):
         qtbot.mouseClick(editor.add_option_button, click)
         editor._option_edits[-1].setText(f"Additional option {option + 1}")
     QApplication.processEvents()
+    assert len(editor._option_edits) == DEMOGRAPHICS_OPTION_COUNT_LIMIT
+    assert not editor.add_option_button.isEnabled()
     assert editor.options_scroll.verticalScrollBar().maximum() > 0
     assert editor.add_option_button.isVisible()
     assert editor.required_checkbox.isVisible()
@@ -1349,3 +1398,57 @@ def test_demographics_builder_validates_drafts_and_keeps_controls_visible(
     assert not wizard.has_pending_edits()
     assert not editor.error_label.isVisible()
     assert document.project.demographics_questions == default_demographics_questions()
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_demographics_compact_action_rows_align(qtbot, controller, tmp_path, dark):
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Question actions")
+    wizard = window.setup_wizard_page
+    palette = _verification_palette(dark=dark)
+    window.setPalette(palette)
+    wizard.setPalette(palette)
+    window.show_setup_wizard(step_key="demographics")
+    window.resize(1120, 820)
+    window.show()
+
+    step = wizard.demographics_setup_step
+    editor = step.editor
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("choice"))
+    editor.prompt_edit.setText("Which languages do you use outside of work or school?")
+    assert editor.options_panel.isVisible()
+    moves = (step.move_up_button, step.move_down_button)
+    toolbar = (
+        step.add_button, step.discard_button, step.restore_defaults_button, step.preview_button,
+    )
+
+    def assert_aligned(*buttons: QPushButton) -> None:
+        QApplication.processEvents()
+        assert all(button.isVisible() for button in buttons)
+        assert len({button.mapTo(step, QPoint()).y() for button in buttons}) == 1
+        assert len({button.height() for button in buttons}) == 1
+        for button in buttons:
+            assert button.width() >= button.sizeHint().width()
+            assert button.height() < wizard.setup_wizard_next_button.height()
+
+    assert_aligned(*toolbar)
+    assert_aligned(
+        *moves, editor.add_option_button, editor.other_button,
+        editor.duplicate_button, editor.remove_button,
+    )
+    assert step.add_button.mapTo(step, QPoint()).x() == moves[0].mapTo(step, QPoint()).x()
+    assert editor.prompt_edit.mapTo(step, QPoint()).x() == (
+        editor.add_option_button.mapTo(step, QPoint()).x()
+    )
+
+    qtbot.mouseClick(editor.other_button, Qt.MouseButton.LeftButton)
+    assert editor.other_button.text() == "Remove Other"
+    assert_aligned(*moves, editor.add_option_button, editor.other_button)
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
+
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("dropdown"))
+    assert editor.other_button.isHidden()
+    assert_aligned(*moves, editor.add_option_button, editor.duplicate_button, editor.remove_button)
+
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("text"))
+    assert editor.add_option_button.isHidden()
+    assert_aligned(*moves, editor.duplicate_button, editor.remove_button)

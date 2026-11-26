@@ -392,7 +392,6 @@ def test_picker_retries_failed_persistence_before_updating_document():
 def test_valid_root_gates_normal_workflow_on_hardware_choice(tmp_path, hardware_accepted):
     controller = _controller()
     controller.load_fpvs_root_dir = Mock(return_value=tmp_path)
-    controller._normalize_fpvs_root_layout = Mock(return_value=True)
     controller.ensure_default_recording_configured = Mock(return_value=hardware_accepted)
 
     assert controller.ensure_fpvs_root_configured() is hardware_accepted
@@ -411,16 +410,13 @@ def test_root_selection_finishes_before_hardware_picker(tmp_path):
         events.append("choose root") or tmp_path
     ))
     controller.save_fpvs_root_dir = Mock(side_effect=lambda _path: events.append("save root"))
-    controller._normalize_fpvs_root_layout = Mock(side_effect=lambda: (
-        events.append("validate root") or True
-    ))
     controller.ensure_default_recording_configured = Mock(side_effect=lambda: (
         events.append("hardware picker") or True
     ))
 
     assert controller.ensure_fpvs_root_configured() is True
 
-    assert events == ["root dialog", "choose root", "save root", "validate root", "hardware picker"]
+    assert events == ["root dialog", "choose root", "save root", "hardware picker"]
     controller.save_fpvs_root_dir.assert_called_once_with(tmp_path)
 
 

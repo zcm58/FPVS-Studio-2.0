@@ -116,7 +116,6 @@ def test_settings_controller_binds_current_theme_and_persists_callback(
     control = create()
     control._fpvs_root_dir = tmp_path
     monkeypatch.setattr(control, "ensure_fpvs_root_configured", lambda: True)
-    monkeypatch.setattr(control, "_normalize_fpvs_root_layout", lambda: True)
     control.set_theme_mode("dark")
     report = SimpleNamespace(
         enabled=False, status="", busy=False, configure=Mock(),

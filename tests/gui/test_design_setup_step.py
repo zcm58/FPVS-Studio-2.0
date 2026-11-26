@@ -130,10 +130,7 @@ def test_masking_duplicate_keeps_modifier_assignment_without_creating_image_sets
 
 def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(qtbot, tmp_path):
     document = _masking_document(tmp_path)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.resize(1120, 820)
     wizard.show()

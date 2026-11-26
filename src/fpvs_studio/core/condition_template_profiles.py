@@ -182,6 +182,24 @@ def is_supported_condition_template(profile: ConditionTemplateProfile) -> bool:
     )
 
 
+def desktop_starter_condition_profile(
+    experiment_category: ExperimentCategory,
+) -> ConditionTemplateProfile | None:
+    """Preserve Studio's default category settings without consulting the local library."""
+
+    profile_id = {
+        ExperimentCategory.FPVS_ODDBALL: STUDIO_DEFAULT_PROFILE_ID,
+        ExperimentCategory.ATTENTIONAL_BLINK: ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
+        ExperimentCategory.COGNITIVE_LOAD_FPVS: COGNITIVE_LOAD_PROFILE_ID,
+    }.get(experiment_category)
+    if profile_id is None:
+        return None
+    return next(
+        profile for profile in built_in_condition_template_profiles()
+        if profile.profile_id == profile_id
+    )
+
+
 def _normalize_library(
     library: ConditionTemplateProfileLibrary,
 ) -> ConditionTemplateProfileLibrary:

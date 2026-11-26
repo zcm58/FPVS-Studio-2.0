@@ -25,13 +25,7 @@ from tests.gui.helpers import (
     record_setup_validation_dialogs,
 )
 
-from fpvs_studio.core.condition_template_profiles import (
-    SINUSOIDAL_CONTRAST_PROFILE_ID,
-    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
-    STUDIO_DEFAULT_PROFILE_ID,
-)
-from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory
-from fpvs_studio.gui import controller as controller_module
+from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.components import studio_theme_stylesheet
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.document import ProjectDocument
@@ -57,42 +51,6 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.project_name_edit is not None
     assert project_editor.project_description_edit is not None
     assert project_editor.project_root_value is not None
-    assert project_editor.condition_profile_combo is not None
-    assert project_editor.condition_profile_combo.itemText(0) == "Continuous Images"
-    assert project_editor.condition_profile_combo.itemData(0) is not None
-    assert "(" not in project_editor.condition_profile_combo.itemText(0)
-    continuous_index = project_editor.condition_profile_combo.findData(STUDIO_DEFAULT_PROFILE_ID)
-    blank_index = project_editor.condition_profile_combo.findData(
-        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
-    )
-    contrast_index = project_editor.condition_profile_combo.findData(SINUSOIDAL_CONTRAST_PROFILE_ID)
-    assert contrast_index >= 0
-    assert project_editor.condition_profile_combo.itemText(contrast_index) == (
-        "Contrast Modulation"
-    )
-    assert (
-        project_editor.condition_profile_combo.itemData(
-            continuous_index,
-            Qt.ItemDataRole.ToolTipRole,
-        )
-        == "Use this template if you want to display one image immediately after the "
-        "previous image with no blanks in between."
-    )
-    assert (
-        project_editor.condition_profile_combo.itemData(
-            blank_index,
-            Qt.ItemDataRole.ToolTipRole,
-        )
-        == "Use this template if you'd like to display images with 50% of the image "
-        "display period being blank before the next image is shown."
-    )
-    assert "Neutral Gray (#808080)" in project_editor.condition_profile_combo.itemData(
-        contrast_index,
-        Qt.ItemDataRole.ToolTipRole,
-    )
-    assert project_editor.manage_templates_button is not None
-    assert project_editor.apply_profile_to_conditions_button is not None
-    assert project_editor.apply_profile_to_conditions_button.isVisible() is False
     assert project_editor.participant_tutorial_checkbox is not None
     assert project_editor.participant_tutorial_checkbox.text() == "Enable participant tutorial"
     assert project_editor.participant_tutorial_checkbox.toolTip()
@@ -102,8 +60,9 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert project_editor.findChild(QLabel, "project_overview_title") is None
     assert project_editor.findChild(QLabel, "project_overview_step_badge") is None
     assert project_editor.findChild(QWidget, "project_overview_checklist") is None
-    assert project_editor.findChild(QWidget, "project_condition_profile_group") is not None
-    assert project_editor.findChild(QWidget, "project_condition_profile_actions") is not None
+    assert project_editor.findChild(QWidget, "project_condition_profile_combo") is None
+    assert project_editor.findChild(QPushButton, "project_manage_templates_button") is None
+    assert project_editor.findChild(QPushButton, "apply_profile_to_conditions_button") is None
     assert dashboard.shell.title_label.text() == "Project"
     assert project_editor.project_root_value.wordWrap() is False
     assert project_editor.project_root_value.maximumHeight() <= 34
@@ -141,9 +100,10 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert not hasattr(dashboard.condition_setup_step, "variant_combo")
     assert dashboard.assets_page is window.assets_page
     assert dashboard.run_page is window.run_page
-    assert len(dashboard.progress_steps.step_items) == 8
+    assert len(dashboard.progress_steps.step_items) == 9
     step_metadata_text = "\n".join(item.toolTip() for item in dashboard.progress_steps.step_items)
     assert "Project" in step_metadata_text
+    assert "Demographics" in step_metadata_text
     assert "Conditions" in step_metadata_text
     assert "Timing" in step_metadata_text
     assert "Image Size" in step_metadata_text
@@ -153,33 +113,9 @@ def test_setup_wizard_surfaces_steps_and_keeps_shared_editors_available(
     assert "Review" in step_metadata_text
 
 
-def test_setup_project_contrast_profile_applies_required_background(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-) -> None:
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Contrast Profile")
-    dashboard = window.setup_wizard_page
-    editor = dashboard.project_overview_editor
-    contrast_index = editor.condition_profile_combo.findData(SINUSOIDAL_CONTRAST_PROFILE_ID)
-    assert contrast_index >= 0
-
-    editor.condition_profile_combo.setCurrentIndex(contrast_index)
-    QApplication.processEvents()
-
-    assert (
-        window.document.project.settings.condition_defaults.duty_cycle_mode
-        == DutyCycleMode.SINUSOIDAL
-    )
-    assert window.document.project.settings.display.background_color == "#808080"
-    assert dashboard.runtime_settings_editor.runtime_background_color_combo.currentData() == (
-        "#808080"
-    )
-
-
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"], ids=["light", "dark"])
 @pytest.mark.parametrize("has_conditions", [False, True], ids=["empty", "with-conditions"])
-def test_project_details_template_actions_fit_at_setup_default_size(
+def test_project_details_controls_fit_at_setup_minimum_and_default_size(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
@@ -190,7 +126,7 @@ def test_project_details_template_actions_fit_at_setup_default_size(
         controller,
         qtbot,
         tmp_path,
-        "Long Project Name For Template Layout Verification",
+        "Longitudinal Visual Recognition at the Cognitive Neuroscience Laboratory",
     )
     palette = QPalette(window.palette())
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -198,14 +134,15 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     window.setStyleSheet(studio_theme_stylesheet(palette))
     guide = window.setup_wizard_page
     editor = guide.project_overview_editor
+    window.document.update_fixation_settings(show_cross=True)
     if has_conditions:
         window.document.create_condition()
     description = (
         "A longitudinal assessment comparing emotional image processing over multiple "
-        "participant visits. The project uses a shared stimulus template while retaining "
+        "participant visits. The project uses a shared set of images while retaining "
         "separate results for each visit.\n\n"
         "This longer description must remain editable without displacing the experiment "
-        "template actions or participant-session controls."
+        "category and participant-session controls."
     )
     editor.project_description_edit.setPlainText(description)
 
@@ -215,20 +152,8 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     window.show()
     QApplication.processEvents()
 
-    apply_button = editor.apply_profile_to_conditions_button
-    manage_button = editor.manage_templates_button
-    qtbot.waitUntil(lambda: apply_button.isVisible() == has_conditions)
-
-    blank_profile_index = editor.condition_profile_combo.findData(
-        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
-    )
-    assert blank_profile_index >= 0
-    editor.condition_profile_combo.setCurrentIndex(blank_profile_index)
-    QApplication.processEvents()
-
-    assert apply_button.isVisible() == has_conditions
-    if has_conditions:
-        assert apply_button.isEnabled()
+    assert window.size().width() == 1120
+    assert window.size().height() == 820
     assert editor.findChild(QWidget, "project_overview_checklist") is None
     workspace = editor.project_workspace
     assert workspace.width() <= 1040
@@ -285,55 +210,16 @@ def test_project_details_template_actions_fit_at_setup_default_size(
     editor.project_name_edit.setFocus()
     qtbot.keyClick(editor.project_name_edit, Qt.Key.Key_Tab)
     assert editor.project_description_edit.hasFocus()
-    for button in (apply_button, manage_button):
-        if not button.isVisible():
-            continue
-        text_width = button.fontMetrics().horizontalAdvance(button.text())
-        assert button.width() >= text_width + 24
-        assert button.minimumWidth() >= text_width + 24
+    tutorial = editor.participant_tutorial_checkbox
+    repeat_sessions = editor.repeat_participant_sessions_checkbox
+    qtbot.keyClick(editor.project_description_edit, Qt.Key.Key_Tab)
+    assert tutorial.hasFocus()
+    qtbot.keyClick(tutorial, Qt.Key.Key_Tab)
+    assert repeat_sessions.hasFocus()
+    for checkbox in (tutorial, repeat_sessions):
+        assert checkbox.width() >= checkbox.sizeHint().width()
     assert_visible_children_within_parent(workspace)
     assert_setup_wizard_vertical_scrolling_disabled(guide)
-
-
-def test_project_template_profiles_are_cached_without_rebuilding_combo(
-    qtbot,
-    controller: StudioController,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    original_loader = controller_module.list_condition_template_profiles
-    disk_reads: list[Path] = []
-
-    def _counting_loader(root_dir: Path):
-        disk_reads.append(root_dir)
-        return original_loader(root_dir)
-
-    monkeypatch.setattr(
-        controller_module,
-        "list_condition_template_profiles",
-        _counting_loader,
-    )
-    controller._condition_template_profiles_cache = None
-    _, window = _open_created_project(controller, qtbot, tmp_path, "Cached Templates")
-    guide = window.setup_wizard_page
-    editor = guide.project_overview_editor
-    rows_removed: list[object] = []
-    rows_inserted: list[object] = []
-    editor.condition_profile_combo.model().rowsRemoved.connect(
-        lambda *args: rows_removed.append(args)
-    )
-    editor.condition_profile_combo.model().rowsInserted.connect(
-        lambda *args: rows_inserted.append(args)
-    )
-
-    initial_reads = len(disk_reads)
-    window.document.update_project_description("Refresh without changing template profiles.")
-    guide.refresh()
-    QApplication.processEvents()
-
-    assert len(disk_reads) == initial_reads
-    assert rows_removed == []
-    assert rows_inserted == []
 
 
 def test_setup_wizard_navigation_has_no_conditions_advanced_editor(
@@ -688,7 +574,7 @@ def test_conditions_next_explains_missing_requirement_only_on_click(
     assert_setup_wizard_vertical_scrolling_disabled(guide)
 
 
-def test_attentional_blink_project_shows_locked_category_and_matching_templates(
+def test_attentional_blink_project_shows_locked_category(
     qtbot, controller: StudioController, tmp_path: Path
 ) -> None:
     document = controller.create_project(
@@ -700,15 +586,13 @@ def test_attentional_blink_project_shows_locked_category_and_matching_templates(
     assert controller.main_window is not None
     window = controller.main_window
     qtbot.addWidget(window)
-    window.resize(1120, 720)
+    window.resize(1120, 820)
     window.show_setup_wizard(step_key="project")
     QApplication.processEvents()
     editor = window.setup_wizard_page.project_overview_editor
     assert isinstance(editor.experiment_category_value, QLabel)
     assert editor.experiment_category_value.text() == "Attentional-Blink"
     assert "fixed" in editor.experiment_category_value.toolTip().lower()
-    assert editor.condition_profile_combo.count() == 1
-    assert editor.condition_profile_combo.currentData() == "attentional-blink-letter-stream-v1"
     assert document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
     assert_visible_children_within_parent(editor)
 

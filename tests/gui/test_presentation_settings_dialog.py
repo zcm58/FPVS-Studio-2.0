@@ -8,12 +8,9 @@ import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
+from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox
 from tests.gui.helpers import _open_created_project, _write_image_directory
 
-from fpvs_studio.core.condition_template_profiles import (
-    built_in_condition_template_profiles,
-)
 from fpvs_studio.core.enums import (
     ImageGeometryMode,
     PresentationUnit,
@@ -35,12 +32,7 @@ from fpvs_studio.core.presentation import (
     resolve_role_presentation,
 )
 from fpvs_studio.gui.components import SectionCard
-from fpvs_studio.gui.condition_template_manager_dialog import _format_profile_details
-from fpvs_studio.gui.condition_template_profile_editor_dialog import (
-    ConditionTemplateProfileEditorDialog,
-)
 from fpvs_studio.gui.controller import StudioController
-from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.presentation_settings_dialog import (
     _PREVIEW_SAMPLE_LIMIT,
     PresentationSettingsDialog,
@@ -746,115 +738,3 @@ def test_fixation_step_authors_pre_stream_gaze_lead_in(
         lines for key, _title, lines in guide._review_checklist_sections() if key == "response"
     )
     assert any("lead-in 2.75 s" in line for line in fixation_lines)
-
-
-def test_experiment_template_editor_exposes_and_saves_presentation_defaults(qtbot) -> None:
-    profile = built_in_condition_template_profiles()[0]
-    dialog = ConditionTemplateProfileEditorDialog(
-        existing_profile_ids=set(),
-        initial_profile=profile.model_copy(update={"built_in": False}),
-    )
-    qtbot.addWidget(dialog)
-    dialog.resize(760, 760)
-    dialog.show()
-    QApplication.processEvents()
-
-    assert [dialog.tabs.tabText(index) for index in range(dialog.tabs.count())] == [
-        "General",
-        "Presentation",
-        "Fixation",
-    ]
-    editor = dialog.presentation_editor
-    assert editor.font_value_label.text() == "Arial (fixed)"
-    editor.transform_combo.setCurrentIndex(
-        editor.transform_combo.findData(StimulusTransform.MIRROR_HORIZONTAL)
-    )
-    editor.geometry_mode_combo.setCurrentIndex(
-        editor.geometry_mode_combo.findData(ImageGeometryMode.EXACT_BOX)
-    )
-    editor.geometry_width_spin.setValue(6.25)
-    editor.geometry_height_spin.setValue(5.0)
-    dialog.pre_stream_fixation_spin.setValue(2.5)
-
-    saved = dialog._build_profile()
-    assert saved.defaults.presentation.pre_stream_fixation_seconds == 2.5
-    assert saved.defaults.presentation.defaults.transform == StimulusTransform.MIRROR_HORIZONTAL
-    assert saved.defaults.presentation.defaults.image_geometry.mode == (ImageGeometryMode.EXACT_BOX)
-    details = _format_profile_details(saved)
-    assert "Presentation" in details
-    assert "Experiment Font: Arial" in details
-    assert "Pre-stream fixation: 2.5 seconds" in details
-
-
-def test_experiment_template_no_op_preserves_values_beyond_old_spin_limits(qtbot) -> None:
-    profile = built_in_condition_template_profiles()[0]
-    presentation = ProjectPresentationSettings(
-        pre_stream_fixation_seconds=82.75,
-        defaults=StimulusPresentationDefaults(
-            image_geometry=ImageGeometrySettings(
-                mode=ImageGeometryMode.EXACT_BOX,
-                width_degrees=101.5,
-                height_degrees=130.25,
-            ),
-            text_position=TextPositionSettings(
-                unit=PresentationUnit.DEGREES,
-                x=17.5,
-                y=-21.25,
-            ),
-            text_height=TextHeightScheduleSettings(values=[0.0123456789]),
-        ),
-    )
-    custom = profile.model_copy(
-        update={
-            "built_in": False,
-            "defaults": profile.defaults.model_copy(
-                update={"presentation": presentation},
-                deep=True,
-            ),
-        },
-        deep=True,
-    )
-    dialog = ConditionTemplateProfileEditorDialog(
-        existing_profile_ids=set(),
-        initial_profile=custom,
-    )
-    qtbot.addWidget(dialog)
-
-    assert dialog.pre_stream_fixation_spin.value() == 82.75
-    assert dialog.presentation_editor.geometry_width_spin.value() == 101.5
-    assert dialog.presentation_editor.geometry_height_spin.value() == 130.25
-    assert dialog.presentation_editor.position_x_spin.value() == 17.5
-    assert dialog.presentation_editor.position_y_spin.value() == -21.25
-    assert dialog.presentation_editor.text_height_values_edit.text() == "0.0123456789"
-
-    saved = dialog._build_profile()
-    assert saved.defaults.presentation == presentation
-
-
-def test_experiment_template_editor_preserves_legacy_word_height_on_no_op(qtbot) -> None:
-    profile = built_in_condition_template_profiles()[0]
-    legacy_defaults = profile.defaults.model_copy(
-        update={"presentation": legacy_project_presentation_settings(8.0)},
-        deep=True,
-    )
-    dialog = ConditionTemplateProfileEditorDialog(
-        existing_profile_ids=set(),
-        initial_profile=profile.model_copy(
-            update={"built_in": False, "defaults": legacy_defaults},
-            deep=True,
-        ),
-    )
-    qtbot.addWidget(dialog)
-
-    saved = dialog._build_profile()
-
-    assert saved.defaults.presentation.defaults.text_height.legacy_stimulus_width_fraction == 0.25
-
-
-def test_create_project_uses_experiment_template_language(qtbot) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
-    qtbot.addWidget(dialog)
-    labels = "\n".join(label.text() for label in dialog.findChildren(QLabel))
-    assert "Experiment Template" in labels
-    assert "Image Timing" not in labels
-    assert "experiment template" in dialog.condition_profile_combo.placeholderText().lower()

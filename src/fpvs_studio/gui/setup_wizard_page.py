@@ -33,7 +33,6 @@ from fpvs_studio.core.masking import condition_masking, is_masking_project
 from fpvs_studio.core.models import (
     AttentionalBlinkStreamSettings,
     Condition,
-    ConditionTemplateProfile,
 )
 from fpvs_studio.core.randomization import (
     effective_randomization_modes,
@@ -54,6 +53,8 @@ from fpvs_studio.gui.components import (
     SetupProgressStepper,
     apply_setup_wizard_theme,
     configure_setup_form,
+    mark_compact_action,
+    mark_form_field_action,
     mark_primary_action,
     mark_secondary_action,
     mark_text_role,
@@ -206,8 +207,6 @@ class SetupWizardPage(QWidget):
         self,
         document: ProjectDocument,
         *,
-        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
-        manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
         load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_return_home: Callable[[], None] | None = None,
         on_save_project: Callable[[], bool] | None = None,
@@ -247,12 +246,7 @@ class SetupWizardPage(QWidget):
         self.assets_page.hide()
         self.run_page = RunPage(document, parent=self)
         self.run_page.hide()
-        self.project_overview_editor = ProjectOverviewEditor(
-            document,
-            load_condition_template_profiles=load_condition_template_profiles,
-            manage_condition_templates=manage_condition_templates,
-            parent=self,
-        )
+        self.project_overview_editor = ProjectOverviewEditor(document, parent=self)
         self.project_overview_editor.project_description_edit.textChanged.connect(
             self.schedule_refresh
         )
@@ -261,6 +255,7 @@ class SetupWizardPage(QWidget):
             show_scope_label=False,
             parent=self,
         )
+        mark_form_field_action(self.runtime_settings_editor.detect_refresh_button)
         self.runtime_settings_editor.refresh_verification_changed.connect(self.schedule_refresh)
         self.image_display_size_editor = (
             AttentionalBlinkCharacterSizeEditor(document, parent=self)
@@ -274,6 +269,10 @@ class SetupWizardPage(QWidget):
             framed=False,
             parent=self,
         )
+        randomization = self.session_structure_editor.randomization_editor
+        for button in (randomization.condition_order_button, randomization.clear_saved_order_button,
+                       randomization.reset_patterns_button):
+            mark_compact_action(button)
         self.session_structure_page = self.session_structure_editor
         self.session_structure_editor.randomization_editor.draft_changed.connect(
             self.pending_edits_changed,
@@ -302,6 +301,7 @@ class SetupWizardPage(QWidget):
             show_preview=True,
             parent=self,
         )
+        mark_form_field_action(self.fixation_response_editor.response_key_button)
         self.fixation_settings_editor = self.fixation_response_editor
         self.fixation_cross_settings_page = self.fixation_settings_editor
         self.shell = NonHomePageShell(
@@ -714,6 +714,7 @@ class SetupWizardPage(QWidget):
         ab = self._document.project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
         refresh_group = QWidget(page)
         refresh_label = QLabel("Display refresh rate", refresh_group)
+        refresh_label.setProperty("setupMetricValue", "true")
         self.timing_refresh_hz_combo = QComboBox(page)
         self.timing_refresh_hz_combo.setObjectName("timing_refresh_hz_combo")
         self.timing_refresh_hz_combo.setAccessibleName("Display refresh rate")
@@ -1218,16 +1219,19 @@ class SetupWizardPage(QWidget):
         title_label = QLabel(section)
         mark_text_role(title_label, "sectionTitle")
         header = QHBoxLayout()
+        header.setSpacing(8)
         header.addWidget(title_label, 1)
         fixation_edit_button = QPushButton("Fixation", section)
         fixation_edit_button.setAccessibleName("Edit Fixation")
         mark_secondary_action(fixation_edit_button)
+        mark_compact_action(fixation_edit_button, inline=True)
         fixation_edit_button.clicked.connect(
             lambda: self._go_to_step_from_progress(self._step_index_for_key("fixation"))
         )
         header.addWidget(fixation_edit_button)
         edit_button = QPushButton("Edit", section)
         mark_secondary_action(edit_button)
+        mark_compact_action(edit_button, inline=True)
         edit_button.clicked.connect(
             lambda: self._go_to_step_from_progress(
                 self._step_index_for_key(str(edit_button.property("reviewStepKey")))

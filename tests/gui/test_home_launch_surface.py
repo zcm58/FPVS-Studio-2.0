@@ -242,7 +242,7 @@ def test_ab_home_shows_total_bursts_and_recall_tracking(qtbot, tmp_path: Path) -
         project_name="Attentional Blink burst recall",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
-    page = HomePage(document, load_condition_template_profiles=lambda: [])
+    page = HomePage(document)
     qtbot.addWidget(page)
     page.resize(1120, 720)
     page.show()
@@ -266,7 +266,7 @@ def test_home_counts_exact_unequal_presentations(qtbot, tmp_path, background):
     first = document.create_condition(name="Faces")
     second = document.create_condition(name="Objects")
     document.update_condition_timing(presentation_counts={first: 3, second: 2})
-    page = HomePage(document, load_condition_template_profiles=lambda: [])
+    page = HomePage(document)
     qtbot.addWidget(page)
     page.setPalette(QPalette(QColor(background)))
     page.resize(1120, 820)
@@ -1014,13 +1014,7 @@ def test_home_launch_surface_shows_only_essential_project_session_metadata(
     }
     assert "Protocol Template" not in project_labels
     assert "Template Status" not in project_labels
-    assert "Experiment Template" in project_labels
-    assert window.setup_dashboard_page.project_overview_editor.condition_profile_combo is not None
-    assert window.setup_dashboard_page.project_overview_editor.manage_templates_button is not None
-    assert (
-        window.setup_dashboard_page.project_overview_editor.apply_profile_to_conditions_button
-        is not None
-    )
+    assert "Experiment Template" not in project_labels
 
     assert condition_count_label.text() == "1"
     assert condition_count_label.property("homeValueRole") == "primary"
@@ -1094,8 +1088,6 @@ def test_configured_demographics_reach_both_launch_surfaces(qtbot, tmp_path, mon
         on_request_import_project_config=lambda: None,
         on_request_import_project_bundle=lambda: None,
         on_request_settings=lambda: None,
-        on_load_condition_template_profiles=lambda: [],
-        on_manage_condition_templates=lambda: [],
     )
 
     def _enter_participant_details(dialog):

@@ -92,10 +92,7 @@ def test_fixation_count_choices_preserve_participant_timing_policy(
         target_count_mode=count_mode, changes_per_sequence=2,
         target_count_min=2, target_count_max=3, no_immediate_repeat_count=False,
     )
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     palette = wizard.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -534,10 +531,7 @@ def test_plain_language_choices_fit_session_and_review(
         document.project.settings.session.fixation_seed = None
         document.project.settings.session.session_seed = 2**40
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     palette = wizard.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -620,8 +614,8 @@ def test_failed_choice_draft_blocks_navigation_until_retry(
     document, _first, _second = _document(tmp_path)
     home_calls = []
     wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [], on_return_home=lambda: home_calls.append(True),
+        document,
+        on_return_home=lambda: home_calls.append(True),
     )
     qtbot.addWidget(wizard)
     wizard.resize(1120, 820)

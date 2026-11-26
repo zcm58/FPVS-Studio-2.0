@@ -10,11 +10,6 @@ from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QFileDialog, QLabel
 from tests.gui.helpers import assert_visible_children_within_parent
 
-from fpvs_studio.core.condition_template_profiles import (
-    COGNITIVE_LOAD_PROFILE_ID,
-    STUDIO_DEFAULT_PROFILE_ID,
-    built_in_condition_template_profiles,
-)
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 
@@ -84,12 +79,11 @@ def test_creation_library_choice_needs_no_manual_fields(qtbot, tmp_path, key) ->
     assert dialog.result() == QDialog.DialogCode.Accepted
     assert dialog.from_library
     assert dialog.project_name == ""
-    assert dialog.condition_profile_id is None
     assert list(tmp_path.iterdir()) == []
 
 
 def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.set_parent_directory(tmp_path)
     dialog.show()
@@ -99,8 +93,6 @@ def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> Non
     dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL].click()
     dialog.accept()
     dialog.project_name_edit.setText("Recognition Study")
-    dialog.condition_profile_combo.setCurrentIndex(1)
-    selected_profile = dialog.condition_profile_id
     dialog.back_button.click()
     assert dialog.category_stack.currentWidget() is dialog.category_page
     dialog.back_button.click()
@@ -111,65 +103,16 @@ def test_creation_back_navigation_preserves_manual_draft(qtbot, tmp_path) -> Non
     assert dialog.category_stack.currentWidget() is dialog.details_page
     assert dialog.project_name == "Recognition Study"
     assert dialog.parent_directory == tmp_path
-    assert dialog.condition_profile_id == selected_profile
+    assert dialog.experiment_category == ExperimentCategory.FPVS_ODDBALL
     assert not dialog.from_library
     dialog.reject()
     assert list(tmp_path.iterdir()) == []
 
 
-def test_creation_oddball_filters_templates_and_preserves_selection(qtbot) -> None:
-    profiles = built_in_condition_template_profiles()
-    cognitive = next(
-        profile for profile in profiles if profile.profile_id == COGNITIVE_LOAD_PROFILE_ID
-    )
-    legacy = cognitive.model_copy(update={
-        "profile_id": "lab-counting-study", "display_name": "Lab counting study", "built_in": False,
-    })
-    dialog = CreateProjectDialog(condition_template_profiles=[*profiles, legacy])
-    qtbot.addWidget(dialog)
-    dialog.show()
-    qtbot.mouseClick(dialog.manual_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(
-        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton,
-    )
-    continue_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
-    assert continue_button is not None
-    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-    assert dialog.category_summary_label.text() == "FPVS-Oddball"
-    assert dialog.condition_profile_id == STUDIO_DEFAULT_PROFILE_ID
-    assert {
-        dialog.condition_profile_combo.itemData(index)
-        for index in range(dialog.condition_profile_combo.count())
-    } == {
-        profile.profile_id for profile in profiles
-        if profile.experiment_category == ExperimentCategory.FPVS_ODDBALL
-    }
-    dialog.condition_profile_combo.setCurrentIndex(1)
-    selected = next(
-        profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
-    )
-    qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
-    qtbot.mouseClick(continue_button, Qt.MouseButton.LeftButton)
-    assert dialog.condition_profile_id == selected.profile_id
-    assert dialog.template_description_label.text() == selected.description
-
-
 @pytest.mark.parametrize("size", [(760, 500), (800, 500)])
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 def test_creation_details_fit_with_long_content(qtbot, size, background) -> None:
-    profiles = built_in_condition_template_profiles()
-    profile = next(
-        profile for profile in profiles if profile.profile_id == STUDIO_DEFAULT_PROFILE_ID
-    ).model_copy(
-        update={
-            "display_name": "Paired image conditions with backward counting and baseline",
-            "description": (
-                "Three image conditions with paired no-load and backward-counting variants. "
-                "Review the stimulus sources and pre-tasks for each pair before collecting data."
-            ),
-        }
-    )
-    dialog = CreateProjectDialog(condition_template_profiles=[profile])
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     palette = dialog.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -188,9 +131,6 @@ def test_creation_details_fit_with_long_content(qtbot, size, background) -> None
     _assert_details_fit(dialog)
     assert (dialog.width(), dialog.height()) == size
     assert dialog.category_summary_label.text() == "FPVS-Oddball"
-    assert dialog.template_description_label.text() == profile.description
-    assert dialog.template_description_label.textFormat() == Qt.TextFormat.PlainText
-    assert dialog.condition_profile_combo.toolTip() == profile.display_name
     assert dialog.folder_hint_label.text() == (
         "New folder: visual-recognition-follow-up-study"
     )
@@ -204,7 +144,8 @@ def test_creation_details_fit_with_long_content(qtbot, size, background) -> None
     assert dialog.project_root_edit.selectedText() == full_path
     visible_labels = [label.text() for label in dialog.findChildren(QLabel) if label.isVisible()]
     assert "Name your experiment" in visible_labels
-    assert "Experiment Template" in visible_labels
+    assert "Experiment Template" not in visible_labels
+    assert {"Project Name", "Save Location"}.issubset(visible_labels)
 
     create_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Ok)
     cancel_button = dialog.button_box.button(QDialogButtonBox.StandardButton.Cancel)
@@ -218,68 +159,23 @@ def test_creation_details_fit_with_long_content(qtbot, size, background) -> None
     )
 
 
-def test_creation_summaries_follow_name_template_and_category(qtbot) -> None:
-    profiles = built_in_condition_template_profiles()
-    dialog = CreateProjectDialog(condition_template_profiles=profiles)
+def test_creation_folder_hint_follows_project_name(qtbot) -> None:
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
     dialog.show()
-    assert dialog.condition_profile_id == STUDIO_DEFAULT_PROFILE_ID
     empty_hint = dialog.folder_hint_label.text()
     assert empty_hint and "New folder:" not in empty_hint
     dialog.project_name_edit.setText("  Recognition Study 2  ")
     assert dialog.folder_hint_label.text() == "New folder: recognition-study-2"
     dialog.project_name_edit.clear()
     assert dialog.folder_hint_label.text() == empty_hint
-
-    assert dialog.condition_profile_combo.count() > 1
-    selected = next(
-        profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
-    )
-    assert dialog.template_description_label.text() == selected.description
-    qtbot.mouseClick(dialog.back_button, Qt.MouseButton.LeftButton)
-    assert dialog.category_stack.currentWidget() is dialog.category_page
-    assert dialog.back_button.isVisible()
-    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
-    dialog.accept()
-    dialog.condition_profile_combo.setCurrentIndex(1)
-    selected = next(
-        profile for profile in profiles if profile.profile_id == dialog.condition_profile_id
-    )
-    assert dialog.template_description_label.text() == selected.description
     _assert_details_fit(dialog)
-
-    dialog.set_condition_template_profiles([], preserve_selection=False)
-    assert dialog.condition_profile_id is None
-    assert dialog.template_description_label.text() != selected.description
-    _assert_details_fit(dialog)
-
-
-def test_creation_template_summary_refreshes_after_managing_templates(qtbot) -> None:
-    profile = next(
-        profile
-        for profile in built_in_condition_template_profiles()
-        if profile.profile_id == STUDIO_DEFAULT_PROFILE_ID
-    )
-    updated = profile.model_copy(update={"description": "Updated presentation for this study."})
-    dialog = CreateProjectDialog(
-        condition_template_profiles=[profile], on_manage_templates=lambda: [updated]
-    )
-    qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
-    dialog.accept()
-    dialog.show()
-    qtbot.mouseClick(dialog.manage_templates_button, Qt.MouseButton.LeftButton)
-    assert dialog.condition_profile_id == profile.profile_id
-    assert dialog.template_description_label.text() == updated.description
 
 
 def test_creation_tab_order_follows_visible_field_order(qtbot) -> None:
-    profiles = built_in_condition_template_profiles()
-    dialog = CreateProjectDialog(
-        condition_template_profiles=profiles, on_manage_templates=lambda: profiles
-    )
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
@@ -288,8 +184,6 @@ def test_creation_tab_order_follows_visible_field_order(qtbot) -> None:
     dialog.project_name_edit.setFocus()
     field_order = (
         dialog.project_name_edit,
-        dialog.condition_profile_combo,
-        dialog.manage_templates_button,
         dialog.project_root_edit,
         dialog.project_root_browse_button,
     )
@@ -302,7 +196,7 @@ def test_creation_tab_order_follows_visible_field_order(qtbot) -> None:
 def test_creation_folder_preview_and_cancel_do_not_create_files(
     qtbot, tmp_path: Path, monkeypatch
 ) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.set_parent_directory(tmp_path)
     dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
