@@ -34,7 +34,7 @@ from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import desktop_starter_condition_profile
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.library_origin import LibraryProjectOrigin
-from fpvs_studio.core.models import ProjectFile, ProjectRecordingSettings
+from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile, ProjectRecordingSettings
 from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
@@ -785,6 +785,7 @@ class StudioController(QObject):
             dialog.project_name,
             dialog.parent_directory,
             experiment_category=dialog.experiment_category,
+            starter_profile=desktop_starter_condition_profile(dialog.experiment_category),
         )
 
     def show_open_project_dialog(self) -> None:
@@ -899,6 +900,7 @@ class StudioController(QObject):
         parent_dir: Path,
         *,
         experiment_category: ExperimentCategory = ExperimentCategory.FPVS_ODDBALL,
+        starter_profile: ConditionTemplateProfile | None = None,
     ) -> ProjectDocument | None:
         """Scaffold and open a new project."""
 
@@ -906,7 +908,7 @@ class StudioController(QObject):
             document = ProjectDocument.create_new(
                 parent_dir=Path(parent_dir),
                 project_name=project_name,
-                condition_template_profile=desktop_starter_condition_profile(experiment_category),
+                condition_template_profile=starter_profile,
                 experiment_category=experiment_category,
                 randomized_blocks=True,
             )
