@@ -49,6 +49,8 @@ def runtime_metadata_for_run(
     return RuntimeMetadata(
         engine_name=engine_name,
         engine_version=psychopy_version,
+        test_mode=bool(runtime_options.get("experiment_test_mode", False)),
+        pilot_mode=bool(runtime_options.get("pilot_mode", False)),
         python_version=sys.version.split()[0],
         display_index=display_index,
         monitor_name=monitor_name,

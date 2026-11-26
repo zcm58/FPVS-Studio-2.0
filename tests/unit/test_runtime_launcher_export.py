@@ -48,6 +48,7 @@ from fpvs_studio.runtime.session_export import (
     write_run_artifacts,
     write_session_artifacts,
 )
+from fpvs_studio.triggers.base import TriggerBackend
 
 
 @pytest.fixture(autouse=True)
@@ -63,6 +64,47 @@ def _stable_native_display_mode(monkeypatch: pytest.MonkeyPatch) -> None:
             mode_reference="60/1",
         ),
     )
+
+
+@pytest.mark.parametrize(
+    "participant,test_mode,pilot_mode",
+    [("0", True, False), ("009", False, True), ("009", False, False), ("00", False, False)],
+    ids=["experiment-test", "pilot", "research", "admin-id-without-test-mode"],
+)
+def test_session_records_selected_launch_modes(
+    sample_project, sample_project_root, monkeypatch, participant, test_mode, pilot_mode,
+):
+    plan = compile_session_plan(sample_project, refresh_hz=60, project_root=sample_project_root)
+    serial = Mock(spec=TriggerBackend, backend_name="serial", emits_external_markers=True,
+                  emits_hardware_triggers=True)
+    monkeypatch.setattr("fpvs_studio.runtime.triggers.SerialBackend", Mock(return_value=serial))
+    register_engine("stub-modes", lambda: StubEngine({}))
+    try:
+        summary = launch_session(
+            sample_project_root, plan, participant_number=participant,
+            launch_settings=LaunchSettings(
+                engine_name="stub-modes", experiment_test_mode=test_mode, pilot_mode=pilot_mode,
+                serial_enabled=not (test_mode or pilot_mode), export_mode=EXPORT_MODE_COMPACT,
+            ),
+        )
+    finally:
+        unregister_engine("stub-modes")
+    assert summary.run_results
+    for item in [summary, *summary.run_results]:
+        assert item.runtime_metadata.test_mode is test_mode
+        assert item.runtime_metadata.pilot_mode is pilot_mode
+    workbook = load_workbook(sample_project_root / "logs/participant_summary.xlsx", read_only=True)
+    try:
+        rows = workbook["Fixation by Condition"].values
+        headers = next(rows)
+        records = [dict(zip(headers, values, strict=True)) for values in rows]
+        assert records
+        for record in records:
+            assert record["Test Mode"] == ("Yes" if test_mode else "No")
+            assert record["Pilot Mode"] == ("Yes" if pilot_mode else "No")
+            assert record["Test Participant"] == ("Yes" if participant in {"0", "00"} else "No")
+    finally:
+        workbook.close()
 
 
 @pytest.mark.parametrize("export_mode", [EXPORT_MODE_FULL, EXPORT_MODE_COMPACT])

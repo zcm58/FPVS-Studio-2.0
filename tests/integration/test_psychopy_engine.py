@@ -77,4 +77,4 @@ def test_psychopy_engine_can_execute_tiny_runspec(
     assert summary.completed_frames == run_spec.display.total_frames
     assert summary.runtime_metadata is not None
     assert summary.run_mode is RunMode.SESSION
-    assert summary.runtime_metadata.test_mode is False
+    assert summary.runtime_metadata.test_mode is True
