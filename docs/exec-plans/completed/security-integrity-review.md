@@ -15,6 +15,9 @@ Status: Completed
   two legitimate journal entries for an interrupted backward-counting interval.
 - Corrected results cleanup inventory and rollback around links, Windows junctions
   and workbooks created after inventory.
+- Fixed a participant-launch callback that could continue after its Qt owner was
+  destroyed during a nested save or confirmation. Both Home and Run stop launch
+  when their owner is destroyed and retain the usual live-window error dialog.
 - Raised the engine's GitPython minimum to 3.2.1. The [security contract](../../SECURITY.md)
   records the supported imaging stack's remaining advisory exposure.
 
@@ -22,6 +25,13 @@ Status: Completed
 
 The Windows precommit run passed 6,673 tests, with 41 platform or permission
 skips. The Windows and Darwin type checks and repository audits passed.
+
+On the native Windows desktop, seven new regression cases exercised disposal
+during participant confirmation or save. The ordinary asynchronous preview-to-run
+case passed. Two shutdown cases, a failed condition-order save followed by retry,
+and a simulated 144 Hz selected-display refresh check also passed. These twelve
+cases passed on both the supported Python 3.10 environment and the independent
+Python 3.11 trial. The display routing check uses a fake measurement engine.
 
 Against baseline `f325278`, a seeded sample produced byte-identical compiled runs
 at 60, 60.02 and 120 Hz. All 45 uncompressed parts across four workbook types

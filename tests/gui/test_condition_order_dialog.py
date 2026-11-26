@@ -486,13 +486,13 @@ def test_stale_worker_and_save_results_never_replace_current_setup(
 def test_save_failure_keeps_file_and_model_then_retry_persists_same_list(
     qtbot, monkeypatch, tmp_path, preview_jobs,
 ):
-    from fpvs_studio.gui import document as document_module
+    from fpvs_studio.core import study_versions
 
     document, first, second = _document(tmp_path)
     document.save()
     before = document.project.model_copy(deep=True)
     saved_bytes = document.project_file_path.read_bytes()
-    writer = document_module.save_project_file
+    revisions = study_versions.list_working_revisions(document.project_root)
     table = ConditionTimingTable(document)
     qtbot.addWidget(table)
     table.presentation_count_spins[first].setValue(3)
@@ -501,11 +501,11 @@ def test_save_failure_keeps_file_and_model_then_retry_persists_same_list(
 
     error = PermissionError(13, "Access is denied", str(document.project_file_path))
 
-    def fail(*_args):
-        raise error
-
-    monkeypatch.setattr(document_module, "save_project_file", fail)
-    dialog.save()
+    failed_write = Mock(side_effect=error)
+    with monkeypatch.context() as patch:
+        patch.setattr(study_versions, "save_project_file", failed_write)
+        dialog.save()
+    failed_write.assert_called_once()
     assert "folder" in dialog.error_label.text()
     assert "[Errno" not in dialog.error_label.text()
     assert table.error_label.toolTip() == str(error)
@@ -517,9 +517,10 @@ def test_save_failure_keeps_file_and_model_then_retry_persists_same_list(
     assert document.project == before
     assert document.project_file_path.read_bytes() == saved_bytes
     assert table.pending_presentation_counts() == {first: 3}
-    monkeypatch.setattr(document_module, "save_project_file", writer)
+    assert study_versions.list_working_revisions(document.project_root) == revisions
     dialog.save()
     reopened = ProjectDocument.open_existing(document.project_root)
+    assert len(study_versions.list_working_revisions(document.project_root)) == len(revisions) + 1
     assert reopened.project.settings.session.saved_condition_order == (
         [first, second, first, second, first]
     )

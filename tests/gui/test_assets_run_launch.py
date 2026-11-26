@@ -612,10 +612,12 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
     preflight_session_ids: list[str] = []
     launched_session_ids: list[str] = []
 
-    def _capture_compile(*, refresh_hz, condition_ids=None):
+    def _capture_compile(*, refresh_hz, condition_ids=None, resolved_seeds=None):
         compile_calls.append(refresh_hz)
         assert condition_ids is None
-        return original_compile(refresh_hz=refresh_hz, condition_ids=condition_ids)
+        return original_compile(
+            refresh_hz=refresh_hz, condition_ids=condition_ids, resolved_seeds=resolved_seeds,
+        )
 
     def _capture_preflight_compiled(_project_root, session_plan, **_kwargs):
         preflight_session_ids.append(session_plan.session_id)
@@ -649,12 +651,10 @@ def test_launch_after_preview_recompiles_and_preflights_once_per_click(
         lambda *args, **kwargs: QMessageBox.StandardButton.Ok,
     )
 
-    window.run_page.launch_session()
-
+    with qtbot.waitSignal(window.run_page.launch_finished):
+        window.run_page.launch_session()
     assert len(compile_calls) == 1
-    qtbot.waitUntil(lambda: bool(preflight_session_ids))
     assert len(preflight_session_ids) == 1
-    qtbot.waitUntil(lambda: bool(launched_session_ids))
     assert launched_session_ids == preflight_session_ids
     assert "runtime launch completed" in window.run_page.summary_text.toPlainText().lower()
 

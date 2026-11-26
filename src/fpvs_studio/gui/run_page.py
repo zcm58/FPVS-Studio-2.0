@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from fpvs_studio.core.demographics import (
     DemographicsQuestion,
@@ -215,11 +216,16 @@ class ParticipantSessionCheckTask(QObject):
                 )
                 if dialog.exec() != int(QDialog.DialogCode.Accepted):
                     session_number = None
+        # The modal or either signal handler can process the owner's destruction.
+        if not isValid(self):
+            return
         self.finished.emit()
-        # A modal confirmation or a finished handler can begin shutdown too.
+        if not isValid(self):
+            return
         if session_number is not None and not update_lifecycle().is_shutting_down:
             self.confirmed.emit(session_number)
-        self.deleteLater()
+        if isValid(self):
+            self.deleteLater()
 
 
 class ParticipantNumberDialog(QDialog):
@@ -997,7 +1003,10 @@ class RunPage(QWidget):
                 )
                 self._document.save()
             except Exception as error:
-                _show_runtime_error_dialog(self, "Launch Blocked", error)
+                if isValid(self):
+                    _show_runtime_error_dialog(self, "Launch Blocked", error)
+                return
+            if not isValid(self):
                 return
         try:
             resolved_seeds = self._document.prepare_participant_randomization(

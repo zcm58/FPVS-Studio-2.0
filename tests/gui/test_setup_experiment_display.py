@@ -406,10 +406,13 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
 ) -> None:
     measured_refresh = {"value": 143.92}
     windows_mode = {"numerator": 144, "denominator": 1, "signal": None}
+    display_name = r"\\.\DISPLAY1"
 
     class _FakeEngine:
         def measure_refresh_hz(self, *, runtime_options=None) -> float:
-            assert runtime_options == {"fullscreen": True, "display_index": None}
+            assert runtime_options == {
+                "fullscreen": True, "display_index": None, "display_device_name": display_name,
+            }
             return measured_refresh["value"]
 
     monkeypatch.setattr(
@@ -424,7 +427,7 @@ def test_setup_wizard_fpvs_rates_persist_and_report_exact_or_approximate_timing(
         "fpvs_studio.runtime.display_refresh.query_primary_native_display_mode",
         lambda: NativeDisplayMode(
             platform_name="Windows",
-            display_name=r"\\.\DISPLAY1",
+            display_name=display_name,
             refresh_hz=windows_mode["numerator"] / windows_mode["denominator"],
             source_name="QueryDisplayConfig",
             exact_refresh=True,
