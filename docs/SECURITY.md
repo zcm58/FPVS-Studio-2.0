@@ -66,14 +66,28 @@ dependencies are counted separately from exploitable Studio transfer paths; dupl
 advisory records are not separate vulnerabilities. `pyproject.toml` records security
 floors for compatible dependencies already required by the selected extras.
 
-Two upstream restrictions remain explicit:
+On November 26, 2026, a check of the installed direct Windows desktop and engine
+requirements against PyPI advisory metadata identified an additional GitPython
+submodule advisory. Engine installations now require GitPython 3.2.1 or later.
+Studio's project import does not use Git submodules.
+[GitPython advisory](https://github.com/gitpython-developers/GitPython/security/advisories/GHSA-83vg-56qc-22m7)
 
-- MoviePy 2.2.1, required by PsychoPy, requires Pillow below 12. The newest compatible
-  Pillow is 11.3.0. [Pillow's PSD advisory](https://github.com/python-pillow/Pillow/security/advisories/GHSA-cfh3-3jmp-rvhc)
-  documents decoder restrictions as a workaround; the Studio boundaries above also
-  exclude FITS and other affected unsupported formats. The installed package still
-  carries advisory matches and must not be described as fully patched. Move to Pillow
-  12.3+ only with a supported MoviePy/PsychoPy dependency graph and runtime acceptance.
+The supported build still has these dependency constraints:
+
+- MoviePy 2.2.1 requires Pillow below 12. The current build uses Pillow 11.3.0.
+  Studio's decoder allowlist excludes formats such as PSD and FITS. It also admits
+  TIFF in several workflows, including image inspection. New upstream fixes cover
+  supported image paths, including compressed TIFF. Use trusted images and bundles
+  with this build. Pillow 13 requires Python 3.11 or later, and a production change
+  needs a compatible engine dependency set, stimulus parity and acquisition checks.
+  [Pillow security fixes](https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html)
+  · [MoviePy 2.2.1 metadata](https://pypi.org/pypi/moviepy/2.2.1/json)
+- Soup Sieve 4.0 fixes a selector denial of service and requires Python 3.11.5 or
+  later. The Windows 3.10 engine environment still carries the affected dependency.
+  No Studio code path was identified that processes operator-supplied CSS selectors
+  or HTML with Soup Sieve.
+  [Soup Sieve advisory](https://github.com/facelessuser/soupsieve/security/advisories/GHSA-mmhr-3c5m-f64f)
+  · [Release metadata](https://pypi.org/pypi/soupsieve/4.0/json)
 - PsychoPy 2026.1.1 pins setuptools 78.1.1. Its
   [source-distribution exclusion advisory](https://github.com/pypa/setuptools/security/advisories/GHSA-h35f-9h28-mq5c)
    has a scanner-reported fix floor of 83.0.0, but the upstream advisory currently names

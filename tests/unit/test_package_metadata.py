@@ -146,6 +146,16 @@ def test_default_install_requires_pyside6_but_keeps_psychopy_optional() -> None:
     assert "pyinstaller" in packaging_dependencies_block
 
 
+def test_engine_requires_gitpython_with_patched_submodule_handling() -> None:
+    requirements = [
+        Requirement(value)
+        for value in ast.literal_eval(f"[{_extract_list_assignment('engine')}]")
+    ]
+    gitpython = next(item for item in requirements if item.name.lower() == "gitpython")
+    assert "3.1.60" not in gitpython.specifier
+    assert "3.2.0" not in gitpython.specifier
+
+
 @pytest.mark.parametrize("platform_name", ["win32", "linux", "darwin"])
 def test_mac_qt_constraint_preserves_windows_and_linux_dependency_range(platform_name) -> None:
     requirements = [
