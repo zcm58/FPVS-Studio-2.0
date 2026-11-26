@@ -20,6 +20,9 @@ Status: Completed
 
 ## Verification
 
+The Windows precommit run passed 6,673 tests, with 41 platform or permission
+skips. The Windows and Darwin type checks and repository audits passed.
+
 Against baseline `f325278`, a seeded sample produced byte-identical compiled runs
 at 60, 60.02 and 120 Hz. All 45 uncompressed parts across four workbook types
 and a migrated CSV matched with fixed inputs and timestamps. Consolidation retained
