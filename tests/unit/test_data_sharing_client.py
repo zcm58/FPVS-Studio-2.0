@@ -121,6 +121,41 @@ def test_pending_results_http_error_is_bounded_and_safe(monkeypatch, payload, ex
     assert stream.closed
 
 
+@pytest.mark.parametrize("stop", ["cancel", "deadline"])
+def test_interrupted_error_response_stops_after_the_current_read(monkeypatch, stop):
+    import fpvs_studio.data_sharing.client as module
+
+    cancel = Event()
+    now = [0.0]
+
+    class PartialError(BytesIO):
+        def read(self, size=-1):
+            pytest.fail("An error response must be read one socket chunk at a time")
+
+        def read1(self, size=-1):
+            assert self.tell() == 0
+            if stop == "cancel":
+                cancel.set()
+            else:
+                now[0] += module.REQUEST_DEADLINE_SECONDS + 1
+            return super().read(1)
+
+    body = PartialError(b"{}")
+    headers = Message()
+    headers["Content-Type"] = "application/json"
+
+    class Opener:
+        def open(self, *args, **kwargs):
+            raise HTTPError(ORIGIN, 403, "Forbidden", headers, body)
+
+    monkeypatch.setattr(module, "build_opener", lambda *_: Opener())
+    monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
+    with pytest.raises(DataSharingError) as failure:
+        http_transport("POST", ORIGIN + "/results/v1/enroll", b"{}", {}, cancel)
+    assert failure.value.code == ("cancelled" if stop == "cancel" else "timeout")
+    assert body.closed
+
+
 def profile():
     return SharingProfile(
         experiment_id="study",

@@ -15,7 +15,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QApplication
 from shiboken6 import isValid
 
-from fpvs_studio.core.data_sharing import SharingStudyChoices, protocol_fingerprint
+from fpvs_studio.core.data_sharing import SharingProfile, SharingStudyChoices, protocol_fingerprint
 from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.data_sharing import service
@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 _LOGGER = logging.getLogger(__name__)
 _RETRY_LIMIT = 4
 _STOPPING_MESSAGE = "Stopping uploads… An in-flight report may already have been received."
-ActionValue = str | bool | tuple[str, str] | CaptureArchiveReview | None
+ActionValue = str | bool | tuple[str, str] | CaptureArchiveReview | SharingProfile | None
 
 
 class DataSharingController(QObject):
@@ -355,6 +355,7 @@ class DataSharingController(QObject):
             ):
                 result = backend.sync_project(
                     root, fingerprint, cancel, release_held=operation == "retry",
+                    retry_profile=cast(SharingProfile, value) if operation == "retry" else None,
                     retry_offline=operation == "startup", fetch_comparison=operation != "startup",
                 )
             return fingerprint, result, studies
@@ -489,7 +490,11 @@ class DataSharingController(QObject):
                 QDesktopServices.openUrl(QUrl(
                     f"{DataSharingClient.configured().origin}/projects/{profile.project_id}"
                 ))
-        elif action in {"retry", "disconnect", "archive", "protocol", "review", "discover"}:
+        elif action == "retry":
+            if self._view is not None and self._view.settings.profile is not None:
+                self._retries = 0
+                self._request(action, self._view.settings.profile)
+        elif action in {"disconnect", "archive", "protocol", "review", "discover"}:
             self._retries = 0
             self._request(action)
 

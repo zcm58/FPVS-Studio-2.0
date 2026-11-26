@@ -371,16 +371,23 @@ def queue_report(
         return record
 
 
+def read_record(root: Path, report_id: str) -> OutboxRecord:
+    return read_bounded_model(_record_path(root, report_id), OutboxRecord, MAX_RECORD_BYTES)
+
+
 def read_payload(root: Path, report_id: str) -> bytes:
-    record = read_bounded_model(_record_path(root, report_id), OutboxRecord, MAX_RECORD_BYTES)
-    return record.payload_json.encode("utf-8")
+    return read_record(root, report_id).payload_json.encode("utf-8")
 
 
-def update_record(root: Path, record: OutboxRecord) -> None:
+def update_record(
+    root: Path, record: OutboxRecord, *, expected: OutboxRecord | None = None,
+) -> bool:
     record = OutboxRecord.model_validate(record.model_dump())
     path = _record_path(root, record.report_id)
     with _storage_lock(root):
         previous = read_bounded_model(path, OutboxRecord, MAX_RECORD_BYTES)
+        if expected is not None and previous != expected:
+            return False
         for field in (
             "payload_json",
             "payload_sha256",
@@ -398,12 +405,15 @@ def update_record(root: Path, record: OutboxRecord) -> None:
         if previous.state == "held" and record.state == "pending":
             record = record.model_copy(update={"state": "held"})
         _save_record(root, record)
+        return True
 
 
-def release_held(root: Path) -> None:
+def release_held(root: Path, *, expected_profile: SharingProfile | None = None) -> None:
     _settings_path(root)
     with _storage_lock(root):
         settings = load_settings(root)
+        if expected_profile is not None and settings.profile != expected_profile:
+            raise DataSharingCancelled()
         if not settings.enabled or settings.profile is None:
             raise SharingStorageError("Enable sharing before explicitly retrying held reports.")
         for record in _records(root):

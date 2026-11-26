@@ -26,7 +26,7 @@ from fpvs_studio.core.data_sharing import DeliveryReceipt, SessionReport, Sharin
 from fpvs_studio.core.library_origin import LibraryProjectOrigin, save_library_origin
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.data_sharing.client import DataSharingClient
-from fpvs_studio.data_sharing.errors import DataSharingError
+from fpvs_studio.data_sharing.errors import DataSharingCancelled, DataSharingError
 from fpvs_studio.data_sharing.service import (
     archive_project,
     disconnect_project,
@@ -614,6 +614,75 @@ def test_inflight_optout_keeps_receipt_and_prevents_next_report(tmp_path):
     sync_project(tmp_path, HASH, Event(), client=client(transport))
     assert len(sends) == 1
     assert sorted(row.state for row in list_records(tmp_path)) == ["held", "uploaded"]
+
+
+def test_off_then_on_during_sync_preserves_hold_for_remaining_reports(tmp_path):
+    enable(tmp_path)
+    for _ in range(2):
+        queue_report(tmp_path, report())
+    sends = []
+
+    def transport(method, url, body, headers, cancel):
+        sends.append(body)
+        set_sharing_enabled(tmp_path, False, HASH, Event())
+        set_sharing_enabled(tmp_path, True, HASH, Event())
+        return receipt_bytes(body)
+
+    sync_project(tmp_path, HASH, Event(), client=client(transport), fetch_comparison=False)
+    assert len(sends) == 1
+    records = list_records(tmp_path)
+    assert sorted(row.state for row in records) == ["held", "uploaded"]
+    assert next(row for row in records if row.state == "held").attempt_count == 0
+
+
+def test_off_then_on_during_credential_lookup_preserves_hold(tmp_path):
+    enable(tmp_path)
+    queued = queue_report(tmp_path, report())
+    saved = Store(credential())
+
+    def lookup(*_args):
+        set_sharing_enabled(tmp_path, False, HASH, Event())
+        set_sharing_enabled(tmp_path, True, HASH, Event())
+        return saved
+
+    backend = DataSharingClient(
+        ORIGIN, store_factory=lookup, transport=lambda *_: pytest.fail("Held report sent"),
+    )
+    with pytest.raises(DataSharingCancelled):
+        sync_project(tmp_path, HASH, Event(), client=backend, fetch_comparison=False)
+    held, = list_records(tmp_path)
+    assert (held.state, held.payload_json) == ("held", queued.payload_json)
+
+
+def test_late_upload_failure_preserves_operator_hold(tmp_path):
+    enable(tmp_path)
+    queued = queue_report(tmp_path, report())
+
+    def transport(*_args):
+        set_sharing_enabled(tmp_path, False, HASH, Event())
+        raise DataSharingError("Synthetic storage limit", code="storage_limit")
+
+    view = sync_project(tmp_path, HASH, Event(), client=client(transport), fetch_comparison=False)
+    assert view.held_count == 1 and view.status == "off"
+    held, = list_records(tmp_path)
+    assert (held.state, held.payload_json) == ("held", queued.payload_json)
+
+
+def test_explicit_retry_cannot_release_held_reports_for_a_replacement_study(tmp_path, monkeypatch):
+    import fpvs_studio.runtime.data_sharing as captures
+
+    first, second = (profile().model_copy(update={"project_id": str(uuid4())}) for _ in range(2))
+    save_settings(tmp_path, SharingSettings(enabled=True, profile=first))
+    queued = queue_report(tmp_path, report(), project_id=second.project_id)
+    assert queued.state == "held"
+    monkeypatch.setattr(captures, "recover_captures", lambda root: save_settings(
+        root, SharingSettings(enabled=True, profile=second),
+    ))
+    backend = client(lambda *_: pytest.fail("No report was authorized for this study"))
+    with pytest.raises(DataSharingCancelled):
+        sync_project(tmp_path, HASH, Event(), client=backend, release_held=True)
+    held, = list_records(tmp_path)
+    assert (held.state, held.payload_json) == ("held", queued.payload_json)
 
 
 def test_local_comparison_is_latest_session_with_target_weighting(tmp_path):

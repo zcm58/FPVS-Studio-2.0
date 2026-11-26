@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from pathlib import Path
 from threading import Event
 
@@ -31,7 +32,7 @@ from fpvs_studio.data_sharing.storage import (
     iter_validated_reports,
     list_pending,
     load_settings,
-    read_payload,
+    read_record,
     review_terminal_captures,
     save_enrollment_settings,
     save_settings,
@@ -278,7 +279,10 @@ def set_sharing_enabled(
     return load_view(root, protocol_sha256, Event(), client=client)
 
 
-def _may_send(root: Path, profile: SharingProfile, protocol_sha256: str, cancel: Event) -> bool:
+def _may_send(
+    root: Path, profile: SharingProfile, protocol_sha256: str, cancel: Event,
+    *, attempt: OutboxRecord | None = None,
+) -> bool:
     if cancel.is_set():
         return False
     current = load_settings(root)
@@ -289,6 +293,8 @@ def _may_send(root: Path, profile: SharingProfile, protocol_sha256: str, cancel:
     )
     if allowed:
         validate_library_scope(root, profile)
+        if attempt is not None:
+            return read_record(root, attempt.report_id) == attempt
     return allowed
 
 
@@ -326,6 +332,7 @@ def sync_project(
     cancel: Event,
     *,
     release_held: bool = False,
+    retry_profile: SharingProfile | None = None,
     fetch_comparison: bool = True,
     retry_offline: bool = False,
     client: DataSharingClient | None = None,
@@ -345,6 +352,7 @@ def sync_project(
     profile = view.settings.profile
     if (
         not view.settings.enabled or profile is None
+        or (retry_profile is not None and profile != retry_profile)
         or view.status == "protocol_mismatch" or profile.protocol_sha256 != protocol_sha256
     ):
         return view
@@ -354,7 +362,7 @@ def sync_project(
 
     recover_captures(root)
     if release_held:
-        release_held_records(root)
+        release_held_records(root, expected_profile=profile)
     now = datetime.now(timezone.utc)
     failure = ""
     for record in list_pending(root):
@@ -370,15 +378,18 @@ def sync_project(
         ):
             continue
         attempted = record.model_copy(update={"attempt_count": record.attempt_count + 1})
-        update_record(root, attempted)
+        if not update_record(root, attempted, expected=record):
+            continue
         with website_export("session report"):
             try:
                 receipt = transport.submit(
                     root,
                     profile,
-                    read_payload(root, record.report_id),
+                    attempted.payload_json.encode("utf-8"),
                     cancel,
-                    before_send=lambda: _may_send(root, profile, protocol_sha256, cancel),
+                    before_send=partial(
+                        _may_send, root, profile, protocol_sha256, cancel, attempt=attempted,
+                    ),
                 )
                 update_record(
                     root,
@@ -396,18 +407,17 @@ def sync_project(
                 raise
             except DataSharingError as error:
                 delay = min(3600, 30 * 2 ** min(attempted.attempt_count - 1, 7))
-                update_record(
-                    root,
-                    attempted.model_copy(
-                        update={
-                            "state": "pending" if error.retryable else "failed",
-                            "last_error_code": error.code,
-                            "next_attempt_at": now + timedelta(seconds=delay)
-                            if error.retryable
-                            else None,
-                        }
-                    ),
+                failed_attempt = attempted.model_copy(
+                    update={
+                        "state": "pending" if error.retryable else "failed",
+                        "last_error_code": error.code,
+                        "next_attempt_at": (
+                            now + timedelta(seconds=delay) if error.retryable else None
+                        ),
+                    }
                 )
+                if not update_record(root, failed_attempt, expected=attempted):
+                    continue
                 failure = str(error)
                 # One inaccessible service/credential should not consume the entire outbox.
                 break

@@ -28,6 +28,7 @@ from fpvs_studio.core.paths import filesystem_path, project_json_path
 from fpvs_studio.core.project_config import export_project_config
 from fpvs_studio.core.project_service import discover_project_roots
 from fpvs_studio.core.randomization import supports_independent_randomization
+from fpvs_studio.data_sharing.client import DataSharingClient
 from fpvs_studio.data_sharing.errors import (
     DataSharingCancelled,
     DataSharingError,
@@ -160,7 +161,7 @@ class _Backend:
         return self.view
 
     def sync_project(
-        self, root, fingerprint, _cancel, *, release_held=False,
+        self, root, fingerprint, _cancel, *, release_held=False, retry_profile=None,
         retry_offline=False, fetch_comparison=True,
     ):
         self.calls.append(("sync", root, fingerprint, release_held))
@@ -218,6 +219,7 @@ def _coordinator(lifecycle, fingerprint, load_preferences):
         "PendingEnrollmentConflict": PendingEnrollmentConflict,
         "load_settings": load_preferences,
         "SharingView": SharingView, "ConditionAggregate": ConditionAggregate,
+        "SharingProfile": SharingProfile, "DataSharingClient": DataSharingClient,
         "SharingStudyChoices": SharingStudyChoices,
         "ComparisonRow": lambda **values: SimpleNamespace(**values),
         "cast": cast, "_RETRY_LIMIT": 4, "_LOGGER": logging.getLogger(__name__),
@@ -337,7 +339,10 @@ def test_startup_for_open_project_hashes_unsaved_snapshot_without_comparison(sta
     _finish_jobs(state)
     assert state.fingerprints[-1][0] is not edited
     assert state.fingerprints[-1][0].settings.protocol.base_hz == 7.0
-    assert calls == [{"release_held": False, "retry_offline": True, "fetch_comparison": False}]
+    assert calls == [{
+        "release_held": False, "retry_profile": None, "retry_offline": True,
+        "fetch_comparison": False,
+    }]
     assert not any(call[0] == "startup" for call in state.backend.calls)
 
 
@@ -637,6 +642,40 @@ def test_lab_access_action_reuses_library_without_creating_a_results_request(sta
     state.controller._action("lab_access")
     assert calls == ["library"]
     assert len(state.lifecycle.jobs) == jobs
+
+
+def test_retry_click_keeps_held_reports_for_a_newly_connected_study(state):
+    from unittest.mock import Mock
+    from uuid import uuid4
+
+    from tests.unit.test_data_sharing_client import report
+    from tests.unit.test_data_sharing_service import client
+
+    from fpvs_studio.data_sharing.service import sync_project
+    from fpvs_studio.data_sharing.storage import list_records, queue_report
+
+    old = _profile().model_copy(update={"project_id": str(uuid4())})
+    state.backend.view = SharingView(SharingSettings(profile=old, enabled=True))
+    state.controller.opened(state.window)
+    _finish_jobs(state)
+    state.controller.dialog = Mock()
+    state.controller._action("retry")
+
+    new = old.model_copy(update={"project_id": str(uuid4())})
+    save_settings(state.root, SharingSettings(profile=new, enabled=False))
+    queued = queue_report(state.root, report().model_copy(update={
+        "experiment_id": new.experiment_id, "experiment_version": new.experiment_version,
+    }), project_id=new.project_id)
+    new_settings = SharingSettings(profile=new, enabled=True)
+    save_settings(state.root, new_settings)
+    state.backend.view = SharingView(new_settings)
+    backend = client(lambda *_: pytest.fail("Retry for the previous study cannot send reports"))
+    state.backend.sync_project = lambda *args, **kwargs: sync_project(
+        *args, **kwargs, client=backend,
+    )
+    _finish_jobs(state)
+    assert state.controller._view.settings == new_settings
+    assert list_records(state.root) == (queued,)
 
 
 @pytest.mark.parametrize(

@@ -156,6 +156,28 @@ def _status_error(status: int, body: object = None) -> DataSharingError:
     )
 
 
+def _read_body(
+    read1: Callable[[int], bytes], limit: int, label: str, deadline: float, cancel: Event,
+) -> bytes:
+    def check_active() -> None:
+        check_cancel(cancel)
+        if time.monotonic() > deadline:
+            raise DataSharingError("Results request timed out.", code="timeout", retryable=True)
+
+    chunks: list[bytes] = []
+    size = 0
+    check_active()
+    while True:
+        chunk = read1(min(16384, limit + 1 - size))
+        check_active()
+        if not chunk:
+            return b"".join(chunks)
+        size += len(chunk)
+        if size > limit:
+            raise DataSharingError(f"{label} exceeds its limit.", code="protocol")
+        chunks.append(chunk)
+
+
 def http_transport(
     method: str,
     url: str,
@@ -165,7 +187,7 @@ def http_transport(
 ) -> bytes:
     check_cancel(cancel)
     request = Request(url, data=body, headers=dict(headers), method=method)
-    started = time.monotonic()
+    deadline = time.monotonic() + REQUEST_DEADLINE_SECONDS
     try:
         with build_opener(_NoRedirect()).open(request, timeout=SOCKET_TIMEOUT_SECONDS) as response:
             if response.headers.get_content_type() != "application/json":
@@ -176,44 +198,16 @@ def http_transport(
                 raise DataSharingError(
                     "Results service returned compressed transport.", code="protocol"
                 )
-            chunks: list[bytes] = []
-            size = 0
-            while True:
-                check_cancel(cancel)
-                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
-                    raise DataSharingError(
-                        "Results request timed out.", code="timeout", retryable=True
-                    )
-                chunk = response.read1(min(16384, MAX_RESPONSE_BYTES + 1 - size))
-                check_cancel(cancel)
-                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
-                    raise DataSharingError(
-                        "Results request timed out.", code="timeout", retryable=True
-                    )
-                if not chunk:
-                    break
-                size += len(chunk)
-                if size > MAX_RESPONSE_BYTES:
-                    raise DataSharingError("Results response exceeds its limit.", code="protocol")
-                chunks.append(chunk)
-            return b"".join(chunks)
+            return _read_body(
+                response.read1, MAX_RESPONSE_BYTES, "Results response", deadline, cancel,
+            )
     except HTTPError as error:
         error_body: object = None
         try:
             if (error.code in (401, 403, 409, 429)
                     and error.headers.get_content_type() == "application/json"
                     and error.headers.get("Content-Encoding", "identity") == "identity"):
-                check_cancel(cancel)
-                payload = error.read(2049)
-                check_cancel(cancel)
-                if time.monotonic() - started > REQUEST_DEADLINE_SECONDS:
-                    raise DataSharingError(
-                        "Results request timed out.", code="timeout", retryable=True
-                    )
-                if len(payload) > 2048:
-                    raise DataSharingError(
-                        "Results error response exceeds its limit.", code="protocol"
-                    )
+                payload = _read_body(error.read1, 2048, "Results error response", deadline, cancel)
                 try:
                     error_body = json.loads(payload)
                 except (ValueError, UnicodeDecodeError, RecursionError):

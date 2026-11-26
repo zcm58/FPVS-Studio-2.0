@@ -80,7 +80,9 @@ An application-owned background job submits it. Project opening, session complet
 and opening the sharing dialog can retry opted-in pending reports; temporary
 failures use bounded backoff. The controller schedules at most four automatic
 follow-up retries per cycle. **Retry pending** explicitly releases held reports in
-the current registered scope. Authentication, schema, version and digest conflicts
+the selected enrollment. A queued worker checks each report's current status just
+before dispatch. Turning sharing off and back on leaves held reports on hold.
+Authentication, schema, version and digest conflicts
 require operator attention. Closing the dialog cancels its current operation.
 Starting a Home or Setup launch cancels background reporting and waits asynchronously
 for its bounded request and any noncancelable local opt-out persistence to finish
