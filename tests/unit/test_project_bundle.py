@@ -18,9 +18,20 @@ import pytest
 from PIL import Image
 
 import fpvs_studio.core.project_bundle as project_bundle_module
+from fpvs_studio.core.compiler import compile_session_plan
+from fpvs_studio.core.condition_template_profiles import (
+    apply_condition_template_profile_to_settings,
+    desktop_starter_condition_profile,
+    upsert_condition_template_profile,
+)
 from fpvs_studio.core.library_origin import LibraryProjectOrigin
-from fpvs_studio.core.models import ProjectFile
-from fpvs_studio.core.paths import app_data_dir, filesystem_path
+from fpvs_studio.core.models import ConditionTemplateProfile, ProjectFile, RandomizationSeeds
+from fpvs_studio.core.paths import (
+    app_data_dir,
+    condition_template_library_path,
+    filesystem_path,
+    project_json_path,
+)
 from fpvs_studio.core.project_bundle import (
     BUNDLE_MANIFEST_FILENAME,
     IMPORT_STAGING_DIRNAME,
@@ -77,6 +88,58 @@ def _replace_bundle_payloads(bundle_path, replacements, *, special_mode=None):
 def test_project_bundle_filename_uses_compact_project_title() -> None:
     assert project_bundle_filename("Semantic Categories") == "semanticcategories.fpvsbundle"
     assert project_bundle_filename("   ") == f"fpvsproject{PROJECT_BUNDLE_SUFFIX}"
+
+
+def test_bundle_preserves_custom_profile_snapshot_without_its_library(
+    tmp_path, sample_project, sample_project_root,
+) -> None:
+    profile = desktop_starter_condition_profile(sample_project.experiment_category)
+    assert profile is not None
+    custom = ConditionTemplateProfile.model_validate({
+        **profile.model_dump(),
+        "profile_id": "lab-image-timing",
+        "display_name": "Lab image timing",
+        "built_in": False,
+    })
+    custom.defaults.fixation_task.target_duration_ms = 250
+    old_root = tmp_path / "original-studio-root"
+    upsert_condition_template_profile(old_root, custom)
+    old_library = condition_template_library_path(old_root)
+    original_library_bytes = old_library.read_bytes()
+    project = sample_project
+    project.settings = apply_condition_template_profile_to_settings(project.settings, custom)
+    project.conditions[0].base_hz = 5.0
+    project.conditions[0].stream_duration_seconds = 40.0
+    _save_bundle_ready_project(sample_project_root, project)
+
+    seeds = RandomizationSeeds(condition_order_seed=17, stimulus_seed=22, fixation_seed=35)
+    expected = compile_session_plan(
+        project, project_root=sample_project_root, refresh_hz=60, resolved_seeds=seeds,
+    )
+    assert expected.blocks[0].entries[0].run_spec.fixation_events
+    assert not condition_template_library_path(sample_project_root.parent).exists()
+    path = project_json_path(sample_project_root)
+    loaded = load_project_file(path)
+    loaded.meta.description = "Reviewed on another computer"
+    save_project_file(loaded, path)
+    reopened = load_project_file(path)
+    assert reopened.settings == project.settings
+    assert reopened.conditions == project.conditions
+
+    bundle = tmp_path / "profiled.fpvsbundle"
+    export_project_bundle(sample_project_root, bundle)
+    receiver = tmp_path / "receiver"
+    imported = import_project_bundle(bundle, receiver)
+    imported_project = load_project_file(project_json_path(imported.project_root))
+    assert imported_project.settings.condition_profile_id == "lab-image-timing"
+    assert imported_project.settings == project.settings
+    assert imported_project.conditions == project.conditions
+    compiled = compile_session_plan(
+        imported_project, project_root=imported.project_root, refresh_hz=60, resolved_seeds=seeds,
+    )
+    assert compiled.model_dump_json() == expected.model_dump_json()
+    assert not condition_template_library_path(receiver).exists()
+    assert old_library.read_bytes() == original_library_bytes
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows extended-path enumeration boundary")

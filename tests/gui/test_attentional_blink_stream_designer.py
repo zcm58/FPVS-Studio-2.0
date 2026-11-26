@@ -624,33 +624,6 @@ def test_removing_all_conditions_returns_to_empty_design_state(qtbot, stream_doc
     assert "Add a condition" in step.status_label.text()
 
 
-def test_cloned_letter_stream_profile_preserves_layout_and_fixation_defaults(qtbot):
-    from fpvs_studio.core.condition_template_profiles import (
-        ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
-        built_in_condition_template_profiles,
-    )
-    from fpvs_studio.gui.condition_template_profile_editor_dialog import (
-        ConditionTemplateProfileEditorDialog,
-    )
-
-    profile = next(
-        item for item in built_in_condition_template_profiles()
-        if item.profile_id == ATTENTIONAL_BLINK_STREAM_PROFILE_ID
-    )
-    dialog = ConditionTemplateProfileEditorDialog(
-        existing_profile_ids=set(), initial_profile=profile,
-    )
-    qtbot.addWidget(dialog)
-    dialog.profile_id_edit.setText("my-letter-stream")
-    dialog.display_name_edit.setText("My digit and letter study")
-    result = dialog._build_profile()
-    assert result.defaults.attentional_blink_layout == "letter_stream"
-    assert result.defaults.protocol == profile.defaults.protocol
-    assert result.defaults.fixation_task.enabled == profile.defaults.fixation_task.enabled
-    assert not result.defaults.fixation_task.accuracy_task_enabled
-    assert not result.defaults.fixation_task.participant_tutorial_enabled
-
-
 def test_conditions_hide_oddball_word_editors_and_keep_questionnaire(qtbot, stream_document):
     step = ConditionSetupStep(stream_document)
     qtbot.addWidget(step)

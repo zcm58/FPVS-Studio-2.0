@@ -186,8 +186,7 @@ Project has two sibling **Project details** and **Experiment setup** cards insid
 frameless workspace. Their top/bottom edges and title baselines align, with 16 px
 internal padding and a 24 px gutter. Bold card titles sit above the field labels;
 content stays at the top and the row uses the taller card's natural height. Name, optional multiline
-description and folder sit on the left; category, template actions and participant
-settings sit on the right. Folder paths elide to the available pixel width, with the
+description and folder sit on the left. Category and participant settings sit on the right. Folder paths elide to the available pixel width, with the
 full path in the tooltip and accessible description. Conditions keeps its navigator beside
 the **This condition** fields, followed by left-aligned image source cards or expanding
 word editors. The list and word editors use the available height below the heading.
@@ -432,15 +431,14 @@ with 36-pixel-high buttons.
 Downloading opens the Library without creating a blank project. Manual creation shows
 **FPVS-Oddball** and a disabled **Standard FPVS (Coming Soon)** card. For cognitive-load
 studies, add a pre-task or the **Backward counting** modifier to an FPVS-Oddball condition.
-Name, parent folder and compatible template follow on the details page. Back returns
+Enter the project name and parent folder on the details page. Studio starts with the
+category's built-in defaults. Back returns
 through category to the source choice while retaining the manual draft. The category
 locks when the experiment is created. See
 [Experiment categories](EXPERIMENT_CATEGORIES.md) for persistence and legacy separation.
 
 The creation dialog has a `760x500` minimum and `800x500` default size. Its final
-page, **Name your experiment**, groups Project Name, Experiment Template and Save
-Location vertically. The selected template's description stays visible below its
-selector; changing the template or returning from Manage Templates refreshes it.
+page, **Name your experiment**, groups Project Name and Save Location vertically.
 Save Location remains editable and exposes the full path by tooltip. A **New folder**
 hint previews the project folder name beneath that location without creating files.
 Back sits at the lower left, with the standard Create Experiment/Cancel pair at the
@@ -494,11 +492,10 @@ surface shows modal staged progress during background import, disables all Welco
 actions until the operation finishes, and does not allow the Welcome window or progress
 surface to close while the import is active.
 
-Condition-template profiles are app-level metadata for the configured FPVS Studio Root
-Folder. They are stored under `.fpvs-studio/templates/condition_templates.json`, keeping
-template storage out of the top-level folder list used for experiment projects.
-The Settings dialog can reopen the root-folder setup guide, manage condition templates,
-and choose whether launched sessions write full `runs/` folders or compact summary logs
+Existing projects carry their saved condition defaults and timing in the project file.
+The desktop workflow leaves historical condition template libraries in place.
+The Settings dialog can reopen the root-folder setup guide and choose whether launched
+sessions write full `runs/` folders or compact summary logs
 only. It also exposes the default-on `Enable Recording Reminder` launch gate used
 before runtime launch, plus `Show recording reminder ticker on Home` to hide/show the
 Home ticker without disabling launch confirmation. Windows/Linux and macOS source
@@ -540,7 +537,7 @@ Windows Animation effects are off or macOS Reduce motion is on.
 
 General contains Participant runs and eligible Local experiment testing controls.
 Appearance owns the exclusive `Light` / `Dark` / `Auto` button toggle and **Reduce motion**.
-Workspace shows the active root folder and offers root-folder setup, condition templates and eligible
+Workspace shows the active root folder and offers root-folder setup and eligible
 Experiment Library access. The root path remains available in full through its tooltip
 and accessible name. Recording
 contains the hardware editor with project and computer-default save actions on one page.
@@ -1024,12 +1021,9 @@ The authoring window is organized around two user-facing modes:
   - Project uses two aligned cards: Project details on the left,
     Experiment setup on the right. The folder path stays compact with full-path access.
     Name is required before continuing; description remains optional, editable and
-    persisted. Refresh preserves pending name edits. Template actions sit below the
-    selector in the right column and remain complete at the compact setup size
-  - Project displays the experiment category read-only. Its image-timing selector
-    contains compatible condition-template profiles, defaulting to Continuous Images
-    for FPVS Oddball Paradigm or Attentional-Blink for AB, and does not rewrite existing conditions unless the user explicitly applies
-    the selected template to all conditions
+    persisted. Refresh preserves pending name edits
+  - Project displays the experiment category read-only. Use Conditions and Timing
+    to author the project's conditions
   - Project exposes `Enable participant tutorial?`, which controls whether the
     participant sees the fixation response tutorial before the first condition; it is
     enabled by default for new projects and by the one-time migration of older projects
@@ -1887,10 +1881,6 @@ preprocessing services but must not silently mutate the active project.
   separate from visual-angle geometry controls.
 - Feature-sized GUI workflow reworks should create or update an execution plan in
   `docs/exec-plans/active/` before implementation.
-- Condition-template management lives in
-  `src/fpvs_studio/gui/condition_template_manager_dialog.py`.
-- The condition-template profile editor lives in
-  `src/fpvs_studio/gui/condition_template_profile_editor_dialog.py`.
 - First-run, Welcome, and Settings root-folder onboarding lives in
   `src/fpvs_studio/gui/root_folder_setup_dialog.py`; the controller owns folder
   selection and settings persistence.
@@ -2072,7 +2062,7 @@ For GUI coverage:
 - monkeypatch modal dialogs and runtime launch calls
 - do not let tests open real `QFileDialog`, `QMessageBox`, or the PsychoPy runtime
 - use `tests/gui/helpers.py` for project windows, compile-ready stimuli, fixation
-  controls, condition-template rows, and fake runtime summaries
+  controls and fake runtime summaries
 - show changed surfaces at their minimum/default size and cover realistic longest text
   plus important success, empty, busy, validation, and error states
 - keep tests organized by focused workflow instead of reading broad files:

@@ -386,8 +386,6 @@ def test_project_update_menu_and_notice_respect_busy_guards(qtbot, tmp_path, mon
         on_request_open_project=lambda: None, on_request_manage_projects=lambda: None,
         on_request_import_project_config=lambda: None,
         on_request_import_project_bundle=lambda: None, on_request_settings=lambda: None,
-        on_load_condition_template_profiles=lambda: [],
-        on_manage_condition_templates=lambda: [],
         on_request_project_update=lambda: requested.append(True),
     )
     qtbot.addWidget(window)
@@ -485,7 +483,6 @@ def _update_window(qtbot, tmp_path):
         on_request_open_project=lambda: None, on_request_manage_projects=lambda: None,
         on_request_import_project_config=lambda: None,
         on_request_import_project_bundle=lambda: None, on_request_settings=lambda: None,
-        on_load_condition_template_profiles=lambda: [], on_manage_condition_templates=lambda: [],
     )
     qtbot.addWidget(window)
     return window

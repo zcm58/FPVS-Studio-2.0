@@ -1117,10 +1117,7 @@ def test_all_categories_use_nine_setup_steps_without_constructing_design(
     monkeypatch.setattr(
         "fpvs_studio.gui.design_setup_step.DesignSetupStep.__init__", unexpected_editor,
     )
-    guide = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    guide = SetupWizardPage(document)
     qtbot.addWidget(guide)
     guide.resize(1120, 820)
     guide.show()

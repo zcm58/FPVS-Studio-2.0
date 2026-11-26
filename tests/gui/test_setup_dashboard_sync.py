@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
 )
 from tests.gui.helpers import _open_created_project
 
-from fpvs_studio.core.condition_template_profiles import SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
 from fpvs_studio.core.enums import (
     DutyCycleMode,
     InterConditionMode,
@@ -34,11 +33,6 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     project_editor.project_name_edit.setText("Dashboard Renamed Project")
     project_editor.project_name_edit.editingFinished.emit()
     project_editor.project_description_edit.setPlainText("Setup dashboard project description.")
-    blank_index = project_editor.condition_profile_combo.findData(
-        SIXTY_HZ_BLANK_FIXATION_PROFILE_ID
-    )
-    assert blank_index >= 0
-    project_editor.condition_profile_combo.setCurrentIndex(blank_index)
 
     conditions_page = window.conditions_page
     conditions_page.add_condition_button.click()
@@ -50,7 +44,8 @@ def test_setup_dashboard_edits_sync_document_and_dedicated_tabs(
     conditions_page.variant_combo.setCurrentIndex(
         conditions_page.variant_combo.findData(StimulusVariant.GRAYSCALE)
     )
-    assert conditions_page.timing_template_combo.currentData() == DutyCycleMode.BLANK_50
+    timing_combo = conditions_page.timing_template_combo
+    timing_combo.setCurrentIndex(timing_combo.findData(DutyCycleMode.BLANK_50))
 
     window.main_stack.setCurrentWidget(dashboard)
     session_editor = dashboard.session_structure_editor

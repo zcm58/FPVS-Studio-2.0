@@ -56,7 +56,6 @@ class RootFolderSetupDialog(QDialog):
 
         self.details_label = QLabel(
             "- Each FPVS experiment project gets its own folder inside the root folder.\n"
-            "- Condition templates and other Studio-level information are stored there too.\n"
             "- Choose a durable location, not a temporary folder or downloads folder.\n"
             "- After setup, you can create a new project or open an existing one.",
             self,

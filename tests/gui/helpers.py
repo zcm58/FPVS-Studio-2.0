@@ -14,7 +14,6 @@ from PySide6.QtWidgets import QApplication, QListWidget, QMessageBox, QScrollAre
 from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.session_plan import SessionPlan
-from fpvs_studio.gui.condition_template_manager_dialog import ConditionTemplateManagerDialog
 from fpvs_studio.gui.controller import StudioController
 
 
@@ -182,16 +181,6 @@ def select_settings_category(dialog: Any, category: str) -> None:
     assert dialog.page_title.text() == category
 
 
-def find_profile_row(dialog: ConditionTemplateManagerDialog, profile_id: str) -> int:
-    """Return the list row for one condition-template profile id."""
-
-    for index in range(dialog.profile_list.count()):
-        item = dialog.profile_list.item(index)
-        if item.data(Qt.ItemDataRole.UserRole) == profile_id:
-            return index
-    raise AssertionError(f"Profile id '{profile_id}' not found in manager list.")
-
-
 def prepare_compile_ready_project(window: Any, tmp_path: Path) -> None:
     """Add one feasible presentation and import base/oddball image folders."""
 
@@ -273,6 +262,5 @@ _assert_setup_wizard_vertical_scrolling_disabled = (
     assert_setup_wizard_vertical_scrolling_disabled
 )
 _assert_visible_children_within_parent = assert_visible_children_within_parent
-_find_profile_row = find_profile_row
 _prepare_compile_ready_project = prepare_compile_ready_project
 _ImmediateProgressTask = ImmediateProgressTask

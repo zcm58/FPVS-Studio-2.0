@@ -228,7 +228,6 @@ class AppSettingsDialog(QDialog):
         recording_uses_default: bool = False,
         on_use_default_recording_configuration: Callable[[], None] | None = None,
         on_show_root_folder_setup: Callable[[QWidget], Path | None] | None = None,
-        on_manage_condition_templates: Callable[[], object] | None = None,
         on_show_library: Callable[[], None] | None = None,
         detailed_run_exports_enabled: bool = False,
         on_detailed_run_exports_changed: Callable[[bool], None] | None = None,
@@ -280,7 +279,6 @@ class AppSettingsDialog(QDialog):
         self._developer_mode_requested = developer_mode_requested
         self._on_developer_mode_changed = on_developer_mode_changed
         self._on_show_root_folder_setup = on_show_root_folder_setup
-        self._on_manage_condition_templates = on_manage_condition_templates
         self._on_show_library = on_show_library
         self._on_detailed_run_exports_changed = on_detailed_run_exports_changed
         self._on_biosemi_recording_confirmation_required_changed = (
@@ -386,15 +384,6 @@ class AppSettingsDialog(QDialog):
         self._set_workspace_root(fpvs_root_dir)
         workspace_layout.addWidget(self.root_folder_value)
 
-        workspace_layout.addSpacing(12)
-        workspace_actions = QHBoxLayout()
-        workspace_actions.setSpacing(12)
-        self.manage_templates_button = QPushButton("Manage Condition Templates...", workspace)
-        self.manage_templates_button.setObjectName("manage_condition_templates_button")
-        mark_secondary_action(self.manage_templates_button)
-        self.manage_templates_button.setEnabled(self._on_manage_condition_templates is not None)
-        self.manage_templates_button.clicked.connect(self._manage_condition_templates)
-        workspace_actions.addWidget(self.manage_templates_button)
         self.library_button = QPushButton("Manage Library Access…", workspace)
         self.library_button.setObjectName("settings_experiment_library")
         self.library_button.setToolTip(
@@ -403,9 +392,7 @@ class AppSettingsDialog(QDialog):
         mark_secondary_action(self.library_button)
         self.library_button.setVisible(on_show_library is not None)
         self.library_button.clicked.connect(self._show_library)
-        workspace_actions.addWidget(self.library_button)
-        workspace_actions.addStretch(1)
-        workspace_layout.addLayout(workspace_actions)
+        workspace_layout.addWidget(self.library_button, alignment=Qt.AlignmentFlag.AlignLeft)
         participant = QWidget(self)
         participant.setObjectName("settings_participant_section")
         participant.setProperty("settingsSection", "true")
@@ -1074,11 +1061,6 @@ class AppSettingsDialog(QDialog):
         if self._on_show_library is not None:
             self.accept()
             self._on_show_library()
-
-    def _manage_condition_templates(self) -> None:
-        if self._on_manage_condition_templates is None:
-            return
-        self._on_manage_condition_templates()
 
     def _set_detailed_run_exports_enabled(self, checked: bool) -> None:
         if self._on_detailed_run_exports_changed is None:

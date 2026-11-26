@@ -6,13 +6,9 @@ import pytest
 from PySide6.QtWidgets import QApplication, QMessageBox
 from tests.gui.helpers import ImmediateProgressTask, open_created_project
 
-from fpvs_studio.core.condition_template_profiles import built_in_condition_template_profiles
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.serialization import load_project_file
 from fpvs_studio.gui.condition_setup_step import ConditionSetupStep
-from fpvs_studio.gui.condition_template_profile_editor_dialog import (
-    ConditionTemplateProfileEditorDialog,
-)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.runtime_settings_page import DisplaySettingsEditor
 
@@ -141,21 +137,6 @@ def test_ab_timing_uses_target_pair_language_and_design_owns_cadence(qtbot, ab_d
     assert "10" in widget.timing_summary_label.text()
 
 
-def test_editing_ab_template_preserves_category_and_cadence(qtbot):
-    profile = next(
-        item for item in built_in_condition_template_profiles()
-        if item.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-    )
-    dialog = ConditionTemplateProfileEditorDialog(
-        existing_profile_ids=set(), initial_profile=profile,
-    )
-    qtbot.addWidget(dialog)
-    result = dialog._build_profile()
-    assert result.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-    assert result.defaults.protocol == profile.defaults.protocol
-    assert dialog.duty_cycle_combo.count() == 1
-
-
 @pytest.mark.parametrize("worker", ["source_import", "readiness"])
 def test_changing_experiments_waits_for_image_workers(
     qtbot, controller, tmp_path, monkeypatch, worker,
@@ -185,16 +166,9 @@ def test_creation_offers_only_oddball_and_disabled_standard_fpvs(qtbot, dark, si
     from PySide6.QtWidgets import QApplication
     from tests.gui.helpers import assert_visible_children_within_parent
 
-    from fpvs_studio.core.models import ConditionTemplateProfile
     from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 
-    retired = ConditionTemplateProfile(
-        profile_id="old-pairs", display_name="Image pairs",
-        experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
-    )
-    dialog = CreateProjectDialog(
-        condition_template_profiles=[*built_in_condition_template_profiles(), retired],
-    )
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.setPalette(QPalette(QColor("#202124" if dark else "#f4f7fb")))
     dialog.resize(*size)
@@ -234,7 +208,6 @@ def test_creation_offers_only_oddball_and_disabled_standard_fpvs(qtbot, dark, si
     dialog.accept()
     assert dialog.category_stack.currentWidget() is dialog.details_page
     assert dialog.experiment_category == ExperimentCategory.FPVS_ODDBALL
-    assert dialog.condition_profile_combo.findData(retired.profile_id) == -1
     assert_visible_children_within_parent(dialog)
 
 

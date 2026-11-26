@@ -1,6 +1,6 @@
 # Retire Condition Templates from Setup
 
-Status: Planned
+Status: Completed
 
 Date: 2026-11-26
 
@@ -65,12 +65,25 @@ template. Whole-project Library and bundle workflows are outside this removal.
 - Run focused source and docs checks, then the repository precommit tier for
   the shared creation and Setup changes. Record source and visible results
   separately.
-- In an approved visible Windows session, create both project categories,
+- In an approved visible Windows session, create an FPVS-Oddball project,
+  then open a saved Attentional-Blink project. For both,
   traverse Project to Conditions and back by keyboard, edit a condition,
   then save and reopen. Check Project, Create Project and Workspace at
   minimum and default window sizes for clipping, empty layout gaps and focus
   order. Confirm that the former template commands are absent and manual
   authoring remains reachable.
 
-Move this plan to `active/` when implementation is authorized. Record
-verification results and archive it after the removal lands.
+The New Project dialog offers FPVS-Oddball and shows Standard FPVS as coming
+soon. Attentional Blink and Cognitive Load continue to open from their saved
+projects. Their programmatic desktop starter paths retain their category defaults.
+
+## Verification on November 26, 2026
+
+- The affected non-Qt project and compiler selection passed 239 tests. Desktop
+  starter parity covers FPVS-Oddball, Attentional Blink and Cognitive Load.
+  The profiled bundle round trip produced identical compiled session JSON with
+  fixed seeds and preserved the condition timing override and fixation events.
+- Focused GUI source verification passed 197 tests and the docs check passed
+  13 tests. Verification configuration accepted the updated Qt registry.
+- Registered Qt smoke coverage was updated. Visible Windows acceptance remains
+  pending an approved visible session.

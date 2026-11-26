@@ -16,11 +16,6 @@ from fpvs_studio.core.attentional_blink_stream import (
     retime_attentional_blink_stream,
     validate_attentional_blink_stream_symbols,
 )
-from fpvs_studio.core.condition_template_profiles import (
-    apply_condition_defaults_to_condition,
-    apply_condition_template_profile_to_settings,
-    require_profile_category,
-)
 from fpvs_studio.core.condition_timing import (
     effective_condition_base_hz,
     propose_condition_timing,
@@ -44,9 +39,7 @@ from fpvs_studio.core.models import (
     AttentionalBlinkSettings,
     AttentionalBlinkStreamSettings,
     Condition,
-    ConditionDefaults,
     ConditionPresentationSettings,
-    ConditionTemplateProfile,
     ProjectFile,
     StimulusSet,
 )
@@ -162,57 +155,6 @@ class DocumentConditionMixin:
         ordered_variants = list(dict.fromkeys([StimulusVariant.ORIGINAL, *variants]))
         settings = validated_copy(self._project.settings, supported_variants=ordered_variants)
         self._apply_project_update(settings=settings)
-
-    def apply_condition_template_profile(
-        self,
-        profile: ConditionTemplateProfile,
-        *,
-        apply_to_existing_conditions: bool = False,
-    ) -> None:
-        """Snapshot one condition-template profile into project settings."""
-
-        require_profile_category(profile, self._project.experiment_category)
-        if self._project.conditions and (
-            is_attentional_blink_stream_project(self._project)
-            != (profile.defaults.attentional_blink_layout == "letter_stream")
-        ):
-            raise DocumentError("Choose a template for this experiment's existing design layout.")
-        settings = apply_condition_template_profile_to_settings(self._project.settings, profile)
-        project = validated_copy(self._project, settings=settings)
-        if apply_to_existing_conditions:
-            defaults = project.settings.condition_defaults
-            conditions = [
-                apply_condition_defaults_to_condition(condition, defaults)
-                for condition in self.ordered_conditions()
-            ]
-            project = validated_copy(
-                project,
-                conditions=self._reindex_conditions(conditions),
-            )
-        self._replace_project(project)
-
-    def apply_condition_defaults_to_all_conditions(
-        self,
-        *,
-        defaults: ConditionDefaults | None = None,
-    ) -> None:
-        """Apply one condition-default snapshot to all conditions in project order."""
-
-        resolved_defaults = defaults or self._project.settings.condition_defaults
-        if (
-            self._project.experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-            and resolved_defaults.duty_cycle_mode != DutyCycleMode.CONTINUOUS
-        ):
-            raise DocumentError("Attentional-Blink requires continuous target-pair presentation.")
-        conditions = [
-            apply_condition_defaults_to_condition(condition, resolved_defaults)
-            for condition in self.ordered_conditions()
-        ]
-        project = validated_copy(
-            self._project,
-            conditions=self._reindex_conditions(conditions),
-        )
-        self._replace_project(project)
 
     def create_condition(self, *, name: str | None = None) -> str:
         """Create a condition with the sources required by its locked experiment type."""

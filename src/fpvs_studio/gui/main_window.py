@@ -31,7 +31,7 @@ from shiboken6 import delete as delete_qobject
 
 from fpvs_studio import __version__
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.models import ConditionTemplateProfile, DisplaySettings, ProjectFile
+from fpvs_studio.core.models import DisplaySettings, ProjectFile
 from fpvs_studio.core.paths import logs_dir
 from fpvs_studio.core.project_bundle import (
     PROJECT_BUNDLE_SUFFIX,
@@ -160,8 +160,6 @@ class StudioMainWindow(QMainWindow):
         on_request_import_project_config: Callable[[], None],
         on_request_import_project_bundle: Callable[[], None],
         on_request_settings: Callable[[], None],
-        on_load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
-        on_manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
         on_request_recording_settings: Callable[[], None] | None = None,
         on_load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_request_library: Callable[[], None] | None = None,
@@ -219,8 +217,6 @@ class StudioMainWindow(QMainWindow):
         self._fixation_cross_data_dialog: FixationCrossDataDialog | None = None
         self._attentional_blink_data_dialog: AttentionalBlinkDataDialog | None = None
         self._action_palette: ActionPaletteDialog | None = None
-        self._on_load_condition_template_profiles = on_load_condition_template_profiles
-        self._on_manage_condition_templates = on_manage_condition_templates
         self._on_load_fpvs_root_dir = on_load_fpvs_root_dir
         self._deferred_open_tasks_started = False
         self._session_seed_ready = False
@@ -247,11 +243,7 @@ class StudioMainWindow(QMainWindow):
         )
         self._apply_compact_window_size()
 
-        self.home_page = HomePage(
-            document,
-            load_condition_template_profiles=on_load_condition_template_profiles,
-            parent=self,
-        )
+        self.home_page = HomePage(document, parent=self)
 
         self.main_stack = QStackedWidget(self)
         self.main_stack.setObjectName("main_stack")
@@ -314,8 +306,6 @@ class StudioMainWindow(QMainWindow):
             # repeat inherited style propagation. The stack takes ownership below.
             page = SetupWizardPage(
                 self.document,
-                load_condition_template_profiles=self._on_load_condition_template_profiles,
-                manage_condition_templates=self._on_manage_condition_templates,
                 load_fpvs_root_dir=self._on_load_fpvs_root_dir,
                 on_return_home=self.show_home,
                 on_save_project=lambda: self.save_project(completed_setup=True),

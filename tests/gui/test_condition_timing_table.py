@@ -38,10 +38,7 @@ def test_guided_timing_refreshes_on_entry_and_preserves_hidden_drafts(
 ):
     document, first, second = _document(tmp_path)
     messages = record_setup_validation_dialogs(monkeypatch)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.resize(1120, 820)
     wizard.show()
@@ -98,10 +95,7 @@ def test_timing_can_select_shared_display_rate_and_resolve_legacy_durations(
     try:
         document, first, _second = _document(tmp_path)
         document.update_display_settings(preferred_refresh_hz=initial_refresh)
-        wizard = SetupWizardPage(
-            document, load_condition_template_profiles=lambda: [],
-            manage_condition_templates=lambda: [],
-        )
+        wizard = SetupWizardPage(document)
         qtbot.addWidget(wizard)
         wizard.resize(1120, 820)
         wizard.show()
@@ -400,10 +394,7 @@ def test_timing_frequency_table_fits_wizard_and_reports_mixed_review_rates(
         document.update_condition_timing(presentation_counts={first: 3, second: 2})
     elif state == "unresolved":
         document.update_display_settings(preferred_refresh_hz=None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     palette = wizard.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -481,10 +472,7 @@ def test_hidden_display_rate_control_cannot_round_a_saved_rate_during_cadence_ed
     document, _first, _second = _document(tmp_path)
     document.update_protocol_settings(base_hz=6.123456)
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.runtime_settings_editor.oddball_every_n_spin.setValue(6)
     assert document.project.settings.protocol.base_hz == 6.123456
@@ -534,10 +522,7 @@ def test_populated_timing_rows_fit_on_first_themed_show(
             name=f"Additional condition {index + 1} with matched image characteristics",
         )
     document.update_condition_frequencies(overrides={first: 4})
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     palette = wizard.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -576,10 +561,7 @@ def test_authored_seconds_disable_legacy_count_editing_and_update_stimulation_to
     document, first, second = _document(tmp_path)
     document.update_condition_timing(durations={first: 20, second: 30})
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.conditions_page.condition_list.setCurrentRow(0)
     wizard.conditions_page.refresh()
@@ -625,10 +607,7 @@ def test_changed_display_rate_surfaces_incompatible_authored_duration(qtbot, mon
     document, first, _second = _document(tmp_path)
     document.update_condition_timing(durations={first: 10})
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     document.update_display_settings(preferred_refresh_hz=59.94)
     report = wizard.runtime_settings_editor.timing_report()
@@ -742,10 +721,7 @@ def test_single_condition_repeats_apply_and_advance_to_session(
     document, first, second = _document(tmp_path)
     document.remove_condition(second)
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     monkeypatch.setattr(wizard.runtime_settings_editor, "timing_is_compatible", lambda: True)
     wizard.resize(1120, 820)
@@ -782,10 +758,7 @@ def test_next_reports_invalid_duration_draft_once_and_preserves_it(
     qtbot, monkeypatch, tmp_path,
 ):
     document, first, _second = _document(tmp_path)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.resize(1120, 820)
     wizard.show()
@@ -820,8 +793,7 @@ def test_new_condition_uses_template_total_presentations_for_image_and_word(qtbo
 
 def test_timing_draft_survives_display_navigation_and_applies_at_the_selected_rate(qtbot, tmp_path):
     document, _first, _second = _document(tmp_path)
-    wizard = SetupWizardPage(document, load_condition_template_profiles=lambda: [],
-                             manage_condition_templates=lambda: [])
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.resize(1120, 820)
     wizard.show()
@@ -860,8 +832,7 @@ def test_display_step_checks_every_image_rate_against_its_refresh_target(
     incompatible = document.project.conditions[-1]
     incompatible.base_hz = 7.5
     document.update_display_settings(preferred_refresh_hz=144)
-    wizard = SetupWizardPage(document, load_condition_template_profiles=lambda: [],
-                             manage_condition_templates=lambda: [])
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     wizard.resize(1120, 820)
     wizard.show()
@@ -895,10 +866,7 @@ def test_masking_keeps_group_repeat_control_and_disables_independent_counts(
     document.apply_condition_modifier_project(project)
     catch_id = document.add_masking_catch_condition("color-1")
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     palette = wizard.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))

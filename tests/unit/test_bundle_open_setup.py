@@ -177,7 +177,7 @@ def _settings_controller(root):
         Path=Path, filesystem_path=filesystem_path,
         _RECENT_PROJECT_ROOTS_KEY="recent", _MAX_RECENT_PROJECTS=10, _FPVS_ROOT_DIR_KEY="root",
     )
-    controller = SimpleNamespace(_settings=settings, _normalize_fpvs_root_layout=lambda: True)
+    controller = SimpleNamespace(_settings=settings)
     controller.load_recent_project_roots = lambda: methods["load_recent_project_roots"](controller)
     return controller, methods, stored
 
@@ -223,3 +223,20 @@ def test_root_setup_preserves_template_library_on_long_paths(imported_long_proje
 
     monkeypatch.setattr(Path, "mkdir", mkdir)
     assert load_condition_template_profile_library(root) == saved
+
+
+@pytest.mark.parametrize("relative_path", [
+    "condition_templates.json", ".fpvs-studio/templates/condition_templates.json",
+])
+def test_selecting_root_leaves_saved_template_file_in_place(tmp_path, relative_path):
+    library_file = tmp_path / relative_path
+    library_file.parent.mkdir(parents=True, exist_ok=True)
+    saved_bytes = b'{"source": "saved on an earlier Studio version"}'
+    library_file.write_bytes(saved_bytes)
+    controller, methods, _stored = _settings_controller(tmp_path)
+
+    methods["save_fpvs_root_dir"](controller, tmp_path)
+
+    assert methods["load_fpvs_root_dir"](controller) == tmp_path
+    assert library_file.read_bytes() == saved_bytes
+    assert list(tmp_path.rglob("condition_templates.json")) == [library_file]

@@ -81,7 +81,7 @@ for first-run details, logs and recovery. Mac support remains experimental and e
 
 The Setup Wizard walks through:
 
-- `Project`: project name, description, and experiment template.
+- `Project`: project name, description, experiment category, and participant settings.
 - `Conditions`: condition names, trigger codes, instructions, and selecting your base and oddball images.
 - `Experiment`: display refresh rate, background color, and how many times you'd like your conditions to repeat.
 - `Fixation`: fixation cross timing and target schedule.
@@ -138,8 +138,7 @@ After you've set up a project, FPVS Studio allows you to run those experiments i
 
 ## Manage Projects And Templates
 
-Use the `File` menu to manage projects, change settings, and manage condition templates.
-Custom condition templates are stored in your FPVS Studio Root Folder. 
+Use the `File` menu to manage projects and change settings.
 
 
 ## Updating FPVS Studio

@@ -22,7 +22,6 @@ from fpvs_studio.core.attentional_blink_presets import (
     RECALL_TASK_ID,
     is_attentional_blink_stream_project,
 )
-from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.session_ordering import session_presentation_count
 from fpvs_studio.gui.components import (
     PAGE_SECTION_GAP,
@@ -170,7 +169,6 @@ class HomePage(QWidget):
         self,
         document: ProjectDocument,
         *,
-        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -179,7 +177,6 @@ class HomePage(QWidget):
         self._collection_complete = False
         self._created_from = ""
         self._refresh_pending = False
-        self._load_condition_template_profiles = load_condition_template_profiles
         self._edit_setup_action: Callable[[], None] | None = None
         self._complete_setup_action: Callable[[], None] | None = None
         self.setObjectName("home_page")

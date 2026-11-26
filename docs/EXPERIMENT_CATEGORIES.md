@@ -18,10 +18,10 @@ FPVS-Oddball experiment and assign the [Backward counting modifier](CONDITION_MO
 or a condition pre-task. Existing Cognitive Load FPVS and supported Attentional-Blink
 projects retain their saved categories and settings.
 
-Name, folder and compatible experiment-template choices follow on the next page.
+Enter the project name and save location on the next page. Studio uses the built-in
+starter settings for the selected category. Author conditions and timing in Setup.
 Cancel creates no project. The category locks when the experiment is created and
 appears read-only on Project. Changing category requires a new experiment.
-Templates carry their own category and preserve it and their cadence when edited.
 
 The nine guided steps are Project, Demographics, Conditions, Timing, Display & Session,
 Image Size, Fixation, Response and Review, fitting `1120x820`. Character Size replaces Image Size

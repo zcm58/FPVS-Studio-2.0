@@ -599,10 +599,7 @@ def test_wizard_session_order_editor_repairs_staged_counts_before_advancing(
         saved_condition_order=[first, second, first, second],
         order_seeds=configured_randomization_seeds(document.project), persist=True,
     )
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     monkeypatch.setattr(wizard.runtime_settings_editor, "timing_is_compatible", lambda: True)
     wizard.resize(1120, 820)
@@ -665,10 +662,7 @@ def test_wizard_session_order_editor_repairs_persisted_structural_mismatch(
     third = document.create_condition(name="New condition missing from the saved order")
     document.save()
     document = ProjectDocument.open_existing(document.project_root)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     monkeypatch.setattr(wizard.runtime_settings_editor, "timing_is_compatible", lambda: True)
     wizard.resize(1120, 820)
@@ -821,10 +815,7 @@ def test_order_actions_and_independent_choices_fit_wizard(
     )
     document.update_randomization_settings(mode="new")
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(
-        document, load_condition_template_profiles=lambda: [],
-        manage_condition_templates=lambda: [],
-    )
+    wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
     palette = wizard.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))

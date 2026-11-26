@@ -23,8 +23,6 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from tests.gui.helpers import (
-    _find_profile_row,
-    _list_widget_text,
     _open_created_project,
     assert_visible_children_within_parent,
     select_settings_category,
@@ -34,13 +32,9 @@ from fpvs_studio import __version__
 from fpvs_studio.core.condition_template_profiles import (
     ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
     COGNITIVE_LOAD_PROFILE_ID,
-    SINUSOIDAL_CONTRAST_PROFILE_ID,
-    SIXTY_HZ_BLANK_FIXATION_PROFILE_ID,
     STUDIO_DEFAULT_PROFILE_ID,
-    built_in_condition_template_profiles,
-    list_condition_template_profiles,
 )
-from fpvs_studio.core.enums import DutyCycleMode, ExperimentCategory, RunMode
+from fpvs_studio.core.enums import ExperimentCategory, RunMode
 from fpvs_studio.core.execution import SessionExecutionSummary
 from fpvs_studio.core.models import AttentionalBlinkStreamSettings
 from fpvs_studio.core.paths import (
@@ -53,10 +47,6 @@ from fpvs_studio.core.serialization import load_project_file, write_json_file
 from fpvs_studio.gui import controller as controller_module
 from fpvs_studio.gui.application import create_application
 from fpvs_studio.gui.components import welcome_window_stylesheet
-from fpvs_studio.gui.condition_template_manager_dialog import (
-    ConditionTemplateManagerDialog,
-    ConditionTemplateProfileEditorDialog,
-)
 from fpvs_studio.gui.controller import StudioController
 from fpvs_studio.gui.create_project_dialog import CreateProjectDialog
 from fpvs_studio.gui.manage_projects_dialog import ManageProjectsDialog
@@ -1098,7 +1088,7 @@ def test_create_project_dialog_prefills_saved_root_parent_directory(
     assert captured_parent_dirs == [str(root_dir)]
 
 
-def test_show_create_project_dialog_normalizes_legacy_template_library(
+def test_show_create_project_dialog_leaves_legacy_template_library_in_place(
     controller: StudioController,
     monkeypatch,
 ) -> None:
@@ -1116,8 +1106,8 @@ def test_show_create_project_dialog_normalizes_legacy_template_library(
     monkeypatch.setattr(CreateProjectDialog, "exec", _capture_exec)
     controller.show_create_project_dialog()
 
-    assert not legacy_path.exists()
-    assert condition_template_library_path(root_dir).is_file()
+    assert legacy_path.read_text(encoding="utf-8") == '{"profiles":[]}'
+    assert not condition_template_library_path(root_dir).exists()
     assert not (root_dir / "templates").exists()
 
 
@@ -1421,31 +1411,6 @@ def test_canceling_welcome_root_folder_picker_keeps_saved_root(
     )
 
     assert controller.load_fpvs_root_dir() == original_root
-
-
-def test_settings_dialog_manage_templates_button_triggers_callback(
-    qtbot,
-    tmp_path: Path,
-) -> None:
-    root_dir = tmp_path / "settings-root"
-    root_dir.mkdir(parents=True, exist_ok=True)
-    callback_calls = 0
-
-    def _capture_manage_templates() -> None:
-        nonlocal callback_calls
-        callback_calls += 1
-
-    dialog = AppSettingsDialog(
-        fpvs_root_dir=root_dir,
-        on_manage_condition_templates=_capture_manage_templates,
-    )
-    qtbot.addWidget(dialog)
-
-    manage_button = dialog.findChild(QPushButton, "manage_condition_templates_button")
-    assert manage_button is not None
-    select_settings_category(dialog, "Workspace")
-    qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
-    assert callback_calls == 1
 
 
 def test_settings_dialog_detailed_run_exports_checkbox_triggers_callback(
@@ -1884,75 +1849,12 @@ def test_opening_project_outside_saved_root_is_allowed_and_keeps_saved_root(
     assert controller.load_fpvs_root_dir() == root_dir
 
 
-def test_create_project_dialog_defaults_to_continuous_image_timing(
-    qtbot,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
-    qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
-    dialog.accept()
-    assert dialog.condition_profile_combo.itemText(0) == "Continuous Images"
-    assert dialog.condition_profile_combo.itemData(0) == STUDIO_DEFAULT_PROFILE_ID
-    assert dialog.condition_profile_combo.currentData() == STUDIO_DEFAULT_PROFILE_ID
-    assert STUDIO_DEFAULT_PROFILE_ID not in dialog.condition_profile_combo.itemText(0)
-    blank_index = dialog.condition_profile_combo.findData(SIXTY_HZ_BLANK_FIXATION_PROFILE_ID)
-    assert blank_index >= 0
-    assert dialog.condition_profile_combo.itemText(blank_index) == "50% Blank Between Images"
-    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in dialog.condition_profile_combo.itemText(
-        blank_index
-    )
-    contrast_index = dialog.condition_profile_combo.findData(SINUSOIDAL_CONTRAST_PROFILE_ID)
-    assert contrast_index >= 0
-    assert dialog.condition_profile_combo.itemText(contrast_index) == "Contrast Modulation"
-    assert "neutral-gray background" in dialog.condition_profile_combo.itemData(
-        contrast_index,
-        Qt.ItemDataRole.ToolTipRole,
-    )
-    messages: list[str] = []
-    monkeypatch.setattr(
-        "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
-        lambda _parent, _title, message: messages.append(message),
-    )
-
-    dialog.project_name_edit.setText("Image Timing Default")
-    dialog.project_root_edit.setText(str(tmp_path))
-    dialog.accept()
-
-    assert dialog.result() == int(dialog.DialogCode.Accepted)
-    assert messages == []
-
-
-def test_create_project_dialog_requires_available_image_timing(
-    qtbot,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=[])
-    qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
-    dialog.accept()
-    messages: list[str] = []
-    monkeypatch.setattr(
-        "fpvs_studio.gui.create_project_dialog.QMessageBox.warning",
-        lambda _parent, _title, message: messages.append(message),
-    )
-
-    dialog.project_name_edit.setText("Image Timing Required")
-    dialog.project_root_edit.setText(str(tmp_path))
-    dialog.accept()
-
-    assert dialog.result() != int(dialog.DialogCode.Accepted)
-    assert any("experiment template" in message.lower() for message in messages)
-
-
 def test_create_project_dialog_allows_templates_project_name(
     qtbot,
     tmp_path: Path,
     monkeypatch,
 ) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
     dialog.accept()
@@ -1967,7 +1869,6 @@ def test_create_project_dialog_allows_templates_project_name(
 
     dialog.project_name_edit.setText("Templates")
     dialog.project_root_edit.setText(str(tmp_path))
-    dialog.condition_profile_combo.setCurrentIndex(0)
     assert dialog.project_name_validation_label.text() == ""
     assert ok_button.isEnabled() is True
 
@@ -1976,322 +1877,42 @@ def test_create_project_dialog_allows_templates_project_name(
     assert messages == []
 
 
-def test_create_project_dialog_manage_templates_refreshes_profile_options(qtbot) -> None:
-    initial_profiles = built_in_condition_template_profiles()[:1]
-    refreshed_profiles = built_in_condition_template_profiles()
-
-    dialog = CreateProjectDialog(
-        condition_template_profiles=initial_profiles,
-        on_manage_templates=lambda: refreshed_profiles,
-    )
-    qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
-    dialog.accept()
-    assert dialog.condition_profile_combo.count() == 1
-
-    manage_button = dialog.findChild(QPushButton, "manage_condition_templates_button")
-    assert manage_button is not None
-    qtbot.mouseClick(manage_button, Qt.MouseButton.LeftButton)
-
-    assert dialog.condition_profile_combo.count() == 3
-
-
-def test_condition_template_cache_reloads_after_file_change_and_manager_close(
-    controller: StudioController,
-    monkeypatch,
-) -> None:
-    original_loader = controller_module.list_condition_template_profiles
-    disk_reads: list[Path] = []
-
-    def _counting_loader(root_dir: Path):
-        disk_reads.append(root_dir)
-        return original_loader(root_dir)
-
-    class _FakeTemplateManager:
-        def __init__(self, *, root_dir: Path, parent: QWidget | None) -> None:
-            self.root_dir = root_dir
-            self.parent = parent
-
-        def exec(self) -> int:
-            return 0
-
-    monkeypatch.setattr(
-        controller_module,
-        "list_condition_template_profiles",
-        _counting_loader,
-    )
-    monkeypatch.setattr(
-        controller_module,
-        "ConditionTemplateManagerDialog",
-        _FakeTemplateManager,
-    )
-    controller._condition_template_profiles_cache = None
-
-    controller._load_condition_template_profiles()
-    initial_disk_reads = len(disk_reads)
-    controller._load_condition_template_profiles()
-    assert len(disk_reads) == initial_disk_reads
-
-    library_path = condition_template_library_path(disk_reads[0])
-    library_path.write_text(
-        library_path.read_text(encoding="utf-8") + "\n",
-        encoding="utf-8",
-    )
-    controller._load_condition_template_profiles()
-    assert len(disk_reads) == initial_disk_reads + 1
-
-    controller._show_condition_template_manager()
-    assert len(disk_reads) == initial_disk_reads + 2
-
-
-def test_manage_condition_templates_dialog_renders_hierarchical_details(
-    qtbot,
-    tmp_path: Path,
-) -> None:
-    root_dir = tmp_path / "template-manager-root"
-    root_dir.mkdir(parents=True, exist_ok=True)
-
-    dialog = ConditionTemplateManagerDialog(root_dir=root_dir)
-    qtbot.addWidget(dialog)
-
-    list_text = _list_widget_text(dialog.profile_list)
-    assert "Continuous Images" in list_text
-    assert "50% Blank Between Images" in list_text
-    assert "Contrast Modulation" in list_text
-    assert STUDIO_DEFAULT_PROFILE_ID not in list_text
-    assert SIXTY_HZ_BLANK_FIXATION_PROFILE_ID not in list_text
-    assert SINUSOIDAL_CONTRAST_PROFILE_ID not in list_text
-    assert "[Built-in]" not in list_text
-
-    details_header = dialog.findChild(QLabel, "condition_template_details_header")
-    assert details_header is not None
-    assert details_header.text() == "Details"
-    assert details_header.alignment() == Qt.AlignmentFlag.AlignCenter
-    assert "font-size: 18px" in details_header.styleSheet()
-    assert "font-weight: 700" in details_header.styleSheet()
-    assert "text-decoration: underline" in details_header.styleSheet()
-
-    studio_row = _find_profile_row(dialog, STUDIO_DEFAULT_PROFILE_ID)
-    dialog.profile_list.setCurrentRow(studio_row)
-    QApplication.processEvents()
-
-    details_text = dialog.profile_details.text()
-    assert (
-        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
-        "Template</span>"
-    ) in details_text
-    assert (
-        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
-        "Display</span>"
-    ) in details_text
-    assert (
-        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
-        "Fixation Cross</span>"
-    ) in details_text
-    assert (
-        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
-        "Condition Settings</span>"
-    ) in details_text
-    assert (
-        '<span style="font-size: 14px; font-weight: 700; text-decoration: underline;">'
-        "Description</span>"
-    ) in details_text
-    assert details_text.count('<div style="height: 12px;"></div>') >= 4
-    assert "Template Name: Continuous Images" in details_text
-    assert "Built-in: Yes" in details_text
-    assert "Display Refresh Rate: Not Set" in details_text
-    assert "Display Resolution: Full Screen (1920 × 1080)" in details_text
-    assert "Fixation Cross: Enabled" in details_text
-    assert "Fixation Cross Accuracy Task: Enabled" in details_text
-    assert "Total cross color changes in each condition: 8 to 13" in details_text
-    assert "Fixation cross timing: 300 ms" in details_text
-    assert "Minimum time between color changes: 1000 ms" in details_text
-    assert "Maximum time between color changes" not in details_text
-    assert "Duty Cycle: Continuous" in details_text
-    assert "Repeats: 1" in details_text
-    assert "Cycles per Repeat: 146" in details_text
-    assert "Display preferred refresh:" not in details_text
-    assert "Fixation: enabled=" not in details_text
-    assert dialog.edit_button.isEnabled() is False
-    assert dialog.delete_button.isEnabled() is False
-    assert dialog.duplicate_button.isEnabled() is True
-
-    blank_row = _find_profile_row(dialog, SIXTY_HZ_BLANK_FIXATION_PROFILE_ID)
-    dialog.profile_list.setCurrentRow(blank_row)
-    QApplication.processEvents()
-
-    blank_details_text = dialog.profile_details.text()
-    assert "Template Name: 50% Blank Between Images" in blank_details_text
-    assert "Duty Cycle: 50% Blank" in blank_details_text
-    assert "Total cross color changes in each condition: 8 to 13" in blank_details_text
-    assert "Display Refresh Rate: Not Set" in blank_details_text
-
-    contrast_row = _find_profile_row(dialog, SINUSOIDAL_CONTRAST_PROFILE_ID)
-    dialog.profile_list.setCurrentRow(contrast_row)
-    QApplication.processEvents()
-
-    contrast_details_text = dialog.profile_details.text()
-    assert "Template Name: Contrast Modulation" in contrast_details_text
-    assert "Duty Cycle: Contrast Modulation" in contrast_details_text
-    assert "Background: Neutral Gray (#808080)" in contrast_details_text
-    assert "neutral-gray background" in contrast_details_text
-
-
-def test_contrast_profile_editor_preserves_required_background_and_fits(
-    qtbot,
-) -> None:
-    profile = next(
-        item
-        for item in built_in_condition_template_profiles()
-        if item.profile_id == SINUSOIDAL_CONTRAST_PROFILE_ID
-    )
-    dialog = ConditionTemplateProfileEditorDialog(
-        existing_profile_ids={profile.profile_id},
-        initial_profile=profile,
-    )
-    qtbot.addWidget(dialog)
-    dialog.resize(760, 760)
-    dialog.show()
-    QApplication.processEvents()
-
-    assert [
-        dialog.duty_cycle_combo.itemText(index) for index in range(dialog.duty_cycle_combo.count())
-    ] == ["Continuous", "50% Blank", "Contrast Modulation"]
-    assert dialog.duty_cycle_combo.currentData() == DutyCycleMode.SINUSOIDAL
-    assert dialog.background_combo.currentData() == "#808080"
-    assert not dialog.background_combo.isEnabled()
-    assert "requires Neutral Gray (#808080)" in dialog.background_combo.toolTip()
-
-    dialog.duty_cycle_combo.setCurrentIndex(
-        dialog.duty_cycle_combo.findData(DutyCycleMode.CONTINUOUS)
-    )
-    assert dialog.background_combo.isEnabled()
-    dark_gray_index = dialog.background_combo.findData("#101010")
-    dialog.background_combo.setCurrentIndex(dark_gray_index)
-    dialog.duty_cycle_combo.setCurrentIndex(
-        dialog.duty_cycle_combo.findData(DutyCycleMode.SINUSOIDAL)
-    )
-    assert dialog.background_combo.currentData() == "#808080"
-    assert dialog._build_profile().defaults.display.background_color == "#808080"
-
-    assert dialog.width() == 760
-    assert dialog.height() == 760
-    assert dialog.background_combo.width() >= max(
-        dialog.background_combo.fontMetrics().horizontalAdvance(
-            dialog.background_combo.itemText(index)
-        )
-        for index in range(dialog.background_combo.count())
-    )
-    assert_visible_children_within_parent(dialog)
-
-
-def test_manage_condition_templates_add_edit_duplicate_delete_round_trip(
-    qtbot,
-    tmp_path: Path,
-    monkeypatch,
-) -> None:
-    root_dir = tmp_path / "template-manager-mutate-root"
-    root_dir.mkdir(parents=True, exist_ok=True)
-    dialog = ConditionTemplateManagerDialog(root_dir=root_dir)
-    qtbot.addWidget(dialog)
-
-    def _accept_add(editor: ConditionTemplateProfileEditorDialog) -> int:
-        editor.profile_id_edit.setText("custom-profile")
-        editor.display_name_edit.setText("Custom Profile")
-        editor.description_edit.setText("Custom profile for GUI lifecycle test.")
-        editor.duty_cycle_combo.setCurrentIndex(
-            editor.duty_cycle_combo.findData(DutyCycleMode.BLANK_50)
-        )
-        editor.sequence_count_spin.setValue(2)
-        editor.oddball_cycles_spin.setValue(120)
-        editor.preferred_refresh_enabled_checkbox.setChecked(True)
-        editor.preferred_refresh_spin.setValue(120.0)
-        editor.fixation_enabled_checkbox.setChecked(True)
-        editor.accuracy_enabled_checkbox.setChecked(True)
-        editor.target_count_mode_combo.setCurrentIndex(
-            editor.target_count_mode_combo.findData("fixed")
-        )
-        editor.changes_per_sequence_spin.setValue(5)
-        editor.target_duration_spin.setValue(300)
-        editor.min_gap_spin.setValue(900)
-        assert editor.max_gap_spin.isHidden()
-        editor._saved_profile = editor._build_profile()
-        return int(editor.DialogCode.Accepted)
-
-    monkeypatch.setattr(ConditionTemplateProfileEditorDialog, "exec", _accept_add)
-    qtbot.mouseClick(dialog.add_button, Qt.MouseButton.LeftButton)
-    custom_row = _find_profile_row(dialog, "custom-profile")
-    dialog.profile_list.setCurrentRow(custom_row)
-    assert dialog.edit_button.isEnabled() is True
-    assert dialog.delete_button.isEnabled() is True
-
-    def _accept_edit(editor: ConditionTemplateProfileEditorDialog) -> int:
-        editor.display_name_edit.setText("Custom Profile Edited")
-        editor.description_edit.setText("Edited custom profile for GUI lifecycle test.")
-        editor.sequence_count_spin.setValue(3)
-        editor._saved_profile = editor._build_profile()
-        return int(editor.DialogCode.Accepted)
-
-    monkeypatch.setattr(ConditionTemplateProfileEditorDialog, "exec", _accept_edit)
-    qtbot.mouseClick(dialog.edit_button, Qt.MouseButton.LeftButton)
-
-    custom_row = _find_profile_row(dialog, "custom-profile")
-    assert "Custom Profile Edited" in dialog.profile_list.item(custom_row).text()
-
-    def _accept_duplicate(editor: ConditionTemplateProfileEditorDialog) -> int:
-        editor._saved_profile = editor._build_profile()
-        return int(editor.DialogCode.Accepted)
-
-    monkeypatch.setattr(ConditionTemplateProfileEditorDialog, "exec", _accept_duplicate)
-    qtbot.mouseClick(dialog.duplicate_button, Qt.MouseButton.LeftButton)
-    duplicate_row = _find_profile_row(dialog, "custom-profile-copy")
-    dialog.profile_list.setCurrentRow(duplicate_row)
-
-    monkeypatch.setattr(
-        "fpvs_studio.gui.condition_template_manager_dialog.QMessageBox.question",
-        lambda *_args, **_kwargs: QMessageBox.StandardButton.Yes,
-    )
-    qtbot.mouseClick(dialog.delete_button, Qt.MouseButton.LeftButton)
-
-    ids_after_delete = {
-        dialog.profile_list.item(index).data(Qt.ItemDataRole.UserRole)
-        for index in range(dialog.profile_list.count())
-    }
-    assert "custom-profile-copy" not in ids_after_delete
-
-    profiles_by_id = {
-        profile.profile_id: profile for profile in list_condition_template_profiles(root_dir)
-    }
-    assert profiles_by_id["custom-profile"].display_name == "Custom Profile Edited"
-    assert profiles_by_id["custom-profile"].defaults.display.background_color is None
-    assert "custom-profile-copy" not in profiles_by_id
-
-
 def test_create_project_flow_scaffolds_project_and_opens_main_window(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
-    qtbot.addWidget(dialog)
-    dialog.select_category(ExperimentCategory.FPVS_ODDBALL)
-    dialog.accept()
-    dialog.project_name_edit.setText("Visual Oddball")
-    dialog.project_root_edit.setText(str(tmp_path))
-    dialog.condition_profile_combo.setCurrentIndex(0)
-    dialog.accept()
-    assert dialog.result() == dialog.DialogCode.Accepted
+    root_dir = controller.load_fpvs_root_dir()
+    assert root_dir is not None
+    library_path = condition_template_library_path(root_dir)
+    library_path.parent.mkdir(parents=True, exist_ok=True)
+    prior_library = b'{"profiles": []}\n'
+    library_path.write_bytes(prior_library)
 
-    document, window = _open_created_project(
-        controller,
-        qtbot,
-        dialog.parent_directory,
-        dialog.project_name,
-    )
+    def _fill_manual_setup(dialog: CreateProjectDialog) -> int:
+        qtbot.addWidget(dialog)
+        dialog.manual_button.click()
+        dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL].click()
+        dialog.accept()
+        dialog.project_name_edit.setText("Visual Oddball")
+        dialog.project_root_edit.setText(str(tmp_path))
+        dialog.accept()
+        return dialog.result()
 
+    monkeypatch.setattr(CreateProjectDialog, "exec", _fill_manual_setup)
+    controller.show_create_project_dialog()
+
+    window = controller.main_window
+    assert window is not None
+    qtbot.addWidget(window)
+    document = window.document
     assert window.isVisible()
-    assert document.project_root.name == "visual-oddball"
-    assert (document.project_root / "project.json").is_file()
+    assert document.project_root == tmp_path / "visual-oddball"
+    project = load_project_file(document.project_file_path)
+    assert project.experiment_category == ExperimentCategory.FPVS_ODDBALL
+    assert project.settings.condition_profile_id == STUDIO_DEFAULT_PROFILE_ID
+    assert library_path.read_bytes() == prior_library
     assert (
         window.setup_dashboard_page.project_overview_editor.project_name_edit.text()
         == "Visual Oddball"
@@ -2320,7 +1941,7 @@ def test_open_existing_project_populates_gui_correctly(
 
 
 def test_creation_manual_category_page_requires_explicit_category_and_hides_details(qtbot) -> None:
-    dialog = CreateProjectDialog(condition_template_profiles=built_in_condition_template_profiles())
+    dialog = CreateProjectDialog()
     qtbot.addWidget(dialog)
     dialog.resize(760, 390)
     dialog.show()
@@ -2331,7 +1952,6 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     assert dialog.category_stack.currentWidget() is dialog.category_page
     assert not dialog.project_name_edit.isVisible()
     assert not dialog.project_root_edit.isVisible()
-    assert not dialog.condition_profile_combo.isVisible()
     assert not dialog.category_buttons[ExperimentCategory.FPVS].isEnabled()
     assert not any(button.isChecked() for button in dialog.category_buttons.values())
     assert all(
@@ -2349,8 +1969,6 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
     qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
     assert dialog.project_name_edit.isVisible()
     assert dialog.category_stack.currentWidget() is dialog.details_page
-    assert dialog.condition_profile_combo.count() == 3
-    assert dialog.condition_profile_combo.currentData() == "studio-default-v1"
     assert dialog.category_summary_label.text() == "FPVS-Oddball"
     assert_visible_children_within_parent(dialog)
 
@@ -2361,9 +1979,8 @@ def test_creation_manual_category_page_requires_explicit_category_and_hides_deta
         dialog.category_buttons[ExperimentCategory.FPVS_ODDBALL], Qt.MouseButton.LeftButton
     )
     qtbot.mouseClick(ok_button, Qt.MouseButton.LeftButton)
-    assert dialog.condition_profile_combo.count() == 3
-    assert dialog.condition_profile_combo.findData("attentional-blink-v1") == -1
-    assert dialog.condition_profile_combo.findData("attentional-blink-letter-stream-v1") == -1
+    assert dialog.category_stack.currentWidget() is dialog.details_page
+    assert dialog.category_summary_label.text() == "FPVS-Oddball"
     dialog.reject()
     assert dialog.result() == QDialog.DialogCode.Rejected
 

@@ -15,10 +15,8 @@ from pathlib import Path
 from fpvs_studio.core.attentional_blink_presets import populate_attentional_blink_stream
 from fpvs_studio.core.cognitive_load_presets import populate_cognitive_load_fpvs
 from fpvs_studio.core.condition_template_profiles import (
-    ATTENTIONAL_BLINK_STREAM_PROFILE_ID,
-    COGNITIVE_LOAD_PROFILE_ID,
     apply_condition_template_profile_to_settings,
-    built_in_condition_template_profiles,
+    desktop_starter_condition_profile,
 )
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.core.migrations import migrate_project_payload
@@ -171,14 +169,7 @@ def build_starter_project(
         }
         and condition_template_profile is None
     ):
-        condition_template_profile = next(
-            profile for profile in built_in_condition_template_profiles()
-            if profile.profile_id == (
-                ATTENTIONAL_BLINK_STREAM_PROFILE_ID
-                if experiment_category == ExperimentCategory.ATTENTIONAL_BLINK
-                else COGNITIVE_LOAD_PROFILE_ID
-            )
-        )
+        condition_template_profile = desktop_starter_condition_profile(experiment_category)
     template = get_template(template_id)
     project_id = slugify_project_name(project_name)
     validate_project_id(project_id)

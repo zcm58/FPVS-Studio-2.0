@@ -13,7 +13,7 @@ from fpvs_studio.gui.run_page import RunPage
 
 def _page(document, page_kind):
     if page_kind == "home":
-        return HomePage(document, load_condition_template_profiles=lambda: [])
+        return HomePage(document)
     if page_kind == "assets":
         return AssetsPage(document)
     return RunPage(document)

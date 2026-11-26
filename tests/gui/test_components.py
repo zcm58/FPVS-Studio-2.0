@@ -33,7 +33,6 @@ from fpvs_studio.gui.components import (
     SetupSourceCard,
     apply_dialog_theme,
     apply_fixation_settings_theme,
-    condition_template_details_header_stylesheet,
     error_text_stylesheet,
     fixation_settings_stylesheet,
     form_controls_stylesheet,
@@ -348,7 +347,6 @@ def test_theme_stylesheet_builders_expose_expected_selectors(qapp) -> None:
     assert "setupProgressStepper" in studio_theme_stylesheet()
     assert "QDialog#image_size_preview_dialog" in image_size_preview_dialog_stylesheet()
     assert resolve_studio_theme().error_text in error_text_stylesheet()
-    assert "text-decoration: underline" in condition_template_details_header_stylesheet()
 
 
 def test_theme_resolver_maps_light_and_dark_palettes(qapp) -> None:

@@ -33,7 +33,6 @@ from fpvs_studio.core.masking import condition_masking, is_masking_project
 from fpvs_studio.core.models import (
     AttentionalBlinkStreamSettings,
     Condition,
-    ConditionTemplateProfile,
 )
 from fpvs_studio.core.randomization import (
     effective_randomization_modes,
@@ -206,8 +205,6 @@ class SetupWizardPage(QWidget):
         self,
         document: ProjectDocument,
         *,
-        load_condition_template_profiles: Callable[[], list[ConditionTemplateProfile]],
-        manage_condition_templates: Callable[[], list[ConditionTemplateProfile]],
         load_fpvs_root_dir: Callable[[], Path | None] | None = None,
         on_return_home: Callable[[], None] | None = None,
         on_save_project: Callable[[], bool] | None = None,
@@ -247,12 +244,7 @@ class SetupWizardPage(QWidget):
         self.assets_page.hide()
         self.run_page = RunPage(document, parent=self)
         self.run_page.hide()
-        self.project_overview_editor = ProjectOverviewEditor(
-            document,
-            load_condition_template_profiles=load_condition_template_profiles,
-            manage_condition_templates=manage_condition_templates,
-            parent=self,
-        )
+        self.project_overview_editor = ProjectOverviewEditor(document, parent=self)
         self.project_overview_editor.project_description_edit.textChanged.connect(
             self.schedule_refresh
         )

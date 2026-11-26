@@ -2115,7 +2115,7 @@ def test_home_recording_fallback_is_an_escaped_internal_link(
         document, "validate_recording_launch",
         Mock(side_effect=DocumentError("Local test required")),
     )
-    page = home_page_module.HomePage(document, load_condition_template_profiles=lambda: [])
+    page = home_page_module.HomePage(document)
     qtbot.addWidget(page)
     palette = page.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
@@ -2150,7 +2150,7 @@ def test_home_recording_device_name_extension_and_pilot_output(
         parent_dir=tmp_path, project_name="Recording label extension",
         experiment_category=ExperimentCategory.ATTENTIONAL_BLINK,
     )
-    page = home_page_module.HomePage(document, load_condition_template_profiles=lambda: [])
+    page = home_page_module.HomePage(document)
     qtbot.addWidget(page)
     palette = page.palette()
     palette.setColor(QPalette.ColorRole.Window, QColor(background))

@@ -63,10 +63,7 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Named local recording profiles](exec-plans/planned/lab-independent-recording-setup.md)
   builds reusable per-computer profiles on the current Recording settings and selected-display preflight.
 
-- [Retire Condition Templates](exec-plans/planned/remove-condition-templates.md)
-  removes template controls from Setup, Create Project and Settings.
-
-The first three plans came out of the November 22 optimization review.
+These future changes came out of the November 22 optimization review.
 
 
 ## Plan Rules and History
@@ -229,6 +226,8 @@ The first three plans came out of the November 22 optimization review.
 - [Windows-primary platform test adapters](exec-plans/completed/windows-primary-platform-test-adapters.md):
   explicit platform seams, native environment selection and Windows-first CI; obsolete
   environments removed, native Windows/Mac safe checks and 100 visible Qt cases passed.
+- [Retire Condition Templates](exec-plans/completed/remove-condition-templates.md)
+  records the Setup, Create Project and Settings removal and saved-project compatibility checks.
 - [Remove Create Control Condition](exec-plans/completed/remove-control-condition-workflow.md):
   dedicated GUI/document workflow removed; saved conditions, formats, assets and manual
   authoring preserved, with full safe precommit and 27 visible Qt cases passed.

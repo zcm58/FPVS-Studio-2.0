@@ -1,17 +1,15 @@
 """Dialog for collecting the inputs needed to scaffold a new project. It gathers user-
 facing values that feed core project_service and path helpers before the resulting
 ProjectFile and folder layout are created. The module owns form interaction only;
-validation, scaffolding, and template defaults stay in backend services."""
+scaffolding and category defaults stay in backend services."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtCore import QSignalBlocker, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QButtonGroup,
-    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -27,9 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from fpvs_studio.core.condition_template_profiles import is_supported_condition_template
 from fpvs_studio.core.enums import ExperimentCategory
-from fpvs_studio.core.models import ConditionTemplateProfile
 from fpvs_studio.core.paths import slugify_project_name, validate_project_id
 from fpvs_studio.gui.components import (
     DialogHeader,
@@ -45,21 +41,13 @@ from fpvs_studio.gui.components import (
 class CreateProjectDialog(QDialog):
     """Choose Library setup or collect a manual category and project details."""
 
-    def __init__(
-        self,
-        *,
-        condition_template_profiles: list[ConditionTemplateProfile] | None = None,
-        on_manage_templates: Callable[[], list[ConditionTemplateProfile]] | None = None,
-        parent: QWidget | None = None,
-    ) -> None:
+    def __init__(self, *, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("Set Up a New Experiment")
         self.setModal(True)
         self.setMinimumSize(760, 500)
         self.resize(800, 500)
-        self._on_manage_templates = on_manage_templates
         self._experiment_category: ExperimentCategory | None = None
-        self._condition_profiles: list[ConditionTemplateProfile] = []
         self.from_library = False
 
         self.category_stack = QStackedWidget(self)
@@ -78,7 +66,7 @@ class CreateProjectDialog(QDialog):
         source_choices.setSpacing(16)
         self.manual_button = QPushButton("Create manually", self.source_page)
         self.manual_button.setObjectName("create_experiment_manually")
-        self.manual_button.setToolTip("Choose an experiment category, name and starting template.")
+        self.manual_button.setToolTip("Choose an experiment category, name and save location.")
         self.manual_button.clicked.connect(self._show_category_page)
         self.library_button = QPushButton("Download from library", self.source_page)
         self.library_button.setObjectName("create_experiment_from_library")
@@ -161,33 +149,15 @@ class CreateProjectDialog(QDialog):
         root_layout.addWidget(self.project_root_edit, 1)
         root_layout.addWidget(self.project_root_browse_button)
 
-        self.condition_profile_combo = QComboBox(self)
-        self.condition_profile_combo.setObjectName("condition_profile_combo")
-        self.condition_profile_combo.setPlaceholderText("Select an experiment template...")
-        self.condition_profile_combo.setMinimumContentsLength(22)
-        self.condition_profile_combo.setSizeAdjustPolicy(
-            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        self.condition_profile_combo.currentIndexChanged.connect(self._update_template_description)
-        self.manage_templates_button = QPushButton("Manage Templates...", self)
-        self.manage_templates_button.setObjectName("manage_condition_templates_button")
-        self.manage_templates_button.clicked.connect(self._manage_templates)
-        self.manage_templates_button.setEnabled(self._on_manage_templates is not None)
-
-        profile_layout = QHBoxLayout()
-        profile_layout.addWidget(self.condition_profile_combo, 1)
-        profile_layout.addWidget(self.manage_templates_button)
-
-        self.template_description_label = QLabel(self.details_page)
-        self.template_description_label.setObjectName("create_project_template_description")
         self.folder_hint_label = QLabel(self.details_page)
         self.folder_hint_label.setObjectName("create_project_folder_hint")
-        for label in (self.template_description_label, self.folder_hint_label):
-            label.setProperty("dialogHelp", "true")
-            label.setTextFormat(Qt.TextFormat.PlainText)
-            label.setWordWrap(True)
-            label.setMinimumWidth(0)
-            label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.folder_hint_label.setProperty("dialogHelp", "true")
+        self.folder_hint_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.folder_hint_label.setWordWrap(True)
+        self.folder_hint_label.setMinimumWidth(0)
+        self.folder_hint_label.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred,
+        )
 
         self.button_box = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel,
@@ -203,7 +173,7 @@ class CreateProjectDialog(QDialog):
         assert ok_button is not None
         mark_primary_action(ok_button)
         for button in (
-            self.back_button, self.project_root_browse_button, self.manage_templates_button,
+            self.back_button, self.project_root_browse_button,
             self.button_box.button(QDialogButtonBox.StandardButton.Cancel),
         ):
             assert button is not None
@@ -217,12 +187,6 @@ class CreateProjectDialog(QDialog):
         details_layout.addWidget(self._field_label("Project Name", self.project_name_edit))
         details_layout.addWidget(self.project_name_edit)
         details_layout.addWidget(self.project_name_validation_label)
-        details_layout.addSpacing(12)
-        details_layout.addWidget(
-            self._field_label("Experiment Template", self.condition_profile_combo)
-        )
-        details_layout.addLayout(profile_layout)
-        details_layout.addWidget(self.template_description_label)
         details_layout.addSpacing(12)
         details_layout.addWidget(self._field_label("Save Location", self.project_root_edit))
         details_layout.addLayout(root_layout)
@@ -243,8 +207,6 @@ class CreateProjectDialog(QDialog):
 
         tab_order = (
             self.project_name_edit,
-            self.condition_profile_combo,
-            self.manage_templates_button,
             self.project_root_edit,
             self.project_root_browse_button,
             self.back_button,
@@ -255,9 +217,6 @@ class CreateProjectDialog(QDialog):
             assert current is not None and following is not None
             self.setTabOrder(current, following)
 
-        self.set_condition_template_profiles(
-            condition_template_profiles or [], preserve_selection=False
-        )
         self._update_project_name_validation()
         apply_dialog_theme(self)
 
@@ -281,16 +240,12 @@ class CreateProjectDialog(QDialog):
             return
         if self.category_stack.currentWidget() is self.source_page:
             self._show_category_page()
-        preserve_selection = category == self._experiment_category
         self._experiment_category = category
         for value, button in self.category_buttons.items():
             button.setChecked(value == category)
             button.setProperty("primaryActionRole", "true" if value == category else "false")
             refresh_widget_style(button)
         self.category_summary_label.setText(selected_button.text().splitlines()[0])
-        self.set_condition_template_profiles(
-            self._condition_profiles, preserve_selection=preserve_selection,
-        )
         self._update_project_name_validation()
 
     def _show_category_page(self) -> None:
@@ -323,68 +278,11 @@ class CreateProjectDialog(QDialog):
 
         return Path(self.project_root_edit.text().strip())
 
-    @property
-    def condition_profile_id(self) -> str | None:
-        """Return the selected condition-template profile id."""
-
-        selected = self.condition_profile_combo.currentData()
-        return str(selected) if selected else None
-
     def set_parent_directory(self, directory: Path) -> None:
         """Prefill the parent directory field."""
 
         self.project_root_edit.setText(str(directory))
         self.project_root_edit.setCursorPosition(0)
-
-    def set_condition_template_profiles(
-        self,
-        profiles: list[ConditionTemplateProfile],
-        *,
-        preserve_selection: bool,
-    ) -> None:
-        """Update selectable condition-template profiles in the dialog."""
-
-        self._condition_profiles = list(profiles)
-        profiles = [
-            profile
-            for profile in profiles
-            if profile.experiment_category == self._experiment_category
-            and is_supported_condition_template(profile)
-        ]
-        current_profile_id = self.condition_profile_id if preserve_selection else None
-        with QSignalBlocker(self.condition_profile_combo):
-            self.condition_profile_combo.clear()
-            for profile in profiles:
-                self.condition_profile_combo.addItem(
-                    profile.display_name,
-                    userData=profile.profile_id,
-                )
-                self.condition_profile_combo.setItemData(
-                    self.condition_profile_combo.count() - 1,
-                    profile.description,
-                    Qt.ItemDataRole.ToolTipRole,
-                )
-            if current_profile_id is None:
-                self.condition_profile_combo.setCurrentIndex(0 if profiles else -1)
-            else:
-                selected_index = self.condition_profile_combo.findData(current_profile_id)
-                self.condition_profile_combo.setCurrentIndex(
-                    selected_index if selected_index >= 0 else -1
-                )
-        self._update_template_description()
-
-    def _update_template_description(self, _index: int = -1) -> None:
-        profile = next(
-            (
-                item for item in self._condition_profiles
-                if item.profile_id == self.condition_profile_id
-            ),
-            None,
-        )
-        description = profile.description if profile is not None else "Choose a starting template."
-        self.template_description_label.setText(description)
-        self.template_description_label.setToolTip(description)
-        self.condition_profile_combo.setToolTip(profile.display_name if profile else description)
 
     def _update_folder_hint(self, _text: str = "") -> None:
         folder = self.project_root_edit.text().strip()
@@ -439,14 +337,6 @@ class CreateProjectDialog(QDialog):
             )
             self.project_root_browse_button.setFocus()
             return
-        if self.condition_profile_id is None:
-            QMessageBox.warning(
-                self,
-                "Experiment Template Required",
-                "Select an experiment template before creating the project.",
-            )
-            self.condition_profile_combo.setFocus()
-            return
         super().accept()
 
     def _browse_root_directory(self) -> None:
@@ -458,12 +348,6 @@ class CreateProjectDialog(QDialog):
         if directory:
             self.project_root_edit.setText(directory)
             self.project_root_edit.setCursorPosition(0)
-
-    def _manage_templates(self) -> None:
-        if self._on_manage_templates is None:
-            return
-        profiles = self._on_manage_templates()
-        self.set_condition_template_profiles(profiles, preserve_selection=True)
 
     def _project_name_validation_error(self, project_name: str) -> str | None:
         if not project_name.strip():

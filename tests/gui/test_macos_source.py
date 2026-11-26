@@ -414,7 +414,7 @@ def test_launch_surfaces_allow_mac_display_check_without_bypassing_structure(
     document = ProjectDocument(project_root=sample_project_root, project=project)
     document.set_experiment_test_mode_enabled(True)
     before = document.project.model_dump(mode="json")
-    home = HomePage(document, load_condition_template_profiles=lambda: [])
+    home = HomePage(document)
     run = RunPage(document)
     qtbot.addWidget(home)
     qtbot.addWidget(run)
