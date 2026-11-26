@@ -417,6 +417,7 @@ class ConditionSetupStep(QWidget):
         self.add_catch_condition_button.setObjectName("setup_wizard_add_catch_condition_button")
         self.add_catch_condition_button.clicked.connect(self._add_catch_condition)
         mark_secondary_action(self.add_catch_condition_button)
+        mark_compact_action(self.add_catch_condition_button)
         self.remove_condition_button = QPushButton("Remove", self)
         self.remove_condition_button.setObjectName("setup_wizard_remove_condition_button")
         self.remove_condition_button.clicked.connect(self._remove_condition)
@@ -682,6 +683,7 @@ class ConditionSetupStep(QWidget):
         self.base_resolution_value.hide()
         _configure_guided_source_card(self.base_source_card)
         self.base_import_button = self.base_source_card.choose_button
+        mark_compact_action(self.base_import_button)
         self.base_import_button.setObjectName("setup_wizard_import_base_folder_button")
         self.base_source_card.choose_requested.connect(lambda: self._import_stimulus_folder("base"))
 
@@ -709,6 +711,7 @@ class ConditionSetupStep(QWidget):
         self.oddball_resolution_value.hide()
         _configure_guided_source_card(self.oddball_source_card)
         self.oddball_import_button = self.oddball_source_card.choose_button
+        mark_compact_action(self.oddball_import_button)
         self.oddball_import_button.setObjectName("setup_wizard_import_oddball_folder_button")
         self.oddball_source_card.choose_requested.connect(
             lambda: self._import_stimulus_folder("oddball")

@@ -1435,6 +1435,9 @@ def _apply_palette_stylesheet(
     observer.apply()
 
 
+_FORM_CONTROL_CORNER_RADIUS = 6
+
+
 def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     """Shared compact fields; native dropdown and spinner affordances stay intact."""
 
@@ -1444,7 +1447,7 @@ def form_controls_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
         color: {theme.text_primary};
         background-color: {theme.surface_elevated};
         border: 1px solid {theme.control_border};
-        border-radius: 6px;
+        border-radius: {_FORM_CONTROL_CORNER_RADIUS}px;
         padding: 3px 6px;
         font-size: {FONT_SIZE_CONTROL}px;
         selection-background-color: {theme.primary};
@@ -2669,6 +2672,10 @@ def setup_wizard_stylesheet(theme: StudioTheme | QPalette | None = None) -> str:
     QWidget#setup_wizard_page {{
         color: {theme.text_primary};
         font-size: {FONT_SIZE_BODY}px;
+    }}
+    QWidget#setup_wizard_page QPushButton[formFieldAction="true"],
+    QTableWidget#condition_frequency_table QPushButton {{
+        border-radius: {_FORM_CONTROL_CORNER_RADIUS}px;
     }}
     QPushButton#setup_wizard_condition_presentation_button,
     QPushButton#setup_wizard_condition_task_button,

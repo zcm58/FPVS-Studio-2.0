@@ -128,6 +128,10 @@ one of those groups.
   the stepper, with a 24 px bottom inset. All steps must fit without clipping or
   required scrolling; the page layout map lives in
   [GUI workflow](GUI_WORKFLOW.md#frameless-setup-layout-and-copy).
+- Keep field-level actions compact and reserve the larger action size for
+  Setup navigation. Check the populated Timing table, including disabled and
+  active frequency resets, in Light and Dark. On Character Size, verify that
+  hidden image-only rows leave the character height beside the viewing geometry.
 - Demographics puts **Add question** above the question outline. **Move up**,
   **Move down**, option actions and question management share one compact row
   beneath the outline and editor. **Required** sits beside the response type.

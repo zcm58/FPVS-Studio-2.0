@@ -1295,6 +1295,7 @@ class ImageDisplaySizeEditor(QWidget):
         actions.setSpacing(8)
         actions.addWidget(self.full_screen_preview_button)
         actions.addWidget(self.configure_presentation_button)
+        actions.addStretch(1)
         self.size_card.body_layout.addLayout(actions)
         self.calibration_card.body_layout.addLayout(self.calibration_form_layout)
         self.calibration_card.body_layout.addWidget(self.use_current_resolution_checkbox)

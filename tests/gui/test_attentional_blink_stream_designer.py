@@ -843,6 +843,13 @@ def test_all_stream_setup_steps_fit_default_window(
             editor = wizard.image_display_size_editor
             assert editor.character_height_edit.isVisible()
             assert not editor.width_degrees_spin.isVisible()
+            height_row = editor.character_height_edit.parentWidget()
+            label = editor.form_layout.labelForField(height_row)
+            assert isinstance(label, QLabel)
+            assert label.alignment() & Qt.AlignmentFlag.AlignLeft
+            distance_label = editor.form_layout.labelForField(editor.viewing_distance_spin)
+            assert isinstance(distance_label, QLabel)
+            assert distance_label.geometry().top() - height_row.geometry().bottom() <= 16
         if step_key == "review":
             sections = {
                 key: lines for key, _title, lines in wizard._review_checklist_sections()

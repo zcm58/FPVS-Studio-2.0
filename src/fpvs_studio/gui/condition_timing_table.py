@@ -43,7 +43,12 @@ from fpvs_studio.core.session_ordering import (
     validate_condition_presentation_counts,
     validate_saved_condition_order,
 )
-from fpvs_studio.gui.components import mark_error_text, mark_primary_action, mark_secondary_action
+from fpvs_studio.gui.components import (
+    mark_compact_action,
+    mark_error_text,
+    mark_primary_action,
+    mark_secondary_action,
+)
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.support.error_explanations import describe_error
 
@@ -91,7 +96,7 @@ class ConditionTimingTable(QWidget):
         if refresh_controls is not None:
             shared.addWidget(refresh_controls, 0, Qt.AlignmentFlag.AlignBottom)
         heading = QLabel("Shared stimulus frequency", self)
-        heading.setProperty("settingsSectionTitle", "true")
+        heading.setProperty("setupMetricValue", "true")
         self.shared_frequency_spin = self._frequency_spin("shared_stimulus_frequency_spin")
         self.shared_frequency_spin.setValue(self._shared_hz)
         self._display_shared_hz = self.shared_frequency_spin.value()
@@ -120,10 +125,12 @@ class ConditionTimingTable(QWidget):
             "Apply frequency, stream duration and presentation counts together.",
         )
         mark_primary_action(self.apply_button)
+        mark_compact_action(self.apply_button, inline=True)
         self.apply_button.clicked.connect(self.apply_pending_edits)
         self.discard_button = QPushButton("Discard", self)
         self.discard_button.setObjectName("discard_condition_frequencies_button")
         mark_secondary_action(self.discard_button)
+        mark_compact_action(self.discard_button, inline=True)
         self.discard_button.clicked.connect(self.discard_pending_edits)
         shared.addWidget(self.discard_button, 0, Qt.AlignmentFlag.AlignBottom)
         shared.addWidget(self.apply_button, 0, Qt.AlignmentFlag.AlignBottom)
@@ -290,11 +297,13 @@ class ConditionTimingTable(QWidget):
                 lambda _checked=False, key=condition.condition_id: self._reset(key),
             )
             mark_secondary_action(reset)
+            mark_compact_action(reset, inline=True)
             self.reset_buttons[condition.condition_id] = reset
             self.table.setCellWidget(row, 6, reset)
             self.table.setRowHeight(
                 row, max(36, spin.sizeHint().height(), reset.sizeHint().height()),
             )
+        self._fit_timing_columns()
         self.table.setMinimumHeight(
             self.table.horizontalHeader().sizeHint().height()
             + sum(self.table.rowHeight(row) for row in range(min(3, len(conditions))))
@@ -311,6 +320,20 @@ class ConditionTimingTable(QWidget):
         if message := self.presentation_count_blocker(include_saved_order=False):
             self.error_label.setText(message)
             self.error_label.show()
+
+    def _fit_timing_columns(self) -> None:
+        header = self.table.horizontalHeader()
+        for column in range(1, self.table.columnCount()):
+            editor = self.table.cellWidget(0, column) if self.table.rowCount() else None
+            if editor is None:
+                header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+                continue
+            # Index widgets can be wider than Qt's resize-to-contents result.
+            # Editors in each column share the same range, suffix, and style.
+            editor.ensurePolished()
+            width = max(editor.minimumWidth(), editor.sizeHint().width()) + 2
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.Fixed)
+            self.table.setColumnWidth(column, max(width, header.sectionSizeHint(column)))
 
     def presentation_count_blocker(self, *, include_saved_order: bool = True) -> str:
         try:

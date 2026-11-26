@@ -522,6 +522,12 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.condition_setup_step.presentation_button.isVisible()
             assert wizard.condition_setup_step.base_import_button.isVisible()
             assert wizard.condition_setup_step.oddball_import_button.isVisible()
+            source_actions = (
+                wizard.condition_setup_step.base_import_button,
+                wizard.condition_setup_step.oddball_import_button,
+            )
+            assert source_actions[0].height() == source_actions[1].height()
+            assert source_actions[0].height() < wizard.setup_wizard_next_button.height()
         elif step_key == "experiment":
             assert wizard.condition_timing_table.isVisible()
             assert wizard.runtime_settings_editor.timing_controls.isVisible()
@@ -531,6 +537,18 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             timing_table = wizard.condition_timing_table.table
             assert timing_table.rowCount() == 5
             assert timing_table.verticalScrollBar().maximum() == 0
+            timing = wizard.condition_timing_table
+            assert timing.apply_button.height() == timing.discard_button.height()
+            assert timing.apply_button.height() < wizard.setup_wizard_next_button.height()
+            for row in range(timing_table.rowCount()):
+                for column in range(1, timing_table.columnCount()):
+                    cell = timing_table.cellWidget(row, column)
+                    assert cell is not None
+                    bounds = timing_table.visualRect(timing_table.model().index(row, column))
+                    assert bounds.contains(cell.geometry()), (row, column, bounds, cell.geometry())
+                    assert cell.width() >= cell.minimumWidth()
+                    if isinstance(cell, (QPushButton, QLabel)):
+                        assert cell.width() >= cell.sizeHint().width()
             assert timing_table.visualItemRect(timing_table.item(4, 0)).bottom() <= (
                 timing_table.viewport().rect().bottom()
             )
@@ -556,6 +574,7 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             check_button = wizard.runtime_settings_editor.detect_refresh_button
             assert check_button.text() == "Check refresh rate"
             assert check_button.width() >= check_button.sizeHint().width()
+            assert check_button.height() < wizard.setup_wizard_next_button.height()
             assert wizard.session_structure_editor.isVisible()
             assert not wizard.condition_timing_table.isVisible()
             assert wizard.runtime_settings_editor.isVisible()
@@ -588,8 +607,16 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             assert wizard.fixation_schedule_editor.pre_stream_fixation_spin.isVisible()
             assert wizard.fixation_schedule_editor.pre_stream_fixation_note.isVisible()
 
+        if step_key == "response":
+            response_action = wizard.fixation_response_editor.response_key_button
+            assert response_action.height() < wizard.setup_wizard_next_button.height()
         surface = wizard.step_stack.currentWidget()
         if step_key == "review":
+            for section in wizard._review_summary_widgets:
+                for button in (section.fixation_edit_button, section.edit_button):
+                    if button.isVisible():
+                        assert button.height() < wizard.review_save_button.height()
+                        assert button.width() >= button.sizeHint().width()
             first_panel = next(item.section for item in wizard._review_summary_widgets
                                if item.section.isVisible())
         else:

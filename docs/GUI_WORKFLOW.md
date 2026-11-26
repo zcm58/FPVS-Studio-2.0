@@ -194,7 +194,9 @@ word editors. The list and word editors use the available height below the headi
 Timing owns the FPVS frequency, duration and presentation table plus oddball cadence.
 For FPVS and masking, refresh, **Shared stimulus frequency** and **Show an oddball every**
 share one toolbar above the expanding condition table. Labels sit above aligned fields;
-Discard/Apply remain beside those controls.
+Compact Discard and Apply actions sit beside the fields. The Timing table reserves
+column widths for the numeric editors and **Use shared**, with the remaining width
+available for condition names. Long names retain their full text on hover.
 Cadence keeps its existing document binding and persists immediately; changing its
 placement does not change stimulus scheduling or pending frequency drafts. AB retains
 its existing cadence/summary surface outside the hidden FPVS table. Visible acceptance:
@@ -211,7 +213,9 @@ headings and 16 px internal padding. Reuse choices use compact semibold field la
 Session owns participant reuse, condition order, totals, managed AB/masking repeats
 and the fixed start key. Image geometry pairs **Stimulus size** (or **Viewing geometry**
 for masking) with **Display calibration** in two cards. Response places response
-controls, cross appearance and preview in three aligned columns. Review pairs Project
+controls, cross appearance and preview in three aligned columns. Display’s refresh
+check and Response’s key picker use the same compact height and corner radius as
+their neighboring fields. Review pairs Project
 with Conditions and Timing with Display; Session spans the two rows beside Image Size
 and Fixation/Response. The shared grid aligns row edges and both column bottoms.
 Experiment/timing aliases open Timing; display/runtime/session aliases open the
