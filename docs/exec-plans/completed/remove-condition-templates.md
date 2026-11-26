@@ -85,5 +85,9 @@ projects. Their programmatic desktop starter paths retain their category default
   fixed seeds and preserved the condition timing override and fixation events.
 - Focused GUI source verification passed 197 tests and the docs check passed
   13 tests. Verification configuration accepted the updated Qt registry.
-- Registered Qt smoke coverage was updated. Visible Windows acceptance remains
-  pending an approved visible session.
+- The approved visible Windows selection passed 55 cases across the Setup,
+  Create Project, category and Welcome workflows. A direct Workspace check
+  confirmed the remaining controls fit at 860 × 560 and 1000 × 680 in Light
+  and Dark. The broader Qt selection reproduced 15 existing Settings footer
+  and condition-test failures on the unchanged main branch. Four temporary
+  Settings-access errors passed on an isolated rerun.

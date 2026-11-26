@@ -33,7 +33,10 @@ from tests.gui.helpers import (
     record_setup_validation_dialogs,
 )
 
-from fpvs_studio.core.demographics import default_demographics_questions
+from fpvs_studio.core.demographics import (
+    DEMOGRAPHICS_OPTION_COUNT_LIMIT,
+    default_demographics_questions,
+)
 from fpvs_studio.core.enums import ExperimentCategory
 from fpvs_studio.gui.components import (
     home_page_stylesheet,
@@ -1318,10 +1321,12 @@ def test_demographics_builder_validates_drafts_and_keeps_controls_visible(
     )
 
     editor._option_edits[1].setText("Second")
-    for option in range(12):
+    for option in range(2, DEMOGRAPHICS_OPTION_COUNT_LIMIT):
         qtbot.mouseClick(editor.add_option_button, click)
         editor._option_edits[-1].setText(f"Additional option {option + 1}")
     QApplication.processEvents()
+    assert len(editor._option_edits) == DEMOGRAPHICS_OPTION_COUNT_LIMIT
+    assert not editor.add_option_button.isEnabled()
     assert editor.options_scroll.verticalScrollBar().maximum() > 0
     assert editor.add_option_button.isVisible()
     assert editor.required_checkbox.isVisible()
@@ -1346,3 +1351,57 @@ def test_demographics_builder_validates_drafts_and_keeps_controls_visible(
     assert not wizard.has_pending_edits()
     assert not editor.error_label.isVisible()
     assert document.project.demographics_questions == default_demographics_questions()
+
+
+@pytest.mark.parametrize("dark", [False, True])
+def test_demographics_compact_action_rows_align(qtbot, controller, tmp_path, dark):
+    _, window = _open_created_project(controller, qtbot, tmp_path, "Question actions")
+    wizard = window.setup_wizard_page
+    palette = _verification_palette(dark=dark)
+    window.setPalette(palette)
+    wizard.setPalette(palette)
+    window.show_setup_wizard(step_key="demographics")
+    window.resize(1120, 820)
+    window.show()
+
+    step = wizard.demographics_setup_step
+    editor = step.editor
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("choice"))
+    editor.prompt_edit.setText("Which languages do you use outside of work or school?")
+    assert editor.options_panel.isVisible()
+    moves = (step.move_up_button, step.move_down_button)
+    toolbar = (
+        step.add_button, step.discard_button, step.restore_defaults_button, step.preview_button,
+    )
+
+    def assert_aligned(*buttons: QPushButton) -> None:
+        QApplication.processEvents()
+        assert all(button.isVisible() for button in buttons)
+        assert len({button.mapTo(step, QPoint()).y() for button in buttons}) == 1
+        assert len({button.height() for button in buttons}) == 1
+        for button in buttons:
+            assert button.width() >= button.sizeHint().width()
+            assert button.height() < wizard.setup_wizard_next_button.height()
+
+    assert_aligned(*toolbar)
+    assert_aligned(
+        *moves, editor.add_option_button, editor.other_button,
+        editor.duplicate_button, editor.remove_button,
+    )
+    assert step.add_button.mapTo(step, QPoint()).x() == moves[0].mapTo(step, QPoint()).x()
+    assert editor.prompt_edit.mapTo(step, QPoint()).x() == (
+        editor.add_option_button.mapTo(step, QPoint()).x()
+    )
+
+    qtbot.mouseClick(editor.other_button, Qt.MouseButton.LeftButton)
+    assert editor.other_button.text() == "Remove Other"
+    assert_aligned(*moves, editor.add_option_button, editor.other_button)
+    _assert_visible_children_within_parent(wizard.demographics_step_surface)
+
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("dropdown"))
+    assert editor.other_button.isHidden()
+    assert_aligned(*moves, editor.add_option_button, editor.duplicate_button, editor.remove_button)
+
+    editor.kind_combo.setCurrentIndex(editor.kind_combo.findData("text"))
+    assert editor.add_option_button.isHidden()
+    assert_aligned(*moves, editor.duplicate_button, editor.remove_button)

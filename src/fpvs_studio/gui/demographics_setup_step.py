@@ -14,8 +14,10 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QListWidgetItem,
     QPushButton,
@@ -37,6 +39,7 @@ from fpvs_studio.core.demographics import (
 )
 from fpvs_studio.gui.components import (
     MoveFeedbackList,
+    mark_compact_action,
     mark_error_text,
     mark_primary_action,
     mark_secondary_action,
@@ -119,8 +122,11 @@ class _QuestionEditor(SectionCard):
         for kind, label in _RESPONSE_TYPES.items():
             self.kind_combo.addItem(label, kind)
         self.kind_combo.currentIndexChanged.connect(self._kind_changed)
+        self.required_checkbox = QCheckBox("Required", self)
+        self.required_checkbox.toggled.connect(lambda value: self._set_value("required", value))
         prompt_row.addWidget(self.prompt_edit, 1)
         prompt_row.addWidget(self.kind_combo)
+        prompt_row.addWidget(self.required_checkbox)
         self.body_layout.addLayout(prompt_row)
 
         self.options_panel = QWidget(self)
@@ -138,18 +144,9 @@ class _QuestionEditor(SectionCard):
         self.option_rows.setContentsMargins(0, 0, 0, 0)
         self.option_rows.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.option_rows.setSpacing(6)
+        self.option_rows.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         self.options_scroll.setWidget(self.options_content)
         option_layout.addWidget(self.options_scroll, 1)
-        self.add_option_button = QPushButton("Add option", self.options_panel)
-        self.add_option_button.clicked.connect(self._add_option)
-        self.other_button = QPushButton("Add Other", self.options_panel)
-        self.other_button.clicked.connect(self._toggle_other)
-        option_actions = QHBoxLayout()
-        for button in (self.add_option_button, self.other_button):
-            mark_secondary_action(button)
-            option_actions.addWidget(button)
-        option_actions.addStretch(1)
-        option_layout.addLayout(option_actions)
         self.body_layout.addWidget(self.options_panel, 1)
 
         self.range_panel = QWidget(self)
@@ -204,20 +201,23 @@ class _QuestionEditor(SectionCard):
         mark_error_text(self.error_label)
         self.body_layout.addWidget(self.error_label)
 
-        separator = QFrame(self)
-        separator.setFrameShape(QFrame.Shape.HLine)
-        self.body_layout.addWidget(separator)
-        footer = QHBoxLayout()
-        self.duplicate_button = QPushButton("Duplicate", self)
-        self.remove_button = QPushButton("Delete", self)
-        self.required_checkbox = QCheckBox("Required", self)
-        self.required_checkbox.toggled.connect(lambda value: self._set_value("required", value))
-        footer.addStretch(1)
-        for button in (self.duplicate_button, self.remove_button):
+        self.action_bar = QWidget(parent)
+        actions_layout = QHBoxLayout(self.action_bar)
+        actions_layout.setContentsMargins(0, 0, 0, 0)
+        actions_layout.setSpacing(8)
+        self.add_option_button = QPushButton("Add option", self.action_bar)
+        self.add_option_button.clicked.connect(self._add_option)
+        self.other_button = QPushButton("Add Other", self.action_bar)
+        self.other_button.clicked.connect(self._toggle_other)
+        self.duplicate_button = QPushButton("Duplicate", self.action_bar)
+        self.remove_button = QPushButton("Delete", self.action_bar)
+        for button in (
+            self.add_option_button, self.other_button, self.duplicate_button, self.remove_button,
+        ):
             mark_secondary_action(button)
-            footer.addWidget(button)
-        footer.addWidget(self.required_checkbox)
-        self.body_layout.addLayout(footer)
+            mark_compact_action(button)
+            actions_layout.addWidget(button)
+        actions_layout.insertStretch(2, 1)
 
     def set_draft(self, draft: _QuestionDraft) -> None:
         self._draft = draft
@@ -276,7 +276,9 @@ class _QuestionEditor(SectionCard):
     def _refresh_kind_controls(self) -> None:
         assert self._draft is not None
         kind = self._draft.kind
-        self.options_panel.setVisible(kind in DEMOGRAPHICS_OPTION_KINDS)
+        has_options = kind in DEMOGRAPHICS_OPTION_KINDS
+        self.options_panel.setVisible(has_options)
+        self.add_option_button.setVisible(has_options)
         self.other_button.setVisible(kind in DEMOGRAPHICS_OTHER_KINDS)
         self.range_panel.setVisible(kind in {"scale", "rating"})
         self.scale_min_title.setVisible(kind == "scale")
@@ -285,7 +287,7 @@ class _QuestionEditor(SectionCard):
         with QSignalBlocker(self.scale_max_spin):
             self.scale_max_spin.setMinimum(3 if kind == "rating" else 2)
             self.scale_max_spin.setValue(self._draft.scale_max)
-        if kind in DEMOGRAPHICS_OPTION_KINDS:
+        if has_options:
             self._refresh_option_rows()
 
     def _refresh_option_rows(self) -> None:
@@ -298,6 +300,7 @@ class _QuestionEditor(SectionCard):
                 widget.deleteLater()
         self._option_edits.clear()
         marker = "□" if self._draft.kind == "checkboxes" else "○"
+        previous_control: QWidget = self.required_checkbox
         for index, value in enumerate(self._draft.options):
             row = QWidget(self.options_content)
             layout = QHBoxLayout(row)
@@ -313,9 +316,14 @@ class _QuestionEditor(SectionCard):
             remove.setAccessibleName(f"Remove option {index + 1}")
             remove.clicked.connect(lambda _checked=False, pos=index: self._remove_option(pos))
             mark_secondary_action(remove)
+            mark_compact_action(remove, inline=True)
             layout.addWidget(remove)
+            QWidget.setTabOrder(previous_control, edit)
+            QWidget.setTabOrder(edit, remove)
+            previous_control = remove
             self._option_edits.append(edit)
             self.option_rows.addWidget(row)
+        QWidget.setTabOrder(previous_control, self.add_option_button)
         other_enabled = self._draft.allow_other and self._draft.kind in DEMOGRAPHICS_OTHER_KINDS
         if other_enabled:
             self.option_rows.addWidget(QLabel(f"{marker}  Other (free text)", self.options_content))
@@ -376,6 +384,12 @@ class DemographicsSetupStep(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(8)
+        self.add_button = QPushButton("Add question", self)
+        mark_primary_action(self.add_button)
+        mark_compact_action(self.add_button)
+        self.add_button.clicked.connect(self._add_question)
+        toolbar.addWidget(self.add_button)
         toolbar.addStretch(1)
         self.discard_button = QPushButton("Discard draft", self)
         self.discard_button.setToolTip("Revert unapplied questionnaire edits.")
@@ -385,14 +399,18 @@ class DemographicsSetupStep(QWidget):
         self.preview_button.setToolTip("Try the participant questionnaire.")
         for button in (self.discard_button, self.restore_defaults_button, self.preview_button):
             mark_secondary_action(button)
+            mark_compact_action(button)
             toolbar.addWidget(button)
         self.discard_button.clicked.connect(self._discard_draft)
         self.restore_defaults_button.clicked.connect(self._restore_defaults)
         self.preview_button.clicked.connect(self._preview)
         layout.addLayout(toolbar)
 
-        workspace = QHBoxLayout()
-        workspace.setSpacing(16)
+        workspace = QGridLayout()
+        workspace.setHorizontalSpacing(16)
+        workspace.setVerticalSpacing(8)
+        workspace.setColumnStretch(1, 1)
+        workspace.setRowStretch(0, 1)
         outline = SectionCard(title="Questions", framed=False, parent=self)
         outline.setMaximumWidth(265)
         outline.card_layout.setContentsMargins(0, 0, 0, 0)
@@ -408,18 +426,17 @@ class DemographicsSetupStep(QWidget):
         self.question_list.order_changed.connect(self._sync_outline_order)
         outline.body_layout.addWidget(self.question_list, 1)
         move_buttons = QHBoxLayout()
-        self.move_up_button = QPushButton("Move up", outline)
-        self.move_down_button = QPushButton("Move down", outline)
+        move_buttons.setSpacing(8)
+        self.move_up_button = QPushButton("Move up", self)
+        self.move_down_button = QPushButton("Move down", self)
         for button, offset in ((self.move_up_button, -1), (self.move_down_button, 1)):
             mark_secondary_action(button)
+            mark_compact_action(button)
             move_buttons.addWidget(button)
             button.clicked.connect(lambda _checked=False, direction=offset: self._move(direction))
-        outline.body_layout.addLayout(move_buttons)
-        self.add_button = QPushButton("Add question", outline)
-        mark_primary_action(self.add_button)
-        self.add_button.clicked.connect(self._add_question)
-        outline.body_layout.addWidget(self.add_button)
-        workspace.addWidget(outline, 1)
+        move_buttons.addStretch(1)
+        workspace.addWidget(outline, 0, 0)
+        workspace.addLayout(move_buttons, 1, 0)
 
         self.editor = _QuestionEditor(self)
         self.editor.changed.connect(self._question_changed)
@@ -430,7 +447,8 @@ class DemographicsSetupStep(QWidget):
         self.editor_stack = QStackedWidget(self)
         self.editor_stack.addWidget(self.editor)
         self.editor_stack.addWidget(self.empty_label)
-        workspace.addWidget(self.editor_stack, 3)
+        workspace.addWidget(self.editor_stack, 0, 1)
+        workspace.addWidget(self.editor.action_bar, 1, 1)
         layout.addLayout(workspace, 1)
         self._discard_draft()
 
@@ -503,6 +521,7 @@ class DemographicsSetupStep(QWidget):
         self.move_up_button.setEnabled(row > 0)
         self.move_down_button.setEnabled(0 <= row < len(self._draft) - 1)
         self.editor_stack.setCurrentWidget(self.editor if row >= 0 else self.empty_label)
+        self.editor.action_bar.setVisible(row >= 0)
         if row >= 0:
             current = self.question_list.item(row).data(Qt.ItemDataRole.UserRole)
             draft = next((question for question in self._draft if question.id == current), None)

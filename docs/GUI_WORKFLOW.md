@@ -272,8 +272,10 @@ Project bundles and `.fpvsconfig` setup handoffs carry the authored questions.
 
 In an approved visible session, open Setup at `1120x820` and use Next from Project
 to reach Demographics. Add a long multiple-choice question, edit its choices, enable
-Other, duplicate the question, and drag it above a default. Test the move buttons and
-check that invalid choices keep the draft open. At `600x360`, preview a mix of types
+Other, duplicate the question, and drag it above a default. In Light and Dark,
+check that **Move up**, **Move down**, **Add option**, and **Remove Other**
+share a row. Fill the choice list to its limit and check that it scrolls while
+the actions stay visible. Check that invalid choices keep the draft open. At `600x360`, preview a mix of types
 with an optional blank and a missing required answer. Save and reopen, then check
 that Participant Information from Home and Run shows the same order and controls.
 Check the empty and restored questionnaires. Complete a compact session with a
