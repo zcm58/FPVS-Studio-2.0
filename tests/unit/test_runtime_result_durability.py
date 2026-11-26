@@ -5,9 +5,11 @@ from __future__ import annotations
 import csv
 import io
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
+from openpyxl import load_workbook
 from tests.unit.runtime_launcher_helpers import StubEngine, _read_csv_rows
 
 from fpvs_studio.core.compiler import compile_session_plan
@@ -15,6 +17,8 @@ from fpvs_studio.core.execution import RunExecutionSummary, SessionExecutionSumm
 from fpvs_studio.core.serialization import read_json_file
 from fpvs_studio.core.task_models import TaskPhase, TaskResponseRecord
 from fpvs_studio.runtime import (
+    attentional_blink_report,
+    fixation_report,
     participant_history,
     participant_results,
     run_worker,
@@ -25,6 +29,7 @@ from fpvs_studio.runtime.condition_recovery import (
     ConditionRecoveryRecorder,
     query_condition_recovery,
 )
+from fpvs_studio.runtime.participant_sessions import resolve_next_participant_session_number
 from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.triggers import TriggerEmissionError
 from fpvs_studio.triggers.null_backend import NullBackend
@@ -160,6 +165,77 @@ def test_bom_history_migration_keeps_original_on_replace_failure(tmp_path, monke
         )
     assert path.read_bytes() == original
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("damaged_row", ['001,"unfinished\r\n002,second\r\n', "001\r\n"])
+def test_damaged_record_blocks_history_replacement_and_visit_reservation(
+    tmp_path, legacy, damaged_row,
+):
+    path = tmp_path / "logs" / session_export.SESSION_CONDITION_HISTORY_FILENAME
+    path.parent.mkdir()
+    columns = ["participant_number", "session_id"]
+    path.write_bytes((",".join(columns) + "\r\n" + damaged_row).encode("utf-8-sig"))
+    original = path.read_bytes()
+    if legacy:
+        columns.append("participant_session_number")
+    with pytest.raises(ValueError, match="malformed rows"):
+        resolve_next_participant_session_number(tmp_path, "001")
+    with pytest.raises(ValueError, match="malformed rows"):
+        session_export._commit_numbered_rows(path, columns, [], identity=("participant_number",))
+    assert path.read_bytes() == original
+    assert list(path.parent.iterdir()) == [path]
+
+
+@pytest.mark.parametrize("report", ["group", "fixation", "attentional-blink"])
+def test_failed_manual_workbook_write_preserves_previous_file(tmp_path, monkeypatch, report):
+    destination = tmp_path / "exports" / "summary.xlsx"
+    destination.parent.mkdir()
+    destination.write_bytes(b"previously saved report")
+
+    def interrupted_save(_workbook, path):
+        Path(path).write_bytes(b"partial ZIP")
+        raise OSError("interrupted write")
+
+    monkeypatch.setattr(session_export.Workbook, "save", interrupted_save)
+    if report == "group":
+        history = tmp_path / "logs" / session_export.SESSION_CONDITION_HISTORY_FILENAME
+        history.parent.mkdir()
+        history.write_text("participant_number,session_id\n001,visit\n", encoding="utf-8")
+        with pytest.raises(OSError, match="interrupted write"):
+            session_export.write_group_summary(tmp_path, destination)
+    elif report == "fixation":
+        with pytest.raises(fixation_report.FixationExportError):
+            fixation_report.write_fixation_task_accuracy_xlsx(
+                fixation_report.FixationCrossDataSummary(1, 1, 1, 100, None, ()), destination,
+            )
+    else:
+        with pytest.raises(attentional_blink_report.AttentionalBlinkExportError):
+            attentional_blink_report.write_attentional_blink_accuracy_xlsx(
+                attentional_blink_report.AttentionalBlinkDataSummary((), (), 0, 0, 0), destination,
+            )
+    assert destination.read_bytes() == b"previously saved report"
+    assert list(destination.parent.iterdir()) == [destination]
+
+
+def test_summary_workbooks_preserve_literal_metadata(tmp_path):
+    history = tmp_path / "logs" / session_export.SESSION_CONDITION_HISTORY_FILENAME
+    history.parent.mkdir()
+    history.write_text(
+        "participant_number,session_id,participant_sex,run_id,run_seed\n001,visit,=literal,run,11\n",
+        encoding="utf-8",
+    )
+    participant = session_export.write_participant_summary(tmp_path)
+    group = session_export.write_group_summary(tmp_path, tmp_path / "group.xlsx")
+    for path, sheet, row in ((participant, "Participant Summary", 2), (group, "Group Summary", 3)):
+        workbook = load_workbook(path)
+        try:
+            worksheet = workbook[sheet]
+            column = next(cell.column for cell in worksheet[1] if cell.value == "Sex")
+            assert worksheet.cell(row, column).value == "=literal"
+            assert worksheet.cell(row, column).data_type == "s"
+        finally:
+            workbook.close()
 
 
 @pytest.mark.parametrize("failure", ["feedback", "completion", "cleanup"])

@@ -60,6 +60,7 @@ from fpvs_studio.runtime.participant_history import (
     participant_session_history_identity,
 )
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
+from fpvs_studio.runtime.research_io import read_research_csv, save_workbook_atomically
 from fpvs_studio.runtime.workbook_layout import autofit_workbook, autofit_worksheet
 
 SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
@@ -321,8 +322,7 @@ def _commit_numbered_rows(
     incoming = list(csv.DictReader(incoming_buffer))
     existing: list[dict[str, str]] = []
     if path.is_file() and path.stat().st_size:
-        _upgrade_csv_header(path, header)
-        existing = _read_csv_dict_rows(path)
+        existing = _upgrade_csv_header(path, header)
     replacements = {
         tuple(row.get(column, "") for column in identity): row
         for row in incoming if row.get("participant_session_number")
@@ -1238,38 +1238,17 @@ def write_group_summary(project_root: Path, output_path: Path) -> Path:
     return path
 
 
-def _upgrade_csv_header(path: Path, header: list[str]) -> None:
+def _upgrade_csv_header(path: Path, header: list[str]) -> list[dict[str, str]]:
     """Add compatible export fields with an atomic replacement of the old table."""
 
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames and len(set(reader.fieldnames)) != len(reader.fieldnames):
-            raise ValueError(
-                f"{path.name} has duplicate column names; existing data was preserved."
-            )
-        if reader.fieldnames == header:
-            return
-        if not reader.fieldnames or any(column not in header for column in reader.fieldnames):
+    columns, rows = read_research_csv(path)
+    if columns != header:
+        if not columns or any(column not in header for column in columns):
             raise ValueError(
                 f"{path.name} has an incompatible header; existing data was preserved."
             )
-        rows = list(reader)
-    if any(None in row for row in rows):
-        raise ValueError(f"{path.name} has malformed rows; existing data was preserved.")
-    temporary_path: Path | None = None
-    try:
-        with NamedTemporaryFile(
-            mode="w", encoding="utf-8", newline="", dir=path.parent,
-            prefix=f".{path.name}.", suffix=".tmp", delete=False,
-        ) as handle:
-            temporary_path = Path(handle.name)
-            writer = csv.writer(handle)
-            writer.writerow(header)
-            writer.writerows([row.get(column, "") for column in header] for row in rows)
-        replace_file_atomically(temporary_path, path)
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+        _write_csv(path, header, ([row.get(column, "") for column in header] for row in rows))
+    return rows
 
 
 def _session_condition_history_rows(
@@ -1440,17 +1419,7 @@ def _block_accuracy_percentages(
 
 
 def _read_csv_dict_rows(path: Path) -> list[dict[str, str]]:
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames and len(set(reader.fieldnames)) != len(reader.fieldnames):
-            raise ValueError(f"{path.name} contains duplicate column names.")
-        rows = list(reader)
-        if any(None in row for row in rows):
-            raise ValueError(f"{path.name} contains malformed rows.")
-        return [
-            {str(key): "" if value is None else value for key, value in row.items() if key}
-            for row in rows
-        ]
+    return read_research_csv(path)[1]
 
 
 def _participant_summary_rows(
@@ -1580,23 +1549,7 @@ def _write_participant_summary_xlsx(
             raise
     else:
         autofit_workbook(workbook)
-    _save_workbook_atomically(workbook, path)
-
-
-def _save_workbook_atomically(workbook: Any, path: Path) -> None:
-    temporary_path: Path | None = None
-    try:
-        with NamedTemporaryFile(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp",
-                                delete=False) as handle:
-            temporary_path = Path(handle.name)
-        workbook.save(temporary_path)
-        with temporary_path.open("r+b") as handle:
-            os.fsync(handle.fileno())
-        replace_file_atomically(temporary_path, path)
-    finally:
-        workbook.close()
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+    save_workbook_atomically(workbook, path)
 
 
 def _write_group_summary_xlsx(
@@ -1632,7 +1585,7 @@ def _write_group_summary_xlsx(
         float_columns=_GROUP_SUMMARY_FLOAT_COLUMNS,
     )
     autofit_workbook(workbook)
-    workbook.save(path)
+    save_workbook_atomically(workbook, path)
 
 
 def _group_summary_rows(
@@ -1708,6 +1661,8 @@ def _format_summary_xlsx(
     header_fill = PatternFill(fill_type="solid", fgColor="D9EAF7")
     for row in worksheet.iter_rows():
         for cell in row:
+            if isinstance(cell.value, str):
+                cell.data_type = "s"
             cell.alignment = centered
             if cell.row == 1:
                 cell.font = Font(bold=True)

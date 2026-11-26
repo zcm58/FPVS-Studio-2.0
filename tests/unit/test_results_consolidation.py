@@ -6,8 +6,11 @@ import csv
 import hashlib
 import importlib.util
 import json
+import os
+import stat
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 from zipfile import ZipFile
 
 import pytest
@@ -99,6 +102,53 @@ def test_default_is_read_only_and_root_discovery_stays_direct(project):
     assert _tree_bytes(project) == before
 
 
+def _directory_alias(alias, directory):
+    if os.name == "nt":
+        from _winapi import CreateJunction
+
+        CreateJunction(str(directory), str(alias))
+    else:
+        alias.symlink_to(directory, target_is_directory=True)
+
+
+def test_inventory_uses_only_physical_project_and_output_directories(project):
+    alias = project.parent / "project-shortcut"
+    _directory_alias(alias, project)
+    assert consolidation.discover_projects(project.parent) == [project]
+    with pytest.raises(ValueError, match="Redirected"):
+        consolidation.inventory_project(alias)
+
+    archive = project / "saved-copy"
+    archive.mkdir()
+    (archive / "events.csv").write_text("frame,event\n", encoding="utf-8")
+    _directory_alias(project / "runs" / "saved-copy", archive)
+    assert all(source.path.startswith(("logs/", "runs/P009_session01/"))
+               for source in consolidation.inventory_project(project).sources)
+
+
+def test_inventory_checks_discovered_filename_before_resolving_it(project, monkeypatch):
+    entry = project / "runs/P009_session01/responses.csv"
+    entry.touch()
+    lstat = Path.lstat
+    resolve = Path.resolve
+
+    def entry_metadata(path):
+        if path.name == entry.name:
+            return SimpleNamespace(st_mode=stat.S_IFREG,
+                                   st_file_attributes=stat.FILE_ATTRIBUTE_REPARSE_POINT)
+        return lstat(path)
+
+    def resolve_entry(path, *args, **kwargs):
+        if path.name == entry.name:
+            pytest.fail("Inventory resolved the entry before checking its own metadata")
+        return resolve(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "lstat", entry_metadata)
+    monkeypatch.setattr(Path, "resolve", resolve_entry)
+    with pytest.raises(ValueError, match="Redirected"):
+        consolidation.inventory_project(project)
+
+
 def test_cleanup_preserves_research_and_archives_exact_originals(project):
     original = _tree_bytes(project)
     backup = project / "backups/old/logs/participant_summary.xlsx"
@@ -168,7 +218,30 @@ def test_source_change_before_commit_preserves_changed_file_and_original_workboo
     assert (project / "logs/participant_summary.csv").exists()
 
 
-def test_cleanup_failure_restores_removed_sources_and_original_workbook(project, monkeypatch):
+def test_workbook_created_after_inventory_is_preserved(project, monkeypatch):
+    workbook = project / "logs/participant_summary.xlsx"
+    original = workbook.read_bytes()
+    workbook.unlink()
+    archive = consolidation._archive
+
+    def archive_then_save(*args):
+        archive(*args)
+        workbook.write_bytes(original)
+
+    monkeypatch.setattr(consolidation, "_archive", archive_then_save)
+    with pytest.raises(ValueError, match="appeared"):
+        consolidation.consolidate_project(project, apply=True)
+    assert workbook.read_bytes() == original
+    assert (project / "logs/participant_summary.csv").is_file()
+
+
+@pytest.mark.parametrize("has_workbook", [True, False])
+def test_cleanup_failure_restores_removed_sources_and_original_workbook(
+    project, monkeypatch, has_workbook,
+):
+    workbook = project / "logs/participant_summary.xlsx"
+    if not has_workbook:
+        workbook.unlink()
     before = _tree_bytes(project)
     unlink = Path.unlink
     target = project / "runs/P009_session01/events.csv"
@@ -183,6 +256,7 @@ def test_cleanup_failure_restores_removed_sources_and_original_workbook(project,
         consolidation.consolidate_project(project, apply=True)
     for relative, data in before.items():
         assert (project / relative).read_bytes() == data
+    assert workbook.exists() == has_workbook
 
 
 def test_custom_active_workbook_is_preserved(project):

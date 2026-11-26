@@ -30,6 +30,7 @@ from fpvs_studio.runtime.session_export import (
     COMPACT_TASK_RESPONSES_HEADER,
     compact_task_checkpoint_path,
 )
+from fpvs_studio.runtime.task_runner import TaskResponseCheckpoint, read_task_response_journal
 
 
 class CountingEngine(StubEngine):
@@ -218,6 +219,17 @@ def test_exception_during_report_preserves_compact_interval_checkpoint(tmp_path)
     journal = [json.loads(line) for line in journal_path.read_text().splitlines()]
     assert journal[-1]["backward_counting"]["interval_completed"]
     assert journal[-1]["backward_counting"]["endpoint"] is None
+    checkpoint = TaskResponseCheckpoint(journal_path)
+    retained = read_task_response_journal(journal_path)
+    initial, completed = retained[-2:]
+    assert initial.response_index == completed.response_index
+    # A later screen may fail with either the initial or the completed snapshot in memory.
+    for snapshot in (initial, completed):
+        reconciled = checkpoint.reconcile_run_responses(completed.run_id, [snapshot])
+        assert reconciled[-1] == completed
+    changed_answer = initial.model_copy(update={"key": "other"})
+    with pytest.raises(ValueError, match="conflicting response identities"):
+        checkpoint.reconcile_run_responses(completed.run_id, [changed_answer])
 
 
 @pytest.mark.parametrize("baseline_steps", [0, -1])

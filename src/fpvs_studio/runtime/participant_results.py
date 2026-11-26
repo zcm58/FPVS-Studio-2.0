@@ -6,7 +6,6 @@ stimulus/frame arrays and never consult the current editable project for old lab
 
 from __future__ import annotations
 
-import csv
 import hashlib
 import json
 import math
@@ -28,6 +27,7 @@ from fpvs_studio.core.paths import (
 from fpvs_studio.core.serialization import atomic_text_write
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
+from fpvs_studio.runtime.research_io import read_research_csv
 from fpvs_studio.runtime.workbook_layout import autofit_workbook
 
 DEMOGRAPHIC_ANSWERS_SHEET_NAME = "Demographic Answers"
@@ -172,14 +172,7 @@ def _json(path: Path) -> dict[str, Any]:
 def _csv(path: Path) -> list[dict[str, str]]:
     if not path.is_file():
         return []
-    with path.open(encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        if reader.fieldnames and len(reader.fieldnames) != len(set(reader.fieldnames)):
-            raise ValueError(f"{path.name} has duplicate column names.")
-        rows = list(reader)
-    if any(None in row or any(value is None for value in row.values()) for row in rows):
-        raise ValueError(f"{path.name} contains malformed rows.")
-    return rows
+    return read_research_csv(path)[1]
 
 
 def _number(value: object) -> int | float | None:

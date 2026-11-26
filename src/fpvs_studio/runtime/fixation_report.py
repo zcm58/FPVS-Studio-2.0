@@ -19,6 +19,7 @@ from openpyxl.styles import Alignment  # type: ignore[import-untyped]
 from openpyxl.utils import get_column_letter  # type: ignore[import-untyped]
 
 from fpvs_studio.core.paths import logs_dir
+from fpvs_studio.runtime.research_io import save_workbook_atomically
 from fpvs_studio.runtime.session_export import (
     SESSION_CONDITION_HISTORY_FILENAME,
     _participant_session_history_groups,
@@ -132,7 +133,7 @@ def write_fixation_task_accuracy_xlsx(
 
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        workbook.save(path)
+        save_workbook_atomically(workbook, path)
     except OSError as exc:
         raise FixationExportError(
             "The fixation task accuracy workbook could not be saved."

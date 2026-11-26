@@ -5,7 +5,6 @@ only; scoring, compilation, and export writing stay in adjacent runtime or core 
 
 from __future__ import annotations
 
-import csv
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -17,6 +16,7 @@ from fpvs_studio.core.enums import RunMode
 from fpvs_studio.core.execution import ParticipantMetadata, SessionExecutionSummary
 from fpvs_studio.core.paths import logs_dir, runs_dir
 from fpvs_studio.core.serialization import read_json_file
+from fpvs_studio.runtime.research_io import read_research_csv
 
 _SESSION_CONDITION_HISTORY_FILENAME = "session_condition_history.csv"
 
@@ -231,21 +231,9 @@ def _iter_session_condition_history_summaries(
     if not history_path.is_file():
         return []
 
-    with history_path.open("r", encoding="utf-8-sig", newline="") as handle:
-        reader = csv.DictReader(handle)
-        if not reader.fieldnames or not {"session_id", "participant_number"}.issubset(
-            reader.fieldnames
-        ):
-            raise ValueError("Participant session history has an incompatible header.")
-        if len(set(reader.fieldnames)) != len(reader.fieldnames):
-            raise ValueError("Participant session history contains duplicate column names.")
-        raw_rows = list(reader)
-        if any(None in row for row in raw_rows):
-            raise ValueError("Participant session history contains malformed rows.")
-        rows = [
-            {str(key): "" if value is None else value for key, value in row.items() if key}
-            for row in raw_rows
-        ]
+    header, rows = read_research_csv(history_path)
+    if not {"session_id", "participant_number"}.issubset(header):
+        raise ValueError("Participant session history has an incompatible header.")
 
     grouped_rows: dict[tuple[str, str, str, str], list[dict[str, str]]] = {}
     for row in rows:

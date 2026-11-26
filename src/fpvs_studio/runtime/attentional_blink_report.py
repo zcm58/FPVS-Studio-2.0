@@ -30,6 +30,7 @@ from fpvs_studio.core.run_spec import AttentionalBlinkStreamRunSpec
 from fpvs_studio.core.session_plan import SessionEntry, SessionPlan
 from fpvs_studio.core.task_models import TaskResponseRecord
 from fpvs_studio.runtime.reporting_lock import project_reporting_lock
+from fpvs_studio.runtime.research_io import save_workbook_atomically
 
 ATTENTIONAL_BLINK_BURSTS_FILENAME = "attentional_blink_bursts_v1.csv"
 ATTENTIONAL_BLINK_JOURNAL_FILENAME = "attentional_blink_bursts_v1.jsonl"
@@ -559,7 +560,7 @@ def write_attentional_blink_accuracy_xlsx(
         notes.row_dimensions[row[0].row].height = 35
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        workbook.save(path)
+        save_workbook_atomically(workbook, path)
     except OSError as exc:
         raise AttentionalBlinkExportError(
             "The attentional blink workbook could not be saved."

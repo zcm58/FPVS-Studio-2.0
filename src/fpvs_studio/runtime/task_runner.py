@@ -36,7 +36,10 @@ from fpvs_studio.engines.base import (
     ResolvedTaskStep,
     TaskEngineInput,
 )
-from fpvs_studio.runtime.backward_counting import BackwardCountingSession
+from fpvs_studio.runtime.backward_counting import (
+    BackwardCountingSession,
+    is_counting_interval_revision,
+)
 from fpvs_studio.runtime.session_export import append_task_response_checkpoint
 
 _MAX_BRANCH_TRANSITIONS_MULTIPLIER = 20
@@ -136,16 +139,23 @@ class TaskResponseCheckpoint:
     ) -> list[TaskResponseRecord]:
         """Recover already submitted responses when a later task screen raises."""
         journaled = read_task_response_journal(self._path) if self._path is not None else []
-        by_index = {response.response_index: response for response in responses}
+        by_index: dict[int, TaskResponseRecord] = {}
         for response in journaled:
             if response.run_id != run_id:
                 continue
             prior = by_index.get(response.response_index)
-            if prior is not None and prior != response:
+            if (prior is not None and prior != response
+                    and not is_counting_interval_revision(prior, response)):
                 raise ValueError(
                     "The retained task journal contains conflicting response identities."
                 )
             by_index[response.response_index] = response
+        for response in responses:
+            latest = by_index.setdefault(response.response_index, response)
+            if latest != response and not is_counting_interval_revision(response, latest):
+                raise ValueError(
+                    "The retained task journal contains conflicting response identities."
+                )
         return [by_index[index] for index in sorted(by_index)]
 
 

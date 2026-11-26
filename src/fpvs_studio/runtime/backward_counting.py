@@ -19,6 +19,19 @@ from fpvs_studio.core.task_models import (
 )
 
 
+def is_counting_interval_revision(initial: TaskResponseRecord, updated: TaskResponseRecord) -> bool:
+    """Recognize only the two playback observations added by finish_run."""
+    before, after = initial.backward_counting, updated.backward_counting
+    if (before is None or after is None or before.role != BackwardCountingRole.LOAD_START
+            or before.interval_completed or before.observed_interval_seconds is not None):
+        return False
+    revised = before.model_copy(update={
+        "interval_completed": after.interval_completed,
+        "observed_interval_seconds": after.observed_interval_seconds,
+    })
+    return initial.model_copy(update={"backward_counting": revised}) == updated
+
+
 class BackwardCountingSession:
     """Retain interval state without placing participant answers in compiled specs."""
 

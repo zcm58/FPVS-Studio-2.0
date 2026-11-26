@@ -1119,6 +1119,11 @@ original table. Reading and regenerating a summary never normalizes the source f
 
 ## Exports
 
+Participant and group summary text fields remain literal Excel text. Group,
+fixation and attentional-blink workbook exports replace the destination after
+the complete workbook has been written. Research CSV migration validates each
+row against its original header before rewriting the table.
+
 Launch-time participant metadata:
 
 - the GUI collects Participant Number and the ordered project demographics
@@ -1274,6 +1279,8 @@ Discovery visits only direct child projects containing `project.json` beneath th
 named root. It never combines projects. The dry-run reports candidate counts/sizes;
 `--apply` obtains the project reporting lock and rejects active recording, redirected
 paths and source changes. Projects without existing participant outputs are untouched.
+Discovery skips directory aliases, including Windows junctions. A workbook that
+appears between inventory and cleanup is preserved for the next review.
 
 The maintenance tool stages the native unified workbook and retains minimal original
 full-mode research records before retiring detailed CSVs. It compares workbook sheet

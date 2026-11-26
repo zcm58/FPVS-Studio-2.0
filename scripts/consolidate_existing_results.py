@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import os
+import stat
 import sys
 from collections import Counter
 from dataclasses import asdict, dataclass
@@ -24,7 +25,12 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 from openpyxl import load_workbook
 
-from fpvs_studio.core.paths import resolve_project_relative_path, to_project_relative_posix
+from fpvs_studio.core.paths import (
+    filesystem_path,
+    resolve_project_relative_path,
+    to_project_relative_posix,
+    validate_project_relative_path,
+)
 from fpvs_studio.core.serialization import replace_file_atomically
 from fpvs_studio.runtime import session_export
 from fpvs_studio.runtime.participant_results import DEMOGRAPHIC_ANSWERS_SHEET_NAME
@@ -81,15 +87,24 @@ def _digest(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _redirected(path: Path) -> bool:
+    try:
+        info = filesystem_path(path).lstat()
+    except FileNotFoundError:
+        return False
+    return stat.S_ISLNK(info.st_mode) or bool(
+        getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+    )
+
+
 def _local(root: Path, relative: str) -> Path:
-    path = resolve_project_relative_path(root, relative)
+    relative = validate_project_relative_path(relative)
     lexical = root
     for part in Path(relative).parts:
         lexical = lexical / part
-        if lexical.is_symlink() or (lexical.exists()
-                and getattr(lexical.lstat(), "st_file_attributes", 0) & 0x400):
+        if _redirected(lexical):
             raise ValueError("Redirected output cannot be consolidated.")
-    return path
+    return resolve_project_relative_path(root, relative)
 
 
 def _csv_rows(path: Path) -> int:
@@ -157,32 +172,36 @@ def _summary_values_covered(root: Path, values: list[list[Any]]) -> bool:
 def inventory_project(project_root: Path) -> ProjectInventory:
     """Read only file identity and table sizes, never print participant values."""
 
+    if _redirected(project_root):
+        raise ValueError("Redirected output cannot be consolidated.")
     root = project_root.resolve(strict=True)
-    if not (root / "project.json").is_file():
+    if not _local(root, "project.json").is_file():
         raise ValueError("Consolidation requires a project.json in the selected project.")
     candidates = [_WORKBOOK, "logs/participant_summary.csv", "post_condition_responses.csv"]
-    backup_candidates = []
-    backup_root = _local(root, "backups")
-    if backup_root.is_dir():
-        backup_candidates.extend(backup_root.glob("*/logs/participant_summary.*"))
-    log_root = _local(root, "logs")
-    if log_root.is_dir():
-        backup_candidates.extend(log_root.glob("backup-*/participant_summary.*"))
-    for path in backup_candidates:
-        path = _local(root, to_project_relative_posix(root, path))
-        if path.suffix in {".xlsx", ".csv"} and _covered_backup(root, path):
-            candidates.append(to_project_relative_posix(root, path))
+    for base, pattern in (("backups", "*"), ("logs", "backup-*")):
+        parent = _local(root, base)
+        for backup in parent.glob(pattern):
+            if _redirected(backup) or not backup.is_dir():
+                continue
+            directory = backup / "logs" if base == "backups" else backup
+            if _redirected(directory):
+                continue
+            for entry in directory.glob("participant_summary.*"):
+                relative = f"{base}/{entry.relative_to(parent).as_posix()}"
+                path = _local(root, relative)
+                if path.suffix in {".xlsx", ".csv"} and _covered_backup(root, path):
+                    candidates.append(relative)
     run_root = _local(root, "runs")
     other_csvs = 0
     if run_root.is_dir():
         for directory, folders, filenames in os.walk(run_root, followlinks=False):
-            folders[:] = [name for name in folders if not (Path(directory) / name).is_symlink()]
+            folders[:] = [name for name in folders if not _redirected(Path(directory) / name)]
             for name in filenames:
                 if not name.lower().endswith(".csv"):
                     continue
                 path = Path(directory) / name
                 if name in _DETAILED_CSV_NAMES:
-                    candidates.append(to_project_relative_posix(root, path))
+                    candidates.append(f"runs/{path.relative_to(run_root).as_posix()}")
                 else:
                     other_csvs += 1
     sources = []
@@ -375,6 +394,7 @@ def consolidate_project(project_root: Path, *, apply: bool = False) -> Consolida
                 raise ValueError("An experiment is running; close it before consolidating output.")
         _assert_unchanged(inventory)
         workbook_path = _local(root, _WORKBOOK)
+        previous = next((source for source in inventory.sources if source.path == _WORKBOOK), None)
         _assert_generated_workbook(root, workbook_path)
         stage = _local(root, f"logs/.results-{uuid4().hex}.xlsx")
         probe = _local(root, f"logs/.results-{uuid4().hex}.xlsx")
@@ -403,6 +423,8 @@ def consolidate_project(project_root: Path, *, apply: bool = False) -> Consolida
             _assert_unchanged(inventory)
             _assert_unchanged(guards)
             committed_digest = _digest(stage)
+            if previous is None and workbook_path.exists():
+                raise ValueError("A workbook appeared during consolidation; it was preserved.")
             replace_file_atomically(stage, workbook_path)
             replaced = True
             if _workbook_parity(workbook_path) != parity:
@@ -421,11 +443,12 @@ def consolidate_project(project_root: Path, *, apply: bool = False) -> Consolida
                 for source in removed:
                     if not _local(root, source.path).exists():
                         _restore_file(root, source, archive_path)
-                previous = next((source for source in inventory.sources
-                                 if source.path == _WORKBOOK), None)
-                if (replaced and previous is not None and workbook_path.is_file()
+                if (replaced and workbook_path.is_file()
                         and _digest(workbook_path) == committed_digest):
-                    _restore_file(root, previous, archive_path)
+                    if previous is None:
+                        workbook_path.unlink()
+                    else:
+                        _restore_file(root, previous, archive_path)
             raise
         finally:
             stage.unlink(missing_ok=True)
@@ -439,8 +462,8 @@ def discover_projects(root: Path) -> list[Path]:
     """Select only direct project children of the explicitly named Studio root."""
     root = root.resolve(strict=True)
     return [project for project in sorted(root.iterdir())
-            if project.is_dir() and not project.is_symlink()
-            and (project / "project.json").is_file()]
+            if not _redirected(project) and project.is_dir()
+            and not _redirected(project / "project.json") and (project / "project.json").is_file()]
 
 
 def consolidate_root(root: Path, *, apply: bool = False) -> list[ConsolidationResult]:
