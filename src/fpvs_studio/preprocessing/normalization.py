@@ -526,6 +526,7 @@ def _resize_center_crop_png(
 ) -> None:
     if not destination_prepared:
         destination_path.parent.mkdir(parents=True, exist_ok=True)
+    image: Image.Image
     with Image.open(source_path, formats=("JPEG", "PNG", "BMP", "TIFF")) as image:
         ImageOps.exif_transpose(image, in_place=True)
         if image.mode != "RGB":

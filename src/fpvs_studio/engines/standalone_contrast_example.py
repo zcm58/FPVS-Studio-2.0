@@ -73,6 +73,7 @@ def main() -> None:
     visual = importlib.import_module("psychopy.visual")
 
     # 4. Make a checkerboard, or find your image beside this script.
+    image_source: np.ndarray | str
     if IMAGE_PATH is None:
         y, x = np.indices((256, 256))
         image_source = (2 * ((x // 32 + y // 32) % 2) - 1).astype(float)

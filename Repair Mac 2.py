@@ -577,7 +577,10 @@ from importlib.metadata import distribution
 from pathlib import Path
 from packaging.requirements import Requirement
 from packaging.version import Version
-import tomli
+try:
+    import tomllib
+except ModuleNotFoundError:  # Older repair environments use the backport.
+    import tomli as tomllib
 
 def compatibility_update(message):
     logger.info("Compatibility update available: %s", message)
@@ -604,7 +607,7 @@ if Version(required_version("fpvs-studio")) != Version(fpvs_studio.__version__):
 for name in ("fpvs-studio", "psychopy", "PySide6", "PyQt6", "numpy", "scipy"):
     logger.info("%s: %s", name, required_version(name))
 with (root / "pyproject.toml").open("rb") as source:
-    project = tomli.load(source)["project"]
+    project = tomllib.load(source)["project"]
 try:
     requirements = list(distribution("fpvs-studio").requires or [])
 except PackageNotFoundError:

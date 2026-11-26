@@ -1,4 +1,4 @@
-$RequiredPythonVersion = "3.10"
+$RequiredPythonVersion = "3.11"
 
 function Format-CommandLine {
     param(
@@ -70,7 +70,7 @@ function Resolve-RepoPython {
         $pythonSuffix = "Scripts\python.exe"
     }
     $candidatePaths = @(
-        (Join-Path (Join-Path $RepoRoot ".venv3.10") $pythonSuffix),
+        (Join-Path (Join-Path $RepoRoot ".venv${RequiredPythonVersion}") $pythonSuffix),
         (Join-Path (Join-Path $RepoRoot ".venv") $pythonSuffix)
     )
 
@@ -84,7 +84,7 @@ function Resolve-RepoPython {
     if ($null -eq $pythonCommand) {
         throw (
             "Python was not found. Create a repo-local Python $RequiredPythonVersion " +
-            "environment at .venv or .venv3.10 before running this script."
+            "environment at .venv or .venv${RequiredPythonVersion} before running this script."
         )
     }
 

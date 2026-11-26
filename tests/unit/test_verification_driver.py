@@ -54,14 +54,14 @@ def test_native_powershell_wrapper_resolves_environment_and_driver(tmp_path):
 @pytest.mark.parametrize("platform,suffix", [
     ("win32", "Scripts/python.exe"), ("darwin", "bin/python"), ("linux", "bin/python"),
 ])
-def test_resolve_repo_python_prefers_venv310_then_venv(monkeypatch, tmp_path, platform, suffix):
+def test_resolve_repo_python_prefers_venv311_then_venv(monkeypatch, tmp_path, platform, suffix):
     set_module_platform(monkeypatch, verify, platform)
     venv_python = tmp_path / ".venv" / suffix
     venv_python.parent.mkdir(parents=True)
     venv_python.touch()
     assert verify.resolve_repo_python(tmp_path) == venv_python.resolve()
 
-    preferred_python = tmp_path / ".venv3.10" / suffix
+    preferred_python = tmp_path / ".venv3.11" / suffix
     preferred_python.parent.mkdir(parents=True)
     preferred_python.touch()
     assert verify.resolve_repo_python(tmp_path) == preferred_python.resolve()
@@ -72,7 +72,7 @@ def test_resolve_repo_python_keeps_posix_virtual_environment_symlink(monkeypatch
     set_module_platform(monkeypatch, verify, "darwin")
     base_python = tmp_path / "base-python"
     base_python.touch()
-    venv_python = tmp_path / ".venv3.10" / "bin" / "python"
+    venv_python = tmp_path / ".venv3.11" / "bin" / "python"
     venv_python.parent.mkdir(parents=True)
     try:
         venv_python.symlink_to(base_python)
@@ -91,8 +91,8 @@ def test_resolve_repo_python_keeps_posix_virtual_environment_symlink(monkeypatch
 ])
 def test_resolve_repo_python_ignores_foreign_environment(monkeypatch, tmp_path, platform, foreign):
     set_module_platform(monkeypatch, verify, platform)
-    monkeypatch.setattr(verify.sys, "version_info", (3, 10))
-    wrong_host = tmp_path / ".venv3.10" / foreign
+    monkeypatch.setattr(verify.sys, "version_info", (3, 11))
+    wrong_host = tmp_path / ".venv3.11" / foreign
     wrong_host.parent.mkdir(parents=True)
     wrong_host.touch()
     assert verify.resolve_repo_python(tmp_path) == Path(sys.executable).absolute()

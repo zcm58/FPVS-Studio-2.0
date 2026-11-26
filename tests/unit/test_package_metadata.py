@@ -64,11 +64,12 @@ def _extract_list_assignment(name: str) -> str:
     return match.group(1)
 
 
-def test_pyproject_targets_python_310_only() -> None:
+def test_pyproject_targets_python_311_and_patched_pillow() -> None:
     assert 'name = "fpvs-studio"' in PYPROJECT_TEXT
-    assert 'requires-python = ">=3.10,<3.11"' in PYPROJECT_TEXT
+    assert 'requires-python = ">=3.11,<3.12"' in PYPROJECT_TEXT
     assert '"Programming Language :: Python :: 3 :: Only"' in PYPROJECT_TEXT
-    assert '"Programming Language :: Python :: 3.10"' in PYPROJECT_TEXT
+    assert '"Programming Language :: Python :: 3.11"' in PYPROJECT_TEXT
+    assert '"pillow>=13.0,<14"' in _extract_list_assignment("dependencies")
 
 
 def test_package_version_matches_pyproject_version() -> None:

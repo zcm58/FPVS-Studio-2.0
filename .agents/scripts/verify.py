@@ -21,7 +21,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_PATH = REPO_ROOT / ".agents" / "verification.toml"
 QT_OPT_IN_ENV = "FPVS_ALLOW_QT_TESTS"
 QT_PLATFORM_ENV = "QT_QPA_PLATFORM"
-SUPPORTED_PYTHON = (3, 10)
+SUPPORTED_PYTHON = (3, 11)
 MACOS_TYPE_TARGETS = (
     "src/fpvs_studio/runtime/macos_display.py",
     "src/fpvs_studio/runtime/macos_session_process.py",
@@ -49,10 +49,11 @@ class VerificationScope:
 
 
 def resolve_repo_python(repo_root: Path = REPO_ROOT) -> Path:
-    """Prefer .venv3.10, then .venv, then the current Python 3.10."""
+    """Prefer the target-version venv, then .venv, then the current supported Python."""
 
     suffix = Path("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
-    for environment in (".venv3.10", ".venv"):
+    required = ".".join(map(str, SUPPORTED_PYTHON))
+    for environment in (f".venv{required}", ".venv"):
         candidate = repo_root / environment / suffix
         if candidate.is_file():
             # POSIX venv executables are symlinks; resolving them selects the
@@ -61,8 +62,8 @@ def resolve_repo_python(repo_root: Path = REPO_ROOT) -> Path:
     if sys.version_info[:2] != SUPPORTED_PYTHON:
         version = ".".join(map(str, sys.version_info[:2]))
         raise RuntimeError(
-            "FPVS Studio verification requires Python 3.10; "
-            f"found {version} at {sys.executable}. Create .venv3.10 or .venv."
+            f"FPVS Studio verification requires Python {required}; "
+            f"found {version} at {sys.executable}. Create .venv{required} or .venv."
         )
     return Path(sys.executable).absolute()
 
