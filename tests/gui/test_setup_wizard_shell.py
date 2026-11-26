@@ -15,6 +15,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import (
     QApplication,
+    QFormLayout,
     QFrame,
     QHeaderView,
     QLabel,
@@ -519,7 +520,26 @@ def test_setup_wizard_compact_steps_do_not_clip_visible_content(
             QApplication.processEvents()
             _assert_visible_children_within_parent(wizard.project_step_surface)
         elif step_key == "conditions":
-            assert wizard.condition_setup_step.presentation_button.isVisible()
+            step = wizard.condition_setup_step
+            form = step.condition_details_section.findChild(QFormLayout)
+            assert form is not None
+            assert form.labelAlignment() & Qt.AlignmentFlag.AlignLeft
+            left_edge = step.condition_scope_label.x()
+            for row in range(form.rowCount()):
+                item = form.itemAt(row, QFormLayout.ItemRole.LabelRole)
+                label = item.widget() if item is not None else None
+                if isinstance(label, QLabel) and label.isVisible():
+                    assert label.mapTo(step.condition_details_section, QPoint()).x() == left_edge
+            appearance, modifiers = step.presentation_button, step.task_button
+            assert appearance.isVisible() and modifiers.isVisible()
+            assert appearance.text().replace("&&", "&") == "Size, Position, & Transforms"
+            assert appearance.width() == modifiers.width()
+            assert appearance.width() >= max(
+                appearance.sizeHint().width(), modifiers.sizeHint().width(),
+            )
+            assert appearance.mapTo(step, appearance.rect().topRight()).x() == (
+                modifiers.mapTo(step, modifiers.rect().topRight()).x()
+            )
             assert wizard.condition_setup_step.base_import_button.isVisible()
             assert wizard.condition_setup_step.oddball_import_button.isVisible()
             source_actions = (

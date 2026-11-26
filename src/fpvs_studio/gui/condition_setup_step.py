@@ -513,7 +513,7 @@ class ConditionSetupStep(QWidget):
         self.presentation_summary_label.setObjectName("setup_wizard_condition_presentation_summary")
         self.presentation_summary_label.setWordWrap(True)
         self.presentation_summary_label.setMinimumWidth(0)
-        self.presentation_button = QPushButton("Size, position & transforms...", self)
+        self.presentation_button = QPushButton("Size, Position, && Transforms", self)
         self.presentation_button.setObjectName("setup_wizard_condition_presentation_button")
         self.presentation_button.setToolTip(
             "Configure condition, Base, and Oddball presentation overrides."
@@ -609,7 +609,7 @@ class ConditionSetupStep(QWidget):
         form.setContentsMargins(0, 0, 0, 0)
         form.setHorizontalSpacing(14)
         form.setVerticalSpacing(10)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.ExpandingFieldsGrow)
         self.target_repeats_label = QLabel("Target Stimulus Repeats", self)
         self.target_repeats_label.setObjectName("setup_conditions_target_repeats_label")
@@ -843,6 +843,12 @@ class ConditionSetupStep(QWidget):
         self.timing_template_combo.ensurePolished()
         self.condition_name_edit.ensurePolished()
         _configure_detail_field_widths(self.timing_template_combo, self.condition_name_edit)
+        buttons = (self.presentation_button, self.task_button)
+        for button in buttons:
+            button.ensurePolished()
+        width = max(button.sizeHint().width() for button in buttons)
+        for button in buttons:
+            button.setFixedWidth(width)
 
     def refresh(self) -> None:
         project = self._document.project
