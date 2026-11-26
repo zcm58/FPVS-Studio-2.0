@@ -63,7 +63,10 @@ Proposals are not implemented behavior. Start in `planned/` and move a plan to
 - [Named local recording profiles](exec-plans/planned/lab-independent-recording-setup.md)
   builds reusable per-computer profiles on the current Recording settings and selected-display preflight.
 
-These future changes came out of the November 22 optimization review.
+- [Retire Condition Templates](exec-plans/planned/remove-condition-templates.md)
+  removes template controls from Setup, Create Project and Settings.
+
+The first three plans came out of the November 22 optimization review.
 
 
 ## Plan Rules and History
