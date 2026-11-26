@@ -10,6 +10,8 @@ from tests.gui.helpers import assert_visible_children_within_parent, record_setu
 
 from fpvs_studio.core.condition_timing import resolve_condition_stream_timing
 from fpvs_studio.core.enums import StimulusModality
+from fpvs_studio.core.paths import project_json_path
+from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.core.session_ordering import effective_condition_presentation_count
 from fpvs_studio.core.validation import APPROVED_MONITOR_REFRESH_RATES_HZ
 from fpvs_studio.gui.condition_timing_table import FREQUENCY_OVERRIDE_WARNING, ConditionTimingTable
@@ -826,8 +828,9 @@ def test_timing_draft_survives_display_navigation_and_applies_at_the_selected_ra
 
 
 def test_display_step_checks_every_image_rate_against_its_refresh_target(
-    qtbot, monkeypatch, multi_condition_project_root,
+    qtbot, monkeypatch, multi_condition_project, multi_condition_project_root,
 ):
+    save_project_file(multi_condition_project, project_json_path(multi_condition_project_root))
     document = ProjectDocument.open_existing(multi_condition_project_root)
     incompatible = document.project.conditions[-1]
     incompatible.base_hz = 7.5
