@@ -4,13 +4,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import re
+import shutil
 import sqlite3
 import stat
 import sys
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, closing
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,7 +27,12 @@ from .paths import (
     slugify_project_name,
     validate_project_id,
 )
-from .serialization import load_project_file, read_json_file, save_project_file
+from .serialization import (
+    load_project_file,
+    model_to_json,
+    read_json_file,
+    save_project_file,
+)
 from .study_lifecycle import (
     StudyState,
     _read_optional_study,
@@ -88,6 +95,76 @@ class ProtocolReviewRequired(ValueError):
 
 
 StudyVisitLookup = Callable[[Path], dict[str, set[str]]]
+
+
+def _recover_into_empty_path(source: Path, target: Path) -> None:
+    if os.name == "nt":
+        source.rename(target)  # Windows rename refuses an occupied destination.
+        return
+    try:
+        os.link(source, target)
+    except FileExistsError:
+        raise
+    except OSError:
+        with source.open("rb") as incoming, target.open("xb") as outgoing:
+            shutil.copyfileobj(incoming, outgoing)
+        shutil.copymode(source, target)
+
+
+def _restore_project_file(path: Path, backup: Path, project: ProjectFile) -> None:
+    # A metadata-only save in another instance can replace project.json while the
+    # revision commit waits for a reader. Inspect the displaced file by private name.
+    displaced = backup.with_name(f"uncommitted-project-{uuid4().hex}.json")
+    path.rename(displaced)
+    try:
+        if displaced.read_bytes() != model_to_json(project).replace("\n", os.linesep).encode():
+            raise OSError("Another editor changed project.json while the revision was saving.")
+        _recover_into_empty_path(backup, path)
+    except BaseException:
+        if not path.exists():
+            _recover_into_empty_path(displaced, path)
+        raise
+    try:
+        displaced.unlink()
+    except OSError:
+        logging.getLogger(__name__).warning("Could not remove uncommitted project at %s", displaced)
+
+
+def _save_project_and_revision(root: Path, project: ProjectFile, db: sqlite3.Connection) -> None:
+    """Keep the exact prior project until SQLite has committed the matching revision."""
+    path = filesystem_path(root / "project.json")
+    backup = filesystem_path(database_path(root).parent / f"project-before-save-{uuid4().hex}.json")
+    clean_backup = False
+    try:
+        try:
+            os.link(path, backup)
+            clean_backup = True
+        except FileExistsError:
+            raise
+        except OSError:
+            # FAT and some network volumes do not support hard links.
+            with path.open("rb") as source, backup.open("xb") as target:
+                clean_backup = True
+                shutil.copyfileobj(source, target)
+            shutil.copymode(path, backup)
+        save_project_file(project, path)
+        try:
+            db.commit()
+        except BaseException:
+            try:
+                _restore_project_file(path, backup, project)
+            except OSError as error:
+                clean_backup = False
+                raise OSError(
+                    f"Could not restore project.json. Its previous copy is at {backup}."
+                ) from error
+            raise
+    finally:
+        if clean_backup:
+            try:
+                backup.unlink(missing_ok=True)
+            except OSError:
+                logging.getLogger(__name__).warning("Could not remove save backup %s", backup)
 
 
 def _require_reason(
@@ -157,14 +234,21 @@ def _active(db: sqlite3.Connection, *, metadata_only: bool = False) -> sqlite3.R
     )
 
 
-def _read_active(root: Path, *, metadata_only: bool = False) -> sqlite3.Row | None:
+@contextmanager
+def _study_reader(root: Path) -> Iterator[sqlite3.Connection | None]:
     path = database_path(root)
     if not path.is_file():
-        return None
+        yield None
+        return
     with closing(sqlite3.connect(path)) as db:
         db.execute("PRAGMA query_only=ON")
         db.row_factory = sqlite3.Row
-        return _active(db, metadata_only=metadata_only)
+        yield db
+
+
+def _read_active(root: Path, *, metadata_only: bool = False) -> sqlite3.Row | None:
+    with _study_reader(root) as db:
+        return _active(db, metadata_only=metadata_only) if db is not None else None
 
 
 def current_version(root: Path) -> StudyVersion | None:
@@ -632,7 +716,14 @@ def prepare_setup_change(
     include_run_observations: bool = True,
 ) -> ProtocolDraft:
     """Review authored fields and stimulus declarations without enumerating stimulus files."""
-    row = _read_active(root)
+    from .run_stimulus_identity import read_run_stimulus_observation
+
+    with _study_reader(root) as db:
+        row = _active(db) if db is not None else None
+        pending = (
+            read_run_stimulus_observation(db, row["version_id"])[1]
+            if db is not None and row is not None and include_run_observations else {}
+        )
     saved = _protocol(load_project_file(root / "project.json"))
     candidate = _protocol(project)
     manifest = _manifest_json(root)
@@ -648,10 +739,7 @@ def prepare_setup_change(
         if manifest_changed:
             old, new = _declared_media(previous_manifest), _declared_media(manifest)
             changes.extend(_media_changes(old, new) or ["Stimulus declarations changed"])
-    if row is not None and include_run_observations:
-        from .run_stimulus_identity import pending_run_stimulus_changes
-
-        pending = pending_run_stimulus_changes(root, row["version_id"])
+    if pending:
         changes.extend(
             f"Stimulus {'removed' if digest is None else 'changed'}: {path}"
             for path, digest in sorted(pending.items())
@@ -669,12 +757,12 @@ def prepare_setup_change(
     )
 
 
-def _validate_setup_review(root: Path, draft: ProtocolDraft) -> str:
-    from .run_stimulus_identity import pending_run_stimulus_changes
+def _validate_setup_review(root: Path, draft: ProtocolDraft, db: sqlite3.Connection) -> str:
+    from .run_stimulus_identity import read_run_stimulus_observation
 
     saved = _protocol(load_project_file(root / "project.json"))
     manifest = _manifest_json(root)
-    pending = pending_run_stimulus_changes(root, draft.previous) if draft.previous else {}
+    pending = read_run_stimulus_observation(db, draft.previous)[1] if draft.previous else {}
     if (
         draft.setup_metadata != (json.dumps(saved, sort_keys=True), manifest)
         or dict(draft.observed_changes) != pending
@@ -684,15 +772,16 @@ def _validate_setup_review(root: Path, draft: ProtocolDraft) -> str:
 
 
 def _proposed_media(
-    root: Path, active: sqlite3.Row | None, manifest: str, draft: ProtocolDraft
+    root: Path, active: sqlite3.Row | None, manifest: str, draft: ProtocolDraft,
+    db: sqlite3.Connection,
 ) -> dict[str, str]:
-    from .run_stimulus_identity import observed_run_stimuli
+    from .run_stimulus_identity import read_run_stimulus_observation
 
     old = _declared_media(_saved_manifest(root, active)) if active is not None else {}
     new = _declared_media(manifest)
     known = _known_media(active) if active is not None else {}
     if active is not None:
-        known.update(observed_run_stimuli(root, active["version_id"]))
+        known.update(read_run_stimulus_observation(db, active["version_id"])[0] or {})
     for path in old.keys() | new.keys():
         if old.get(path) != new.get(path):
             if path in new:
@@ -723,7 +812,7 @@ def commit_setup_change(
         _tables(db)
         _check_current(db, draft)
         _require_reason(root, draft, reason, visits)
-        manifest = _validate_setup_review(root, draft)
+        manifest = _validate_setup_review(root, draft, db)
         if _protocol(project) != draft.protocol:
             raise ValueError("The experiment changed after review. Review its settings again.")
         active = _active(db)
@@ -733,7 +822,7 @@ def commit_setup_change(
         ):
             assets = _assets(root, db, rollback=rollback)
             actual = {f"stimuli/{p}": key for p, key in assets.items() if p != "manifest.json"}
-            expected = _proposed_media(root, active, manifest, draft)
+            expected = _proposed_media(root, active, manifest, draft, db)
             unexplained = {
                 path: actual.get(path)
                 for path, digest in expected.items()
@@ -772,7 +861,7 @@ def commit_setup_change(
                     reason or (active["reason"] if pending and active else ""),
                 )
         elif draft.changes:
-            known = _proposed_media(root, active, manifest, draft)
+            known = _proposed_media(root, active, manifest, draft, db)
             needs_decision = not completed_setup
             if needs_decision and pending:
                 baseline = db.execute(
@@ -793,7 +882,7 @@ def commit_setup_change(
                 "UPDATE working_revisions SET pending=0 WHERE version_id=?", (draft.previous,)
             )
         if not discovered:
-            save_project_file(project, root / "project.json")
+            _save_project_and_revision(root, project, db)
             rollback.pop_all()
     if discovered:
         raise ProtocolReviewRequired(
@@ -902,7 +991,7 @@ def commit_change(
             )
         if draft.changes:
             _record(db, draft, reason)
-        save_project_file(project, root / "project.json")
+        _save_project_and_revision(root, project, db)
 
 
 def prepare_library_update(
@@ -1031,6 +1120,51 @@ def _materialize(
             raise ValueError(f"Saved stimulus is damaged: {relative}")
 
 
+@contextmanager
+def _install_stimuli(
+    root: Path, replacement: Path, *, keep_original: bool = False,
+) -> Iterator[Path | None]:
+    """Keep working bytes outside temporary cleanup until installation or rollback succeeds."""
+    active = filesystem_path(root / "stimuli")
+    previous = database_path(root).parent / f"unapplied-stimuli-{uuid4().hex}"
+    try:
+        had_original = stat.S_ISDIR(_regular(active).st_mode)
+    except FileNotFoundError:
+        had_original = False
+    else:
+        if not had_original:
+            raise NotADirectoryError(f"Expected a working stimulus directory at {active}.")
+    if had_original:
+        active.rename(filesystem_path(previous))
+    installed = False
+    try:
+        replacement.rename(active)
+        installed = True
+        yield previous if had_original else None
+    except BaseException:
+        try:
+            if installed:
+                # An editor may have added files to the installed tree during the
+                # failed commit. Keep it outside temporary cleanup as well.
+                pending = filesystem_path(previous.with_name(f"uncommitted-stimuli-{uuid4().hex}"))
+                active.rename(pending)
+                logging.getLogger(__name__).warning("Uncommitted stimuli retained at %s", pending)
+            if had_original:
+                filesystem_path(previous).rename(active)
+        except OSError as error:
+            if had_original:
+                raise OSError(
+                    f"Could not restore the working stimuli. Recover them from {previous}."
+                ) from error
+            raise
+        raise
+    if had_original and not keep_original:
+        try:
+            shutil.rmtree(filesystem_path(previous))
+        except OSError:
+            logging.getLogger(__name__).warning("Could not remove previous stimuli at %s", previous)
+
+
 def restore_version(
     root: Path, draft: ProtocolDraft, reason: str, visits: StudyVisitLookup
 ) -> ProjectFile:
@@ -1058,19 +1192,9 @@ def restore_version(
         with TemporaryDirectory(dir=database_path(root).parent) as work:
             stage = Path(work)
             _materialize(root, stage / "restored", draft.assets)
-            active = resolve_project_relative_path(root, "stimuli")
-            if active.exists():
-                active.rename(stage / "original")
-            try:
-                (stage / "restored").rename(active)
+            with _install_stimuli(root, stage / "restored"):
                 _record(db, draft, reason)
-                save_project_file(restored, root / "project.json")
-            except BaseException:
-                if active.exists():
-                    active.rename(stage / "unused")
-                if (stage / "original").exists():
-                    (stage / "original").rename(active)
-                raise
+                _save_project_and_revision(root, restored, db)
         return restored
 
 
@@ -1111,7 +1235,7 @@ def keep_saved_stimuli(root: Path, draft: ProtocolDraft) -> Path | None:
         if row is None:
             return None
         if draft.setup_metadata is not None:
-            _validate_setup_review(root, draft)
+            _validate_setup_review(root, draft, db)
             if not draft.media_changed:
                 return None
         active_assets = _read_assets(root)
@@ -1121,20 +1245,12 @@ def keep_saved_stimuli(root: Path, draft: ProtocolDraft) -> Path | None:
         if draft.setup_metadata is None and active_assets != draft.assets:
             raise ValueError("Stimuli changed again during review. Review the current files.")
         private = database_path(root).parent
-        recovered = private / f"unapplied-stimuli-{uuid4().hex}"
         with TemporaryDirectory(dir=private) as work:
             stage = Path(work) / "saved"
             _materialize(root, stage, saved, available_assets=active_assets)
-            active = root / "stimuli"
-            if active.exists():
-                active.rename(recovered)
-            try:
-                stage.rename(active)
-            except BaseException:
-                if recovered.exists():
-                    recovered.rename(active)
-                raise
-        return recovered if recovered.exists() else None
+            with _install_stimuli(root, stage, keep_original=True) as recovered:
+                db.commit()
+            return recovered
 
 
 def create_from_version(
@@ -1160,7 +1276,7 @@ def create_from_version(
     if draft.setup_metadata is not None:
         with study_transaction(root) as db:
             _check_current(db, draft)
-            _validate_setup_review(root, draft)
+            _validate_setup_review(root, draft, db)
             draft = replace(draft, assets=_read_assets(root), candidate_root=root)
     now = datetime.now(timezone.utc)
     metadata = source.meta.model_copy(
@@ -1208,7 +1324,7 @@ def create_from_version(
             _check_current(db, draft)
             row = _active(db)
             if draft.setup_metadata is not None:
-                _validate_setup_review(root, draft)
+                _validate_setup_review(root, draft, db)
                 if not draft.media_changed:
                     restore_source_assets = False
             if draft.working_protocol is not None and draft.working_protocol != _protocol(
@@ -1224,26 +1340,19 @@ def create_from_version(
                         "The original stimuli changed during review. Review the study again."
                     )
                 original_assets = _original_assets(root, row, draft.assets)
-            if restore_source_assets and draft.assets != original_assets:
-                # The stimulus editor may have written candidate bytes before Save.
-                # Put the original bytes back only after the independent copy is ready.
-                with TemporaryDirectory(dir=database_path(root).parent) as swap_path:
-                    swap = Path(swap_path)
-                    active = root / "stimuli"
-                    _materialize(
-                        root, swap / "saved", original_assets, available_assets=draft.assets
+            with ExitStack() as swap:
+                if restore_source_assets and draft.assets != original_assets:
+                    # Keep the original study recoverable until publication is committed.
+                    swap_path = swap.enter_context(
+                        TemporaryDirectory(dir=database_path(root).parent)
                     )
-                    if active.exists():
-                        active.rename(swap / "edited")
-                    try:
-                        (swap / "saved").rename(active)
-                        stage.rename(destination)
-                    except BaseException:
-                        if active.exists():
-                            active.rename(swap / "unused")
-                        if (swap / "edited").exists():
-                            (swap / "edited").rename(active)
-                        raise
-            else:
+                    replacement = Path(swap_path) / "saved"
+                    _materialize(
+                        root, replacement, original_assets, available_assets=draft.assets
+                    )
+                    swap.enter_context(_install_stimuli(root, replacement))
                 stage.rename(destination)
+                # This final source transaction guards the review and reads history.
+                # Release its reservation after publication without a writer commit.
+                db.rollback()
     return destination

@@ -4,8 +4,10 @@ import hashlib
 import json
 import os
 import sqlite3
+import stat
 from contextlib import closing
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -192,6 +194,185 @@ def test_save_restore_and_fork_exact_image_and_protocol(
     assert get_study(root).collection_complete
     assert list_versions(root)[0].label == "Original"
     assert len(list_versions(root)) == 3
+
+
+@pytest.mark.parametrize("action", ["setup", "review", "restore"])
+def test_busy_version_commit_keeps_working_setup_and_stimuli(
+    sample_project_root, sample_project, monkeypatch, action,
+):
+    root = sample_project_root
+    project_file = root / "project.json"
+    save_project_file(sample_project, project_file)
+    prepare_change(root, sample_project)
+    initial = current_version(root)
+    image = next((root / "stimuli").rglob("*.png"))
+    image.write_bytes(b"working edition")
+    sample_project.conditions[0].name = "Working edition"
+    if action == "restore":
+        commit_change(root, sample_project, prepare_change(root, sample_project), "",
+                      research_visits_by_version)
+        draft = historical_draft(root, initial.version_id)
+    elif action == "setup":
+        draft = prepare_setup_change(root, sample_project)
+    else:
+        draft = prepare_change(root, sample_project)
+
+    prior_project = project_file.read_bytes()
+    versions = list_versions(root)
+    objects = set((database_path(root).parent / "objects").iterdir())
+    connect = sqlite3.connect
+
+    def short_timeout(*args, **kwargs):
+        return connect(*args, **{**kwargs, "timeout": 0.02})
+
+    with closing(connect(database_path(root))) as reader:
+        # A reader can coexist with the writer until SQLite needs an exclusive commit.
+        reader.execute("BEGIN")
+        reader.execute("SELECT version_id FROM versions").fetchall()
+        monkeypatch.setattr(sqlite3, "connect", short_timeout)
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            if action == "restore":
+                restore_version(root, draft, "", research_visits_by_version)
+            elif action == "setup":
+                commit_setup_change(root, sample_project, draft, "", research_visits_by_version,
+                                    save_version=True)
+            else:
+                commit_change(root, sample_project, draft, "", research_visits_by_version)
+
+    assert project_file.read_bytes() == prior_project
+    assert image.read_bytes() == b"working edition"
+    assert list_versions(root) == versions
+    assert set((database_path(root).parent / "objects").iterdir()) == objects
+    assert not list(database_path(root).parent.glob("project-before-save-*"))
+    assert not list(database_path(root).parent.glob("unapplied-stimuli-*"))
+
+
+@pytest.mark.parametrize("action", ["restore", "fork", "cancel"])
+def test_blocked_stimulus_rollback_retains_unarchived_edits(
+    sample_project_root, sample_project, tmp_path, monkeypatch, action,
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    prepare_change(root, sample_project)
+    version = current_version(root)
+    image = next((root / "stimuli").rglob("*.png"))
+    image.write_bytes(b"unarchived edit")
+    draft = (
+        historical_draft(root, version.version_id) if action == "restore"
+        else prepare_setup_change(root, sample_project, stimuli_changed=True)
+    )
+    private = database_path(root).parent
+    assert not (private / "objects" / hashlib.sha256(image.read_bytes()).hexdigest()).exists()
+    rename = Path.rename
+
+    def busy_active_directory(path, target):
+        if filesystem_path(target) == filesystem_path(root / "stimuli"):
+            raise PermissionError("Stimulus installation is blocked")
+        return rename(path, target)
+
+    monkeypatch.setattr(Path, "rename", busy_active_directory)
+    with pytest.raises(OSError) as error:
+        if action == "restore":
+            restore_version(root, draft, "", research_visits_by_version)
+        elif action == "fork":
+            create_from_version(root, tmp_path, "Copy", draft, restore_source_assets=True)
+        else:
+            keep_saved_stimuli(root, draft)
+    (recovered,) = private.glob("unapplied-stimuli-*")
+    assert str(recovered) in str(error.value)
+    assert (recovered / image.relative_to(root / "stimuli")).read_bytes() == b"unarchived edit"
+    assert current_version(root) == version
+    assert not (tmp_path / "copy").exists()
+
+
+@pytest.mark.parametrize("rollback_blocked", [False, True])
+def test_version_save_on_volume_without_hard_links(
+    sample_project_root, sample_project, monkeypatch, rollback_blocked,
+):
+    root = sample_project_root
+    project_file = root / "project.json"
+    save_project_file(sample_project, project_file)
+    prepare_change(root, sample_project)
+    prior_project = project_file.read_bytes()
+    sample_project.conditions[0].name = "Review"
+    draft = prepare_setup_change(root, sample_project)
+
+    def unsupported_link(*_args):
+        raise OSError("Volume does not support hard links")
+
+    monkeypatch.setattr(os, "link", unsupported_link)
+    if not rollback_blocked:
+        commit_setup_change(root, sample_project, draft, "", research_visits_by_version,
+                            save_version=True)
+        assert load_project_file(project_file) == sample_project
+        assert not list(database_path(root).parent.glob("project-before-save-*"))
+        return
+
+    def busy_restore(*_args):
+        raise PermissionError("Project file is in use")
+
+    connect = sqlite3.connect
+    with closing(connect(database_path(root))) as reader:
+        reader.execute("BEGIN")
+        reader.execute("SELECT version_id FROM versions").fetchall()
+        monkeypatch.setattr(sqlite3, "connect", lambda filename, **_: connect(filename, timeout=0))
+        monkeypatch.setattr(study_versions, "_restore_project_file", busy_restore)
+        with pytest.raises(OSError) as error:
+            commit_setup_change(root, sample_project, draft, "", research_visits_by_version,
+                                save_version=True)
+    (recovery,) = database_path(root).parent.glob("project-before-save-*")
+    assert recovery.read_bytes() == prior_project
+    assert str(recovery) in str(error.value)
+    assert len(list_versions(root)) == 1
+
+
+def test_stimulus_swap_checks_lexical_entry_before_any_move(
+    sample_project_root, sample_project, monkeypatch,
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    prepare_change(root, sample_project)
+    live = filesystem_path(root / "stimuli")
+    original_lstat = Path.lstat
+    rename = Path.rename
+    moves = []
+
+    def linked_stimuli(path):
+        if path == live:
+            return SimpleNamespace(st_mode=stat.S_IFDIR, st_file_attributes=0x400)
+        return original_lstat(path)
+
+    def record_move(source, target):
+        moves.append((source, target))
+        return rename(source, target)
+
+    monkeypatch.setattr(Path, "lstat", linked_stimuli)
+    monkeypatch.setattr(Path, "rename", record_move)
+    with pytest.raises(ValueError, match="Linked stimulus paths"):
+        with study_versions._install_stimuli(root, root / "replacement"):
+            pytest.fail("Unexpected installation")
+    assert not moves
+
+
+def test_rollback_keeps_metadata_saved_by_another_editor(sample_project_root, sample_project):
+    root = sample_project_root
+    path = root / "project.json"
+    save_project_file(sample_project, path)
+    prior = path.read_bytes()
+    prepare_change(root, sample_project)
+    sample_project.conditions[0].name = "Edited condition"
+
+    class BusyCommit:
+        def commit(self):
+            from fpvs_studio.core.project_service import rename_project
+            rename_project(root, "Independent rename")
+            raise sqlite3.OperationalError("database is locked")
+
+    with pytest.raises(OSError, match="previous copy"):
+        study_versions._save_project_and_revision(root, sample_project, BusyCommit())
+    assert load_project_file(path).meta.name == "Independent rename"
+    (backup,) = database_path(root).parent.glob("project-before-save-*")
+    assert backup.read_bytes() == prior
 
 
 def test_first_setup_save_captures_final_candidate_once(
@@ -488,6 +669,29 @@ def test_fork_changed_draft_keeps_original_bytes(sample_project_root, sample_pro
     assert image.read_bytes() == before
     assert (fork / image.relative_to(root)).read_bytes() == b"candidate"
     assert current_version(root) == original
+
+
+def test_published_study_survives_reader_of_original_history(
+    sample_project_root, sample_project, tmp_path, monkeypatch,
+):
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    prepare_change(root, sample_project)
+    draft = historical_draft(root, current_version(root).version_id)
+    target = tmp_path / "new-cohort"
+    rename = Path.rename
+    with closing(sqlite3.connect(database_path(root))) as reader:
+        def observe_publication(source, destination):
+            result = rename(source, destination)
+            if destination == target:
+                (target / "logs/review.txt").write_bytes(b"independent work")
+                reader.execute("BEGIN")
+                reader.execute("SELECT version_id FROM versions").fetchall()
+            return result
+
+        monkeypatch.setattr(Path, "rename", observe_publication)
+        assert create_from_version(root, tmp_path, "New cohort", draft) == target
+    assert (target / "logs/review.txt").read_bytes() == b"independent work"
 
 
 def test_collecting_checkpoint_discovers_external_changes_for_next_save(

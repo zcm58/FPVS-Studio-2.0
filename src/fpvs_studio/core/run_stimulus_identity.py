@@ -13,6 +13,22 @@ from .paths import resolve_project_relative_path
 from .study_lifecycle import database_path, study_transaction
 
 
+def read_run_stimulus_observation(
+    db: sqlite3.Connection, version_id: str,
+) -> tuple[dict[str, str] | None, dict[str, str | None]]:
+    """Read launch evidence using the caller's current study transaction."""
+    if not db.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='run_stimuli'"
+    ).fetchone():
+        return None, {}
+    row = db.execute(
+        "SELECT verified, changes FROM run_stimuli WHERE version_id=?", (version_id,)
+    ).fetchone()
+    if row is None:
+        return None, {}
+    return (json.loads(row[0]) if row[0] is not None else None), json.loads(row[1])
+
+
 def _observation(
     root: Path, version_id: str,
 ) -> tuple[dict[str, str] | None, dict[str, str | None]]:
@@ -21,16 +37,7 @@ def _observation(
         return None, {}
     with closing(sqlite3.connect(path)) as db:
         db.execute("PRAGMA query_only=ON")
-        if not db.execute(
-            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='run_stimuli'"
-        ).fetchone():
-            return None, {}
-        row = db.execute(
-            "SELECT verified, changes FROM run_stimuli WHERE version_id=?", (version_id,)
-        ).fetchone()
-    if row is None:
-        return None, {}
-    return (json.loads(row[0]) if row[0] is not None else None), json.loads(row[1])
+        return read_run_stimulus_observation(db, version_id)
 
 
 def observed_run_stimuli(root: Path, version_id: str) -> dict[str, str]:

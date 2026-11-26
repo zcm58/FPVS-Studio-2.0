@@ -123,6 +123,9 @@ in Studio. Never substitute an earlier checkpoint for an unsnapshotted setup.
 From history, the author can **Save as new study** using that version or
 **Restore this version** inside the existing study. Restoring records a new
 current version, preserves the intervening versions and affects future visits.
+If a version save fails while committing the study history, Studio restores the
+previous working setup. If a file lock also prevents rollback, the error gives
+the location of the preserved files.
 Use the same two warnings for an in-place restore that changes a protocol
 after participant data exists. Each earlier visit keeps its recorded version.
 
