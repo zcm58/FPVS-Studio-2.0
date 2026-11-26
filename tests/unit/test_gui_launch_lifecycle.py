@@ -349,6 +349,7 @@ def test_participant_confirmation_does_not_continue_during_shutdown(session_numb
     )
     _bind_methods(
         check, "run_page.py", "ParticipantSessionCheckTask", ["_on_finished"],
+        isValid=lambda widget: widget is check,
         update_lifecycle=lambda: lifecycle,
         ParticipantSessionConfirmationDialog=confirmation,
         QDialog=SimpleNamespace(DialogCode=SimpleNamespace(Accepted=1)),

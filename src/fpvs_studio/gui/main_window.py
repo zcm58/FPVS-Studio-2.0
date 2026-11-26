@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 from shiboken6 import delete as delete_qobject
+from shiboken6 import isValid
 
 from fpvs_studio import __version__
 from fpvs_studio.core.enums import ExperimentCategory
@@ -1261,6 +1262,8 @@ class StudioMainWindow(QMainWindow):
                     participant_number, participant_details.manual_removed_electrodes,
                 )
                 self.document.save()
+                if not isValid(self):
+                    return
             resolved_seeds = self.document.prepare_participant_randomization(
                 participant_number, participant_session_number,
             )
@@ -1272,7 +1275,8 @@ class StudioMainWindow(QMainWindow):
                 ) if local_display is None else None
             )
         except Exception as error:
-            _show_error_dialog(self, "Launch Blocked", error)
+            if isValid(self):
+                _show_error_dialog(self, "Launch Blocked", error)
             return
         if (
             self.document.require_biosemi_recording_confirmation

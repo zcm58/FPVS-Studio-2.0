@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QRadioButton,
     QWidget,
 )
+from shiboken6 import delete, isValid
 from tests.gui.helpers import (
     _assert_visible_children_within_parent,
     _ImmediateProgressTask,
@@ -1197,6 +1198,62 @@ def test_participant_history_lookup_runs_off_gui_thread_and_finishes_before_conf
     qtbot.waitUntil(lambda: bool(confirmed))
     assert callback_threads[0] is not QApplication.instance().thread()
     assert confirmed == [(1, True)]
+
+
+@pytest.mark.parametrize("disposal_point", ["dialog", "finished", "confirmed"])
+def test_participant_check_stops_when_callback_destroys_owner(qtbot, monkeypatch, disposal_point):
+    container = QWidget()
+    qtbot.addWidget(container)
+    owner = QWidget(container)
+    events = []
+
+    def record(stage):
+        events.append(stage)
+        if stage == disposal_point:
+            delete(owner)
+
+    def confirm(_dialog):
+        record("dialog")
+        return int(ParticipantSessionConfirmationDialog.DialogCode.Accepted)
+
+    monkeypatch.setattr(ParticipantSessionConfirmationDialog, "exec", confirm)
+    check = ParticipantSessionCheckTask(
+        parent_widget=owner, participant_number="0007", allow_repeated_sessions=True,
+        callback=lambda: 2, task_factory=_ImmediateProgressTask,
+    )
+    # Like the real lifecycle-owned worker, the sender outlives the launch UI.
+    check._task.setParent(container)
+    check.finished.connect(lambda: record("finished"))
+    check.confirmed.connect(lambda _number: record("confirmed"))
+    check.start()
+    stages = ["dialog", "finished", "confirmed"]
+    assert events == stages[:stages.index(disposal_point) + 1]
+    assert not isValid(check)
+
+
+@pytest.mark.parametrize("surface", ["home", "run"])
+@pytest.mark.parametrize("save_fails", [False, True])
+def test_participant_launch_stops_if_owner_destroyed_during_save(
+    qtbot, controller, tmp_path, monkeypatch, surface, save_fails,
+):
+    document = controller.create_project("Close During Participant Save", tmp_path)
+    window = controller.main_window
+    qtbot.waitUntil(lambda: window._session_seed_ready)
+    page = window if surface == "home" else window.run_page
+
+    def save():
+        delete(window)
+        if save_fails:
+            raise OSError("Visit save interrupted")
+
+    monkeypatch.setattr(document, "save", save)
+    monkeypatch.setattr(document, "validate_recording_launch", lambda: "serial")
+    monkeypatch.setattr(document, "prepare_participant_randomization",
+                        lambda *_: pytest.fail("A closed window cannot continue launch"))
+    monkeypatch.setattr(main_window, "_show_error_dialog",
+                        lambda *_: pytest.fail("A closed window cannot display an error"))
+    page._launch_participant_session(ParticipantLaunchDetails("0007"), 60.0, 1)
+    assert not isValid(page)
 
 
 @pytest.mark.parametrize("session_number", [1, 2])
