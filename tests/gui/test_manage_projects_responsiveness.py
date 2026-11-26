@@ -477,23 +477,37 @@ def test_manage_saved_versions_keeps_latest_open_and_routes_explicit_choices(
         dialog.show()
         qapp.processEvents()
         assert dialog.size().toTuple() == (660, 460)
-        assert_visible_children_within_parent(dialog)
-        dialog.resize(dialog.minimumSize())
-        qapp.processEvents()
-        assert_visible_children_within_parent(dialog)
         if dialog.windowTitle() == "Experiment version history":
+            buttons = {button.text(): button for button in dialog.findChildren(QPushButton)}
+            actions = [buttons[text] for text in (
+                "Name…", "Restore…", "Save as new study…", "Close", "Open read-only…",
+            )]
+            for size in (dialog.size(), dialog.minimumSize()):
+                dialog.resize(size)
+                qapp.processEvents()
+                assert dialog.size() == size
+                assert_visible_children_within_parent(dialog)
+                assert len({button.geometry().top() for button in actions}) == 1
+                assert len({button.height() for button in actions}) == 1
+                assert all(button.width() >= button.sizeHint().width() for button in actions)
+                assert all(left.geometry().right() < right.geometry().left()
+                           for left, right in zip(actions, actions[1:], strict=False))
+            assert actions[-1].property("primaryActionRole") == "true"
             rows = dialog.findChild(QListWidget)
             assert rows.item(0).text().startswith("Version 2 ")
             assert rows.item(1).text().startswith("Version 1 ")
             rows.setCurrentRow(1)
-            buttons = {button.text(): button for button in dialog.findChildren(QPushButton)}
             if action in ("restore", "cancel_restore", "review"):
-                buttons["Restore this version…"].click()
+                buttons["Restore…"].click()
             else:
-                buttons["Open version read-only…"].click()
+                buttons["Open read-only…"].click()
                 dialog.reject()
         else:
             assert dialog.windowTitle() == "Version 1 — read-only"
+            assert_visible_children_within_parent(dialog)
+            dialog.resize(dialog.minimumSize())
+            qapp.processEvents()
+            assert_visible_children_within_parent(dialog)
             tree = dialog.findChild(QTreeWidget)
             match = Qt.MatchFlag.MatchExactly | Qt.MatchFlag.MatchRecursive
             rates = tree.findItems("base hz", match)
