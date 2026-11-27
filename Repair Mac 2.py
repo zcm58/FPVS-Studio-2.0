@@ -626,8 +626,11 @@ for raw in requirements:
     if requirement.url:
         # A release with the same version can differ from the pinned source revision.
         direct_url = distribution(requirement.name).read_text("direct_url.json")
-        origin = json.loads(direct_url) if direct_url else {}
-        if origin.get("url") != urldefrag(requirement.url).url:
+        try:
+            origin = json.loads(direct_url or "{}")
+        except ValueError:
+            origin = {}
+        if not isinstance(origin, dict) or origin.get("url") != urldefrag(requirement.url).url:
             compatibility_update(f"{requirement.name} must be installed from the pinned source.")
     if installed not in requirement.specifier:
         compatibility_update(f"{requirement.name} {installed} does not satisfy {requirement}.")

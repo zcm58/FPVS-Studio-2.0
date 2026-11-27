@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPushButton,
     QVBoxLayout,
@@ -38,6 +39,7 @@ class ParallelPortSelector(QWidget):
         self._dismissed = False
         self._manual_override = address is not None
         layout = QVBoxLayout(self)
+        layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
         row = QHBoxLayout()

@@ -663,22 +663,26 @@ def test_probe_detects_source_requirement_changes_without_release_bump(
     assert calls == []
 
 
-@pytest.mark.parametrize("installed_url", [
-    None, "https://example.test/moviepy-old.zip", "https://example.test/moviepy-pinned.zip",
+@pytest.mark.parametrize("provenance,expected_match", [
+    (None, False), ("{", False), ("null", False),
+    (json.dumps({"url": "https://example.test/moviepy-old.zip"}), False),
+    (json.dumps({"url": "https://example.test/moviepy-pinned.zip"}), True),
 ])
-def test_probe_checks_direct_engine_requirement_origin(monkeypatch, tmp_path, installed_url):
+def test_probe_checks_direct_engine_requirement_origin(
+    monkeypatch, tmp_path, provenance, expected_match,
+):
     url = "https://example.test/moviepy-pinned.zip"
     _fake_probe(monkeypatch, tmp_path, versions={"moviepy": "2.2.0"},
                 source_requirements={"engine": [f"moviepy @ {url}#sha256={'0' * 64}"]})
     original = importlib.metadata.distribution
-    provenance = json.dumps({"url": installed_url}) if installed_url else None
+
     def distribution(name):
         if name == "moviepy":
             return SimpleNamespace(read_text=lambda filename: provenance)
         return original(name)
 
     monkeypatch.setattr(importlib.metadata, "distribution", distribution)
-    if installed_url == url:
+    if expected_match:
         exec(repair.COMPATIBILITY_PROBE, {})
     else:
         with pytest.raises(SystemExit) as stopped:
