@@ -2561,12 +2561,17 @@ def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
     return (
         launch_surface_frame_stylesheet(theme)
         + f"""
-    QWidget#image_resizer_page QScrollArea#page_container_scroll_area,
-    QWidget#image_resizer_page QScrollArea#page_container_scroll_area
+    QWidget[imageTool="true"] QPushButton[compactAction="standard"] {{
+        min-height: 24px;
+        max-height: 24px;
+        padding: 5px 12px;
+    }}
+    QWidget[imageTool="true"] QScrollArea#page_container_scroll_area,
+    QWidget[imageTool="true"] QScrollArea#page_container_scroll_area
     QWidget#qt_scrollarea_viewport,
-    QWidget#image_resizer_page QWidget#page_container_scroll_content,
-    QWidget#image_resizer_page QFrame#page_container_content_frame,
-    QWidget#image_resizer_page QFrame#non_home_shell_content_frame {{
+    QWidget[imageTool="true"] QWidget#page_container_scroll_content,
+    QWidget[imageTool="true"] QFrame#page_container_content_frame,
+    QWidget[imageTool="true"] QFrame#non_home_shell_content_frame {{
         border: none;
         background-color: transparent;
     }}
@@ -2575,6 +2580,7 @@ def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
     QWidget#image_resizer_results_panel {{
         background-color: transparent;
     }}
+    QLabel[imageToolHeading="true"],
     QLabel#image_resizer_controls_heading,
     QLabel#image_resizer_results_heading {{
         font-size: {FONT_SIZE_SECTION_TITLE}px;
@@ -2585,7 +2591,7 @@ def image_resizer_stylesheet(theme: StudioTheme | QPalette | None = None) -> str
         color: {theme.text_primary};
         font-weight: 600;
     }}
-    QFrame#image_resizer_column_separator {{
+    QFrame[imageToolDivider="true"], QFrame#image_resizer_column_separator {{
         border: none;
         background-color: {theme.border_soft};
         min-width: 1px;

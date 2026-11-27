@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -23,8 +24,9 @@ from PySide6.QtWidgets import (
 
 from fpvs_studio.gui import folder_actions
 from fpvs_studio.gui.components import (
-    DialogHeader,
-    apply_dialog_theme,
+    NonHomePageShell,
+    apply_image_resizer_theme,
+    mark_compact_action,
     mark_primary_action,
     mark_secondary_action,
     mark_text_role,
@@ -58,21 +60,49 @@ class ImageEqualizerDialog(QDialog):
         self._progress.stage_changed.connect(self._on_progress)
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setContentsMargins(32, 32, 32, 16)
         layout.setSpacing(12)
-        header = DialogHeader(
-            "Image Equalizer",
-            "Match grayscale brightness and contrast across all folders. Save new PNG copies.",
+        shell = NonHomePageShell(
+            title="Image Equalizer",
+            width_preset="full",
+            subtitle=(
+                "Match grayscale brightness and contrast across all folders. Save new PNG copies."
+            ),
             parent=self,
         )
-        self.summary_label = header.subtitle_label
+        self.summary_label = shell.subtitle_label
         self.summary_label.setToolTip(
             "Matches whole-image mean intensity and RMS contrast using one automatic target. "
             "Resize or crop first. Monitor calibration is handled outside this tool. "
             "Color images become grayscale. Originals are preserved."
         )
-        layout.addWidget(header)
-        layout.addSpacing(8)
+        self.setProperty("launchSurfaceRoot", "true")
+        self.setProperty("imageTool", "true")
+        frame = QFrame(self)
+        frame.setProperty("launchSurfaceFrame", "true")
+        frame_layout = QVBoxLayout(frame)
+        frame_layout.setContentsMargins(0, 0, 0, 0)
+        frame_layout.addWidget(shell)
+        layout.addWidget(frame, 1)
+
+        workbench = QWidget(shell)
+        columns = QHBoxLayout(workbench)
+        columns.setContentsMargins(16, 8, 16, 8)
+        columns.setSpacing(22)
+        setup = QVBoxLayout()
+        results = QVBoxLayout()
+        for column, title in ((setup, "Batch Setup"), (results, "Results")):
+            column.setSpacing(12)
+            heading = QLabel(title, workbench)
+            heading.setProperty("imageToolHeading", "true")
+            column.addWidget(heading)
+        divider = QFrame(workbench)
+        divider.setFrameShape(QFrame.Shape.VLine)
+        divider.setProperty("imageToolDivider", "true")
+        columns.addLayout(setup, 3)
+        columns.addWidget(divider)
+        columns.addLayout(results, 2)
+        shell.add_content_widget(workbench, stretch=1)
 
         self.folder_table = QTableWidget(0, 2, self)
         self.folder_table.setObjectName("image_equalizer_folder_pairs")
@@ -110,18 +140,21 @@ class ImageEqualizerDialog(QDialog):
         self.open_button.clicked.connect(self._open_output)
         for button in (self.add_button, self.output_button, self.remove_button, self.open_button):
             mark_secondary_action(button)
-            if button is self.open_button:
-                row.addStretch(1)
+            mark_compact_action(button)
+        for button in (self.add_button, self.output_button, self.remove_button):
             row.addWidget(button)
-        layout.addLayout(row)
-        layout.addWidget(self.folder_table, 1)
+        row.addStretch(1)
+        setup.addLayout(row)
+        setup.addWidget(self.folder_table, 1)
         self.status_label = QLabel("Add the folders you want to equalize together.", self)
         self.status_label.setWordWrap(True)
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
         mark_text_role(self.status_label, "body")
         self.status_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.status_label.setMinimumHeight(self.status_label.fontMetrics().lineSpacing() * 4)
-        layout.addWidget(self.status_label)
+        results.addWidget(self.status_label)
+        results.addStretch(1)
+        results.addWidget(self.open_button, alignment=Qt.AlignmentFlag.AlignRight)
 
         self.run_button = QPushButton("Equalize Images", self)
         self.run_button.clicked.connect(self._start)
@@ -129,19 +162,21 @@ class ImageEqualizerDialog(QDialog):
         self.close_button = QPushButton("Close", self)
         self.close_button.clicked.connect(self.reject)
         mark_secondary_action(self.close_button)
+        mark_compact_action(self.run_button)
+        mark_compact_action(self.close_button)
+        setup.addWidget(self.run_button, alignment=Qt.AlignmentFlag.AlignRight)
         footer = QHBoxLayout()
         footer.addWidget(self.close_button)
         footer.addStretch(1)
-        footer.addWidget(self.run_button)
         layout.addLayout(footer)
         focus_order = (
-            self.add_button, self.output_button, self.remove_button, self.open_button,
-            self.folder_table, self.close_button, self.run_button,
+            self.add_button, self.output_button, self.remove_button, self.folder_table,
+            self.run_button, self.open_button, self.close_button,
         )
         for first, second in zip(focus_order, focus_order[1:], strict=False):
             QWidget.setTabOrder(first, second)
         self.add_button.setFocus()
-        apply_dialog_theme(self)
+        apply_image_resizer_theme(self)
         self._refresh_actions()
 
     def _refresh_actions(self) -> None:
