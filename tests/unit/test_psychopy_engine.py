@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import csv
 import gc
+import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 from math import ceil
 from pathlib import Path
@@ -52,7 +55,9 @@ from fpvs_studio.engines.psychopy_stimuli import (
 )
 from fpvs_studio.engines.psychopy_text_screens import show_text_screen
 from fpvs_studio.engines.psychopy_timing import measure_playback_cadence
+from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.triggers import LoggedTriggerBackend, build_trigger_backend
+from fpvs_studio.triggers import parallel_backend
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
@@ -2336,6 +2341,69 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
     ]
     call_on_flip_events = [event for event in _events(captures) if event[0] == "callOnFlip"]
     assert len(call_on_flip_events) == 2
+
+
+def test_egi_din_exports_compiled_markers_from_the_presentation_flips(
+    monkeypatch, sample_project, sample_project_root, tmp_path,
+) -> None:
+    sample_project.settings.fixation_task.enabled = False
+    sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
+    run_spec = compile_run_spec(
+        sample_project, project_root=sample_project_root, refresh_hz=60.0, run_id="egi-din",
+    )
+    captures: dict[str, Any] = {}
+    writes: list[int] = []
+    rising_edges: list[dict[str, int | float]] = []
+
+    def wire_write(address: int, code: int) -> None:
+        assert address == 0xDC00
+        if code:
+            assert writes[-1] == 0
+            rising_edges.append({"code": code, "time_s": captures["window"].last_flip_time})
+        writes.append(code)
+
+    driver = SimpleNamespace(connect=lambda: None, write=wire_write, close=lambda: None)
+    monkeypatch.setattr(parallel_backend, "_InpOutDriver", lambda: driver)
+    # Give the production reset worker wall-clock time between synthetic display flips.
+    original_flip = _FakeWindow.flip
+
+    def paced_flip(window):
+        time.sleep(0.002)
+        return original_flip(window)
+
+    monkeypatch.setattr(_FakeWindow, "flip", paced_flip)
+    engine = PsychoPyEngine()
+    _patch_fake_psychopy(monkeypatch, engine, _build_fake_psychopy(captures, flip_times=[]))
+    monkeypatch.setattr(engine, "show_transition_screen", lambda **_kwargs: False)
+    monkeypatch.setattr(engine, "show_completion_screen", lambda **_kwargs: None)
+    output = tmp_path / "egi-transfer"
+    summary = RuntimeWorker(engine).execute(
+        sample_project_root, run_spec, output, participant_number="001",
+        runtime_options={
+            "recording_backend": "egi_din", "egi_parallel_address": 0xDC00,
+            "egi_pulse_width_ms": 1, "timing_warmup_frames": 0,
+        },
+    )
+    assert not summary.aborted
+    assert [event.label for event in run_spec.trigger_events] == [
+        "condition_start", "oddball_onset", "oddball_onset",
+    ]
+    codes = [event.code for event in run_spec.trigger_events]
+    assert codes[0] != codes[1] == codes[2]
+    assert writes[-1] == 0
+    assert [edge["code"] for edge in rising_edges] == codes
+    with (output / "trigger_log.csv").open(encoding="utf-8", newline="") as file:
+        rows = list(csv.DictReader(file))
+    assert [(int(row["frame_index"]), int(row["code"]), row["label"]) for row in rows] == [
+        (event.frame_index, event.code, event.label) for event in run_spec.trigger_events
+    ]
+    assert all(row["backend_name"] == "egi_din" and row["status"] == "sent" for row in rows)
+    first_edge = rising_edges[0]["time_s"]
+    first_frame = run_spec.trigger_events[0].frame_index
+    assert [edge["time_s"] - first_edge for edge in rising_edges] == pytest.approx([
+        (event.frame_index - first_frame) / 60 for event in run_spec.trigger_events
+    ])
+    (output / "mock_wire_edges.json").write_text(json.dumps(rising_edges), encoding="utf-8")
 
 
 @pytest.mark.parametrize("transport", ["serial", "unicorn_udp"])

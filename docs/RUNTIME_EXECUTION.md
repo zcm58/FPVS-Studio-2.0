@@ -419,6 +419,24 @@ pauses; a successful serial write cannot establish recording state. See BioSemi'
 [receiver installation](https://www.biosemi.com/faq/install_USB.htm) and
 [trigger handling](https://www.biosemi.com/faq/trigger_signals.htm).
 
+### Net Amps 400 wired DIN output
+
+Select **EGI Net Amps 400 (wired DIN)** for a compatible Windows
+parallel data port and a lab-verified cable to the amplifier's digital inputs.
+Enter the actual I/O address and the pulse width qualified for that setup.
+Studio emits the compiled condition-start and oddball bytes (1–255) on their
+scheduled flips and returns the data lines to zero after each pulse. The required
+low interval equals the configured pulse width. Preflight rejects schedules with
+spacing less than or equal to twice that width. During playback a busy output or
+failed write/reset is an error, including when the next event repeats the same
+code. Each per-run trigger log identifies the transport as `egi_din`.
+
+For a recorded comparison, enable **detailed run folders** before launching.
+Start and save the recording in Net Station. Use the Toolbox MFF diagnostic
+with the selected run's `runspec.json`, `trigger_log.csv`, DIN track and
+lab-verified code map. The [execution plan](exec-plans/active/egi-din-markers.md)
+records the software checks and the hardware and optical timing checks still due.
+
 ### actiCHamp parallel-port output
 
 Settings > Recording includes **Brain Products / BrainVision (Parallel port)** for
@@ -759,8 +777,8 @@ The [active plan](exec-plans/active/unicorn-hybrid-black-support.md#decision-and
 tracks the bench evidence and the remaining BDF+/Toolbox, loss handling and physical
 timing checks. Exported receiver-validation metadata stays `pending`.
 
-The project selection is `serial`, `biosemi_active_three`, `brainproducts_triggerbox`
-or `unicorn_udp`; native GUI projects without saved recording settings inherit the
+The project selection is `serial`, `biosemi_active_three`, `brainproducts_triggerbox`,
+`brainproducts_parallel`, `egi_din` or `unicorn_udp`. Native GUI projects without saved recording settings inherit the
 reviewed computer default. Callers without an injected preference keep the legacy
 BioSemi default. Invalid persisted values are rejected on load. The UDP port is a
 strict integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there

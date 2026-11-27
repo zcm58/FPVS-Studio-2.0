@@ -827,7 +827,9 @@ class StudioMainWindow(QMainWindow):
             ActionEntry(self.project_update_action, "File / Project", "library project version"),
             ActionEntry(self.image_resizer_action, "Tools", "resize images stimuli png"),
             ActionEntry(self.image_equalizer_action, "Tools", "grayscale brightness rms contrast"),
-            ActionEntry(self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi"),
+            ActionEntry(
+                self.trigger_tester_action, "Tools", "recording eeg brainvision biosemi egi din",
+            ),
             ActionEntry(self.condition_figure_action, "Tools", "fpvs sequence image 600 dpi png"),
             ActionEntry(self.check_updates_action, "Help", "software version update"),
             ActionEntry(self.tutorials_action, "Help", "help tutorials getting started"),

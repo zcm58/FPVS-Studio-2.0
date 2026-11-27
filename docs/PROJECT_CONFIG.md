@@ -107,6 +107,11 @@ listed below.
 | BioSemi ActiveThree (`biosemi_active_three`) | `biosemi128` for the radial A–D layout, or `recorded` |
 | Brain Products (`brainproducts_triggerbox` or `brainproducts_parallel`) | `brainproducts_acticap_gacs_64`, `brainproducts_acticap_gacs_128`, or `recorded` |
 | Unicorn Hybrid Black (`unicorn_udp`) | `unicorn8` for the factory layout |
+| EGI Net Amps 400 wired DIN (`egi_din`) | Marker output only. Leave the montage and acquisition profile unset. |
+
+EGI handoffs include the configured parallel-port address and pulse width. When
+another device is selected, Studio retains those preferences in its project and
+omits them from the exported recording declaration for older Toolbox readers.
 
 `recorded` instructs Toolbox to use available recording coordinates. Earlier
 configs may omit the montage. ActiveTwo and Unicorn may still identify their

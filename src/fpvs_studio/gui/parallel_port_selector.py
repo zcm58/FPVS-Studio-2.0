@@ -31,7 +31,9 @@ class ParallelPortSelector(QWidget):
 
     address_changed = Signal()
 
-    def __init__(self, address: object, parent: QWidget | None = None) -> None:
+    def __init__(
+        self, address: object, parent: QWidget | None = None, *, name_prefix: str = "brainproducts",
+    ) -> None:
         super().__init__(parent)
         self._job: UpdateJob | None = None
         self._started = False
@@ -44,7 +46,7 @@ class ParallelPortSelector(QWidget):
         row.setContentsMargins(0, 0, 0, 0)
         self.combo = QComboBox(self)
         self.combo.setEditable(True)
-        self.combo.setObjectName("brainproducts_parallel_address_combo")
+        self.combo.setObjectName(f"{name_prefix}_parallel_address_combo")
         self.combo.setAccessibleName("Parallel port address in hexadecimal")
         self.combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.combo.setSizeAdjustPolicy(
@@ -55,7 +57,7 @@ class ParallelPortSelector(QWidget):
             f"0x{address:X}" if type(address) is int else "" if address is None else str(address),
         )
         self.edit = cast(QLineEdit, self.combo.lineEdit())
-        self.edit.setObjectName("brainproducts_parallel_address_edit")
+        self.edit.setObjectName(f"{name_prefix}_parallel_address_edit")
         self.edit.setAccessibleName("Parallel port address in hexadecimal")
         self.edit.setPlaceholderText("e.g. 0x378")
         self.combo.setToolTip(

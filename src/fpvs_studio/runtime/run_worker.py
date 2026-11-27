@@ -1392,11 +1392,12 @@ def _finish_playback_trigger_output(
 def _finish_triggerbox_pulse(backend: LoggedTriggerBackend) -> None:
     """Finish asynchronous resets between conditions, outside timed presentation."""
 
-    if backend.backend_name in ("brainproducts_triggerbox", "brainproducts_parallel"):
+    if backend.backend_name in ("brainproducts_triggerbox", "brainproducts_parallel", "egi_din"):
         try:
             backend.reset()
         except Exception as exc:
-            raise TriggerEmissionError(f"Brain Products pulse reset failed: {exc}") from exc
+            device = "EGI DIN" if backend.backend_name == "egi_din" else "Brain Products"
+            raise TriggerEmissionError(f"{device} pulse reset failed: {exc}") from exc
 
 
 def _build_and_connect_trigger_backend(
@@ -1426,7 +1427,7 @@ def _build_and_connect_trigger_backend(
                 "Check the configured loopback UDP port. Opening a socket cannot verify "
                 "Recorder is listening or saving EEG."
             )
-        elif selected == "brainproducts_parallel":
+        elif selected in ("brainproducts_parallel", "egi_din"):
             help_text = (
                 "Confirm the configured parallel-port I/O address matches this PC and "
                 "a compatible InpOut driver is installed and running."

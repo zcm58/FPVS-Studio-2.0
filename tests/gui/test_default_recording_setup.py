@@ -34,7 +34,7 @@ from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 _BACKENDS = (
     "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-    "unicorn_udp",
+    "unicorn_udp", "egi_din",
 )
 _PROMPT = "Please select your default EEG hardware. You can change this choice later."
 
@@ -76,7 +76,7 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
     assert dialog.selected_backend == backend
     fixed = {"serial": "biosemi64", "unicorn_udp": "unicorn8"}
     assert dialog.selected_montage == fixed.get(backend)
-    assert dialog.montage_combo.isEnabled() == (backend not in fixed)
+    assert dialog.montage_combo.isEnabled() == (backend not in fixed and backend != "egi_din")
     assert dialog.continue_button.isEnabled()
     dialog.continue_button.click()
     assert dialog.result() == QDialog.DialogCode.Accepted

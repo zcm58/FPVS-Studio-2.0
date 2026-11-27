@@ -54,7 +54,9 @@
 - Resolve unset/blank serial-port configuration to `COM3`, while preserving an
   explicit nonempty port. This is a configuration default, never a retry/fallback
   after a port fails to open or write.
-- Parallel-port output is an explicit Windows actiCHamp transport. Open only the
+- Windows parallel-port output serves actiCHamp and the explicit EGI wired DIN
+  choice. Preserve each backend's identity and device-specific setup fields.
+  EGI requires a lab-confirmed pulse width and matching low interval. Open only the
   installed InpOut device, check each device-I/O result, and close it on failure.
   Never load the auto-installing vendor DLL, install/start drivers, guess addresses
   or probe ports by writing. Discovery reads Windows device/resource metadata only.

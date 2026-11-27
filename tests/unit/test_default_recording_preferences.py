@@ -20,7 +20,7 @@ from fpvs_studio.runtime.recording import RecordingConfigurationError, recording
 _KEY = "recording/default_configuration"
 _BACKENDS = (
     "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-    "unicorn_udp",
+    "unicorn_udp", "egi_din",
 )
 _LEGACY_SETTINGS = {"recording/backend": "unicorn_udp", "recording/unicorn_udp_port": 4321}
 
@@ -183,6 +183,8 @@ def test_default_roundtrip_serializes_the_model_and_updates_only_after_success(
         "brainproducts_parallel_address": 0xD010,
         "brainproducts_pulse_width_ms": 20,
     }
+    if backend == "egi_din":
+        configuration.update(egi_parallel_address=0xD020, egi_pulse_width_ms=7)
     expected = ProjectRecordingSettings.model_validate(configuration).model_dump(mode="json")
     if main_window:
         def injected(actual):
@@ -255,6 +257,7 @@ def test_existing_valid_default_skips_picker_and_writes():
     ("serial", "biosemi64"), ("biosemi_active_three", "biosemi128"),
     ("biosemi_active_three", None), ("brainproducts_triggerbox", "brainproducts_acticap_gacs_64"),
     ("brainproducts_parallel", "brainproducts_acticap_gacs_128"), ("unicorn_udp", "unicorn8"),
+    ("egi_din", None),
 ])
 def test_first_picker_saves_selected_hardware_and_cap_without_guessing_amplifier(backend, montage):
     factory = Mock(return_value=_dialog(backend, montage=montage))
@@ -318,6 +321,7 @@ def test_unspecified_cap_stays_absent_and_cross_recorder_montages_are_rejected()
         options = LaunchSettings(
             recording_backend=backend, brainproducts_parallel_address=0x378,
             brainproducts_amplifier="actichamp", brainproducts_sampling_rate_hz=500,
+            egi_parallel_address=0xD020, egi_pulse_width_ms=7,
         ).as_runtime_options()
         assert "electrode_montage" not in options
         assert "electrode_montage" not in recording_snapshot(options).model_dump()
