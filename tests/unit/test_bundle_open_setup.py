@@ -5,9 +5,10 @@ from __future__ import annotations
 import ast
 import os
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 
 import pytest
+from tests.unit.preference_settings import MemorySettings
 from tests.unit.test_project_bundle import _save_bundle_ready_project
 
 from fpvs_studio.core.condition_template_profiles import (
@@ -164,22 +165,18 @@ def test_setup_image_readiness_detects_changes_under_long_root(
 
 
 def _settings_controller(root):
-    stored = {"root": str(root), "recent": []}
-    settings = SimpleNamespace(
-        value=lambda key, default, **kwargs: stored.get(key, default),
-        setValue=lambda key, value: stored.update({key: value}),
-        remove=lambda key: stored.pop(key, None), sync=lambda: None,
-    )
+    settings = MemorySettings({"root": str(root), "recent": []})
     methods = _source_functions(
         "src/fpvs_studio/gui/controller.py",
         ["load_recent_project_roots", "record_recent_project_root",
-         "load_fpvs_root_dir", "save_fpvs_root_dir"],
-        Path=Path, filesystem_path=filesystem_path,
+         "load_fpvs_root_dir", "save_fpvs_root_dir", "_save_preference"],
+        Path=Path, filesystem_path=filesystem_path, QSettings=settings.constructor,
         _RECENT_PROJECT_ROOTS_KEY="recent", _MAX_RECENT_PROJECTS=10, _FPVS_ROOT_DIR_KEY="root",
     )
     controller = SimpleNamespace(_settings=settings)
+    controller._save_preference = MethodType(methods["_save_preference"], controller)
     controller.load_recent_project_roots = lambda: methods["load_recent_project_roots"](controller)
-    return controller, methods, stored
+    return controller, methods, settings.values
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows namespace behavior")

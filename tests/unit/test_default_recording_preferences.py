@@ -11,6 +11,7 @@ from unittest.mock import Mock
 
 import pytest
 from tests.platform_adapters import platform_sys
+from tests.unit.preference_settings import MemorySettings as _Settings
 
 from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.runtime.launcher import LaunchSettings
@@ -22,35 +23,6 @@ _BACKENDS = (
     "unicorn_udp",
 )
 _LEGACY_SETTINGS = {"recording/backend": "unicorn_udp", "recording/unicorn_udp_port": 4321}
-
-
-class _Settings:
-    """In-memory QSettings-shaped fake, including failed-write status."""
-
-    def __init__(self, values=None, *, sync_failures=0):
-        self.values = dict(values or {})
-        self.sync_failures = sync_failures
-        self.sync_calls = 0
-        self.mutations = []
-        self._status = 0
-
-    def value(self, key, default=None, **_kwargs):
-        return self.values.get(key, default)
-
-    def setValue(self, key, value):  # noqa: N802
-        self.values[key] = value
-        self.mutations.append((key, value))
-
-    def remove(self, key):
-        self.values.pop(key, None)
-        self.mutations.append((key, None))
-
-    def sync(self):
-        self.sync_calls += 1
-        self._status = int(self.sync_calls <= self.sync_failures)
-
-    def status(self):
-        return self._status
 
 
 def _bind_controller(controller, **namespace):
@@ -67,6 +39,7 @@ def _bind_controller(controller, **namespace):
         "load_default_recording_configuration", "save_default_recording_configuration",
         "ensure_default_recording_configured", "ensure_fpvs_root_configured",
         "experiment_test_mode_enabled", "set_experiment_test_mode_enabled",
+        "_save_preference", "_save_chosen_root",
     }
     methods = [node for node in owner.body if isinstance(node, ast.FunctionDef)
                and node.name in names]
@@ -82,7 +55,7 @@ def _bind_controller(controller, **namespace):
     namespace.update({
         "_DEFAULT_RECORDING_CONFIGURATION_KEY": _KEY,
         "ProjectRecordingSettings": ProjectRecordingSettings,
-        "QSettings": SimpleNamespace(Status=SimpleNamespace(NoError=0)),
+        "QSettings": controller._settings.constructor,
         "_LOGGER": logging.getLogger(__name__),
         "Path": Path,
     })
@@ -377,6 +350,7 @@ def test_picker_retries_failed_persistence_before_updating_document():
     assert controller.ensure_default_recording_configured() is True
 
     assert factory.call_count == 2
+    settings.constructor.assert_called_once_with(settings.fileName(), settings.format())
     assert factory.call_args_list[0].kwargs["error_message"] == ""
     assert factory.call_args_list[1].kwargs["error_message"]
     expected = ProjectRecordingSettings(recording_backend="biosemi_active_three").model_dump(
