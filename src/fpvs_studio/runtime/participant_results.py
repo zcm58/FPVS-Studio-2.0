@@ -476,7 +476,7 @@ def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
     for record, _ in records:
         number = str(record.get("participant_number") or "")
         session = str(record.get("session_id") or "")
-        if not number:
+        if not number or number.strip() in _TEST_IDS:
             continue
         key, test = modes[identity_of(record)]
         captured = any(
@@ -499,8 +499,10 @@ def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
             )
     for row in rows:
         number, session = row.get("participant_number", ""), row.get("session_id", "")
+        if not number or number.strip() in _TEST_IDS:
+            continue
         key, test = modes[identity_of(row)]
-        if number and not test and int(row.get("completed_frames") or 0) > 0:
+        if not test and int(row.get("completed_frames") or 0) > 0:
             visits.setdefault(key, set()).add(
                 f"{number} · {row.get('participant_session_number') or session}"
             )
@@ -514,7 +516,7 @@ def research_visits_by_version(project_root: Path) -> dict[str, set[str]]:
         number, session, ordinal = identity_of(evidence)
         if (
             not number
-            or number in {"0", "00"}
+            or number.strip() in _TEST_IDS
             or (evidence.get("recording") or {}).get("effective_backend") == "null"
         ):
             continue

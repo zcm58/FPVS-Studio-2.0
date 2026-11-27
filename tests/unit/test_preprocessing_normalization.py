@@ -532,6 +532,29 @@ def test_folder_optimizer_reports_existing_outputs_without_overwriting(
     assert second.skipped_files[0].reason == "Output file already exists"
 
 
+def test_same_image_with_two_valid_extensions_retains_both_pool_entries(tmp_path: Path) -> None:
+    source = tmp_path / "raw-images"
+    _write_image(source / "photo.jpg", (64, 96))
+    (source / "photo.jpeg").write_bytes((source / "photo.jpg").read_bytes())
+    original = _file_contents(source)
+    stimulus_sets = [_stimulus_set("base-set", "raw-images")]
+    result = normalize_stimulus_sets(
+        project_root=tmp_path, stimulus_sets=stimulus_sets, target_size=256
+    )
+    normalized = _file_contents(tmp_path / result.sets[0].source_dir)
+    assert len(normalized) == result.sets[0].image_count == result.processed_count == 2
+    assert len(set(normalized.values())) == 1
+
+    output = tmp_path / "resized"
+    for expected_count in (2, 0):
+        resized = optimize_image_folder_for_fpvs(
+            input_dir=source, output_dir=output, target_size=256
+        )
+        assert resized.processed_count == expected_count
+        assert _file_contents(output) == normalized
+    assert _file_contents(source) == original
+
+
 def test_folder_optimizer_rejects_missing_empty_and_same_output_folders(
     tmp_path: Path,
 ) -> None:

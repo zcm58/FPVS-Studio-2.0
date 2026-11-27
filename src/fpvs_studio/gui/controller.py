@@ -457,8 +457,10 @@ class StudioController(QObject):
         root_dir = Path(path).expanduser().resolve()
         if not filesystem_path(root_dir).is_dir():
             raise ValueError("FPVS Studio Root Folder must be an existing directory.")
-        self._settings.setValue(_FPVS_ROOT_DIR_KEY, str(root_dir))
-        self._settings.sync()
+        self._save_preference(
+            _FPVS_ROOT_DIR_KEY, str(root_dir),
+            "Could not save the FPVS Studio root folder. Check Settings access and retry.",
+        )
         self._fpvs_root_dir = root_dir
         self._projects_parent_dir = root_dir
 
@@ -492,16 +494,36 @@ class StudioController(QObject):
         apply_studio_reduce_motion(self._app, enabled)
 
     def _save_appearance_preference(self, key: str, value: str | bool) -> None:
-        previous = self._settings.value(key)
-        self._settings.setValue(key, value)
-        self._settings.sync()
-        if self._settings.status() != QSettings.Status.NoError:
-            if previous is None:
-                self._settings.remove(key)
+        self._save_preference(
+            key, value, "Could not save appearance. Check Settings access and retry.",
+        )
+
+    def _save_preference(self, key: str, value: str | bool, error_message: str) -> None:
+        # Snapshot the local value before another QSettings opens the file. A
+        # failed write must not turn an inherited value into a local override.
+        fallbacks = self._settings.fallbacksEnabled()
+        self._settings.setFallbacksEnabled(False)
+        try:
+            had_value = self._settings.contains(key)
+            previous = self._settings.value(key)
+        finally:
+            self._settings.setFallbacksEnabled(fallbacks)
+        writer = self._settings
+        if writer.status() != QSettings.Status.NoError:
+            # QSettings retains the first error on an instance. Retry the same
+            # store and group with a fresh status after a previous failure.
+            writer = QSettings(self._settings.fileName(), self._settings.format())
+            writer.setAtomicSyncRequired(self._settings.isAtomicSyncRequired())
+            writer.beginGroup(self._settings.group())
+        writer.setValue(key, value)
+        writer.sync()
+        if writer.status() != QSettings.Status.NoError:
+            if not had_value:
+                writer.remove(key)
             else:
-                self._settings.setValue(key, previous)
-            self._settings.sync()
-            raise OSError("Could not save appearance. Check Settings access and retry.")
+                writer.setValue(key, previous)
+            writer.sync()
+            raise OSError(error_message)
 
     def load_run_export_mode(self) -> str:
         """Load the saved export choice, using compact output for a fresh preference."""
@@ -555,18 +577,10 @@ class StudioController(QObject):
         """Save this computer's default without overwriting project overrides."""
 
         recording = ProjectRecordingSettings.model_validate(configuration)
-        previous = self._settings.value(_DEFAULT_RECORDING_CONFIGURATION_KEY)
-        self._settings.setValue(_DEFAULT_RECORDING_CONFIGURATION_KEY, recording.model_dump_json())
-        self._settings.sync()
-        if self._settings.status() != QSettings.Status.NoError:
-            if previous is None:
-                self._settings.remove(_DEFAULT_RECORDING_CONFIGURATION_KEY)
-            else:
-                self._settings.setValue(_DEFAULT_RECORDING_CONFIGURATION_KEY, previous)
-            self._settings.sync()
-            raise OSError(
-                "Could not save the default EEG hardware. Check Settings access and retry.",
-            )
+        self._save_preference(
+            _DEFAULT_RECORDING_CONFIGURATION_KEY, recording.model_dump_json(),
+            "Could not save the default EEG hardware. Check Settings access and retry.",
+        )
         if self.main_window is not None:
             self.main_window.document.set_default_recording_configuration(
                 recording.model_dump(mode="json"),
@@ -716,9 +730,8 @@ class StudioController(QObject):
                 return False
 
             selected_path = self._choose_fpvs_root_dir(parent=parent, initial_dir=Path.home())
-            if selected_path is None:
+            if selected_path is None or not self._save_chosen_root(parent, selected_path):
                 continue
-            self.save_fpvs_root_dir(selected_path)
             return self.ensure_default_recording_configured()
 
     def show_root_folder_setup(self, parent: QWidget | None = None) -> Path | None:
@@ -738,10 +751,17 @@ class StudioController(QObject):
             parent=dialog_parent,
             initial_dir=current_root or Path.home(),
         )
-        if selected_path is None:
+        if selected_path is None or not self._save_chosen_root(dialog_parent, selected_path):
             return None
-        self.save_fpvs_root_dir(selected_path)
         return selected_path
+
+    def _save_chosen_root(self, parent: QWidget | None, path: Path) -> bool:
+        try:
+            self.save_fpvs_root_dir(path)
+        except (ValueError, OSError) as error:
+            _show_error(parent, "Save Root Folder Error", error)
+            return False
+        return True
 
     def _choose_fpvs_root_dir(
         self,

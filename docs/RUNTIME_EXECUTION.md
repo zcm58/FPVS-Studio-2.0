@@ -1165,8 +1165,10 @@ Participant results workbook:
     Scale and rating answers are numbers, and date and time answers use `YYYY-MM-DD`
     and `HH:MM` text. Older visits with only standard fields appear in `Demographics`
   - research sheets distinguish `Test Participant` (reserved IDs `0`/`00`) from the
-    recorded `Test Mode` and `Pilot Mode` launch flags; unavailable historical flags
-    remain unavailable, and original Participant Summary inclusion rules are unchanged
+    recorded `Test Mode` and `Pilot Mode` launch flags, including interrupted visits.
+    Missing historical flags remain unavailable. The study-version guard excludes
+    reserved IDs even when a historical record has a missing or incorrect mode flag.
+    The Participant Summary sheet retains its original inclusion rules.
   - `Fixation by Condition` exposes condition-occurrence target/hit/miss/false-alarm
     counts, accuracy (%) and mean reaction time (ms), with abort/inclusion context
   - `Fixation Responses` retains individual target hit/miss outcomes and response

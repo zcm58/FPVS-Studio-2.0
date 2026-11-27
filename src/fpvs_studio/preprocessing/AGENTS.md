@@ -10,6 +10,10 @@ assets and manifests. `models.py` owns `StimulusManifest` and related records;
 - Generated derivatives are project-contained PNGs. `original` preserves imported
   bytes, `grayscale` converts luminance, `rot180` rotates (not inverts), and
   `phase_scrambled` records its reproducible seed/parameters.
+- Materialization verifies the recorded derivative bytes at their saved paths.
+  For a missing PNG, prefer a verified copy from the study checkpoint. Publish a
+  regenerated replacement only when it matches the recorded SHA-256. Sources that
+  share a stem and content digest retain distinct output paths.
 - Manifests retain source/derived hashes, paths, geometry, format, transform chain,
   seeds, versions and timestamps. Identical source/parameters/seed must reproduce
   the same derivative.

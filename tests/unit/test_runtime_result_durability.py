@@ -194,6 +194,7 @@ def test_single_run_preserves_completed_results_before_later_failure(
     assert caught.value is original
     saved = read_json_file(output / "run_summary.json", RunExecutionSummary)
     assert saved.completed_frames == run.display.total_frames
+    assert saved.runtime_metadata.test_mode is True
 
 
 @pytest.mark.parametrize("mode", ["single", "full", "compact"])

@@ -736,3 +736,17 @@ def test_real_partial_records_activate_protection(sample_project_root):
         }
         (directory / f"{index}.json").write_text(json.dumps(record))
     assert research_visits_by_version(root) == {"first": {"3 · 1"}}
+
+
+def test_legacy_admin_ids_do_not_activate_version_protection(tmp_path):
+    directory = tmp_path / "logs/.participant-results"
+    directory.mkdir(parents=True)
+    (directory / "admin.json").write_text(json.dumps({
+        "schema_version": 1, "participant_number": "0", "session_id": "admin",
+        "test_mode": False, "protocol_version_id": "first",
+        "runs": [{"run_id": "run", "completed_frames": 1}],
+    }))
+    (directory.parent / "session_condition_history.csv").write_text(
+        "participant_number,session_id,completed_frames\n00,second,12\n000,research,1\n"
+    )
+    assert research_visits_by_version(tmp_path) == {"": {"000 · research"}}
