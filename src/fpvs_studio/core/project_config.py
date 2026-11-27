@@ -720,6 +720,10 @@ def export_project_config(
     recording = (
         project.settings.recording.model_copy(deep=True) if project.settings.recording else None
     )
+    if recording is not None and recording.recording_backend != "egi_din":
+        # Earlier Toolbox readers reject unknown recording fields, even for an inactive output.
+        recording.egi_parallel_address = None
+        recording.egi_pulse_width_ms = None
     if recording is not None and session_plan is not None:
         # Historical plan-only exports have no launch snapshot for the operator's cap.
         recording.electrode_montage = None

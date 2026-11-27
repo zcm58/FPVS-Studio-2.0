@@ -456,6 +456,12 @@ class DocumentRuntimeMixin:
                     brainproducts_pulse_width_ms=cast(
                         int, recording_configuration.get("brainproducts_pulse_width_ms", 10),
                     ),
+                    egi_parallel_address=cast(
+                        int | None, recording_configuration.get("egi_parallel_address"),
+                    ),
+                    egi_pulse_width_ms=cast(
+                        int | None, recording_configuration.get("egi_pulse_width_ms"),
+                    ),
                     brainproducts_amplifier=cast(
                         str | None, recording_configuration.get("brainproducts_amplifier"),
                     ),

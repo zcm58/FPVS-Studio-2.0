@@ -31,7 +31,7 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
     selected = values.get("recording_backend")
     if selected not in (
         None, "serial", "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
-        "brainproducts_parallel",
+        "brainproducts_parallel", "egi_din",
     ):
         raise RecordingConfigurationError(
             "Unknown recording backend. Open Settings > Recording and choose a "
@@ -42,7 +42,7 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
             raise RecordingConfigurationError(f"{key} must be a boolean.")
     if values.get("experiment_test_mode", False) or values.get("pilot_mode", False):
         return "null"
-    if selected in ("unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel"):
+    if selected in ("unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel", "egi_din"):
         return str(selected)
     return "serial"
 
@@ -73,6 +73,18 @@ def validate_recording_configuration(options: Mapping[str, object] | None = None
                 "Unicorn UDP port must be an integer from 1 to 65535."
             )
     selected = values.get("recording_backend")
+    if selected == "egi_din":
+        for key, maximum, label in (
+            ("egi_parallel_address", 65535, "parallel-port I/O address"),
+            ("egi_pulse_width_ms", 1000, "DIN pulse width in milliseconds"),
+        ):
+            value = values.get(key)
+            if value is None and effective == "null":
+                continue
+            if type(value) is not int or not 1 <= value <= maximum:
+                raise RecordingConfigurationError(
+                    f"Set the EGI {label} in Settings > Recording (integer 1–{maximum})."
+                )
     if selected in ("brainproducts_triggerbox", "brainproducts_parallel"):
         parallel = selected == "brainproducts_parallel"
         if parallel:
@@ -165,21 +177,26 @@ def validate_production_recording(options: Mapping[str, object] | None = None) -
 def validate_recording_trigger_schedule(
     run_spec: RunSpec, options: Mapping[str, object] | None = None,
 ) -> None:
-    """Reject schedules that cannot contain Brain Products high and low intervals."""
+    """Reject schedules that cannot contain both the configured high and low intervals."""
 
     effective = validate_recording_configuration(options)
-    if effective not in ("brainproducts_triggerbox", "brainproducts_parallel"):
+    if effective not in ("brainproducts_triggerbox", "brainproducts_parallel", "egi_din"):
         return
-    pulse_ms = cast(int, (options or {}).get("brainproducts_pulse_width_ms", 10))
+    if effective == "egi_din":
+        pulse_ms = cast(int, (options or {})["egi_pulse_width_ms"])
+        family, transport = "EGI DIN", "Parallel-port output"
+    else:
+        pulse_ms = cast(int, (options or {}).get("brainproducts_pulse_width_ms", 10))
+        family = "Brain Products"
+        transport = (
+            "Parallel-port output" if effective == "brainproducts_parallel" else "TriggerBox"
+        )
     frames = sorted(event.frame_index for event in run_spec.trigger_events)
     for previous, current in zip(frames, frames[1:], strict=False):
         gap_ms = (current - previous) * 1000 / run_spec.display.refresh_hz
         if gap_ms <= 2 * pulse_ms:
-            transport = (
-                "Parallel-port output" if effective == "brainproducts_parallel" else "TriggerBox"
-            )
             raise RecordingConfigurationError(
-                f"Brain Products markers at frames {previous} and {current} are "
+                f"{family} markers at frames {previous} and {current} are "
                 f"{gap_ms:g} ms apart. {transport} needs more than {2 * pulse_ms} ms "
                 f"for the configured {pulse_ms} ms pulse and low interval. "
                 "Choose a shorter pulse only if supported by the amplifier sampling "
@@ -202,6 +219,13 @@ def recording_backend_label(options: Mapping[str, object] | None = None) -> str:
             f"{values.get('brainproducts_serial_port', 'COM3')} "
             f"({values.get('brainproducts_pulse_width_ms', 10)} ms pulse)"
         )
+    if effective == "egi_din":
+        values = options or {}
+        address = values.get("egi_parallel_address")
+        endpoint = f"0x{address:X}" if type(address) is int else "address required"
+        pulse = values.get("egi_pulse_width_ms")
+        timing = f"{pulse} ms pulse" if type(pulse) is int else "pulse width required"
+        return f"EGI Net Amps 400 DIN (parallel port) — {endpoint} ({timing})"
     if effective == "brainproducts_parallel":
         values = options or {}
         address = values.get("brainproducts_parallel_address")
@@ -232,6 +256,14 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
         "serial_port"
     )
     serial_output = effective in ("serial", "brainproducts_triggerbox")
+    address = None
+    if selected == "brainproducts_parallel":
+        address = values.get("brainproducts_parallel_address")
+    elif selected == "egi_din":
+        address = values.get("egi_parallel_address")
+    pulse_width = values.get("brainproducts_pulse_width_ms", 10) if brainproducts else None
+    if effective == "egi_din":
+        pulse_width = values.get("egi_pulse_width_ms")
     return RecordingSnapshot.model_validate(
         {
             "selected_backend": selected,
@@ -250,13 +282,8 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
                 (2_000_000 if triggerbox else values.get("serial_baudrate", 115200))
                 if serial_output else None
             ),
-            "parallel_port_address": (
-                values.get("brainproducts_parallel_address")
-                if selected == "brainproducts_parallel" else None
-            ),
-            "trigger_pulse_width_ms": (
-                values.get("brainproducts_pulse_width_ms", 10) if brainproducts else None
-            ),
+            "parallel_port_address": address,
+            "trigger_pulse_width_ms": pulse_width,
             "brainproducts_amplifier": (
                 "actichamp" if selected == "brainproducts_parallel" else (
                     values.get("brainproducts_amplifier")
@@ -276,7 +303,8 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
             "recorder_version": values.get("recorder_version"),
             "receiver_validation": (
                 "pending" if selected in ("unicorn_udp", "biosemi_active_three",
-                                           "brainproducts_triggerbox", "brainproducts_parallel")
+                                           "brainproducts_triggerbox", "brainproducts_parallel",
+                                           "egi_din")
                 else "not_applicable"
             ),
         }

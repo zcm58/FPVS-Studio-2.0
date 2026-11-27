@@ -18,7 +18,7 @@ from fpvs_studio.triggers.base import (
 )
 from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxBackend
 from fpvs_studio.triggers.null_backend import NullBackend
-from fpvs_studio.triggers.parallel_backend import ParallelPortBackend
+from fpvs_studio.triggers.parallel_backend import EgiDinParallelBackend, ParallelPortBackend
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
@@ -177,7 +177,9 @@ class LoggedTriggerBackend(TriggerBackend):
     def reset(self) -> None:
         try:
             self._backend.reset()
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, TriggerCompletionError):
+                self._mark_last_error(str(exc))
             LOGGER.exception(
                 "Trigger backend reset failed.",
                 extra={"backend_name": self._backend_name},
@@ -242,6 +244,14 @@ def build_trigger_backend(
                 ),
             ),
             backend_name="brainproducts_triggerbox",
+        ), []
+    if backend_name == "egi_din":
+        return LoggedTriggerBackend(
+            EgiDinParallelBackend(
+                address=_positive_int_option(options, "egi_parallel_address"),
+                pulse_width_ms=_positive_int_option(options, "egi_pulse_width_ms"),
+            ),
+            backend_name="egi_din",
         ), []
     if backend_name == "brainproducts_parallel":
         return LoggedTriggerBackend(

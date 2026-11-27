@@ -9,9 +9,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from fpvs_studio.runtime.triggers import LoggedTriggerBackend, TriggerEmissionError
 from fpvs_studio.triggers import parallel_backend as backend_module
 from fpvs_studio.triggers.manual import send_test_trigger
 from fpvs_studio.triggers.parallel_backend import (
+    EgiDinParallelBackend,
     ParallelPortBackend,
     ParallelPortDriverUnavailableError,
     ParallelPortError,
@@ -126,6 +128,27 @@ def test_invalid_event_codes_never_reach_driver(code: object) -> None:
         backend.close()
 
 
+def test_manual_egi_sends_exact_bytes_on_separate_pulses() -> None:
+    driver = FakeDriver()
+    backend = EgiDinParallelBackend(0xD010, pulse_width_ms=2, driver=driver)
+    for code in (55, 55, 128, 255):
+        send_test_trigger(backend, code)
+    events = [i for i, code in enumerate(driver.codes) if code]
+    assert [driver.codes[i] for i in events] == [55, 55, 128, 255]
+    for i in events:
+        assert driver.codes[i - 1] == driver.codes[i + 1] == 0
+    assert driver.closed
+
+
+@pytest.mark.parametrize("code", [256, -1, True, "55"])
+def test_manual_egi_rejects_invalid_bytes_before_connect(code: object) -> None:
+    driver = FakeDriver()
+    backend = EgiDinParallelBackend(0xD010, pulse_width_ms=2, driver=driver)
+    with pytest.raises(ValueError, match="integer from 0 to 255"):
+        send_test_trigger(backend, code)  # type: ignore[arg-type]
+    assert driver.open_count == 0
+
+
 def test_prevalidated_callback_does_not_validate_again(monkeypatch) -> None:
     driver = FakeDriver()
     backend = ParallelPortBackend(0x378, driver=driver)
@@ -156,9 +179,10 @@ def test_overlap_is_rejected_synchronously_without_queue_or_sleep() -> None:
         backend.close()
 
 
-def test_repeated_codes_require_complete_low_interval(monkeypatch) -> None:
+@pytest.mark.parametrize("adapter", [ParallelPortBackend, EgiDinParallelBackend])
+def test_repeated_codes_require_complete_low_interval(monkeypatch, adapter) -> None:
     driver = FakeDriver()
-    backend = ParallelPortBackend(0x378, driver=driver)
+    backend = adapter(0x378, driver=driver)
     backend.connect()
     clock = SimpleNamespace(now=time.monotonic())
 
@@ -219,6 +243,30 @@ def test_sync_and_async_write_failures_remain_visible_through_cleanup(failure_at
     assert close_error.value is error.value
     assert driver.closed and driver.codes[-1] == 0
     assert worker is not None and not worker.is_alive()
+
+
+@pytest.mark.parametrize("observe_via", ["next_send", "condition_end", "close"])
+def test_egi_failed_pulse_is_identified_in_the_log(observe_via: str) -> None:
+    driver = FakeDriver()
+    driver.fail_at.add(3)  # Zero idle, first event, then its asynchronous reset.
+    adapter = EgiDinParallelBackend(0x378, pulse_width_ms=1, driver=driver)
+    backend = LoggedTriggerBackend(adapter, backend_name=adapter.backend_name)
+    backend.connect()
+    backend.send_trigger(55)
+    driver.wait_for_attempts(3)
+    if observe_via == "next_send":
+        with pytest.raises(TriggerEmissionError, match="previous marker failed"):
+            backend.send_trigger(55)
+    elif observe_via == "condition_end":
+        with pytest.raises(ParallelPortError, match="reset trigger"):
+            backend.reset()
+    with pytest.raises(ParallelPortError, match="reset trigger"):
+        backend.close()
+    assert backend.records[0].status == "error"
+    assert "reset trigger" in backend.records[0].message
+    assert len(backend.records) == (2 if observe_via == "next_send" else 1)
+    assert driver.codes == [0, 55, 0, 0]
+    assert driver.closed
 
 
 @pytest.mark.parametrize("fail_open", [False, True])

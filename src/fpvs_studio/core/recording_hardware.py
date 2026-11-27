@@ -42,7 +42,7 @@ class RecordingHardwareDefinition(BaseModel):
     label: str
     recording_backend: Literal[
         "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-        "unicorn_udp"
+        "unicorn_udp", "egi_din"
     ]
     acquisition_profile: AcquisitionProfile | None = None
 
@@ -66,6 +66,9 @@ _HARDWARE = (
     RecordingHardwareDefinition(
         label="Brain Products / BrainVision (Parallel port)",
         recording_backend="brainproducts_parallel",
+    ),
+    RecordingHardwareDefinition(
+        label="EGI Net Amps 400 (wired DIN via parallel port)", recording_backend="egi_din",
     ),
     RecordingHardwareDefinition(
         label="Unicorn Hybrid Black (factory 8 channels)", recording_backend="unicorn_udp",

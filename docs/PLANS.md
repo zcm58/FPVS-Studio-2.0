@@ -34,6 +34,7 @@ watchdog and matched every retained report payload, receipt and capture.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [Net Amps 400 DIN markers](exec-plans/active/egi-din-markers.md) | Sender and MFF verification tested in software. Physical receipt and optical timing are unqualified because the lab has no hardware access. |
 | [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Recorder 2 digit sends verified. Qualify physical automatic discovery and BioSemi reconnect in ActiView. |
 | [Windows refresh recommendation](exec-plans/active/windows-refresh-recommendation.md) | Native 60.02 Hz advisory and keyboard actions passed. Qualify the fixed 60/120 Hz display switch. |

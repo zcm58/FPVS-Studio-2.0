@@ -9,11 +9,15 @@ import time
 from typing import Protocol
 
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
-from fpvs_studio.triggers.base import TriggerBackend
+from fpvs_studio.triggers.base import TriggerBackend, TriggerCompletionError
 
 
 class ParallelPortError(RuntimeError):
     """Native LPT initialization, trigger output or reset failed."""
+
+
+class ParallelPulseResetError(ParallelPortError, TriggerCompletionError):
+    """The previously submitted marker could not be cleared to idle."""
 
 
 class ParallelPortDriverUnavailableError(ParallelPortError):
@@ -216,7 +220,8 @@ class ParallelPortBackend(TriggerBackend):
                 try:
                     self._write(self._require_driver(), 0, action="reset trigger lines")
                 except ParallelPortError as exc:
-                    self._failure = exc
+                    self._failure = ParallelPulseResetError(str(exc))
+                    self._failure.__cause__ = exc
                 self._reset_at = None
                 self._ready_at = time.monotonic() + self._pulse_s
                 self._condition.notify_all()
@@ -247,6 +252,14 @@ class ParallelPortBackend(TriggerBackend):
             raise ParallelPortError(
                 f"Unable to {action} code {code} at LPT address 0x{self._address:04X}: {exc}"
             ) from exc
+
+
+class EgiDinParallelBackend(ParallelPortBackend):
+    """Eight-bit LPT data output for a bench-confirmed Net Amps DIN connection."""
+
+    @property
+    def backend_name(self) -> str:
+        return "egi_din"
 
 
 class _InpOutDriver:
@@ -294,8 +307,7 @@ class _InpOutDriver:
             raise ParallelPortDriverUnavailableError(
                 "An already installed, running InpOut driver is required for native LPT output "
                 f"(Windows error {ctypes.get_last_error()}). "
-                "Studio does not install or start kernel drivers. Select TriggerBox/Plus when "
-                "using the USB interface."
+                "Check that the installed driver matches the native LPT output."
             )
         self._api = api
         self._handle = handle

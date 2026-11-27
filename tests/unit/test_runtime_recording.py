@@ -1269,6 +1269,76 @@ def test_parallel_missing_address_or_invalid_timing_fails_before_visit_or_output
     assert not (root / "logs" / "acquisition").exists()
 
 
+def test_egi_configuration_round_trips_without_changing_legacy_recording_fields():
+    options = {"recording_backend": "egi_din", "egi_parallel_address": 0xDC00,
+               "egi_pulse_width_ms": 12}
+    recording = ProjectRecordingSettings.model_validate(options)
+    for backend in ("egi_din", "serial"):
+        saved = recording.model_copy(update={"recording_backend": backend}).model_dump(mode="json")
+        assert ProjectRecordingSettings.model_validate(saved).egi_parallel_address == 0xDC00
+        assert saved["egi_pulse_width_ms"] == 12
+    assert "egi_parallel_address" not in ProjectRecordingSettings().model_dump()
+    assert "egi_pulse_width_ms" not in LaunchSettings().as_runtime_options()
+    snapshot = recording_snapshot(LaunchSettings(**options).as_runtime_options())
+    assert snapshot.effective_backend == snapshot.selected_backend == "egi_din"
+    assert snapshot.parallel_port_address == 0xDC00 and snapshot.trigger_pulse_width_ms == 12
+    assert snapshot.receiver_validation == "pending"
+    assert snapshot.physical_timing == "uncharacterized"
+    assert snapshot.serial_port is None and snapshot.acquisition_profile is None
+    assert snapshot.brainproducts_amplifier is None and snapshot.electrode_montage is None
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_egi_log_only_modes_never_construct_hardware(monkeypatch, mode):
+    adapter = Mock(side_effect=AssertionError("hardware must not be created"))
+    monkeypatch.setattr(triggers, "EgiDinParallelBackend", adapter)
+    options = {"recording_backend": "egi_din", mode: True}
+    backend, _ = triggers.build_trigger_backend(options)
+    assert backend.backend_name == "null"
+    assert recording_snapshot(options).selected_backend == "egi_din"
+    adapter.assert_not_called()
+
+
+@pytest.mark.parametrize("key,value", [
+    ("egi_parallel_address", None), ("egi_parallel_address", True),
+    ("egi_parallel_address", "0x378"), ("egi_parallel_address", 65536),
+    ("egi_pulse_width_ms", None), ("egi_pulse_width_ms", True),
+    ("egi_pulse_width_ms", 0), ("egi_pulse_width_ms", 1001),
+])
+def test_egi_rejects_missing_or_malformed_settings_before_output(key, value):
+    options = {"recording_backend": "egi_din", "egi_parallel_address": 0xDC00,
+               "egi_pulse_width_ms": 12, key: value}
+    with pytest.raises(RecordingConfigurationError, match="Set the EGI"):
+        triggers.build_trigger_backend(options)
+
+
+def test_egi_driver_connection_errors_report_selected_endpoint(monkeypatch):
+    adapter = Mock(backend_name="egi_din", emits_external_markers=True)
+    adapter.connect.side_effect = OSError("test driver unavailable")
+    monkeypatch.setattr(triggers, "EgiDinParallelBackend", lambda **_kwargs: adapter)
+    with pytest.raises(PreflightError, match="EGI Net Amps 400.*0xDC00.*InpOut.*unavailable"):
+        _build_and_connect_trigger_backend({
+            "recording_backend": "egi_din", "egi_parallel_address": 0xDC00, "egi_pulse_width_ms": 1,
+        })
+    adapter.send_trigger.assert_not_called()
+    adapter.close.assert_called_once()
+
+
+def test_egi_checks_high_and_low_spacing_before_presentation(execution):
+    _, plan = execution
+    spec = plan.ordered_entries()[0].run_spec.model_copy(deep=True)
+    spec.display.refresh_hz = 100
+    spec.trigger_events = [
+        TriggerEvent(frame_index=-1, code=55, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    options = {"recording_backend": "egi_din", "egi_parallel_address": 0xDC00,
+               "egi_pulse_width_ms": 10}
+    with pytest.raises(RecordingConfigurationError, match="EGI DIN markers.*more than 20 ms"):
+        validate_recording_trigger_schedule(spec, options)
+    validate_recording_trigger_schedule(spec, {**options, "egi_pulse_width_ms": 9})
+
+
 def test_parallel_schedule_reuses_actichamp_high_and_low_interval_validation(execution):
     _, plan = execution
     spec = plan.ordered_entries()[0].run_spec.model_copy(deep=True)

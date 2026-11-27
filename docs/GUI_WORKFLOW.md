@@ -764,6 +764,17 @@ points to the listed port before opening anything.
 Detected ports and COM edits in the tester apply to this dialog only. Recording
 uses the port saved in **Settings > Recording**. Set the parallel I/O address there.
 
+For **EGI Net Amps 400 (wired DIN)**, enter the Windows parallel-port I/O address
+and the pulse width verified for the amplifier, output device and cable in
+**Settings > Recording**. Studio uses this width for the high pulse and as the
+minimum idle interval between pulses. Leave Test and Pilot modes off for a bench
+playback. Start acquisition in Net Station and save the MFF there.
+The tester displays the configured address and enables the digits once both
+settings are present. Digits `1`–`9` send a code and `0` writes idle. For any
+decimal code from 1 to 255, type it in **DIN code** and choose **Send code** or
+press Enter. Typing in that field does not send markers. A successful local
+write still requires checking the event track in Net Station.
+
 For **Unicorn Recorder UDP**, the tester displays the loopback endpoint using the
 port from **Settings > Recording**. Enable **Trigger UDP Input** in Unicorn Recorder
 on the same computer with the matching IP address and port, and start a recording
@@ -771,7 +782,7 @@ to check saved markers. Each digit `1`–`9` submits one UDP datagram. Digit `0`
 disabled. The tester reports local submission. Verify receipt in Recorder and
 check the saved `Status` channel in the raw BDF.
 
-Each keypress opens the selected output, sends the digit and releases the connection.
+Each send opens the selected output, writes the code and releases the connection.
 Wait for the result before sending the next digit. Studio reports the outcome of
 the local write. Use digits `1`–`9` to verify receipt in BrainVision Recorder or
 BioSemi ActiView. For these hardware outputs, digit `0` writes the idle value,
@@ -805,6 +816,14 @@ which may be omitted from the marker display.
    With Recorder logging a bench recording, send `1`, `9`, `5`, `5` and compare
    the order in the saved raw BDF. Switch back to a hardware output and check
    that `0` is available after any required connection check.
+6. In **Settings > Recording**, select **EGI Net Amps 400 (wired DIN)**. Check that
+   missing address or pulse width gives actionable guidance. Apply the verified
+   bench values and reopen Recording to check both. In **Tools > Trigger Tester**,
+   confirm the selected EGI address and the absence of COM controls at `560x340`.
+   On an approved, recording bench, use **DIN code** to send `55`, `55`, `128`,
+   and `255`, waiting for each send to finish. Check the event track and saved
+   MFF for four ordered events, including both copies of 55. Check that typing
+   the digits alone sends nothing and that the quick `0` button restores idle.
 
 Registered GUI coverage lives in `tests/gui/test_trigger_tester.py`.
 
@@ -1423,10 +1442,11 @@ at collection time. Invalid newest snapshots or acquisition-era evidence without
 handoff surface an error. Only sessions without acquisition artifacts retain the
 legacy full-run plan-only export path. Authoring-only exports remain unchanged.
 The typed `recording_backend` values are `serial`, `biosemi_active_three`,
-`brainproducts_triggerbox`, `brainproducts_parallel`, and `unicorn_udp`.
+`brainproducts_triggerbox`, `brainproducts_parallel`, `unicorn_udp`, and `egi_din`.
 `core/models.py::ProjectRecordingSettings` owns defaults and ranges, including
 `brainproducts_parallel_address` and the transport-specific port fields. Select the
-amplifier and sampling rate before normal TriggerBox launch. Parallel selects actiCHamp.
+amplifier and sampling rate before normal TriggerBox launch. Brain Products parallel
+output selects actiCHamp. EGI DIN uses its own parallel address and pulse width.
 Malformed saved configurations are rejected on load. Choosing another recording device
 preserves BioSemi's serial settings. Editing its port preserves the project baudrate
 and all other trigger fields; no recording choice changes compiled experiment timing.
