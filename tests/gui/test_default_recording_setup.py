@@ -484,28 +484,118 @@ def test_welcome_settings_fits_and_changes_default_without_a_project(
     assert controller.load_default_recording_configuration() == _configuration("unicorn_udp")
 
 
-def test_failed_preference_sync_does_not_change_live_hardware(controller, qtbot, tmp_path):
+def test_failed_preference_sync_does_not_change_live_hardware(
+    controller, qtbot, tmp_path,
+):
     document, _window = open_created_project(controller, qtbot, tmp_path)
-    settings = controller._settings
+    parent = tmp_path / "preferences"
+    parent.mkdir()
+    path = parent / "custom.ini"
+    settings = QSettings(str(path), QSettings.Format.IniFormat)
+    settings.beginGroup("local")
+    controller._settings = settings
+    previous = _configuration("serial")
+    controller.save_default_recording_configuration(previous)
+    settings.setValue("unrelated", "retained")
+    settings.sync()
+    before = path.read_bytes()
 
-    class UnwritableSettings:
-        def value(self, *args, **kwargs):
-            return settings.value(*args, **kwargs)
-
-        def setValue(self, *_args):
-            pass
-
-        def sync(self):
-            pass
-
-        def status(self):
-            return QSettings.Status.AccessError
-
-    controller._settings = UnwritableSettings()
-    with pytest.raises(OSError):
+    # Block only this temporary INI path, regardless of the user's filesystem permissions.
+    backup = tmp_path / "saved-preferences"
+    parent.rename(backup)
+    parent.write_text("temporary path conflict", encoding="utf-8")
+    with pytest.raises(OSError, match="Could not save the default EEG hardware"):
         controller.save_default_recording_configuration(_configuration("unicorn_udp"))
-    assert document.recording_configuration == _configuration("serial")
-    assert controller.load_default_recording_configuration() == _configuration("serial")
+    with pytest.raises(OSError, match="Could not save appearance"):
+        controller.set_reduce_motion(True)
+    assert controller.load_default_recording_configuration() == previous
+    assert not settings.contains("appearance/reduce_motion")
+    assert document.recording_configuration == previous
+    parent.unlink()
+    backup.rename(parent)
+    assert path.read_bytes() == before
+
+    controller.save_default_recording_configuration(_configuration("unicorn_udp"))
+    assert document.recording_configuration == _configuration("unicorn_udp")
+    assert controller.load_default_recording_configuration() == _configuration("unicorn_udp")
+    controller.set_reduce_motion(True)
+    try:
+        reader = QSettings(str(path), QSettings.Format.IniFormat)
+        assert reader.value("local/appearance/reduce_motion", type=bool)
+        assert reader.value("local/unrelated") == "retained"
+        assert not reader.contains("appearance/reduce_motion")
+        saved = reader.value("local/recording/default_configuration")
+        assert json.loads(saved) == _configuration("unicorn_udp")
+    finally:
+        controller.set_reduce_motion(False)
+
+
+def test_failed_local_preference_write_keeps_inherited_value(controller):
+    scope = QSettings.Format.IniFormat
+    org, app = "Synthetic preference fallback", "Studio"
+    inherited = QSettings(scope, QSettings.Scope.SystemScope, org, app)
+    inherited.setValue("appearance/reduce_motion", True)
+    inherited.sync()
+    settings = QSettings(scope, QSettings.Scope.UserScope, org, app)
+    controller._settings = settings
+    assert controller.load_reduce_motion()
+    local = Path(settings.fileName())
+    assert not local.parent.exists()
+    local.parent.write_text("temporary path conflict", encoding="utf-8")
+    with pytest.raises(OSError, match="Could not save appearance"):
+        controller.set_reduce_motion(False)
+    local.parent.unlink()
+    inherited.setValue("appearance/reduce_motion", False)
+    inherited.sync()
+    settings.sync()
+    assert not controller.load_reduce_motion()
+    assert not QSettings(str(local), scope).contains("appearance/reduce_motion")
+
+
+@pytest.mark.parametrize("first_run", [True, False])
+def test_root_folder_save_failure_retains_location_and_can_retry(
+    qapp, tmp_path, monkeypatch, first_run,
+):
+    control = StudioController(qapp)
+    folder = tmp_path / "preferences"
+    folder.mkdir()
+    ini = folder / "custom.ini"
+    control._settings = QSettings(str(ini), QSettings.Format.IniFormat)
+    previous = None
+    if not first_run:
+        previous = tmp_path / "original-root"
+        previous.mkdir()
+        control.save_fpvs_root_dir(previous)
+    chosen = tmp_path / "new-root"
+    chosen.mkdir()
+    moved = tmp_path / "preserved-preferences"
+    folder.rename(moved)
+    folder.write_text("temporary path conflict", encoding="utf-8")
+    failures = []
+
+    def restore_settings(_parent, title, error):
+        assert title == "Save Root Folder Error"
+        assert isinstance(error, OSError) and not failures
+        assert control._fpvs_root_dir == previous
+        assert control._projects_parent_dir != chosen
+        failures.append(error)
+        folder.unlink()
+        moved.rename(folder)
+
+    monkeypatch.setattr(controller_module, "_show_error", restore_settings)
+    monkeypatch.setattr(RootFolderSetupDialog, "exec", lambda _dialog: QDialog.DialogCode.Accepted)
+    monkeypatch.setattr(control, "_choose_fpvs_root_dir", lambda **_kwargs: chosen)
+    if first_run:
+        assert control.ensure_fpvs_root_configured()
+    else:
+        assert control.show_root_folder_setup() is None
+        assert control.load_fpvs_root_dir() == previous
+        assert control.show_root_folder_setup() == chosen
+    assert len(failures) == 1
+    assert control.load_fpvs_root_dir() == chosen
+    assert control._projects_parent_dir == chosen
+    reader = QSettings(str(ini), QSettings.Format.IniFormat)
+    assert reader.value("paths/fpvs_root_dir") == str(chosen)
 
 
 @pytest.mark.parametrize("cancel", [False, True])
