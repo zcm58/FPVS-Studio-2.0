@@ -61,7 +61,7 @@ jobs:
       - name: Install authoring and test dependencies
         run: python -m pip install --editable '.[dev]'
       - name: Verify primary Windows contracts before secondary Mac checks
-        run: python .agents/scripts/verify.py --scope repo --tier precommit --workers 4
+        run: python .agents/scripts/verify.py --scope repo --tier precommit --workers 2
       - name: Create and relocate a synthetic portable project
         run: >-
           python tests/integration/macos_bundle_handoff.py create
