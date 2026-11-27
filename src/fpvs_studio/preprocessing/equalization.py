@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import math
 import os
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
@@ -29,6 +30,8 @@ from fpvs_studio.preprocessing.normalization import NORMALIZATION_INPUT_SUFFIXES
 TARGET_MEAN = 128.0
 REPORT_NAME = "image-equalizer-report.json"
 QUANTIZATION_TOLERANCE = 0.501
+# NumPy 2.2 accumulated the original equalizer's float64 variance in blocks of this size.
+_VARIANCE_BLOCK_PIXELS = 8192
 
 
 class ImageEqualizationError(ValueError):
@@ -82,9 +85,19 @@ class ImageEqualizationResult:
 
 
 def _statistics(pixels: np.ndarray) -> ImageStatistics:
+    samples = pixels.ravel()
+    mean = float(np.mean(samples, dtype=np.float64))
+    sum_squares = 0.0
+    # Keep the reference addition order across NumPy versions. Each worker needs
+    # at most one 64 KiB scratch block even for a full-resolution image.
+    for start in range(0, samples.size, _VARIANCE_BLOCK_PIXELS):
+        block = samples[start:start + _VARIANCE_BLOCK_PIXELS]
+        deviations = np.subtract(block, mean, dtype=np.float64)
+        np.square(deviations, out=deviations)
+        sum_squares += float(np.sum(deviations))
     return ImageStatistics(
-        float(np.mean(pixels, dtype=np.float64)),
-        float(np.std(pixels, dtype=np.float64)),
+        mean,
+        math.sqrt(sum_squares / samples.size),
         float(pixels.min()),
         float(pixels.max()),
     )

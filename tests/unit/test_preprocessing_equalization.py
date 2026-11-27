@@ -28,6 +28,17 @@ def _pair(tmp_path: Path, name: str = "base") -> eq.FolderPair:
     return pair
 
 
+def test_saved_report_preserves_reference_contrast_for_multiblock_image(tmp_path):
+    pair = eq.FolderPair(tmp_path / "source", tmp_path / "equalized")
+    pixels = ((np.arange(10001) * 7) % 251).astype(np.uint8).reshape(73, 137)
+    _image(pair.input_dir / "stimulus.png", pixels)
+
+    result = eq.equalize_image_folders([pair], max_workers=1)
+    report = json.loads(result.reports[0].read_bytes())
+    reference = float.fromhex("0x1.21c3ad1dee1c5p+6")
+    assert report["images"][0]["before"]["standard_deviation"] == reference
+
+
 def test_all_folders_share_targets_and_preserve_originals(tmp_path):
     base, oddball = _pair(tmp_path), _pair(tmp_path, "oddball")
     # Different means, contrast and geometry, including an RGB source.
