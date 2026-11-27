@@ -2,29 +2,24 @@
 
 ## Supported Runtime
 
-FPVS Studio supports Python `3.10` only.
-
-This is enforced in:
-
-- `pyproject.toml` via `requires-python = ">=3.10,<3.11"`
-- Ruff via `target-version = "py310"`
-- mypy via `python_version = "3.10"`
+This development branch requires 64-bit Python 3.11. The Python package metadata
+and repository verification scripts enforce the minor version.
 
 ## Recommended Local Setup
 
 ### Windows source setup
 
 In the full checkout on x64 Windows, close PyCharm and double-click **Setup Windows.cmd**.
-Setup reuses a compatible `.venv3.10` or `.venv`. If neither is usable and `.venv3.10`
-is available, it creates `.venv3.10` with 64-bit Python 3.10. It uses an installed 3.10
-interpreter when found by the Python launcher, or downloads one into `.python310`
+Setup reuses a compatible `.venv3.11` or `.venv`. If neither is usable and `.venv3.11`
+is available, it creates `.venv3.11` with 64-bit Python 3.11. It uses an installed 3.11
+interpreter when found by the Python launcher, or downloads one into `.python311`
 using a pinned, checksum-verified uv release. An incompatible `.venv` is preserved.
-If `.venv3.10` is incompatible or incomplete, rename it and rerun setup.
+If `.venv3.11` is incompatible or incomplete, rename it and rerun setup.
 
-`requirements.txt` installs packages into the selected Python 3.10 environment.
+`requirements.txt` installs packages into the selected Python 3.11 environment.
 It includes the Studio app, PsychoPy and development tools. Setup runs `pip check`
-and leaves PowerShell open with that environment active. Run `fpvs-studio` there
-to open Studio.
+and verifies the Studio, PsychoPy and MoviePy imports. PowerShell stays open with
+the environment active. Run `fpvs-studio` there to open Studio.
 
 For PyCharm, open the checkout and run **FPVS Studio (Windows)**. Setup configures
 the project interpreter and points this run configuration at
@@ -41,7 +36,7 @@ activate the environment. `scripts/windows_pycharm.py` prepares the IDE files.
 
 For experimental macOS source setup, double-click `Setup Mac.command`, then
 `Run Mac.command` in the complete checkout. The existing shell adapter creates or
-reuses a native Python 3.10 environment, installs `requirements-macos.txt` and checks
+reuses a native Python 3.11 environment, installs `requirements-macos.txt` and checks
 consistency/imports. If Python is missing, a pinned, checksum-verified uv binary
 installs it under `.fpvs-macos/`; system Python and shell profiles are not modified.
 `FPVS_PYTHON` can select an existing native interpreter. Intel setup handles Rust
@@ -60,31 +55,31 @@ SDK entries and project components are preserved. The same actions are available
 
 ### Manual Windows setup
 
-With 64-bit Python 3.10 already installed, run these commands in PowerShell:
+With 64-bit Python 3.11 already installed, run these commands in PowerShell:
 
 ```powershell
-py -3.10-64 -m venv .venv3.10
-.\.venv3.10\Scripts\python -m pip install -U 'pip>=26.2'
-.\.venv3.10\Scripts\python -m pip install -r requirements.txt
+py -3.11-64 -m venv .venv3.11
+.\.venv3.11\Scripts\python -m pip install -U 'pip>=26.2'
+.\.venv3.11\Scripts\python -m pip install -r requirements.txt
 ```
 
 For development that does not run experiments, install only the dev extra:
 
 ```powershell
-.\.venv3.10\Scripts\python -m pip install -e '.[dev]'
+.\.venv3.11\Scripts\python -m pip install -e '.[dev]'
 ```
 
 Install the packaging extra when you want to build the Windows executable:
 
 ```powershell
-.\.venv3.10\Scripts\python -m pip install -e ".[dev,engine,packaging]"
+.\.venv3.11\Scripts\python -m pip install -e ".[dev,engine,packaging]"
 ```
 
 Notes:
 
 - the default install includes PySide6 because the GUI is now the primary app
   surface
-- repo wrapper scripts resolve the local Python from `.venv3.10` first and `.venv`
+- repo wrapper scripts resolve the local Python from `.venv3.11` first and `.venv`
   second, so agents can use the scripts even when a checkout was prepared with the
   shorter environment name
 - PsychoPy is included by both requirements files; it remains optional for direct
@@ -93,13 +88,13 @@ Notes:
   verification, and `pytest-xdist` for parallel non-Qt checks
 - the packaging extra includes PyInstaller for local executable builds
 
-The extras declare security minimums for their existing dependencies. Refresh an
-existing environment with the relevant editable install before verification or
-packaging; `-SkipInstall` does not apply those minimums. See
-[Security](SECURITY.md#dependency-advisories-and-compatibility-exceptions) for the
-remaining Pillow/MoviePy and setuptools/PsychoPy constraints. Do not override
-upstream requirements or treat a scanner package match as proof of a reachable
-Studio attack path.
+The engine extra installs MoviePy from a SHA-256-verified archive of upstream
+commit `211e4b15f6ce4f34a6a9efbfff40590e43a68f77`. Released MoviePy 2.x
+depends on an older Pillow. The pinned source supplies the MoviePy 2 API used by
+PsychoPy and permits Pillow 13. A source installation downloads this archive
+without requiring Git. Refresh an existing environment with the relevant editable
+install before verification or packaging.
+[Upstream MoviePy change](https://github.com/Zulko/moviepy/commit/211e4b15f6ce4f34a6a9efbfff40590e43a68f77)
 
 If Windows PowerShell blocks repository scripts because execution is restricted,
 launch the specific repository script with a process-only policy:
@@ -116,7 +111,7 @@ that load `.ps1` files use the same process-only setting.
 Run the authoring GUI with:
 
 ```powershell
-.\.venv3.10\Scripts\python -m fpvs_studio.app
+.\.venv3.11\Scripts\python -m fpvs_studio.app
 ```
 
 or the installed script:
@@ -170,10 +165,10 @@ source-only guards, Retina backing pixels and child-process boundaries. Syntheti
 helper IPC tests resolve linked POSIX interpreters while retaining the parent's
 import paths; production executable validation stays unchanged.
 
-Verification chooses `.venv3.10`, then `.venv`, using the current host's executable
+Verification chooses `.venv3.11`, then `.venv`, using the current host's executable
 layout and preserving POSIX venv symlinks. Full repository audits require PowerShell;
 install `pwsh` on Mac before running the repo route. Mac source setup reuses an
-existing `.venv` when `.venv3.10` is absent.
+existing `.venv` when `.venv3.11` is absent.
 
 The verification driver reports the 20 slowest test phases by default. Use
 `-Durations 0` to remove the count limit or choose another nonnegative count.
@@ -231,7 +226,7 @@ closure when testing Return/Escape; drain deferred fixture deletion between case
 For local GUI work:
 
 1. Run the focused `gui` scope.
-2. Launch `.\.venv3.10\Scripts\python -m fpvs_studio.app` visibly.
+2. Launch `.\.venv3.11\Scripts\python -m fpvs_studio.app` visibly.
 3. Exercise only the changed surface and its important success, empty, busy, and error
    states at the documented minimum/default size.
 4. Record the manual path and whether the optional registered pytest-qt suite was not

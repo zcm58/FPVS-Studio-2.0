@@ -37,7 +37,7 @@ def no_native_processes(monkeypatch):
     monkeypatch.setattr(repair.platform, "mac_ver", lambda: ("26.0", (), "arm64"))
 
 
-def _checkout(tmp_path: Path, environment: str = ".venv3.10") -> tuple[Path, Path]:
+def _checkout(tmp_path: Path, environment: str = ".venv3.11") -> tuple[Path, Path]:
     root = tmp_path / "Studio café & projects"
     root.mkdir()
     (root / "pyproject.toml").write_text('[project]\nname = "fpvs-studio"\n')
@@ -69,27 +69,35 @@ def mac_checkout(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("preferred_exists,fallback_exists,expected", [
-    (False, False, ".venv3.10"), (True, False, ".venv3.10"),
-    (False, True, ".venv"), (True, True, ".venv3.10"),
+    (False, False, ".venv3.11"), (True, False, ".venv3.11"),
+    (False, True, ".venv"), (True, True, ".venv3.11"),
 ])
 def test_environment_selection_matches_mac_setup(
     tmp_path, preferred_exists, fallback_exists, expected,
 ):
     if preferred_exists:
-        (tmp_path / ".venv3.10").mkdir()
+        (tmp_path / ".venv3.11").mkdir()
     if fallback_exists:
         (tmp_path / ".venv").mkdir()
     assert repair.expected_environment(tmp_path) == tmp_path / expected
 
 
-@pytest.mark.parametrize("environment", [".venv3.10", ".venv"])
+@pytest.mark.parametrize("setting", ["version", "version_info"])
+def test_repair_preserves_previous_python_checkout_environment(tmp_path, setting):
+    legacy = tmp_path / ".venv"
+    legacy.mkdir()
+    (legacy / "pyvenv.cfg").write_text(f"{setting} = 3.10.22\n")
+    assert repair.expected_environment(tmp_path) == tmp_path / ".venv3.11"
+
+
+@pytest.mark.parametrize("environment", [".venv3.11", ".venv"])
 def test_broken_environment_symlink_does_not_select_another_environment(
     monkeypatch, tmp_path, environment,
 ):
     target = tmp_path / environment
     original = Path.is_symlink
     monkeypatch.setattr(Path, "is_symlink", lambda path: path == target or original(path))
-    if environment == ".venv3.10":
+    if environment == ".venv3.11":
         (tmp_path / ".venv").mkdir()
     assert repair.expected_environment(tmp_path) == target
 
@@ -154,19 +162,19 @@ def test_unsupported_native_cpu_is_not_treated_as_repairable(monkeypatch, mac_ch
 
 
 @pytest.mark.parametrize("attribute,value", [
-    ("platform", "linux"), ("version_info", (3, 11)),
+    ("platform", "linux"), ("version_info", (3, 10)),
     ("prefix", "/unrelated/venv"), ("base_prefix", "/selected/venv"), ("machine", "x86_64"),
 ])
 def test_child_interpreter_probe_rejects_wrong_target(attribute, value):
     selected = SimpleNamespace(
-        platform="darwin", version_info=(3, 10), prefix="/selected/venv",
+        platform="darwin", version_info=(3, 11), prefix="/selected/venv",
         base_prefix="/base", executable="/selected/venv/bin/python",
         argv=["probe", "/selected/venv", "arm64"],
     )
     machine = value if attribute == "machine" else "arm64"
     if attribute != "machine":
         setattr(selected, attribute, value)
-    fake_platform = SimpleNamespace(python_version=lambda: "3.10.14", machine=lambda: machine)
+    fake_platform = SimpleNamespace(python_version=lambda: "3.11.14", machine=lambda: machine)
     normal_import = builtins.__import__
 
     def fake_import(name, *args, **kwargs):
@@ -228,7 +236,7 @@ def test_backup_preserves_all_environment_files_inside_checkout(tmp_path):
     assert (backups[0] / "pyvenv.cfg").exists()
 
 
-@pytest.mark.parametrize("linked", [".venv3.10", ".fpvs-macos", ".fpvs-macos/environment-backups"])
+@pytest.mark.parametrize("linked", [".venv3.11", ".fpvs-macos", ".fpvs-macos/environment-backups"])
 def test_backup_refuses_linked_paths_without_moving_environment(monkeypatch, tmp_path, linked):
     root, python = _checkout(tmp_path)
     target = root / linked
@@ -242,7 +250,7 @@ def test_backup_refuses_linked_paths_without_moving_environment(monkeypatch, tmp
 def test_backup_refuses_existing_destination(monkeypatch, tmp_path):
     root, python = _checkout(tmp_path)
     monkeypatch.setattr(repair.uuid, "uuid4", lambda: SimpleNamespace(hex="fixed"))
-    destination = root / ".fpvs-macos/environment-backups/.venv3.10-fixed"
+    destination = root / ".fpvs-macos/environment-backups/.venv3.11-fixed"
     destination.mkdir(parents=True)
     with pytest.raises(ValueError, match="already exists"):
         repair._backup_environment(root)
@@ -275,7 +283,7 @@ def _fake_flow(
     pip_present=True, ensurepip=0, ide="ready",
 ):
     calls = []
-    python = str(root / ".venv3.10/bin/python")
+    python = str(root / ".venv3.11/bin/python")
     pending_checks = iter(checks)
     pending_validation = iter(validations or [python] * 4)
     pending_setup = iter(setup)
@@ -571,11 +579,11 @@ def _fake_probe(
         importlib.metadata, "distribution", lambda name: SimpleNamespace(requires=requirements),
     )
     monkeypatch.setattr(markers, "default_environment", lambda: {
-        "implementation_name": "cpython", "implementation_version": "3.10.14",
+        "implementation_name": "cpython", "implementation_version": "3.11.14",
         "os_name": "posix", "platform_machine": "arm64", "platform_release": "24.0",
         "platform_system": "Darwin", "platform_version": "synthetic Mac",
-        "python_full_version": "3.10.14", "platform_python_implementation": "CPython",
-        "python_version": "3.10", "sys_platform": "darwin",
+        "python_full_version": "3.11.14", "platform_python_implementation": "CPython",
+        "python_version": "3.11", "sys_platform": "darwin",
     })
     declared = source_requirements or {}
     (root / "pyproject.toml").write_text(
@@ -653,6 +661,29 @@ def test_probe_detects_source_requirement_changes_without_release_bump(
     assert f"does not satisfy {requirement}" in caplog.text
     assert "RuntimeError" not in caplog.text
     assert calls == []
+
+
+@pytest.mark.parametrize("installed_url", [
+    None, "https://example.test/moviepy-old.zip", "https://example.test/moviepy-pinned.zip",
+])
+def test_probe_checks_direct_engine_requirement_origin(monkeypatch, tmp_path, installed_url):
+    url = "https://example.test/moviepy-pinned.zip"
+    _fake_probe(monkeypatch, tmp_path, versions={"moviepy": "2.2.0"},
+                source_requirements={"engine": [f"moviepy @ {url}#sha256={'0' * 64}"]})
+    original = importlib.metadata.distribution
+    provenance = json.dumps({"url": installed_url}) if installed_url else None
+    def distribution(name):
+        if name == "moviepy":
+            return SimpleNamespace(read_text=lambda filename: provenance)
+        return original(name)
+
+    monkeypatch.setattr(importlib.metadata, "distribution", distribution)
+    if installed_url == url:
+        exec(repair.COMPATIBILITY_PROBE, {})
+    else:
+        with pytest.raises(SystemExit) as stopped:
+            exec(repair.COMPATIBILITY_PROBE, {})
+        assert stopped.value.code == 2
 
 
 @pytest.mark.parametrize("operation,package", [

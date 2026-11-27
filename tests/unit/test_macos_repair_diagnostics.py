@@ -260,7 +260,7 @@ def test_continuation_runs_same_file_with_verified_interpreter(monkeypatch, diag
     assert state["job_log"] == str(job)
     command = calls[0][0][0]
     assert command == [
-        str(diagnostics.root / ".venv3.10/bin/python"), "-I",
+        str(diagnostics.root / ".venv3.11/bin/python"), "-I",
         str(Path(repair.__file__).absolute()), "--finish-diagnostics", str(state_path),
     ]
     assert calls[0][1]["start_new_session"] is True

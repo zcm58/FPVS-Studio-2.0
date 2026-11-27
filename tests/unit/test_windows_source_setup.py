@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import shutil
+import subprocess
+import sys
+from importlib.util import find_spec
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -11,9 +16,62 @@ RUN_PATH = ".idea/runConfigurations/FPVS_Studio_Windows.xml"
 TABLE_PATH = "options/jdk.table.xml"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Starts the Windows source bootstrap")
+@pytest.mark.parametrize("venv_name", [".venv3.11", ".venv"])
+def test_bootstrap_uses_existing_project_venv_for_install_and_checks(tmp_path, venv_name):
+    checkout = tmp_path / "Studio checkout"
+    scripts = checkout / "scripts"
+    scripts.mkdir(parents=True)
+    source_scripts = Path(__file__).resolve().parents[2] / "scripts"
+    shutil.copyfile(source_scripts / "setup_windows.ps1", scripts / "setup_windows.ps1")
+    shutil.copyfile(source_scripts / "script_helpers.ps1", scripts / "script_helpers.ps1")
+    # Run the real setup selection and working-directory logic. Stand in for
+    # installation and IDE writes to keep this test independent of the network.
+    with (scripts / "script_helpers.ps1").open("a", encoding="utf-8") as helpers:
+        helpers.write("""
+function Invoke-WebRequest { throw 'Setup attempted a download despite a compatible venv.' }
+function Invoke-NativeChecked {
+    param([string]$File, [string[]]$Arguments)
+    if ($File -ne [IO.Path]::GetFullPath((Join-Path $PWD 'VENV_NAME/Scripts/python.exe'))) {
+        throw "Unexpected interpreter: $File"
+    }
+    Add-Content -LiteralPath 'setup-calls.txt' -Value ($Arguments -join ' ')
+}
+""".replace("VENV_NAME", venv_name))
+    app = checkout / "src/fpvs_studio/app"
+    app.mkdir(parents=True)
+    (app / "main.py").touch()
+    (checkout / "requirements.txt").touch()
+    subprocess.run(
+        [sys.executable, "-m", "venv", "--without-pip", str(checkout / venv_name)], check=True,
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+         str(scripts / "setup_windows.ps1")],
+        capture_output=True, text=True, timeout=25,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    commands = (checkout / "setup-calls.txt").read_text().splitlines()
+    requirements = checkout / "requirements.txt"
+    assert f"-I -m pip --require-virtualenv install --requirement {requirements}" in commands
+    assert "-I -m pip check" in commands
+
+
+@pytest.mark.skipif(find_spec("psychopy") is None, reason="Requires the optional engine")
+def test_installed_engine_supplies_moviepy_api_used_by_psychopy():
+    import numpy as np
+    from moviepy import ImageSequenceClip, VideoFileClip
+
+    assert callable(VideoFileClip)
+    frame = np.full((4, 6, 3), (12, 34, 56), dtype=np.uint8)
+    with ImageSequenceClip([frame], fps=1) as clip:
+        small = clip.resized(new_size=(3, 2)).get_frame(0)
+    np.testing.assert_array_equal(small, frame[::2, ::2])
+
+
 def test_setup_registers_sdk_and_binds_main_in_a_fresh_checkout(tmp_path):
     checkout = tmp_path / "Studio & projects"
-    python = checkout / ".venv3.10/Scripts/python.exe"
+    python = checkout / ".venv3.11/Scripts/python.exe"
     profile = tmp_path / "PyCharm2026.3"
 
     configure(checkout, python, profile)
@@ -26,7 +84,7 @@ def test_setup_registers_sdk_and_binds_main_in_a_fresh_checkout(tmp_path):
     run = ET.parse(checkout / RUN_PATH).find("configuration")
     options = {option.get("name"): option.get("value") for option in run.findall("option")}
     assert options["SDK_NAME"] == name
-    assert options["SDK_HOME"] == "$PROJECT_DIR$/.venv3.10/Scripts/python.exe"
+    assert options["SDK_HOME"] == "$PROJECT_DIR$/.venv3.11/Scripts/python.exe"
     assert options["SCRIPT_NAME"] == "$PROJECT_DIR$/src/fpvs_studio/app/main.py"
     assert options["WORKING_DIRECTORY"] == "$PROJECT_DIR$"
     assert run.find("module").get("name") == "fpvs-studio"
@@ -41,7 +99,7 @@ def test_setup_registers_sdk_and_binds_main_in_a_fresh_checkout(tmp_path):
 
 def test_setup_updates_an_explicit_old_module_sdk_and_preserves_other_settings(tmp_path):
     checkout = tmp_path / "checkout"
-    python = checkout / ".venv3.10/Scripts/python.exe"
+    python = checkout / ".venv3.11/Scripts/python.exe"
     profile = tmp_path / "PyCharm2026.3"
     configure(checkout, python, profile)
     module = checkout / ".idea/fpvs-studio.iml"
@@ -61,7 +119,7 @@ def test_setup_updates_an_explicit_old_module_sdk_and_preserves_other_settings(t
     configure(checkout, python, profile)
 
     tree = ET.parse(module)
-    assert tree.find(".//orderEntry").get("jdkName") == "Python 3.10 (FPVS Studio: checkout)"
+    assert tree.find(".//orderEntry").get("jdkName") == "Python 3.11 (FPVS Studio: checkout)"
     assert tree.find("component[@name='CustomSettings']") is not None
     assert table.read_bytes() == prior_table
     backup = next((checkout / ".idea/fpvs-setup-backups").glob("fpvs-studio.iml.*.bak"))

@@ -43,7 +43,7 @@ outside of one of those directories.
 ### Windows source setup
 
 Clone or extract the entire repository. Close PyCharm if it is open, then
-double-click **Setup Windows.cmd**. Setup prepares 64-bit Python 3.10, installs
+double-click **Setup Windows.cmd**. Setup prepares 64-bit Python 3.11, installs
 `requirements.txt`, and leaves the virtual environment active in its PowerShell window.
 
 Run `fpvs-studio` in that window, or open the checkout in PyCharm and select
@@ -54,7 +54,7 @@ Run `fpvs-studio` in that window, or open the checkout in PyCharm and select
 
 Download or clone the **entire repository**, then open its folder in Finder:
 
-1. Double-click **Setup Mac.command**. It prepares native Python 3.10, the virtual
+1. Double-click **Setup Mac.command**. It prepares native Python 3.11, the virtual
    environment and all Mac GUI/engine requirements, then checks the installation.
 2. Double-click **Run Mac.command** to open Studio. Python and PyCharm do not need
    to be installed beforehand.

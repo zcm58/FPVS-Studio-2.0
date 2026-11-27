@@ -6,7 +6,7 @@ function Test-StudioPython {
     param([string]$Python, [switch]$VirtualEnvironment)
 
     if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) { return $false }
-    $probe = "import sys, sysconfig; valid = sys.version_info[:2] == (3, 10) and sysconfig.get_platform() == 'win-amd64'"
+    $probe = "import sys, sysconfig; valid = f'{sys.version_info.major}.{sys.version_info.minor}' == '$RequiredPythonVersion' and sysconfig.get_platform() == 'win-amd64'"
     if ($VirtualEnvironment) {
         $probe += '; valid = valid and sys.prefix != sys.base_prefix'
     }
@@ -50,13 +50,13 @@ function Install-ManagedPython {
             $zip.Dispose()
         }
 
-        Write-Host 'Preparing checkout-local Python 3.10...'
+        Write-Host "Preparing checkout-local Python $RequiredPythonVersion..."
         $env:UV_PYTHON_INSTALL_DIR = $ToolsRoot
         Invoke-NativeChecked -File $uv -Arguments @(
-            '--no-config', 'python', 'install', '--no-bin', '3.10'
+            '--no-config', 'python', 'install', '--no-bin', $RequiredPythonVersion
         ) | Out-Host
         return Invoke-NativeOutputChecked -File $uv -Arguments @(
-            '--no-config', 'python', 'find', '--managed-python', '--system', '3.10'
+            '--no-config', 'python', 'find', '--managed-python', '--system', $RequiredPythonVersion
         )
     }
     finally {
@@ -70,7 +70,7 @@ function Install-ManagedPython {
 function Get-StudioPython {
     param([string]$ToolsRoot)
 
-    $preferred = Join-Path $RepoRoot '.venv3.10'
+    $preferred = Join-Path $RepoRoot ".venv$RequiredPythonVersion"
     $fallback = Join-Path $RepoRoot '.venv'
     foreach ($folder in @($preferred, $fallback)) {
         $item = Get-Item -LiteralPath $folder -Force -ErrorAction SilentlyContinue
@@ -96,7 +96,7 @@ function Get-StudioPython {
         try {
             $candidate = & {
                 $ErrorActionPreference = 'Continue'
-                & $launcher.Source -3.10-64 -I -c 'import sys; sys.stdout.write(sys.executable)' 2>$null
+                & $launcher.Source "-$RequiredPythonVersion-64" -I -c 'import sys; sys.stdout.write(sys.executable)' 2>$null
             }
             if ($candidate -and (Test-StudioPython -Python $candidate)) {
                 $basePython = $candidate
@@ -107,9 +107,9 @@ function Get-StudioPython {
         }
     }
     if (-not $basePython) { $basePython = Install-ManagedPython -ToolsRoot $ToolsRoot }
-    if (-not (Test-StudioPython -Python $basePython)) { throw '64-bit Python 3.10 is required.' }
+    if (-not (Test-StudioPython -Python $basePython)) { throw "64-bit Python $RequiredPythonVersion is required." }
 
-    Write-Host 'Creating .venv3.10...'
+    Write-Host "Creating .venv$RequiredPythonVersion..."
     Invoke-NativeChecked -File $basePython -Arguments @('-I', '-m', 'venv', $preferred) | Out-Host
     return Join-Path $preferred 'Scripts\python.exe'
 }
@@ -125,7 +125,7 @@ try {
         -not (Test-Path -LiteralPath 'src/fpvs_studio/app/main.py' -PathType Leaf)) {
         throw 'Extract or clone the full FPVS Studio repository before running setup.'
     }
-    $toolsRoot = Join-Path $RepoRoot '.python310'
+    $toolsRoot = Join-Path $RepoRoot ('.python' + $RequiredPythonVersion.Replace('.', ''))
     if ((Get-Item -LiteralPath $toolsRoot -Force -ErrorAction SilentlyContinue).Attributes -band
         [IO.FileAttributes]::ReparsePoint) {
         throw "The Python tools directory must be inside the checkout: $toolsRoot"
@@ -140,7 +140,7 @@ try {
 
     $python = Get-StudioPython -ToolsRoot $toolsRoot
     if (-not (Test-StudioPython -Python $python -VirtualEnvironment)) {
-        throw "Setup requires a 64-bit Python 3.10 virtual environment: $python"
+        throw "Setup requires a 64-bit Python $RequiredPythonVersion virtual environment: $python"
     }
     Write-Host "Installing Studio requirements with $python..."
     Invoke-NativeChecked -File $python -Arguments @(
@@ -151,10 +151,10 @@ try {
     )
     Invoke-NativeChecked -File $python -Arguments @('-I', '-m', 'pip', 'check')
     Invoke-NativeChecked -File $python -Arguments @(
-        '-I', '-c', "from fpvs_studio.app.main import main; from importlib.metadata import version; version('psychopy')"
+        '-I', '-c', 'from fpvs_studio.app.main import main; import psychopy; from moviepy import ImageSequenceClip, VideoFileClip'
     )
     . (Join-Path (Split-Path -Parent $python) 'Activate.ps1')
-    Write-Host 'Python setup complete. The Python 3.10 environment is active in this window.'
+    Write-Host "Python setup complete. The Python $RequiredPythonVersion environment is active in this window."
     Write-Host 'Run fpvs-studio here to open Studio.'
 
     if (Get-Process -Name 'pycharm*' -ErrorAction SilentlyContinue) {

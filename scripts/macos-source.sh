@@ -28,15 +28,21 @@ case "$native_arch" in
   arm64|x86_64) ;;
   *) echo "Unsupported Mac CPU: $native_arch" >&2; exit 2 ;;
 esac
-venv_python="$repo_root/.venv3.10/bin/python"
-if [ ! -e "$repo_root/.venv3.10" ] && [ ! -L "$repo_root/.venv3.10" ] &&
-   { [ -e "$repo_root/.venv" ] || [ -L "$repo_root/.venv" ]; }; then
+venv_python="$repo_root/.venv3.11/bin/python"
+# Leave an earlier checkout's working environment available when switching branches.
+old_checkout_venv() {
+  local cfg="$repo_root/.venv/pyvenv.cfg"
+  [ ! -L "$repo_root/.venv" ] && [ ! -L "$cfg" ] && [ -f "$cfg" ] &&
+    grep -Eq '^version(_info)?[[:space:]]*=[[:space:]]*3\.10([.]|[[:space:]]|$)' "$cfg"
+}
+if [ ! -e "$repo_root/.venv3.11" ] && [ ! -L "$repo_root/.venv3.11" ] &&
+   { [ -e "$repo_root/.venv" ] || [ -L "$repo_root/.venv" ]; } && ! old_checkout_venv; then
   venv_python="$repo_root/.venv/bin/python"
 fi
 
-require_python310() {
+require_python311() {
   "$1" -c 'import platform, sys
-assert sys.version_info[:2] == (3, 10), "FPVS Studio requires Python 3.10"
+assert sys.version_info[:2] == (3, 11), "FPVS Studio requires Python 3.11"
 assert platform.machine() == sys.argv[1], "Python must match the native Mac CPU"' "$native_arch"
 }
 
@@ -45,7 +51,7 @@ require_environment() {
     echo "Double-click Setup Mac.command first (or run bash scripts/macos-source.sh setup)." >&2
     exit 2
   fi
-  require_python310 "$venv_python"
+  require_python311 "$venv_python"
 }
 
 download() {
@@ -84,9 +90,9 @@ install_python() {
   fi
   export UV_PYTHON_INSTALL_DIR="$tools_root/python"
   export UV_CACHE_DIR="$tools_root/cache"
-  echo "Installing a native, project-contained Python 3.10..."
-  "$uv_bin" python install --no-bin 3.10
-  python_bin="$("$uv_bin" python find --managed-python --system 3.10)"
+  echo "Installing a native, project-contained Python 3.11..."
+  "$uv_bin" python install --no-bin 3.11
+  python_bin="$("$uv_bin" python find --managed-python --system 3.11)"
 }
 
 prepare_intel_build_tools() {
@@ -157,7 +163,7 @@ case "$command_name" in
       exit 2
     fi
     if [ -x "$venv_python" ]; then
-      require_python310 "$venv_python"
+      require_python311 "$venv_python"
       echo "Reusing $venv_python"
     else
       python_bin="${FPVS_PYTHON:-}"
@@ -166,17 +172,17 @@ case "$command_name" in
         exit 2
       fi
       if [ -z "$python_bin" ] && [ "${FPVS_MANAGED_PYTHON:-0}" != 1 ]; then
-        python_bin="$(command -v python3.10 || true)"
-        if [ -n "$python_bin" ] && ! require_python310 "$python_bin" >/dev/null 2>&1; then
-          echo "Python on PATH is not native Python 3.10; installing a compatible interpreter."
+        python_bin="$(command -v python3.11 || true)"
+        if [ -n "$python_bin" ] && ! require_python311 "$python_bin" >/dev/null 2>&1; then
+          echo "Python on PATH is not native Python 3.11; installing a compatible interpreter."
           python_bin=""
         fi
       fi
       if [ -z "$python_bin" ]; then install_python; fi
-      require_python310 "$python_bin"
-      "$python_bin" -m venv "$repo_root/.venv3.10"
+      require_python311 "$python_bin"
+      "$python_bin" -m venv "$repo_root/.venv3.11"
     fi
-    require_python310 "$venv_python"
+    require_python311 "$venv_python"
     prepare_intel_build_tools
     echo "Installing Studio, the presentation engine and verification tools..."
     "$venv_python" -m pip install --upgrade 'pip>=25,<27'
@@ -197,12 +203,12 @@ logging.getLogger("fpvs_studio.setup").info("Studio imports and presentation-eng
     ;;
   repair)
     repair_python="$venv_python"
-    if [ ! -x "$repair_python" ] || ! require_python310 "$venv_python" >/dev/null 2>&1; then
+    if [ ! -x "$repair_python" ] || ! require_python311 "$venv_python" >/dev/null 2>&1; then
       if [ -L "$tools_root" ]; then echo "Setup tools directory must not be a symlink." >&2; exit 2; fi
       mkdir -p "$tools_root"
       trap 'if [ -n "${download_tmp:-}" ]; then rm -rf -- "$download_tmp"; fi' EXIT
       install_python
-      require_python310 "$python_bin"
+      require_python311 "$python_bin"
       repair_python="$python_bin"
     fi
     exec "$repair_python" -I "$repo_root/Repair Mac 2.py" "$@"

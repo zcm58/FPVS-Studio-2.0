@@ -52,8 +52,8 @@ the requirements files and `scripts/`. Keep it in a local folder.
    quit PyCharm before using this launcher so its interpreter setting is read; the
    shortcut explains this if PyCharm is already running and preserves your open work.
 
-Setup reuses `.venv3.10`, then `.venv`, when present and compatible. Otherwise it
-creates `.venv3.10`. Missing native Python 3.10 is downloaded through a pinned,
+Setup reuses `.venv3.11`, then `.venv`, when present and compatible. Otherwise it
+creates `.venv3.11`, preserving a previous Python 3.10 checkout environment. Missing native Python 3.11 is downloaded through a pinned,
 checksum-verified [uv release](https://github.com/astral-sh/uv/releases/tag/0.13.7),
 using uv's [managed Python installation](https://docs.astral.sh/uv/guides/install-python/).
 The installer and Python live in ignored `.fpvs-macos/`; keep that folder alongside
@@ -67,8 +67,7 @@ Setup installs with pip, runs `pip check`, checks GUI imports without opening an
 and loads the actual engine dependencies in a separate isolated process. The Mac
 engine extra allows SciPy 1.14.1 and newer. Repair Mac 2 preserves working SciPy
 installations and installs 1.14.1 only after observing the specific native PROPACK
-loader failure, then checks the engine again. Python remains 3.10;
-Windows dependency selection is unchanged. Successful installation does not guarantee every GUI,
+loader failure, then checks the engine again. The trial selects Python 3.11. Successful installation does not guarantee every GUI,
 presentation or service workflow is bug-free; those acceptance gates remain above.
 
 Intel dependencies can require compilation. Setup checks Apple's Command Line Tools,
@@ -135,7 +134,7 @@ retain the original import cause.
    The helper can start from the wrong project interpreter; no manual interpreter
    selection is required.
 2. Wait for the checks and any repair. The helper automatically selects Setup Mac's
-   `.venv3.10/bin/python` or reused `.venv/bin/python`, verifies native Python 3.10,
+   `.venv3.11/bin/python` or reused `.venv/bin/python`, verifies native Python 3.11,
    checks the engine, and fixes the project and Studio run configurations.
 3. If PyCharm needs to reload its interpreter settings, the helper starts a separate
    finishing process, requests a normal quit, and reopens the same app/project after
@@ -194,8 +193,8 @@ Windows tests exercise it with controlled process/filesystem substitutes.
 For a manual install from the checkout root, using the same interpreter as Studio:
 
 ```bash
-.venv3.10/bin/python -m pip install --requirement requirements-macos.txt
-.venv3.10/bin/python "Repair Mac 2.py" --check
+.venv3.11/bin/python -m pip install --requirement requirements-macos.txt
+.venv3.11/bin/python "Repair Mac 2.py" --check
 ```
 
 Substitute `.venv/bin/python` when that is the configured environment. The narrower
@@ -214,9 +213,9 @@ bash scripts/macos-source.sh verify
 bash scripts/macos-source.sh run
 ```
 
-`FPVS_PYTHON=/absolute/path/to/python3.10` selects an existing interpreter;
+`FPVS_PYTHON=/absolute/path/to/python3.11` selects an existing interpreter;
 `FPVS_MANAGED_PYTHON=1` exercises managed Python acquisition on a fresh checkout
-even if Python 3.10 is already on PATH. Existing environments are always preserved
+even if Python 3.11 is already on PATH. Existing environments are always preserved
 and reused first. Install the declared requirements without `--no-deps` or mixing
 Intel and Apple Silicon environments. No guarantee follows for an untested OS/CPU.
 
@@ -247,7 +246,7 @@ packages, then reinstall the selected complete Qt family to restore overlapping 
 .venv/bin/python -m pip check
 ```
 
-Use `.venv3.10/bin/python` in these commands if that is the environment being refreshed.
+Use `.venv3.11/bin/python` in these commands if that is the environment being refreshed.
 
 For source updates, close Studio, preserve any local source edits, update to the
 chosen revision (for example, `git pull --ff-only` on an unmodified tracking branch),
@@ -343,7 +342,7 @@ physical key interaction remains a separate acceptance check.
 
 ## Automated Mac evidence
 
-[macos-source.yml](../.github/workflows/macos-source.yml) defines native Python 3.10
+[macos-source.yml](../.github/workflows/macos-source.yml) defines native Python 3.11
 lanes for `macos-15`/arm64 and `macos-15-intel`/x86_64. Successful
 [run 41554238134](https://github.com/zcm58/FPVS-Studio-2.0/actions/runs/41554238134)
 records this source-environment matrix for `f6b6721`:
@@ -374,7 +373,7 @@ and host-specific `evidence.json`. Successful local reuse on one OS is not a cro
 pass; retain the actual CI artifact chain for that claim.
 
 `bash scripts/macos-source.sh verify` runs the safe `macos` focused scope.
-The helper prefers `.venv3.10` and reuses `.venv` if present instead of creating
+The helper prefers `.venv3.11` and reuses `.venv` if present instead of creating
 another environment. Tests select the primary Windows or secondary Mac contract at
 module-owned seams without changing the process-wide host. Repo verification checks
 all source types for Windows, then the Mac adapter owners for Darwin; the Mac focused

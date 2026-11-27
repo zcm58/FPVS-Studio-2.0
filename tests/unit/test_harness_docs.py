@@ -218,7 +218,7 @@ def test_active_agent_docs_use_repo_python_environment() -> None:
         for line in text.splitlines():
             if (
                 re.search(r"python -m (pytest|ruff|mypy)", line)
-                and r".\.venv3.10\Scripts\python" not in line
+                and r".\.venv3.11\Scripts\python" not in line
             ):
                 stale_references.append(relative_path)
 

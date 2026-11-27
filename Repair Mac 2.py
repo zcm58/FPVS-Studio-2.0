@@ -176,7 +176,7 @@ class _Diagnostics:
             failure = "missing_dependency"
         elif "does not satisfy" in text or "metadata is from a different source version" in text:
             failure = "dependency_mismatch"
-        elif "Studio requires Python 3.10" in text or "Python must match the native" in text:
+        elif "Studio requires Python 3.11" in text or "Python must match the native" in text:
             failure = "python_incompatible"
         if failure and not self.checking_compatibility and not compatibility_update:
             self.failure(failure)
@@ -575,6 +575,7 @@ COMPATIBILITY_PROBE = METADATA_PROBE + """
 import sys
 from importlib.metadata import distribution
 from pathlib import Path
+from urllib.parse import urldefrag
 from packaging.requirements import Requirement
 from packaging.version import Version
 try:
@@ -622,6 +623,12 @@ for raw in requirements:
     ):
         continue
     installed = required_version(requirement.name)
+    if requirement.url:
+        # A release with the same version can differ from the pinned source revision.
+        direct_url = distribution(requirement.name).read_text("direct_url.json")
+        origin = json.loads(direct_url) if direct_url else {}
+        if origin.get("url") != urldefrag(requirement.url).url:
+            compatibility_update(f"{requirement.name} must be installed from the pinned source.")
     if installed not in requirement.specifier:
         compatibility_update(f"{requirement.name} {installed} does not satisfy {requirement}.")
 
@@ -637,7 +644,7 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 logging.info("Selected Python: %s (%s, %s)", sys.executable,
              platform.python_version(), platform.machine())
 assert sys.platform == "darwin", "The selected interpreter must run on macOS."
-assert sys.version_info[:2] == (3, 10), "Studio requires Python 3.10."
+assert sys.version_info[:2] == (3, 11), "Studio requires Python 3.11."
 assert sys.prefix != sys.base_prefix, "The selected Python must be a virtual environment."
 assert Path(sys.prefix).resolve() == Path(sys.argv[1]).resolve(), "Wrong venv prefix."
 assert platform.machine() == sys.argv[2], "Python must match the native Mac CPU."
@@ -651,10 +658,19 @@ class EnvironmentInvalidError(ValueError):
 def expected_environment(repo_root: Path) -> Path:
     """Match Setup Mac.command, including its preservation of incomplete environments."""
 
-    preferred = repo_root / ".venv3.10"
+    preferred = repo_root / ".venv3.11"
     alternate = repo_root / ".venv"
     if preferred.exists() or preferred.is_symlink():
         return preferred
+    config = alternate / "pyvenv.cfg"
+    if not alternate.is_symlink() and not config.is_symlink() and config.is_file():
+        # Setup preserves a Python 3.10 checkout environment when switching branches.
+        try:
+            config_text = config.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return alternate
+        if re.search(r"^version(?:_info)?[ \t]*=[ \t]*3\.10(?:\.|\s|$)", config_text, re.M):
+            return preferred
     if alternate.exists() or alternate.is_symlink():
         return alternate
     return preferred

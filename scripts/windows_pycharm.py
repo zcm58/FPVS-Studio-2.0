@@ -112,7 +112,7 @@ def _register_sdk(table: ET.Element, root: Path, python: Path) -> str:
         if Path(path) == python:
             return label
 
-    base = f"Python 3.10 (FPVS Studio: {root.name})"
+    base = f"Python {sys.version_info.major}.{sys.version_info.minor} (FPVS Studio: {root.name})"
     name = base
     suffix = 2
     while name in names:

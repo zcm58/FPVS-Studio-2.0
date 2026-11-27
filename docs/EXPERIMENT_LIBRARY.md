@@ -708,7 +708,7 @@ The source remains unchanged; existing outputs are never overwritten.
 ```powershell
 # Run from the FPVS Studio source checkout. Replace the source and study values.
 $studioRepo = (Get-Location).Path
-$python = Join-Path $studioRepo '.venv3.10\Scripts\python.exe'
+$python = Join-Path $studioRepo '.venv3.11\Scripts\python.exe'
 $sourceProject = 'X:\Studies\Example'
 $itemId = 'example-study'
 $version = '1.0.0'
@@ -752,7 +752,7 @@ that local inventory out of the public-facing catalog.
 Generate two artificial transfer fixtures without reading real studies:
 
 ```powershell
-.\.venv3.10\Scripts\python scripts/create_library_test_bundles.py "build\library-test-bundles"
+.\.venv3.11\Scripts\python scripts/create_library_test_bundles.py "build\library-test-bundles"
 ```
 
 This produces a word-stream project and a Cognitive Load project with geometric

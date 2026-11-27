@@ -6,13 +6,13 @@ requires the source tree or a system Python environment.
 
 ## Build Environment
 
-FPVS Studio packaging uses the repo-local Python 3.10 environment and PyInstaller.
+FPVS Studio packaging uses the repo-local Python 3.11 environment and PyInstaller.
 Create or refresh the environment once:
 
 ```powershell
-py -3.10 -m venv .venv3.10
-.\.venv3.10\Scripts\python -m pip install -U pip
-.\.venv3.10\Scripts\python -m pip install -e ".[dev,engine,packaging]"
+py -3.11 -m venv .venv3.11
+.\.venv3.11\Scripts\python -m pip install -U pip
+.\.venv3.11\Scripts\python -m pip install -e ".[dev,engine,packaging]"
 ```
 
 The `engine` extra is included because lab builds should contain PsychoPy and runtime
@@ -150,7 +150,7 @@ Use simple semantic versioning:
 The package metadata test fails if the importable app version and `pyproject.toml` drift:
 
 ```powershell
-.\.venv3.10\Scripts\python -m pip install -e ".[dev,engine,packaging]"
+.\.venv3.11\Scripts\python -m pip install -e ".[dev,engine,packaging]"
 ./scripts/verify.ps1 -Scope packaging -Tier focused
 ```
 
@@ -172,7 +172,7 @@ Run the repo script:
 .\scripts\build_exe.ps1
 ```
 
-The script verifies Python 3.10, installs `.[engine,packaging]` unless
+The script verifies Python 3.11, installs `.[engine,packaging]` unless
 `-SkipInstall` is passed, cleans only packaging output folders, and runs PyInstaller.
 
 Expected output:

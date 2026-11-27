@@ -483,7 +483,7 @@ from fpvs_studio.core.serialization import load_project_file
 root = Path(os.environ["FPVS_PROTOCOL_PROJECT"])
 project = load_project_file(project_json_path(root))
 print(protocol_fingerprint(project, root))
-'@ | & .\.venv3.10\Scripts\python.exe -
+'@ | & .\.venv3.11\Scripts\python.exe -
 ```
 
 The loader applies normal in-memory project migrations; this command does not save

@@ -43,6 +43,9 @@ engine = [
   "psychopy>=2024.2,<2027.0; sys_platform != 'darwin'",
   # Mac refresh protection requires the display-link callback added in 2026.1.
   "psychopy>=2026.1,<2027.0; sys_platform == 'darwin'",
+  # Released MoviePy 2.x caps Pillow below 13. This upstream revision keeps the
+  # MoviePy 2 APIs PsychoPy imports and supports Pillow 13.
+  "moviepy @ https://github.com/Zulko/moviepy/archive/211e4b15f6ce4f34a6a9efbfff40590e43a68f77.zip#sha256=11e67e8b94033067d01ea94e852a4d2ec320e4125c094fe8923d2e76f6796aa8",
   # Preserve working SciPy builds; Repair Mac 2 targets confirmed native loader failures.
   "scipy>=1.14.1; sys_platform == 'darwin'",
   "sounddevice>=0.4,<0.6",
@@ -115,6 +118,9 @@ no_implicit_optional = true
 check_untyped_defs = true
 disallow_incomplete_defs = true
 disallow_untyped_defs = true
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fpvs_studio"]

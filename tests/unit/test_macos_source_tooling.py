@@ -22,7 +22,7 @@ def test_repair_shortcut_starts_helper_without_installing_studio_first() -> None
     assert "python" not in shortcut.lower()
     script = (ROOT / "scripts/macos-source.sh").read_text(encoding="utf-8")
     repair = script.split("\n  repair)\n", 1)[1].split("\n    ;;", 1)[0]
-    assert 'require_python310 "$venv_python"' in repair
+    assert 'require_python311 "$venv_python"' in repair
     assert "install_python" in repair
     assert '"$repo_root/Repair Mac 2.py"' in repair
     assert "pip install" not in repair
@@ -46,7 +46,7 @@ def test_source_helper_reuses_native_environment(tmp_path, command, preferred):
     uname.write_text('#!/bin/sh\ncase "$1" in -s) echo Darwin;; -m) echo arm64;; esac\n',
                      encoding="utf-8")
     uname.chmod(0o700)
-    for environment in (".venv", ".venv3.10") if preferred else (".venv",):
+    for environment in (".venv", ".venv3.11") if preferred else (".venv",):
         python = tmp_path / environment / "bin/python"
         python.parent.mkdir(parents=True)
         python.write_text(
@@ -60,11 +60,11 @@ def test_source_helper_reuses_native_environment(tmp_path, command, preferred):
     result = subprocess.run([bash, str(helper), command], env=env, capture_output=True,
                             text=True, timeout=15, check=False)
     assert result.returncode == 0, result.stderr
-    selected = ".venv3.10" if preferred else ".venv"
+    selected = ".venv3.11" if preferred else ".venv"
     commands = log.read_text(encoding="utf-8")
     assert str(tmp_path / selected / "bin/python") in commands
     assert ("fpvs_studio.app" if command == "run" else "requirements-macos.txt") in commands
-    assert (tmp_path / ".venv3.10").exists() is preferred
+    assert (tmp_path / ".venv3.11").exists() is preferred
 
 
 def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -> None:
@@ -93,7 +93,7 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
     setup = next(step for step in job["steps"] if step.get("uses", "").startswith(
         "actions/setup-python@"
     ))
-    assert setup["with"]["python-version"] == "3.10"
+    assert setup["with"]["python-version"] == "3.11"
     steps = "\n".join(str(step) for step in job["steps"])
     installation = next(step for step in job["steps"]
                         if step.get("run") == "bash scripts/macos-source.sh setup")
@@ -102,7 +102,7 @@ def test_macos_source_ci_checks_both_native_architectures_without_gui_opt_in() -
         step for step in job["steps"]
         if "load_psychopy_modules()" in step.get("run", "")
     )
-    assert ".venv3.10/bin/python -I" in engine_smoke["run"]
+    assert ".venv3.11/bin/python -I" in engine_smoke["run"]
     assert "continue-on-error" not in engine_smoke
     assert "FPVS_MACOS_NATIVE_CHECKS" in steps
     assert "FPVS_ALLOW_QT_TESTS" not in steps

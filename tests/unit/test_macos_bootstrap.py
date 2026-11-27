@@ -199,7 +199,7 @@ def repair_ide(tmp_path, monkeypatch):
     app, config, _table = _ide_profile(tmp_path)
     ide = pycharm.RepairIDE(app, config / "PyCharm2026.1")
     monkeypatch.setattr(pycharm, "_discover_repair_ide", lambda: ide)
-    monkeypatch.setattr(pycharm, "_target_python_version", lambda _python: "3.10.22")
+    monkeypatch.setattr(pycharm, "_target_python_version", lambda _python: "3.11.18")
     monkeypatch.setattr(pycharm, "_profile_is_closed", lambda _ide: True)
     return root, python, ide
 
@@ -353,17 +353,17 @@ def test_reused_sdk_version_is_refreshed_after_venv_rebuild(repair_ide):
     document = ET.Element("application")
     sdk = ET.SubElement(ET.SubElement(document, "component", name="ProjectJdkTable"), "jdk")
     for tag, value in (("name", "Existing SDK"), ("homePath", str(python)),
-                       ("type", "Python SDK"), ("version", "Python 3.11.9")):
+                       ("type", "Python SDK"), ("version", "Python 3.12.9")):
         ET.SubElement(sdk, tag, value=value)
     ET.SubElement(sdk, "additional", SDK_UUID="preserve-identity")
     table.write_bytes(ET.tostring(document))
     pycharm.register_pycharm(
-        root, python, str(ide.app), config_dir=ide.config_dir, python_version="3.10.22",
+        root, python, str(ide.app), config_dir=ide.config_dir, python_version="3.11.18",
     )
     saved = ET.parse(table).find(".//jdk")
     assert saved.find("name").get("value") == "Existing SDK"
     assert saved.find("additional").get("SDK_UUID") == "preserve-identity"
-    assert saved.find("version").get("value") == "Python 3.10.22"
+    assert saved.find("version").get("value") == "Python 3.11.18"
     assert len(list((root / ".fpvs-macos/pycharm-backups").glob("jdk.table.xml.*.bak"))) == 1
 
 
@@ -386,7 +386,7 @@ def test_active_ide_repair_is_detached_and_repeated_runs_reuse_job(repair_ide, m
     assert not (root / ".idea").exists()
 
 
-@pytest.mark.parametrize("prefix,version", [("different", "3.10"), (None, "3.11")])
+@pytest.mark.parametrize("prefix,version", [("different", "3.11"), (None, "3.10")])
 def test_wrong_live_interpreter_requires_restart_even_with_correct_xml(
     repair_ide, monkeypatch, prefix, version,
 ):
@@ -414,7 +414,7 @@ def test_live_correct_interpreter_and_settings_do_not_restart(repair_ide, monkey
         pycharm.subprocess, "Popen", lambda *a, **k: pytest.fail("unexpected restart"),
     )
     assert pycharm.configure_for_repair(
-        root, python, launch_prefix=str(python.parent.parent), launch_version="3.10",
+        root, python, launch_prefix=str(python.parent.parent), launch_version="3.11",
     ) == "ready"
 
 
@@ -423,11 +423,11 @@ def test_stale_sdk_version_alone_requires_repair(repair_ide):
     pycharm.configure_for_repair(root, python)
     table = ide.config_dir / "options/jdk.table.xml"
     tree = ET.parse(table)
-    tree.find(".//jdk/version").set("value", "Python 3.11.9")
+    tree.find(".//jdk/version").set("value", "Python 3.12.9")
     tree.write(table)
     assert not pycharm._repair_settings_ready(root, python, ide)
     assert pycharm.configure_for_repair(root, python) == "ready"
-    assert ET.parse(table).find(".//jdk/version").get("value") == "Python 3.10.22"
+    assert ET.parse(table).find(".//jdk/version").get("value") == "Python 3.11.18"
 
 
 def test_expired_lease_reuses_worker_that_is_still_finishing(repair_ide, monkeypatch):
@@ -707,11 +707,23 @@ def test_fresh_setup_creates_venv_installs_complete_requirements_and_checks(shel
     result = _setup(root, env, "setup")
     assert result.returncode == 0, result.stdout + result.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
-    assert ["-m", "venv", str(root / ".venv3.10")] in calls
+    assert ["-m", "venv", str(root / ".venv3.11")] in calls
     assert ["-m", "pip", "install", "--requirement", "requirements-macos.txt"] in calls
     assert ["-m", "pip", "check"] in calls
     assert any(call[0] == "scripts/macos_pycharm.py" for call in calls)
     assert "Setup complete" in result.stdout
+
+
+def test_setup_keeps_old_python_environment_when_switching_branches(shell_project):
+    root, _tools, _log, env, _executable, python = shell_project
+    legacy = root / ".venv"
+    legacy.mkdir()
+    (legacy / "pyvenv.cfg").write_text("version = 3.10.22\n")
+    env["FPVS_PYTHON"] = str(python)
+    result = _setup(root, env, "setup")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (legacy / "pyvenv.cfg").read_text() == "version = 3.10.22\n"
+    assert (root / ".venv3.11/bin/python").is_file()
 
 
 def test_repair_setup_skips_ide_writes_until_finalization(shell_project):
@@ -732,7 +744,7 @@ def test_install_failure_keeps_environment_and_never_reports_success(shell_proje
     assert result.returncode == 9
     assert "Setup did not finish" in result.stdout
     assert "Setup complete" not in result.stdout
-    assert (root / ".venv3.10/bin/python").is_file()
+    assert (root / ".venv3.11/bin/python").is_file()
     assert (root / ".fpvs-macos/setup.log").is_file()
 
 
@@ -745,12 +757,12 @@ def test_native_engine_failure_never_reports_setup_success_or_changes_ide(shell_
     assert "Setup complete" not in result.stdout
     calls = [json.loads(line) for line in log.read_text().splitlines()]
     assert not any(call[0] == "scripts/macos_pycharm.py" for call in calls)
-    assert (root / ".venv3.10/bin/python").is_file()
+    assert (root / ".venv3.11/bin/python").is_file()
 
 
 def test_incomplete_environment_is_preserved_with_clear_recovery(shell_project):
     root, _tools, _log, env, _executable, _python = shell_project
-    marker = root / ".venv3.10/user-marker"
+    marker = root / ".venv3.11/user-marker"
     marker.parent.mkdir()
     marker.write_text("keep")
     result = _setup(root, env, "setup")
@@ -768,7 +780,7 @@ def test_managed_download_checksum_failure_never_executes_payload(shell_project)
     assert result.returncode == 1
     assert "checksum failed" in result.stdout
     assert not log.exists()
-    assert not (root / ".venv3.10").exists()
+    assert not (root / ".venv3.11").exists()
 
 
 def test_pycharm_launcher_dispatches_scoped_setup_with_exact_interpreter(shell_project):
@@ -778,7 +790,7 @@ def test_pycharm_launcher_dispatches_scoped_setup_with_exact_interpreter(shell_p
     result = _setup(root, env, "pycharm")
     assert result.returncode == 0, result.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
-    assert ["scripts/macos_pycharm.py", str(root), str(root / ".venv3.10/bin/python"),
+    assert ["scripts/macos_pycharm.py", str(root), str(root / ".venv3.11/bin/python"),
             "--launch", "PyCharm.app"] in calls
 
 
@@ -800,13 +812,13 @@ if sys.argv[2:4] == ['python', 'find']:
     result = _setup(root, env, "setup")
     assert result.returncode == 0, result.stdout + result.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
-    assert ["uv", "python", "install", "--no-bin", "3.10"] in calls
-    assert ["-m", "venv", str(root / ".venv3.10")] in calls
+    assert ["uv", "python", "install", "--no-bin", "3.11"] in calls
+    assert ["-m", "venv", str(root / ".venv3.11")] in calls
 
 
 def test_repair_launcher_reuses_python_and_does_not_preempt_helper_diagnostics(shell_project):
     root, _tools, log, env, _executable, python = shell_project
-    selected = root / ".venv3.10/bin/python"
+    selected = root / ".venv3.11/bin/python"
     selected.parent.mkdir(parents=True)
     shutil.copyfile(python, selected)
     selected.chmod(0o700)
@@ -822,7 +834,7 @@ def test_repair_launcher_reuses_python_and_does_not_preempt_helper_diagnostics(s
 @pytest.mark.parametrize("existing", ["missing", "incompatible"])
 def test_repair_launcher_acquires_only_native_python_before_helper(shell_project, existing):
     root, _tools, log, env, executable, python = shell_project
-    selected = root / ".venv3.10/bin/python"
+    selected = root / ".venv3.11/bin/python"
     if existing == "incompatible":
         selected.parent.mkdir(parents=True)
         shutil.copyfile(python, selected)
@@ -843,7 +855,7 @@ if sys.argv[2:4] == ['python', 'find']:
     result = _setup(root, env, "repair")
     assert result.returncode == 0, result.stdout + result.stderr
     calls = [json.loads(line) for line in log.read_text().splitlines()]
-    assert ["uv", "python", "install", "--no-bin", "3.10"] in calls
+    assert ["uv", "python", "install", "--no-bin", "3.11"] in calls
     assert ["-I", str(root / "Repair Mac 2.py")] in calls
     assert not any(call[:2] == ["-m", "pip"] for call in calls)
     assert not any(call[:2] == ["-m", "venv"] for call in calls)

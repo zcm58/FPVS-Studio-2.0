@@ -28,7 +28,7 @@ def session(tmp_path):
 
 def facts(studio="2.8.1", scipy="1.15.3"):
     return "FPVS_REPAIR_FACTS " + json.dumps({
-        "fpvs-studio": studio, "scipy": scipy, "python_version": "3.10.22",
+        "fpvs-studio": studio, "scipy": scipy, "python_version": "3.11.18",
         "python_cpu": "arm64", "psychopy_version": "2026.2.5",
         "numpy_version": "2.2.6", "pyside6_version": "6.11.3",
     })
@@ -59,7 +59,7 @@ def fake_metadata_process(monkeypatch, state):
 
 @pytest.mark.parametrize("initial", ["missing", "unrunnable"])
 def test_rebuilt_environment_is_never_reported_as_the_original(monkeypatch, tmp_path, initial):
-    python = tmp_path / ".venv3.10/bin/python"
+    python = tmp_path / ".venv3.11/bin/python"
     if initial == "unrunnable":
         python.parent.mkdir(parents=True)
         python.touch()
@@ -87,7 +87,7 @@ def test_rebuilt_environment_is_never_reported_as_the_original(monkeypatch, tmp_
 
 @pytest.mark.parametrize("final", ["installed", "unrunnable"])
 def test_failed_setup_still_snapshots_actual_final_packages(monkeypatch, tmp_path, final):
-    python = tmp_path / ".venv3.10/bin/python"
+    python = tmp_path / ".venv3.11/bin/python"
     python.parent.mkdir(parents=True)
     python.touch()
     state = {"facts": facts()}
@@ -109,7 +109,7 @@ def test_failed_setup_still_snapshots_actual_final_packages(monkeypatch, tmp_pat
     assert details["initial_scipy_version"] == "1.15.3"
     assert details["final_scipy_version"] == ("1.14.1" if final == "installed" else "unknown")
     assert details["final_studio_version"] == ("3.0.1" if final == "installed" else "unknown")
-    assert details["python_version"] == ("3.10.22" if final == "installed" else "unknown")
+    assert details["python_version"] == ("3.11.18" if final == "installed" else "unknown")
 
 
 def test_versions_keep_before_after_and_native_architecture(session):
@@ -574,7 +574,7 @@ def test_detached_completion_keeps_auto_mode_and_final_result(monkeypatch, tmp_p
     monkeypatch.setattr(repair, "sys", SimpleNamespace(platform="darwin"))
     monkeypatch.setattr(repair, "_pid_alive", lambda pid: False)
     monkeypatch.setattr(repair, "_complete_automatic_report", lambda *args: calls.append(args))
-    python = tmp_path / ".venv3.10/bin/python"
+    python = tmp_path / ".venv3.11/bin/python"
     python.parent.mkdir(parents=True)
     python.touch()
     fake_metadata_process(monkeypatch, {"facts": facts("3.0.1", "1.14.1")})

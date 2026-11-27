@@ -11,7 +11,7 @@ the private subject mapping are not included in the historical measurements belo
 ## Reproduce
 
 ```powershell
-./.venv3.10/Scripts/python.exe scripts/measure_reporting_storage.py --backend ../OpenFPVS
+./.venv3.11/Scripts/python.exe scripts/measure_reporting_storage.py --backend ../OpenFPVS
 ```
 
 The script uses temporary SQLite files and makes no network requests. Sizes are

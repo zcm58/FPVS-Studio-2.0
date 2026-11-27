@@ -115,7 +115,7 @@ def register_pycharm(
                         version.set("value", f"Python {python_version}")
                         table_changed = True
     if sdk_name is None:
-        base_name = f"Python 3.10 (FPVS Studio Mac: {repo_root.name})"
+        base_name = f"Python 3.11 (FPVS Studio Mac: {repo_root.name})"
         sdk_name = base_name
         suffix = 2
         while sdk_name in names:
@@ -508,8 +508,8 @@ def _target_python_version(python: Path) -> str:
         capture_output=True, text=True, check=True, timeout=20,
     )
     value = result.stdout.strip()
-    if not value.startswith("3.10."):
-        raise ValueError("The verified Studio environment must use Python 3.10.")
+    if not value.startswith("3.11."):
+        raise ValueError("The verified Studio environment must use Python 3.11.")
     return value
 
 
@@ -791,7 +791,7 @@ def configure_for_repair(
     live_interpreter_mismatch = bool(ide.pids) and (
         (launch_prefix is not None
          and Path(launch_prefix).resolve() != python.parent.parent.resolve())
-        or (launch_version is not None and launch_version != "3.10")
+        or (launch_version is not None and launch_version != "3.11")
     )
     if _repair_settings_ready(repo_root, python, ide) and not live_interpreter_mismatch:
         return "ready"

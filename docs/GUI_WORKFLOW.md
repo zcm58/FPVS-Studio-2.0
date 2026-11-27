@@ -291,7 +291,7 @@ paragraph and checkbox selections, then inspect **Demographic Answers** in
 Run the authoring application with:
 
 ```powershell
-.\.venv3.10\Scripts\python -m fpvs_studio.app
+.\.venv3.11\Scripts\python -m fpvs_studio.app
 ```
 
 The installed script entry point is also available as `fpvs-studio`.

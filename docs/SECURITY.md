@@ -66,7 +66,7 @@ dependencies are counted separately from exploitable Studio transfer paths; dupl
 advisory records are not separate vulnerabilities. `pyproject.toml` records security
 floors for compatible dependencies already required by the selected extras.
 
-Two upstream restrictions remain explicit:
+The published Python 3.10 build reviewed in that audit had two upstream restrictions:
 
 - MoviePy 2.2.1, required by PsychoPy, requires Pillow below 12. The newest compatible
   Pillow is 11.3.0. [Pillow's PSD advisory](https://github.com/python-pillow/Pillow/security/advisories/GHSA-cfh3-3jmp-rvhc)
@@ -88,9 +88,9 @@ and [XML recursion fixes](https://www.qt.io/blog/security-advisory-cve-2026-1924
 The updated Qt runtime still requires visible acceptance before release.
 
 The package advisory scan does not cover CPython/OpenSSL, codec DLLs or every native
-transitive library. The current build interpreter is CPython 3.10.11; the
+transitive library. That build used CPython 3.10.11; the
 [3.10 series reached end of support on October 1, 2026](https://www.python.org/downloads/release/python-31022/).
-The bundle workaround does not patch the interpreter's other vulnerabilities. Moving
-the supported engine/build environment to maintained Python needs its own compatibility
-and runtime acceptance work. Review the packaged native inventory and current upstream
+The bundle workaround does not patch the interpreter's other vulnerabilities. The experimental Python 3.11 branch uses Pillow 13 and pins the MoviePy source
+archive and its digest in the engine dependencies. PsychoPy 2026.2.5 in the trial has
+no direct setuptools pin. Review the packaged native inventory and current upstream
 advisories before a security release; source tests alone do not certify those binaries.
