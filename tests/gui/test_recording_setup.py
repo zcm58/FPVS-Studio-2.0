@@ -1050,7 +1050,7 @@ def test_triggerbox_detection_preserves_operator_edit_during_scan(qtbot, port_de
 ])
 @pytest.mark.parametrize("first_candidate_port", ["COM3", "COM9"])
 def test_triggerbox_multiple_candidates_never_choose_arbitrary_first(
-    qtbot, port_detection_jobs, initial_port, expected_port, first_candidate_port,
+    qtbot, port_detection_jobs, recording_errors, initial_port, expected_port, first_candidate_port,
 ):
     dialog = RecordingSetupDialog(_unconfigured_triggerbox(brainproducts_serial_port=initial_port))
     qtbot.addWidget(dialog)
@@ -1063,12 +1063,17 @@ def test_triggerbox_multiple_candidates_never_choose_arbitrary_first(
     assert dialog.brainproducts_port_combo.count() == 2
     assert dialog.brainproducts_port_edit.text() == expected_port
     assert "Choose a port" in dialog.detection_status_label.text()
-    assert dialog.apply_button.isEnabled() is bool(expected_port)
     if not expected_port:
+        previous = dialog.configuration
+        _assert_invalid_apply(dialog, recording_errors)
+        assert "COM" in str(recording_errors.call_args.args[2])
+        assert dialog.configuration == previous
         dialog.brainproducts_port_combo.setCurrentIndex(1)
         dialog.brainproducts_port_combo.activated.emit(1)
         assert dialog.brainproducts_port_edit.text() == "COM12"
-        assert dialog.apply_button.isEnabled()
+    dialog.apply_button.click()
+    assert dialog.result() == int(QDialog.DialogCode.Accepted)
+    assert dialog.configuration["brainproducts_serial_port"] == (expected_port or "COM12")
 
 
 def test_triggerbox_empty_and_failed_detection_allow_manual_port_and_retry(
@@ -1430,11 +1435,11 @@ def test_settings_recording_editor_persists_only_apply(
         assert dialog.isVisible()
     else:
         dialog.reject()
-    QApplication.processEvents()
-    _assert_labels_fit(dialog)
+    qtbot.waitUntil(lambda: _assert_labels_fit(dialog))
     if accepted:
         assert saved == [{
             "recording_backend": backend,
+            **({"electrode_montage": "unicorn8"} if backend == "unicorn_udp" else {}),
             "unicorn_udp_port": 2345 if backend == "unicorn_udp" else 1000,
             "brainproducts_serial_port": (
                 "COM123" if backend == "brainproducts_triggerbox" else "COM3"
@@ -2253,7 +2258,7 @@ def test_recording_settings_failed_save_preserves_accepted_device(
     assert not dialog.recording_summary.toolTip()
     assert dialog._recording_configuration == original
     assert editor.backend_combo.currentData() == "unicorn_udp"
-    _assert_labels_fit(dialog)
+    qtbot.waitUntil(lambda: _assert_labels_fit(dialog))
 
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
