@@ -177,6 +177,51 @@ def test_recorded_repair_preserves_a_file_created_while_encoding(
         assert image.getextrema() == (127, 127)
 
 
+@pytest.mark.parametrize("damaged_checkpoint", [False, True])
+def test_missing_variant_prefers_verified_saved_study_bytes(
+    sample_project, sample_project_root, monkeypatch, damaged_checkpoint,
+) -> None:
+    from fpvs_studio.core.serialization import save_project_file
+    from fpvs_studio.core.study_versions import commit_setup_change, prepare_setup_change
+
+    root = sample_project_root
+    save_project_file(sample_project, root / "project.json")
+    variant = StimulusVariant.ROT180
+    manifest = materialize_project_assets(sample_project, project_root=root, variants=[variant])
+    record = manifest.sets[0].assets[0].derivatives[0]
+    path = root / record.relative_path
+    with Image.open(path) as image:
+        preserved = image.copy()
+    preserved.save(path, compress_level=0)
+    expected = path.read_bytes()
+    record.sha256 = sha256(expected).hexdigest().upper()
+    write_stimulus_manifest(root, manifest)
+    draft = prepare_setup_change(root, sample_project)
+    commit_setup_change(root, sample_project, draft, "", lambda _root: {}, save_version=True)
+    checkpoint = root / ".fpvs-study" / "objects" / record.sha256.lower()
+    assert checkpoint.read_bytes() == expected
+    path.unlink()
+
+    def unexpected_encoder(*args, **kwargs):
+        raise AssertionError("Use the recorded checkpoint bytes before re-encoding")
+
+    monkeypatch.setattr(
+        "fpvs_studio.preprocessing.importer.generate_rot180_png", unexpected_encoder
+    )
+    if damaged_checkpoint:
+        Image.new("RGB", (256, 256), "green").save(checkpoint, format="PNG")
+        with pytest.raises(ValueError, match="Saved stimulus is damaged"):
+            materialize_project_assets(sample_project, project_root=root, variants=[variant])
+        assert not path.exists()
+    else:
+        restored = materialize_project_assets(sample_project, project_root=root, variants=[variant])
+        assert restored == manifest
+        assert checkpoint.read_bytes() == path.read_bytes() == expected
+        assert materialize_project_assets(
+            sample_project, project_root=root, variants=[variant]
+        ) == manifest
+
+
 def test_materialize_grayscale_outputs_png_and_updates_manifest(
     sample_project,
     sample_project_root,

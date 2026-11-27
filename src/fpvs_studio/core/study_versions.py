@@ -306,6 +306,26 @@ def _object(root: Path, digest: str) -> Path:
     return resolve_project_relative_path(root, f".fpvs-study/objects/{digest}")
 
 
+def stage_saved_stimulus(root: Path, relative: str, digest: str, target: Path) -> bool:
+    """Stage verified checkpoint bytes at a new caller-owned path if captured locally."""
+
+    blob = _object(root, digest)
+    if not blob.is_file():
+        return False
+    _copy_verified_stimulus(blob, target, relative, digest)
+    return True
+
+
+def _copy_verified_stimulus(source: Path, target: Path, relative: str, digest: str) -> None:
+    check = hashlib.sha256()
+    with source.open("rb") as handle, target.open("xb") as output:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            check.update(block)
+            output.write(block)
+    if check.hexdigest() != digest:
+        raise ValueError(f"Saved stimulus is damaged: {relative}")
+
+
 def _asset_stamp(path: Path, info: os.stat_result) -> str | None:
     change = info.st_ctime_ns
     if sys.platform == "win32":
@@ -1010,7 +1030,6 @@ def _materialize(
     for relative, digest in assets.items():
         target = resolve_project_relative_path(destination, relative)
         target.parent.mkdir(parents=True, exist_ok=True)
-        check = hashlib.sha256()
         live = candidate_root
         if available_assets is not None and available_assets.get(relative) == digest:
             live = source
@@ -1023,12 +1042,7 @@ def _materialize(
             raise ValueError(f"Saved stimulus is missing: {relative}")
         if live is not None:
             _regular(blob)
-        with blob.open("rb") as handle, target.open("xb") as output:
-            for block in iter(lambda: handle.read(1024 * 1024), b""):
-                check.update(block)
-                output.write(block)
-        if check.hexdigest() != digest:
-            raise ValueError(f"Saved stimulus is damaged: {relative}")
+        _copy_verified_stimulus(blob, target, relative, digest)
 
 
 def restore_version(
