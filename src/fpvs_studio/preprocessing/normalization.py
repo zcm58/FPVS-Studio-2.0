@@ -31,7 +31,7 @@ from fpvs_studio.core.paths import (
     stimulus_normalized_dir,
     stimulus_normalized_images_root,
 )
-from fpvs_studio.preprocessing.source_files import source_image_directory_files
+from fpvs_studio.preprocessing.source_files import generated_png_name, source_image_directory_files
 
 NORMALIZATION_INPUT_SUFFIXES = frozenset({".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"})
 COMPILER_READY_SUFFIXES = frozenset({".jpg", ".jpeg", ".png"})
@@ -246,9 +246,12 @@ def _normalize_locked(
                 raise ImageNormalizationError(
                     f"Stimulus set '{stimulus_set.name}' does not contain normalizable images."
                 )
+            used_names: set[str] = set()
             for image_path in image_paths:
                 _check_normalization_cancel(cancel)
-                destination = temp_dir / _normalized_filename(image_path)
+                destination = temp_dir / generated_png_name(
+                    image_path, _compute_file_sha256(image_path), used_names
+                )
                 _resize_center_crop_png(
                     image_path,
                     destination,
@@ -410,6 +413,7 @@ def optimize_image_folder_for_fpvs(
     skipped_files: list[ImageFolderOptimizationIssue] = []
     failed_files: list[ImageFolderOptimizationIssue] = []
     output_files: list[Path] = []
+    used_names: set[str] = set()
 
     for path in files:
         if cancel():
@@ -423,7 +427,9 @@ def optimize_image_folder_for_fpvs(
                 )
             )
             continue
-        destination_path = destination_dir / _normalized_filename(path)
+        destination_path = destination_dir / generated_png_name(
+            path, _compute_file_sha256(path), used_names
+        )
         if destination_path.exists():
             skipped_files.append(
                 ImageFolderOptimizationIssue(
@@ -539,10 +545,6 @@ def _resize_center_crop_png(
         top = (resized_size[1] - target_height) // 2
         final = resized.crop((left, top, left + target_width, top + target_height))
         final.save(destination_path, format="PNG")
-
-
-def _normalized_filename(source_path: Path) -> str:
-    return f"{source_path.stem}-{_compute_file_sha256(source_path)[:12]}.png"
 
 
 def _compute_file_sha256(path: Path) -> str:

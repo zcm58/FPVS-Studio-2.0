@@ -6,6 +6,8 @@ construction, or runtime launch behavior."""
 
 from __future__ import annotations
 
+import errno
+import os
 import shutil
 import tempfile
 from collections.abc import Callable
@@ -25,7 +27,7 @@ from fpvs_studio.core.paths import (
     stimulus_variant_dirname,
     to_project_relative_posix,
 )
-from fpvs_studio.core.portable_paths import validate_portable_path_inventory
+from fpvs_studio.core.portable_paths import portable_path_key, validate_portable_path_inventory
 from fpvs_studio.core.study_versions import ensure_working_setup
 from fpvs_studio.preprocessing.controls import (
     generate_phase_scrambled_png,
@@ -54,7 +56,7 @@ from fpvs_studio.preprocessing.models import (
     StimulusSetInspectionSummary,
     StimulusSetManifest,
 )
-from fpvs_studio.preprocessing.source_files import source_image_directory_files
+from fpvs_studio.preprocessing.source_files import generated_png_name, source_image_directory_files
 
 PHASE_SCRAMBLE_POLICY = "fft-amplitude-preserved-noise-phase-v1"
 
@@ -148,6 +150,12 @@ def materialize_project_assets(
     requested_variants = variants or list(project.settings.supported_variants)
     existing_manifest = manifest or _load_or_create_manifest(project, project_root)
     working_manifest = existing_manifest
+    used_paths = {
+        portable_path_key(record.relative_path)
+        for previous_set in existing_manifest.sets
+        for asset in previous_set.assets
+        for record in asset.derivatives
+    }
 
     for stimulus_set in project.stimulus_sets:
         if stimulus_set.modality != StimulusModality.IMAGE:
@@ -176,11 +184,17 @@ def materialize_project_assets(
             manifest_set,
             project_root=project_root,
             variants=requested_variants,
+            used_paths=used_paths,
         )
         working_manifest = upsert_manifest_set(working_manifest, manifest_set)
 
     ensure_working_setup(project_root)
-    write_stimulus_manifest(project_root, working_manifest)
+    if (
+        manifest is not None
+        or working_manifest != existing_manifest
+        or not stimulus_manifest_path(project_root).is_file()
+    ):
+        write_stimulus_manifest(project_root, working_manifest)
     return working_manifest
 
 
@@ -213,8 +227,13 @@ def _merge_existing_derivatives(
     for asset in manifest_set.assets:
         previous_asset = previous_assets.get(asset.source.relative_path)
         if previous_asset is not None and previous_asset.source.sha256 == asset.source.sha256:
+            source = asset.source.model_copy(
+                update={"imported_at": previous_asset.source.imported_at}
+            )
             merged_assets.append(
-                asset.model_copy(update={"derivatives": previous_asset.derivatives})
+                asset.model_copy(
+                    update={"source": source, "derivatives": previous_asset.derivatives}
+                )
             )
         else:
             merged_assets.append(asset)
@@ -236,6 +255,7 @@ def _materialize_manifest_set_variants(
     *,
     project_root: Path,
     variants: list[StimulusVariant],
+    used_paths: set[str],
 ) -> StimulusSetManifest:
     """Ensure the requested variants exist on disk and in the manifest."""
 
@@ -253,6 +273,7 @@ def _materialize_manifest_set_variants(
                 set_id=manifest_set.set_id,
                 project_root=project_root,
                 variant=variant,
+                used_paths=used_paths,
             )
             materialized_asset = upsert_asset_derivative(materialized_asset, derivative)
             available_variants.add(variant)
@@ -272,6 +293,7 @@ def _ensure_derivative(
     set_id: str,
     project_root: Path,
     variant: StimulusVariant,
+    used_paths: set[str],
 ) -> DerivedImageRecord:
     """Create one deterministic derivative when needed and return its manifest record."""
 
@@ -279,32 +301,49 @@ def _ensure_derivative(
         (item for item in asset.derivatives if item.variant == variant),
         None,
     )
-    relative_path = _derived_relative_path(
-        set_id=set_id,
-        source_relative_path=asset.source.relative_path,
-        source_sha256=asset.source.sha256,
-        variant=variant,
-    )
+    prefix = f"stimuli/generated-variants/{set_id}/{stimulus_variant_dirname(variant.value)}/"
+    source_name = Path(asset.source.relative_path)
+    if existing_derivative is None:
+        filename = generated_png_name(source_name, asset.source.sha256, used_paths, prefix=prefix)
+    else:
+        filename = f"{source_name.stem}-{asset.source.sha256[:12]}.png"
+    relative_path = prefix + filename
     destination_path = project_root / Path(relative_path)
 
-    if existing_derivative is not None and destination_path.is_file():
-        return existing_derivative.model_copy(
-            update={
+    if existing_derivative is not None:
+        imported_layout = existing_derivative.relative_path != relative_path
+        recorded_path = (
+            resolve_project_relative_path(project_root, existing_derivative.relative_path)
+            if imported_layout else destination_path
+        )
+        if recorded_path.is_file():
+            digest = _compute_file_sha256(recorded_path)
+            if existing_derivative.sha256 is not None and existing_derivative.sha256 != digest:
+                raise ValueError(f"Stimulus checksum differs from the manifest: {recorded_path}")
+            return existing_derivative.model_copy(update={
+                "resolution": asset.source.resolution,
+                "sha256": digest,
+            })
+        if imported_layout and not existing_derivative.sha256 and destination_path.is_file():
+            return existing_derivative.model_copy(update={
                 "relative_path": relative_path,
                 "resolution": asset.source.resolution,
-                "sha256": existing_derivative.sha256 or _compute_file_sha256(destination_path),
-            }
-        )
+                "sha256": _compute_file_sha256(destination_path),
+            })
 
     source_path = project_root / Path(asset.source.relative_path)
     seed: int | None = _variant_seed(asset.source.sha256, variant=variant)
-    generator = _variant_generator(variant)
+    if existing_derivative is not None and existing_derivative.sha256:
+        _restore_recorded_png(
+            project_root, existing_derivative, destination_path, source_path, seed
+        )
+        return existing_derivative
+
+    _generate_variant(variant, source_path, destination_path, seed)
     if variant == StimulusVariant.PHASE_SCRAMBLED:
-        generator(source_path, destination_path, seed=seed)
         parameters = {"policy": PHASE_SCRAMBLE_POLICY}
         deterministic_policy = PHASE_SCRAMBLE_POLICY
     else:
-        generator(source_path, destination_path)
         parameters = {}
         deterministic_policy = "deterministic-transform-v1"
         seed = None
@@ -320,6 +359,58 @@ def _ensure_derivative(
     )
 
 
+def _restore_recorded_png(
+    project_root: Path, record: DerivedImageRecord, canonical: Path, source: Path, seed: int | None,
+) -> None:
+    """Publish a missing recorded derivative only after checking its exact staged bytes."""
+
+    target = filesystem_path(resolve_project_relative_path(project_root, record.relative_path))
+    if (
+        not target.is_relative_to(project_root.resolve() / "stimuli")
+        or target.suffix.lower() != ".png"
+    ):
+        raise ValueError(f"Cannot restore this project stimulus PNG: {record.relative_path}")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".variant-repair-", dir=target.parent) as stage:
+        candidate = Path(stage) / "candidate.png"
+        if canonical.is_file():
+            shutil.copyfile(canonical, candidate)
+        else:
+            _generate_variant(record.variant, source, candidate, seed)
+        if _compute_file_sha256(candidate) != record.sha256:
+            raise ValueError(
+                "Stimulus checksum differs from the manifest. Restore the original PNG "
+                f"from a project backup: {record.relative_path}"
+            )
+        if os.name == "nt":
+            candidate.rename(target)  # On Windows rename fails if the destination exists.
+        else:
+            try:
+                os.link(candidate, target)
+            except OSError as error:
+                if error.errno not in {errno.ENOTSUP, errno.ENOSYS, errno.EPERM}:
+                    raise
+                # Removable volumes can lack hard links. Create exclusively there as well.
+                with candidate.open("rb") as staged:
+                    output = target.open("xb")
+                    try:
+                        with output:
+                            shutil.copyfileobj(staged, output)
+                    except BaseException:
+                        target.unlink()
+                        raise
+
+
+def _generate_variant(
+    variant: StimulusVariant, source: Path, destination: Path, seed: int | None,
+) -> None:
+    generator = _variant_generator(variant)
+    if variant == StimulusVariant.PHASE_SCRAMBLED:
+        generator(source, destination, seed=seed)
+    else:
+        generator(source, destination)
+
+
 def _variant_generator(variant: StimulusVariant) -> Callable[..., None]:
     """Return the generator callable for a derived variant."""
 
@@ -330,26 +421,6 @@ def _variant_generator(variant: StimulusVariant) -> Callable[..., None]:
     if variant == StimulusVariant.PHASE_SCRAMBLED:
         return generate_phase_scrambled_png
     raise ValueError(f"Unsupported derived variant '{variant.value}'.")
-
-
-def _derived_relative_path(
-    *,
-    set_id: str,
-    source_relative_path: str,
-    source_sha256: str,
-    variant: StimulusVariant,
-) -> str:
-    """Build a stable project-relative output path for one derivative."""
-
-    source_name = Path(source_relative_path).stem
-    filename = f"{source_name}-{source_sha256[:12]}.png"
-    return (
-        Path("stimuli")
-        / "generated-variants"
-        / set_id
-        / stimulus_variant_dirname(variant.value)
-        / filename
-    ).as_posix()
 
 
 def _variant_seed(source_sha256: str, *, variant: StimulusVariant) -> int:
