@@ -475,10 +475,11 @@ def test_setup_wizard_ready_project_returns_home_without_confirmation(
     def _unexpected_prompt(*_args, **_kwargs):
         raise AssertionError("Ready setup should not ask before returning Home.")
 
-    monkeypatch.setattr(
-        "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
-        _unexpected_prompt,
-    )
-    qtbot.mouseClick(guide.setup_wizard_return_home_button, Qt.MouseButton.LeftButton)
+    with monkeypatch.context() as guard:
+        guard.setattr(
+            "fpvs_studio.gui.setup_wizard_page.QMessageBox.question",
+            _unexpected_prompt,
+        )
+        qtbot.mouseClick(guide.setup_wizard_return_home_button, Qt.MouseButton.LeftButton)
 
     assert window.main_stack.currentWidget() is window.home_page

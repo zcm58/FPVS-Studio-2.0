@@ -28,6 +28,14 @@ def _recording(backend="serial"):
     ).model_dump(mode="json")
 
 
+def _assert_saved_recording(save, backend):
+    save.assert_called_once()
+    draft, = save.call_args.args
+    assert "serial_port" not in draft
+    saved = ProjectRecordingSettings.model_validate(draft).model_dump(mode="json")
+    assert saved == _recording(backend)
+
+
 def _edit_recording(dialog, *, backend="serial", port="COM193"):
     editor = dialog.recording_editor
     editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
@@ -156,7 +164,7 @@ def test_other_recording_devices_do_not_include_a_biosemi_port_edit(
     qtbot.addWidget(dialog)
     _edit_recording(dialog, backend="unicorn_udp")
     dialog.apply_recording_button.click()
-    assert save.call_args.args == (_recording("unicorn_udp"),)
+    _assert_saved_recording(save, "unicorn_udp")
     assert dialog._biosemi_serial_port == "COM7"
 
 
@@ -176,7 +184,7 @@ def test_computer_default_changes_and_reset_preserve_project_serial_context(
     qtbot.addWidget(dialog)
     _edit_recording(dialog, backend="biosemi_active_three")
     dialog.save_default_recording_button.click()
-    assert default_save.call_args.args == (_recording("biosemi_active_three"),)
+    _assert_saved_recording(default_save, "biosemi_active_three")
     project_save.assert_not_called()
     dialog.use_default_recording_button.click()
     assert dialog._biosemi_serial_port == "COM7"
@@ -206,7 +214,7 @@ def test_inline_default_save_does_not_require_or_include_project_serial_port(
     popup.assert_called_once()
     assert popup.call_args.args[:2] == (dialog, "Recording Setup Error")
     dialog.save_default_recording_button.click()
-    default_save.assert_called_once_with(_recording(backend))
+    _assert_saved_recording(default_save, backend)
     project_save.assert_not_called()
     assert popup.call_count == 1
     assert dialog._biosemi_serial_port == "COM7"

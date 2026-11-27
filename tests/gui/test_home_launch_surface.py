@@ -71,7 +71,7 @@ def _assert_button_contents_fit(button: QPushButton) -> None:
     assert button.rect().contains(contents)
 
 
-@pytest.mark.parametrize("activation", ["mouse", "keyboard"])
+@pytest.mark.parametrize("activation", ["mouse", "return", "keypad-enter"])
 def test_home_recording_link_opens_recording_and_menu_still_opens_general(
     qtbot, controller, tmp_path, monkeypatch, activation,
 ):
@@ -109,7 +109,8 @@ def test_home_recording_link_opens_recording_and_menu_still_opens_general(
         qtbot.mouseClick(link, Qt.MouseButton.LeftButton, pos=link.rect().center())
     else:
         link.setFocus(Qt.FocusReason.TabFocusReason)
-        qtbot.keyClick(link, Qt.Key.Key_Return)
+        key = Qt.Key.Key_Return if activation == "return" else Qt.Key.Key_Enter
+        qtbot.keyClick(link, key)
     assert opened_categories == ["Recording"]
 
     window.settings_action.trigger()
@@ -559,12 +560,19 @@ def test_home_test_mode_launch_compiles_only_the_selected_condition(
 
     monkeypatch.setattr(window.document, "launch_compiled_session", _fake_launch)
 
+    errors = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.main_window._show_error_dialog",
+        lambda _parent, _title, error: errors.append(str(error)),
+    )
     window.launch_session()
+    qtbot.waitUntil(lambda: bool(captures or errors))
+    assert not errors
 
     session_plan = captures["session_plan"]
     assert isinstance(session_plan, SessionPlan)
     assert captures["participant_number"] == TEST_MODE_PARTICIPANT_NUMBER
-    assert session_plan.total_runs == window.document.project.settings.session.block_count
+    assert session_plan.total_runs == 1  # The selected condition has one authored presentation.
     assert {
         entry.condition_id for entry in session_plan.ordered_entries()
     } == {selected_condition_id}
@@ -668,7 +676,7 @@ def test_home_quick_action_buttons_present_and_wired(
     qtbot.mouseClick(edit_setup_button, Qt.MouseButton.LeftButton)
     assert window.main_stack.currentWidget() is window.setup_wizard_page
     assert window.setup_wizard_page.step_stack.currentWidget() is (
-        window.setup_wizard_page.project_step_surface
+        window.setup_wizard_page.conditions_step_surface
     )
 
     assert trigger_counts == {"new": 1, "import": 1, "open": 1, "launch": 0}

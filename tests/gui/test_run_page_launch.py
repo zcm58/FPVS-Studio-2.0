@@ -91,6 +91,10 @@ def test_participant_dialog_collects_and_prefills_manual_removed_electrodes(
     participant_number_edit.setText(" 0007 ")
     manual_removed_edit.setText(" ft7, P9; Oz\nFT7 ")
     assert dialog.manual_removed_electrodes == ("FT7", "P9", "OZ")
+    qtbot.waitUntil(
+        lambda: dialog.demographics_scroll.viewport().width()
+        == dialog.demographics_scroll.widget().width(),
+    )
     _assert_visible_children_within_parent(dialog)
 
     dialog.findChild(QLineEdit, "participant_age_edit").setText("30")
@@ -863,6 +867,7 @@ def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
     monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Test Mode Launch")
+    qtbot.waitUntil(lambda: not controller.welcome_window.isVisible())
     _prepare_compile_ready_project(window, tmp_path / "test-mode-launch-first")
     _prepare_compile_ready_project(window, tmp_path / "test-mode-launch-second")
     selected_condition_id = window.document.ordered_conditions()[1].condition_id
@@ -907,13 +912,20 @@ def test_run_page_test_mode_skips_participant_collection_and_uses_reserved_id(
 
     monkeypatch.setattr(window.document, "launch_compiled_session", _capture_launch)
 
+    errors = []
+    monkeypatch.setattr(
+        "fpvs_studio.gui.run_page._show_runtime_error_dialog",
+        lambda _parent, _title, error: errors.append(str(error)),
+    )
     window.run_page.launch_session()
+    qtbot.waitUntil(lambda: bool(captures or errors))
+    assert not errors
 
     assert captures["participant_number"] == TEST_MODE_PARTICIPANT_NUMBER
     assert captures["participant_metadata"] is None
     session_plan = captures["session_plan"]
     assert isinstance(session_plan, SessionPlan)
-    assert session_plan.total_runs == window.document.project.settings.session.block_count
+    assert session_plan.total_runs == 1  # The selected condition has one authored presentation.
     assert {
         entry.condition_id for entry in session_plan.ordered_entries()
     } == {selected_condition_id}

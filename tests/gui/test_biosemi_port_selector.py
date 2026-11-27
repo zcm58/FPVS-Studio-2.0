@@ -391,18 +391,31 @@ def test_apply_stages_port_and_cancel_preserves_original(qtbot, serial_jobs, bac
     assert serial_jobs.jobs[-1].cancelled
 
 
-def test_blank_port_blocks_apply_and_check_but_not_other_devices(qtbot, serial_jobs):
-    dialog = _dialog(qtbot, port="COM42")
+@pytest.mark.parametrize("backend", ["serial", "biosemi_active_three"])
+def test_blank_port_blocks_apply_and_check_but_not_other_devices(
+    qtbot, serial_jobs, monkeypatch, backend,
+):
+    error_popup = Mock()
+    monkeypatch.setattr(dialog_module, "_show_error_dialog", error_popup)
+    dialog = _dialog(qtbot, backend=backend, port="COM42")
     selector = dialog.biosemi_port_selector
     _finish_list(serial_jobs, "COM193")
     selector.edit.setText("   ")
-    assert not dialog.apply_button.isEnabled()
     assert not selector.check_button.isEnabled()
-    assert "Enter the BioSemi" in dialog.error_label.text()
+    dialog.apply_button.click()
+    error_popup.assert_called_once()
+    parent, title, error = error_popup.call_args.args
+    assert parent is dialog and title == "Recording Setup Error"
+    assert "Enter the BioSemi trigger-interface serial port" in str(error)
+    assert dialog.isVisible()
+    assert dialog.configuration == {"recording_backend": backend}
+    assert dialog.biosemi_serial_port == "COM42"
     dialog.backend_combo.setCurrentIndex(dialog.backend_combo.findData("unicorn_udp"))
     assert not selector.isVisible()
     assert dialog.apply_button.isEnabled()
     dialog.apply_button.click()
+    assert dialog.result() == int(QDialog.DialogCode.Accepted)
+    assert dialog.configuration["recording_backend"] == "unicorn_udp"
     assert dialog.biosemi_serial_port == "COM42"
 
 

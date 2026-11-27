@@ -5,7 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
-from PySide6.QtGui import QAction, QColor, QIcon, QPainter, QPaintEvent, QResizeEvent, QShowEvent
+from PySide6.QtGui import (
+    QAction,
+    QColor,
+    QIcon,
+    QKeyEvent,
+    QPainter,
+    QPaintEvent,
+    QResizeEvent,
+    QShowEvent,
+)
 from PySide6.QtWidgets import (
     QFrame,
     QGridLayout,
@@ -381,6 +390,7 @@ class HomePage(QWidget):
         )
         self.recording_summary.setOpenExternalLinks(False)
         self.recording_summary.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.recording_summary.installEventFilter(self)
         self.recording_summary.setStatusTip("Open recording settings")
         launch_panel_layout.addWidget(self.recording_summary)
         launch_panel_layout.addWidget(self.launch_button, 0, Qt.AlignmentFlag.AlignCenter)
@@ -532,10 +542,12 @@ class HomePage(QWidget):
     def _sync_action_layout(self) -> None:
         page_margins = self.launch_surface.page_layout.contentsMargins()
         content_margins = self.launch_surface.content_layout.contentsMargins()
+        frame_margins = self.launch_surface.content_frame.contentsMargins()
         available_width = max(0, min(
             self.launch_surface.hero_container.maximumWidth(),
             self.width() - page_margins.left() - page_margins.right()
-            - content_margins.left() - content_margins.right(),
+            - content_margins.left() - content_margins.right()
+            - frame_margins.left() - frame_margins.right(),
         ))
         self.launch_surface.hero_container.setMinimumWidth(available_width)
         for button in self._quick_action_buttons:
@@ -660,6 +672,16 @@ class HomePage(QWidget):
         ))
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
+        if (
+            event.type() == QEvent.Type.KeyPress and isinstance(event, QKeyEvent)
+            and watched is self.recording_summary and self.recording_summary.isEnabled()
+            and event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+            and event.modifiers() in (
+                Qt.KeyboardModifier.NoModifier, Qt.KeyboardModifier.KeypadModifier,
+            )
+        ):
+            self.recording_summary.linkActivated.emit("recording-settings")
+            return True
         if event.type() in (QEvent.Type.Resize, QEvent.Type.FontChange, QEvent.Type.StyleChange):
             if watched is getattr(self, "current_project_header", None):
                 self._refresh_project_title()

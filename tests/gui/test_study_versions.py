@@ -1,18 +1,69 @@
 """Exercise the protected authoring workflow through real native Qt dialogs."""
 
 import json
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QThread, QTimer
 from PySide6.QtWidgets import QApplication, QCheckBox, QDialog, QLineEdit, QMessageBox, QPushButton
 from tests.gui.helpers import open_created_project
 
 from fpvs_studio.core.study_lifecycle import get_study
 from fpvs_studio.core.study_versions import current_version, list_versions
 from fpvs_studio.gui.document import ProjectDocument
+from fpvs_studio.gui.local_test_display_dialog import save_local_test_resolution
 from fpvs_studio.gui.study_versions import ProtocolReviewCancelled
 
 _MESSAGE_BOX_EXEC = QMessageBox.exec
+
+
+@pytest.mark.parametrize("accept", [False, True])
+def test_launch_worker_resolution_change_reviews_protected_study_on_gui_thread(
+    qtbot, controller, tmp_path, monkeypatch, accept,
+):
+    document, window = open_created_project(controller, qtbot, tmp_path, "Display review")
+    document.save(completed_setup=True)
+    root = document.project_root
+    original = document.project_file_path.read_bytes()
+    records = root / "logs/.participant-results"
+    records.mkdir()
+    (records / "partial.json").write_text(json.dumps({
+        "schema_version": 1, "participant_number": "synthetic", "session_id": "visit",
+        "protocol_version_id": current_version(root).version_id, "runs": [{"completed_frames": 2}],
+    }))
+    selected = document.project.settings.display.model_copy(
+        update={"screen_width_px": 2880, "screen_height_px": 1800},
+    )
+    review = window._study_versions
+    work = review._work
+    reviewed = []
+
+    def check_work(label, callback):
+        # Fail before constructing any native Qt objects on the wrong thread.
+        assert QThread.isMainThread()
+        return work(label, callback)
+
+    def decide(draft):
+        assert QThread.isMainThread()
+        reviewed.append(draft.changes)
+        if not accept:
+            raise ProtocolReviewCancelled("Kept saved resolution")
+        return "The study display has changed."
+
+    monkeypatch.setattr(review, "_work", check_work)
+    monkeypatch.setattr(review, "review", decide)
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        save = worker.submit(save_local_test_resolution, document, selected)
+        qtbot.waitUntil(save.done)
+        if accept:
+            save.result()
+            saved = ProjectDocument.open_existing(root).project.settings.display
+            assert (saved.screen_width_px, saved.screen_height_px) == (2880, 1800)
+        else:
+            with pytest.raises(ProtocolReviewCancelled, match="Kept saved resolution"):
+                save.result()
+            assert document.project_file_path.read_bytes() == original
+    assert len(reviewed) == 1 and reviewed[0]
 
 
 def test_only_final_setup_save_captures_stimuli(qtbot, controller, tmp_path, monkeypatch):

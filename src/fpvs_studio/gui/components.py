@@ -941,8 +941,7 @@ class SetupMetricStrip(QFrame):
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 value.setAlignment(Qt.AlignmentFlag.AlignCenter)
             else:
-                label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
-                label.setMinimumWidth(0)
+                label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
                 value.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
                 value.setMinimumWidth(0)
                 value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

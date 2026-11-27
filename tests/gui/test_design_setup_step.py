@@ -8,7 +8,11 @@ import pytest
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication, QLabel, QPushButton, QTabBar
-from tests.gui.helpers import assert_visible_children_within_parent, write_image_directory
+from tests.gui.helpers import (
+    assert_visible_children_within_parent,
+    record_setup_validation_dialogs,
+    write_image_directory,
+)
 from tests.gui.test_experiment_designer import _populate_sources
 
 from fpvs_studio.core.condition_modifiers import assign_modifier, remove_modifier
@@ -128,7 +132,9 @@ def test_masking_duplicate_keeps_modifier_assignment_without_creating_image_sets
     assert document.project.stimulus_sets == []
 
 
-def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(qtbot, tmp_path):
+def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(
+    qtbot, tmp_path, monkeypatch,
+):
     document = _masking_document(tmp_path)
     wizard = SetupWizardPage(document)
     qtbot.addWidget(wizard)
@@ -154,7 +160,10 @@ def test_masking_wizard_uses_modifier_sources_and_preserves_display_calibration(
     document.project.conditions[0].duty_cycle_mode = DutyCycleMode.BLANK_50
     wizard.open_wizard(step_key="conditions")
     assert "continuous" in wizard._condition_setup_blocker()
-    assert not wizard.setup_wizard_next_button.isEnabled()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    wizard.setup_wizard_next_button.click()
+    assert len(messages) == 1 and "continuous" in messages[0][1]
+    assert wizard.step_stack.currentWidget() is wizard.conditions_step_surface
 
 
 def test_empty_design_step_explains_where_to_add_a_condition(qtbot, tmp_path):

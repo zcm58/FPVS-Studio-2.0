@@ -255,6 +255,35 @@ def set_truncated_label_text(label: QLabel, text: str, *, max_length: int) -> No
     label.setToolTip(text if display_text != text else "")
 
 
+class WrappedMessageLabel(QLabel):
+    """Keep multi-line messages legible inside nested Qt form and card layouts."""
+
+    def __init__(self, parent: QWidget, *, minimum_height: int = 0) -> None:
+        super().__init__(parent)
+        self._height_floor = minimum_height
+        self.setMinimumHeight(minimum_height)
+        self.setMinimumWidth(0)
+        self.setWordWrap(True)
+
+    def setText(self, text: str) -> None:  # noqa: N802
+        super().setText(text)
+        self._fit_message()
+
+    def event(self, event: QEvent) -> bool:
+        handled = super().event(event)
+        if event.type() in (
+            QEvent.Type.Resize, QEvent.Type.Show, QEvent.Type.FontChange, QEvent.Type.StyleChange,
+        ):
+            self._fit_message()
+        return handled
+
+    def _fit_message(self) -> None:
+        if self.isVisible() and self.width() > 0:
+            height = max(self._height_floor, self.heightForWidth(self.width()))
+            if self.minimumHeight() != height:
+                self.setMinimumHeight(height)
+
+
 class StatusBadgeLabel(QLabel):
     """Semantic status with an optional inline presentation for local state."""
 

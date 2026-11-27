@@ -132,7 +132,7 @@ def test_contrast_modulation_and_neutral_background_round_trip(
     reopened.show_setup_wizard(step_key="conditions")
     reopened_step = reopened.setup_wizard_page.condition_setup_step
     assert reopened_step.timing_template_combo.currentData() == DutyCycleMode.SINUSOIDAL
-    reopened.show_setup_wizard(step_key="experiment")
+    reopened.show_setup_wizard(step_key="display")
     reopened_editor = reopened.setup_wizard_page.runtime_settings_editor
     assert reopened_editor.runtime_background_color_combo.currentData() == "#808080"
     assert reopened_editor.contrast_background_note_label.isVisible()
@@ -680,7 +680,8 @@ def test_fixation_feasibility_shows_single_value_for_uniform_condition_lengths(
     guidance = page.fixation_feasibility_label.text()
     assert "Effective maximum changes per condition:" in guidance
     assert "varies by condition" not in guidance
-    assert "\n" not in guidance
+    assert guidance.count("Effective maximum changes per condition:") == 1
+    assert "(+1 more)" in guidance
 
 
 def test_save_preserves_different_condition_stream_durations(
@@ -735,7 +736,7 @@ def test_compile_accepts_different_condition_stream_durations(
     })
     plan = window.document.compile_session(refresh_hz=60)
     durations = {
-        entry.condition_id: entry.run_spec.total_frames / 60
+        entry.condition_id: entry.run_spec.display.total_frames / entry.run_spec.display.refresh_hz
         for entry in plan.ordered_entries()
     }
     assert durations == {

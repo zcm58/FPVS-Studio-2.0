@@ -132,7 +132,7 @@ def test_hidden_run_session_change_is_reflected_when_shown(qtbot, tmp_path, monk
     # No compilation or runtime launch is needed to exercise the presentation signal.
     document._last_session_plan = SimpleNamespace(
         session_id="latest-preview", random_seed=23, block_count=2, total_runs=6,
-        refresh_hz=60.0, blocks=[],
+        refresh_hz=60.0, blocks=[], ordering_policy=None,
     )
     document.session_plan_changed.emit()
     assert validation_calls == []

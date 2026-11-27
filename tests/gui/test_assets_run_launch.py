@@ -863,6 +863,7 @@ def test_launch_action_cancelled_participant_prompt_aborts_launch(
 def test_participant_number_dialog_requires_digits_and_trims_whitespace(qtbot, monkeypatch) -> None:
     dialog = ParticipantNumberDialog()
     qtbot.addWidget(dialog)
+    dialog.show()
     age = dialog.findChild(QLineEdit, "participant_age_edit")
     sex = dialog.findChild(QRadioButton, "participant_sex_option_0")
     handedness = dialog.findChild(QRadioButton, "participant_handedness_option_0")

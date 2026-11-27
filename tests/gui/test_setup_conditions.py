@@ -29,6 +29,7 @@ from tests.gui.helpers import (
     _write_image_directory,
     _write_mixed_image_directory,
     assert_setup_wizard_vertical_scrolling_disabled,
+    record_setup_validation_dialogs,
 )
 
 from fpvs_studio.core.enums import (
@@ -117,6 +118,7 @@ def test_setup_wizard_conditions_step_authors_word_condition(
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Word Condition")
     guide = window.setup_wizard_page
@@ -141,7 +143,10 @@ def test_setup_wizard_conditions_step_authors_word_condition(
     assert step.words_panel.isVisible()
     assert not step.sources_row.isVisible()
     assert step.base_check_status.text() == "Base Words Not Configured"
-    assert not next_button.isEnabled()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    next_button.click()
+    assert len(messages) == 1 and "Add base words" in messages[0][1]
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
     step.base_words_edit.setPlainText("cat\n dog\ncat\n")
     step.oddball_words_edit.setPlainText("tool\nchair")
@@ -466,11 +471,12 @@ def test_setup_wizard_conditions_step_accepts_default_and_short_names_with_posit
     qtbot,
     controller: StudioController,
     tmp_path: Path,
+    monkeypatch,
 ) -> None:
     _, window = _open_created_project(controller, qtbot, tmp_path, "Condition Gate")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    window.show_setup_wizard(step_key="conditions")
     next_button = guide.findChild(QPushButton, "setup_wizard_next_button")
     assert next_button is not None
 
@@ -486,13 +492,16 @@ def test_setup_wizard_conditions_step_accepts_default_and_short_names_with_posit
     assert step.name_check_status.text() == "Complete"
     assert step.base_check_status.text() == "Base Images Not Selected"
     assert step.oddball_check_status.text() == "Oddball Images Not Selected"
-    assert not next_button.isEnabled()
+    messages = record_setup_validation_dialogs(monkeypatch)
+    next_button.click()
+    assert len(messages) == 1 and "Choose the image sources" in messages[0][1]
+    assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 
     for valid_name in ("A", "AB", "Condition 3"):
         guide._document.update_condition(condition_id, name=valid_name)
         QApplication.processEvents()
         assert step.name_check_status.text() == "Complete"
-        assert not next_button.isEnabled()
+        assert "Choose the image sources" in guide._condition_setup_blocker()
 
     guide._document.update_condition(condition_id, name="Dog")
     QApplication.processEvents()
@@ -509,7 +518,7 @@ def test_setup_wizard_conditions_step_accepts_default_and_short_names_with_posit
     assert step.trigger_check_status.text() == "Complete"
     assert step.base_check_status.text() == "Base Images Not Selected"
     assert step.oddball_check_status.text() == "Oddball Images Not Selected"
-    assert not next_button.isEnabled()
+    assert "Choose the image sources" in guide._condition_setup_blocker()
     assert step.sources_row.isVisible()
 
     base_dir = _write_image_directory(tmp_path / "gated-condition-base")
@@ -1511,7 +1520,7 @@ def test_setup_wizard_condition_image_picker_starts_in_project_stimuli_folder(
     _, window = _open_created_project(controller, qtbot, tmp_path, "Wizard Image Picker")
     guide = window.setup_wizard_page
     step = guide.condition_setup_step
-    guide.open_wizard(step_key="conditions")
+    window.show_setup_wizard(step_key="conditions")
     qtbot.mouseClick(step.add_condition_button, Qt.MouseButton.LeftButton)
     assert guide.step_stack.currentWidget() is guide.conditions_step_surface
 

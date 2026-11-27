@@ -7,9 +7,10 @@ from __future__ import annotations
 
 import random
 from collections.abc import Callable
+from concurrent.futures import Future
 from pathlib import Path
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal, Slot
 
 from fpvs_studio.core.condition_timing import propose_condition_timing
 from fpvs_studio.core.demographics import DemographicsQuestion
@@ -148,6 +149,7 @@ class ProjectDocument(
     session_plan_changed = Signal()
     randomization_changed = Signal()
     saved = Signal()
+    _display_resolution_save_requested = Signal(int, int, object)
 
     def __init__(
         self,
@@ -160,6 +162,9 @@ class ProjectDocument(
         self._project_root = Path(project_root)
         self._automatic_session_seed: int | None = None
         self.setup_save_handler: Callable[[ProjectFile, bool], None] | None = None
+        self._display_resolution_save_requested.connect(
+            self._save_display_resolution_for_launch, Qt.ConnectionType.BlockingQueuedConnection,
+        )
         self._project = project
         self._manifest = manifest
         self._dirty = False
@@ -396,6 +401,29 @@ class ProjectDocument(
 
     def save_display_resolution(self, width_px: int, height_px: int) -> None:
         """Persist explicit pixel dimensions before adopting them in the document."""
+        if self.setup_save_handler is not None and QThread.currentThread() != self.thread():
+            # The launch worker must wait for the author's version decision. The live
+            # document owns that UI and dispatches its file operations to workers.
+            result: Future[None] = Future()
+            self._display_resolution_save_requested.emit(width_px, height_px, result)
+            if not result.done():
+                raise DocumentError("Display resolution review closed.")
+            result.result()
+            return
+        self._persist_display_resolution(width_px, height_px)
+
+    @Slot(int, int, object)
+    def _save_display_resolution_for_launch(
+        self, width_px: int, height_px: int, result: Future[None],
+    ) -> None:
+        try:
+            self._persist_display_resolution(width_px, height_px)
+        except Exception as error:
+            result.set_exception(error)
+        else:
+            result.set_result(None)
+
+    def _persist_display_resolution(self, width_px: int, height_px: int) -> None:
         display = _validated_copy(
             self._project.settings.display,
             screen_width_px=width_px,

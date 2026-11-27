@@ -190,6 +190,10 @@ def test_existing_refresh_check_suppresses_new_selection(display_gate):
 @pytest.mark.parametrize("state", ["hidden", "destroyed", "shutdown"])
 def test_completed_probe_does_not_resume_inactive_owner(display_gate, monkeypatch, state):
     parent, probe, errors = display_gate
+    if state == "destroyed":
+        # Destroy the launch window explicitly; qtbot still owns its outer fixture.
+        parent = QWidget(parent, Qt.WindowType.Window)
+        parent.show()
     held_tasks = []
 
     class HeldTask(_ImmediateTask):

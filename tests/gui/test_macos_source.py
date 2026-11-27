@@ -14,6 +14,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QDialogButtonBox, QLabel
 from tests.gui.helpers import assert_visible_children_within_parent
 from tests.platform_adapters import set_module_platform
 
+from fpvs_studio.core import study_versions
 from fpvs_studio.core.enums import DutyCycleMode
 from fpvs_studio.core.serialization import save_project_file
 from fpvs_studio.gui import (
@@ -24,9 +25,6 @@ from fpvs_studio.gui import (
     run_page,
     settings_dialog,
     update_dialog,
-)
-from fpvs_studio.gui import (
-    document as document_module,
 )
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.document_support import DocumentError
@@ -275,7 +273,7 @@ def test_mac_resolution_save_runs_in_launch_worker_before_compile(
     save = Mock(wraps=document.save_display_resolution)
     if outcome == "save_failure":
         monkeypatch.setattr(
-            document_module, "save_project_file",
+            study_versions, "save_project_file",
             Mock(side_effect=PermissionError("Project resolution could not be saved.")),
         )
     monkeypatch.setattr(document, "save_display_resolution", save)
@@ -339,7 +337,7 @@ def test_mac_resolution_save_runs_in_launch_worker_before_compile(
         assert calls == []
         document.compile_session.assert_not_called()
         document.launch_compiled_session.assert_not_called()
-        monkeypatch.setattr(document_module, "save_project_file", save_project_file)
+        monkeypatch.setattr(study_versions, "save_project_file", save_project_file)
         with ThreadPoolExecutor(max_workers=1) as executor:
             executor.submit(held[0].callback).result()
         assert save.call_count == 2

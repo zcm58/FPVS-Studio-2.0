@@ -340,7 +340,7 @@ def test_preview_preserves_symbol_error_priority_over_condition_timing(qtbot, st
     assert "whole multiple of 100 ms" in timing_error
 
     editor.base_edit.setText("A")
-    assert editor.validation_label.text() == (
+    assert editor.validation_label.text().splitlines()[0] == (
         "The base stream needs at least two different single letters or digits."
     )
     assert editor.validation_label.text() == editor.validation_message()

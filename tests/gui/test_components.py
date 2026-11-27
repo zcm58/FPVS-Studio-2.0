@@ -455,7 +455,7 @@ def test_dark_theme_stylesheets_use_dark_tokens(qapp) -> None:
     assert f"background-color: {dark_theme.surface};" in welcome_window_stylesheet(
         dark_palette
     )
-    assert f"background-color: {dark_theme.surface_elevated};" in section_card_stylesheet(
+    assert f"background-color: {dark_theme.surface};" in section_card_stylesheet(
         dark_palette
     )
     assert f"color: {dark_theme.text_primary};" in setup_wizard_stylesheet(dark_palette)

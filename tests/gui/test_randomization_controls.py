@@ -7,7 +7,7 @@ from itertools import product
 import pytest
 from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication, QLabel, QLineEdit
+from PySide6.QtWidgets import QApplication, QLabel, QLineEdit, QVBoxLayout, QWidget
 from tests.gui.helpers import (
     _open_created_project,
     assert_visible_children_within_parent,
@@ -17,6 +17,7 @@ from tests.gui.test_condition_timing_table import _document
 
 from fpvs_studio.core.enums import StimulusModality
 from fpvs_studio.core.randomization import RandomizationSeeds, configured_randomization_seeds
+from fpvs_studio.gui.components import apply_studio_theme
 from fpvs_studio.gui.document import DocumentError, ProjectDocument
 from fpvs_studio.gui.experiment_designer_dialog import ExperimentDesignerWidget
 from fpvs_studio.gui.randomization_editor import RandomizationEditor
@@ -50,6 +51,24 @@ def _word_document(tmp_path):
     document.update_condition_words(first, role="oddball", words=["fear", "anger"])
     document.update_fixation_settings(enabled=False, accuracy_task_enabled=False)
     return document, first, second
+
+
+def _show_session_wizard(qtbot, document, background):
+    # The application supplies Studio's field typography on the parent of Setup.
+    host = QWidget()
+    qtbot.addWidget(host)
+    palette = host.palette()
+    palette.setColor(QPalette.ColorRole.Window, QColor(background))
+    host.setPalette(palette)
+    apply_studio_theme(host)
+    layout = QVBoxLayout(host)
+    layout.setContentsMargins(0, 0, 0, 0)
+    wizard = SetupWizardPage(document, parent=host)
+    layout.addWidget(wizard)
+    host.resize(1120, 820)
+    host.show()
+    wizard.open_wizard(step_key="session", allow_step_jumps=True)
+    return host, wizard
 
 
 def test_legacy_choices_do_not_rewrite_source_and_can_be_changed_independently(qtbot, tmp_path):
@@ -87,21 +106,15 @@ def test_fixation_count_choices_preserve_participant_timing_policy(
     qtbot, tmp_path, background, reuse_mode, count_mode,
 ):
     document, _first, _second = _document(tmp_path)
-    document.update_randomization_settings(modes={"fixation": reuse_mode})
     document.update_fixation_settings(
         target_count_mode=count_mode, changes_per_sequence=2,
         target_count_min=2, target_count_max=3, no_immediate_repeat_count=False,
     )
-    wizard = SetupWizardPage(document)
-    qtbot.addWidget(wizard)
-    palette = wizard.palette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(background))
-    wizard.setPalette(palette)
-    wizard.resize(1120, 820)
-    wizard.show()
-    wizard.open_wizard(step_key="session", allow_step_jumps=True)
-    QApplication.processEvents()
+    _host, wizard = _show_session_wizard(qtbot, document, background)
     randomization = wizard.session_structure_editor.randomization_editor
+    timing_policy = randomization.mode_combos["fixation"]
+    timing_policy.setCurrentIndex(timing_policy.findData(reuse_mode))
+    QApplication.processEvents()
     heading = randomization.heading_labels["fixation"]
     assert heading.text() == "Fixation cross color change timing"
     assert heading.width() >= heading.fontMetrics().horizontalAdvance(heading.text())
@@ -531,14 +544,7 @@ def test_plain_language_choices_fit_session_and_review(
         document.project.settings.session.fixation_seed = None
         document.project.settings.session.session_seed = 2**40
     monkeypatch.setattr(ExperimentDesignerWidget, "_load_thumbnails", lambda _self: None)
-    wizard = SetupWizardPage(document)
-    qtbot.addWidget(wizard)
-    palette = wizard.palette()
-    palette.setColor(QPalette.ColorRole.Window, QColor(background))
-    wizard.setPalette(palette)
-    wizard.resize(1120, 820)
-    wizard.show()
-    wizard.open_wizard(step_key="session", allow_step_jumps=True)
+    _host, wizard = _show_session_wizard(qtbot, document, background)
     editor = wizard.session_structure_editor.randomization_editor
     if state == "sequential":
         combo = editor.mode_combos["stimulus"]
@@ -583,9 +589,12 @@ def test_plain_language_choices_fit_session_and_review(
     for label in [*editor.findChildren(QLabel),
                   *wizard.runtime_settings_editor.findChildren(QLabel)]:
         if label.isVisible() and label.text():
-            assert label.height() >= label.heightForWidth(label.width()) if label.wordWrap() else (
-                label.width() >= label.fontMetrics().horizontalAdvance(label.text())
-            )
+            if label.wordWrap():
+                assert label.height() >= label.heightForWidth(label.width()), label.text()
+            else:
+                assert label.width() >= label.fontMetrics().horizontalAdvance(label.text()), (
+                    label.text()
+                )
     for button in (editor.condition_order_button, editor.clear_saved_order_button,
                    editor.reset_patterns_button):
         if button.isVisible():

@@ -103,6 +103,7 @@ from fpvs_studio.gui.components import (
     refresh_widget_style,
 )
 from fpvs_studio.gui.condition_task_dialog import ConditionTaskDialog
+from fpvs_studio.gui.design_system import WrappedMessageLabel
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.folder_actions import open_folder
 from fpvs_studio.gui.masking_source_dialog import MaskingSourceDialog
@@ -129,8 +130,8 @@ _PRE_QUESTIONS_KEY = "__pre-condition-questions__"
 
 def _label(text: str, parent: QWidget) -> QLabel:
     label = QLabel(text, parent)
-    label.setWordWrap(True)
     label.setTextFormat(Qt.TextFormat.PlainText)
+    label.setWordWrap(True)
     label.setMinimumWidth(0)
     label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
     return label
@@ -429,7 +430,9 @@ class ConditionModifierDialog(QDialog):
         overview.addLayout(flow)
         overview.addSpacing(6)
         recorded_section = self._flat_section("Recorded data", self.overview)
-        self.recorded_label = _label("", recorded_section)
+        self.recorded_label = WrappedMessageLabel(recorded_section)
+        self.recorded_label.setTextFormat(Qt.TextFormat.PlainText)
+        self.recorded_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         recorded_section.body_layout.addWidget(self.recorded_label)
         overview.addWidget(recorded_section)
         self.advanced_button = QPushButton("Advanced steps…", self.overview)

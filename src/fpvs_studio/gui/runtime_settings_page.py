@@ -67,6 +67,7 @@ from fpvs_studio.gui.components import (
 from fpvs_studio.gui.components import (
     create_resolution_spin_box as _resolution_spin_box,
 )
+from fpvs_studio.gui.design_system import WrappedMessageLabel
 from fpvs_studio.gui.document import ProjectDocument
 from fpvs_studio.gui.monitor_selection_dialog import (
     choose_experiment_display,
@@ -217,13 +218,10 @@ class DisplaySettingsEditor(QWidget):
         self.timing_summary_label.setWordWrap(True)
         self.timing_summary_label.setMinimumWidth(0)
 
-        self.timing_status_label = QLabel(self)
+        self.timing_status_label = WrappedMessageLabel(self, minimum_height=34)
         self.timing_status_label.setObjectName(
             _prefixed_object_name(object_name_prefix, "timing_status_label")
         )
-        self.timing_status_label.setWordWrap(True)
-        self.timing_status_label.setMinimumWidth(0)
-        self.timing_status_label.setMinimumHeight(34)
         self.timing_status_label.setProperty("statusBadge", "true")
 
         self.summary_value_labels: dict[str, QLabel] = {}

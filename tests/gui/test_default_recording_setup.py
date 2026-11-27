@@ -484,28 +484,23 @@ def test_welcome_settings_fits_and_changes_default_without_a_project(
     assert controller.load_default_recording_configuration() == _configuration("unicorn_udp")
 
 
-def test_failed_preference_sync_does_not_change_live_hardware(controller, qtbot, tmp_path):
+def test_failed_preference_sync_does_not_change_live_hardware(
+    controller, qtbot, tmp_path, monkeypatch,
+):
     document, _window = open_created_project(controller, qtbot, tmp_path)
     settings = controller._settings
-
-    class UnwritableSettings:
-        def value(self, *args, **kwargs):
-            return settings.value(*args, **kwargs)
-
-        def setValue(self, *_args):
-            pass
-
-        def sync(self):
-            pass
-
-        def status(self):
-            return QSettings.Status.AccessError
-
-    controller._settings = UnwritableSettings()
-    with pytest.raises(OSError):
-        controller.save_default_recording_configuration(_configuration("unicorn_udp"))
-    assert document.recording_configuration == _configuration("serial")
-    assert controller.load_default_recording_configuration() == _configuration("serial")
+    previous = controller.load_default_recording_configuration()
+    assert previous is not None and previous["recording_backend"] == "serial"
+    assert document.recording_configuration == previous
+    with monkeypatch.context() as failure:
+        failure.setattr(settings, "status", lambda: QSettings.Status.AccessError)
+        with pytest.raises(OSError, match="Could not save the default EEG hardware"):
+            controller.save_default_recording_configuration(_configuration("unicorn_udp"))
+    assert document.recording_configuration == previous
+    assert controller.load_default_recording_configuration() == previous
+    controller.save_default_recording_configuration(_configuration("unicorn_udp"))
+    assert document.recording_configuration == _configuration("unicorn_udp")
+    assert controller.load_default_recording_configuration() == _configuration("unicorn_udp")
 
 
 @pytest.mark.parametrize("cancel", [False, True])
