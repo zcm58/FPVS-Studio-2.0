@@ -33,6 +33,8 @@ rendered word images can use this tool like other images.
 - For each image calculate population mean `mu`, population standard deviation `sd`,
   minimum and maximum. Define normalized RMS contrast as `sd / mu`; record both
   standard deviation and normalized RMS explicitly.
+  To preserve historical report values, sum squared deviations in consecutive
+  blocks of 8,192 pixels using float64 and add the block totals in order.
 - Use common target mean `M = 128`. The requested target standard deviation is the
   median of the individual image standard deviations (each image has equal weight).
   For each non-flat image, its no-clipping bound is

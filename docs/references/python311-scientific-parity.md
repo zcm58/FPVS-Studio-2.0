@@ -1,5 +1,9 @@
 # Scientific output comparison on Windows
 
+The subsequent workflow trial fixed the two equalization differences measured
+below and added checksum-verified recovery from study checkpoints. Fresh PNG
+compression differences remain. [Final workflow verification](../exec-plans/completed/python311-user-workflows.md)
+
 On November 26, 2026, Python 3.11.18 reproduced the measured scientific outputs with
 the reference library versions. Fresh Pillow 13 generation changed the file identity
 of four stimulus derivatives used by the synthetic study, despite identical pixels.
