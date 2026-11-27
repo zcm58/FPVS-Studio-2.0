@@ -1,13 +1,36 @@
-"""Recognize Finder metadata without discarding authored dot-prefixed images."""
+"""Enumerate authored source images and name their generated PNGs."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from hashlib import sha256
 from itertools import chain, islice
 from operator import methodcaller
 from pathlib import Path, WindowsPath
 
+from fpvs_studio.core.portable_paths import portable_path_key
+
 _WINDOWS_INVENTORY_MIN_ENTRIES = 64
+
+
+def generated_png_name(
+    source: Path, digest: str, used_paths: set[str], *, prefix: str = "",
+) -> str:
+    """Keep the original stem/hash name unless another input already claimed it."""
+
+    stem = source.stem
+    filename = f"{stem}-{digest[:12]}.png"
+    key = portable_path_key(prefix + filename)
+    attempt = 0
+    while key in used_paths:
+        # JPEG/JPG and TIFF/TIF copies can share both their stem and their bytes.
+        # A separate delimiter keeps the alternative disjoint from ordinary names.
+        attempt += 1
+        identity = f"{source.name}\0{digest}\0{attempt}".encode()
+        filename = f"{stem}.{sha256(identity).hexdigest()[:12]}.png"
+        key = portable_path_key(prefix + filename)
+    used_paths.add(key)
+    return filename
 
 
 def is_finder_metadata_file(path: Path) -> bool:
