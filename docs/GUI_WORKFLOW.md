@@ -534,6 +534,9 @@ pull changes from the remote repository and rerun the source setup helper.
 Settings uses a left navigation column with General, Recording, Appearance, Workspace,
 Advanced, Diagnostics and Account selections. A native `QListWidget` supports mouse and keyboard
 selection, and the current category heading appears above its controls on the right.
+If Studio cannot save a recording default, appearance preference or root folder,
+it keeps the previous value. After write access returns, retry the change in
+the same session. The active root switches only after the new location is saved.
 The sidebar's Settings heading and the selected category title establish the hierarchy.
 Page titles, section headings and subsection headings use the shared text hierarchy.
 The sidebar marker moves to the newly selected row in up to 150 ms. The selected

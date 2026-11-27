@@ -21,8 +21,8 @@ reserved participant launched in ordinary mode. It reads each run summary and
 the generated participant workbook. Cancellation and failures after playback
 have separate checks. A synthetic historical project with inconsistent mode
 flags verifies that participant `000` still counts as a research visit and that
-`0` and `00` do not. All 13 targeted checks passed under supported Python 3.10
-and trial Python 3.11.18. The tests use synthetic engines and trigger backends.
+`0` and `00` do not. All 13 targeted checks passed under supported Python 3.10.
+The tests use synthetic engines and trigger backends.
 
 Repository precommit passed 6,653 tests with 41 skips on Python 3.10. Ruff,
 Windows and Darwin type checks, and the repository audits passed.
