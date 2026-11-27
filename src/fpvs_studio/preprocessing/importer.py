@@ -28,7 +28,7 @@ from fpvs_studio.core.paths import (
     to_project_relative_posix,
 )
 from fpvs_studio.core.portable_paths import portable_path_key, validate_portable_path_inventory
-from fpvs_studio.core.study_versions import ensure_working_setup
+from fpvs_studio.core.study_versions import ensure_working_setup, stage_saved_stimulus
 from fpvs_studio.preprocessing.controls import (
     generate_phase_scrambled_png,
     generate_rot180_png,
@@ -318,11 +318,14 @@ def _ensure_derivative(
         )
         if recorded_path.is_file():
             digest = _compute_file_sha256(recorded_path)
-            if existing_derivative.sha256 is not None and existing_derivative.sha256 != digest:
+            if (
+                existing_derivative.sha256 is not None
+                and existing_derivative.sha256.lower() != digest
+            ):
                 raise ValueError(f"Stimulus checksum differs from the manifest: {recorded_path}")
             return existing_derivative.model_copy(update={
                 "resolution": asset.source.resolution,
-                "sha256": digest,
+                "sha256": existing_derivative.sha256 or digest,
             })
         if imported_layout and not existing_derivative.sha256 and destination_path.is_file():
             return existing_derivative.model_copy(update={
@@ -373,15 +376,18 @@ def _restore_recorded_png(
     target.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".variant-repair-", dir=target.parent) as stage:
         candidate = Path(stage) / "candidate.png"
-        if canonical.is_file():
-            shutil.copyfile(canonical, candidate)
-        else:
-            _generate_variant(record.variant, source, candidate, seed)
-        if _compute_file_sha256(candidate) != record.sha256:
-            raise ValueError(
-                "Stimulus checksum differs from the manifest. Restore the original PNG "
-                f"from a project backup: {record.relative_path}"
-            )
+        assert record.sha256 is not None
+        expected = record.sha256.lower()
+        if not stage_saved_stimulus(project_root, record.relative_path, expected, candidate):
+            if canonical.is_file():
+                shutil.copyfile(canonical, candidate)
+            else:
+                _generate_variant(record.variant, source, candidate, seed)
+            if _compute_file_sha256(candidate) != expected:
+                raise ValueError(
+                    "Stimulus checksum differs from the manifest. Restore the original PNG "
+                    f"from a project backup: {record.relative_path}"
+                )
         if os.name == "nt":
             candidate.rename(target)  # On Windows rename fails if the destination exists.
         else:
