@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 from PySide6.QtCore import (
+    QEvent,
     QObject,
     QPoint,
     QRect,
@@ -70,6 +71,9 @@ def _windows_refresh_contract(monkeypatch, qapp):
     hints.setTabFocusBehavior(Qt.TabFocusBehavior.TabFocusAllControls)
     yield
     hints.setTabFocusBehavior(original)
+    # pytest-qt schedules widget deletion after each case. Dispose the previous
+    # wizard tree before the next case changes the native palette and stylesheet.
+    qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 def test_mac_failed_probe_preserves_rate_and_can_be_retried(
