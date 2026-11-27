@@ -801,6 +801,7 @@ class AppSettingsDialog(QDialog):
         else:
             self._close_button.setMaximumHeight(self._close_maximum_height)
             self._close_button.setMinimumSize(0, self._close_default_height)
+        self.button_box.setMinimumHeight(self._close_button.minimumHeight())
         first_control = self._category_focus_controls[index]
         QWidget.setTabOrder(self.navigation, first_control)
         if first_control is self.manage_account_button:
