@@ -61,6 +61,9 @@ jobs:
       - name: Install authoring and test dependencies
         run: python -m pip install --editable '.[dev]'
       - name: Verify primary Windows contracts before secondary Mac checks
+        # Multi-visit integration tests flush real files on the hosted Windows disk.
+        env:
+          PYTEST_ADDOPTS: --timeout=120
         run: python .agents/scripts/verify.py --scope repo --tier precommit --workers 2
       - name: Create and relocate a synthetic portable project
         run: >-
