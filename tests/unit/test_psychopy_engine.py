@@ -1178,7 +1178,7 @@ def test_psychopy_engine_preloads_unique_images_before_playback_flip(
     _patch_fake_psychopy(monkeypatch, engine, fake_psychopy)
 
     try:
-        engine.run_condition(
+        summary = engine.run_condition(
             run_spec,
             sample_project_root,
             runtime_options={"experiment_test_mode": True, "timing_warmup_frames": 0},
@@ -1190,6 +1190,8 @@ def test_psychopy_engine_preloads_unique_images_before_playback_flip(
     events = _events(captures)
     first_flip_index = next(index for index, event in enumerate(events) if event[0] == "flip")
     image_indices = [index for index, event in enumerate(events) if event[0] == "image"]
+    assert summary.runtime_metadata.test_mode is True
+    assert summary.runtime_metadata.pilot_mode is False
 
     assert len(_image_stims(captures)) == 2
     assert image_indices

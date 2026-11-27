@@ -1077,6 +1077,7 @@ class RuntimeWorker:
         runtime_metadata = runtime_metadata.model_copy(
             update={
                 "recording": recording_snapshot(runtime_options),
+                "test_mode": bool((runtime_options or {}).get("experiment_test_mode", False)),
                 "pilot_mode": bool((runtime_options or {}).get("pilot_mode", False)),
                 "fixation_rt_scoring_source": _fixation_rt_scoring_source(
                     run_spec,
@@ -1655,6 +1656,8 @@ def _build_start_aborted_summary(
         runtime_metadata=RuntimeMetadata(
             engine_name=engine_name,
             recording=recording_snapshot(runtime_options),
+            test_mode=bool((runtime_options or {}).get("experiment_test_mode", False)),
+            pilot_mode=bool((runtime_options or {}).get("pilot_mode", False)),
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,
@@ -1696,6 +1699,8 @@ def _build_trigger_aborted_summary(
         runtime_metadata=RuntimeMetadata(
             engine_name=engine_name,
             recording=recording_snapshot(runtime_options),
+            test_mode=bool((runtime_options or {}).get("experiment_test_mode", False)),
+            pilot_mode=bool((runtime_options or {}).get("pilot_mode", False)),
             display_index=_coerce_int(runtime_options, "display_index"),
             fullscreen=bool((runtime_options or {}).get("fullscreen", True)),
             requested_refresh_hz=run_spec.display.refresh_hz,

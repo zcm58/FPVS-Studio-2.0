@@ -135,7 +135,7 @@ def test_runtime_launcher_dispatches_runspec_to_registered_engine(
     assert summary.warnings == []
     assert summary.runtime_metadata is not None
     assert summary.run_mode is RunMode.SESSION
-    assert summary.runtime_metadata.test_mode is False
+    assert summary.runtime_metadata.test_mode is True
     assert summary.runtime_metadata.fixation_rt_scoring_source == "not_applicable"
     assert summary.trigger_log[0].label == "condition_start"
     assert (sample_project_root / "runs" / "faces-run" / "runspec.json").is_file()
@@ -876,9 +876,12 @@ def test_session_launch_forces_space_transition_key(
     )
 
 
+@pytest.mark.parametrize("test_mode,pilot_mode", [(True, False), (False, True)])
 def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled(
     sample_project,
     sample_project_root,
+    test_mode,
+    pilot_mode,
 ) -> None:
     captures: dict[str, object] = {"abort_on_transition": True}
     register_engine("stub-start-abort", lambda: StubEngine(captures))
@@ -895,7 +898,7 @@ def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled
             run_spec,
             participant_number=PARTICIPANT_NUMBER,
             launch_settings=LaunchSettings(
-                experiment_test_mode=True, serial_enabled=False,
+                experiment_test_mode=test_mode, pilot_mode=pilot_mode, serial_enabled=False,
                 engine_name="stub-start-abort",
             ),
         )
@@ -904,6 +907,8 @@ def test_single_run_launch_aborts_before_playback_when_start_screen_is_cancelled
 
     assert summary.aborted is True
     assert summary.abort_reason == "Run aborted during the start screen."
+    assert summary.runtime_metadata.test_mode is test_mode
+    assert summary.runtime_metadata.pilot_mode is pilot_mode
     assert summary.completed_frames == 0
     assert "run_ids" not in captures
     assert (sample_project_root / "runs" / "faces-run" / "run_summary.json").is_file()
@@ -1308,7 +1313,7 @@ def test_launch_run_uses_session_mode_without_mode_gate(
     assert captures["run_ids"] == ["faces-run"]
     assert summary.run_mode is RunMode.SESSION
     assert summary.runtime_metadata is not None
-    assert summary.runtime_metadata.test_mode is False
+    assert summary.runtime_metadata.test_mode is True
 
 
 def test_session_runtime_metadata_aggregates_two_conditions_conservatively() -> None:

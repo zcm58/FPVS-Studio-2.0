@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, TypeVar
 
 from PySide6.QtCore import QEventLoop, Qt, QTimer
 from PySide6.QtWidgets import (
-    QAbstractButton,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -42,7 +42,13 @@ from fpvs_studio.core.study_versions import (
     restore_version,
     saved_version_count,
 )
-from fpvs_studio.gui.components import apply_dialog_theme, mark_primary_action, mark_text_role
+from fpvs_studio.gui.components import (
+    apply_dialog_theme,
+    mark_compact_action,
+    mark_primary_action,
+    mark_secondary_action,
+    mark_text_role,
+)
 from fpvs_studio.gui.document_support import DocumentError
 from fpvs_studio.gui.workers import BackgroundTask, ProgressTask
 from fpvs_studio.preprocessing.manifest import create_empty_manifest
@@ -298,6 +304,8 @@ class StudyVersionController:
         dialog.setMinimumSize(560, 360)
         dialog.resize(660, 460)
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         lineage = self.window.document.study_lineage()
         if lineage:
             origin = QLabel("Created from " + lineage)
@@ -307,6 +315,7 @@ class StudyVersionController:
         if visits.get(""):
             count = len(visits[""])
             unknown = QLabel(f"Research visits with an unrecorded protocol version: {count}")
+            unknown.setWordWrap(True)
             unknown.setToolTip(", ".join(sorted(visits[""])))
             layout.addWidget(unknown)
         items = QListWidget()
@@ -327,12 +336,15 @@ class StudyVersionController:
         ]
         if working_records:
             items.addItem("Working revisions used or reviewed during collection")
-        layout.addWidget(items, 2)
-        detail_label = QLabel("Version details", dialog)
-        mark_text_role(detail_label, "sectionTitle")
-        detail_label.setBuddy(details)
-        layout.addWidget(detail_label)
-        layout.addWidget(details, 3)
+        for title, view, stretch in (("Saved versions", items, 2), ("Version details", details, 3)):
+            heading = QLabel(title, dialog)
+            mark_text_role(heading, "sectionTitle")
+            heading.setBuddy(view)
+            section = QVBoxLayout()
+            section.setSpacing(6)
+            section.addWidget(heading)
+            section.addWidget(view, 1)
+            layout.addLayout(section, stretch)
 
         def selected() -> StudyVersion:
             return versions[items.currentRow()]
@@ -360,30 +372,46 @@ class StudyVersionController:
             else:
                 details.setPlainText("No saved versions yet. Save the project at the end of Setup.")
 
-        inspect = QPushButton("Open version read-only…", dialog)
+        inspect = QPushButton("Open read-only…", dialog)
         inspect.clicked.connect(
             lambda: self._inspect_version(dialog, selected(), len(versions) - items.currentRow())
         )
-        layout.addWidget(inspect, 0, Qt.AlignmentFlag.AlignLeft)
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
-        buttons.rejected.connect(dialog.reject)
-        rename = buttons.addButton("Name version…", QDialogButtonBox.ButtonRole.ActionRole)
-        restore = buttons.addButton("Restore this version…", QDialogButtonBox.ButtonRole.ActionRole)
-        copy = buttons.addButton("Save as new study…", QDialogButtonBox.ButtonRole.ActionRole)
+        mark_primary_action(inspect)
+        rename = QPushButton("Name…", dialog)
+        rename.setAccessibleName("Name version")
+        restore = QPushButton("Restore…", dialog)
+        restore.setAccessibleName("Restore selected version")
+        copy = QPushButton("Save as new study…", dialog)
+        close = QPushButton("Close", dialog)
+        close.clicked.connect(dialog.reject)
+        footer = QHBoxLayout()
+        footer.setSpacing(6)
+        choice: QPushButton | None = None
+
+        def choose(button: QPushButton) -> None:
+            nonlocal choice
+            choice = button
+            dialog.accept()
+
+        for action in (rename, restore, copy):
+            action.clicked.connect(lambda _checked=False, button=action: choose(button))
+            footer.addWidget(action)
+        footer.addStretch(1)
+        footer.addWidget(close)
+        footer.addWidget(inspect)
+        for action in (rename, restore, copy, close):
+            mark_secondary_action(action)
+        for action in (rename, restore, copy, close, inspect):
+            mark_compact_action(action)
+            action.setAutoDefault(False)
+        dialog.setTabOrder(close, inspect)
+        layout.addLayout(footer)
+
         items.currentRowChanged.connect(refresh)
         if items.count():
             items.setCurrentRow(0)
         else:
             refresh()
-        choice: list[QAbstractButton] = []
-
-        def choose(button: QAbstractButton) -> None:
-            if button in (rename, restore, copy):
-                choice.append(button)
-                dialog.accept()
-
-        buttons.clicked.connect(choose)
-        layout.addWidget(buttons)
         apply_dialog_theme(dialog)
         result = dialog.exec()
         row = items.currentRow()
@@ -391,7 +419,7 @@ class StudyVersionController:
         if result != QDialog.DialogCode.Accepted or not choice:
             return
         version = versions[row]
-        if choice[0] is rename:
+        if choice is rename:
             label, ok = QInputDialog.getText(
                 self.window, "Name experiment version", "Optional name", text=version.label
             )
@@ -408,7 +436,7 @@ class StudyVersionController:
             "Checking the selected version…",
             lambda: historical_draft(self.root, version.version_id),
         )
-        if choice[0] is copy:
+        if choice is copy:
             self._copy(draft, version_id=version.version_id)
             return
         if draft.changes:
@@ -444,6 +472,8 @@ class StudyVersionController:
         dialog.setMinimumSize(420, 300)
         dialog.resize(660, 460)
         layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
         tree = QTreeWidget(dialog)
         tree.setAccessibleName("Saved experiment settings")
         tree.setHeaderLabels(["Setting", "Saved value"])
