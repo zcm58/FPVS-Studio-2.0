@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from PIL import Image
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QPushButton, QScrollArea
+from PySide6.QtWidgets import QApplication, QPushButton
 from tests.gui.helpers import (
     ImmediateProgressTask,
     assert_visible_children_within_parent,
@@ -149,14 +149,15 @@ def test_states_fit_with_long_accessible_paths(qtbot, qapp, size, dark, monkeypa
         QApplication.processEvents()
         assert dialog.size().toTuple() == size
         assert_visible_children_within_parent(dialog)
-        assert not dialog.findChildren(QScrollArea)
         table = dialog.folder_table
-        assert table.x() == dialog.add_button.x() == dialog.status_label.x()
+        assert table.x() == dialog.add_button.x()
         assert dialog.add_button.geometry().bottom() < table.y()
-        assert table.geometry().bottom() < dialog.status_label.y()
-        assert table.width() == dialog.width() - 48
+        assert table.geometry().right() < dialog.status_label.x()
+        assert table.geometry().bottom() < dialog.run_button.y()
+        assert dialog.open_button.y() > dialog.status_label.geometry().bottom()
         for button in dialog.findChildren(QPushButton):
             if button.isVisible():
+                assert 34 <= button.height() <= 40
                 assert button.contentsRect().width() >= button.fontMetrics().horizontalAdvance(
                     button.text(),
                 )

@@ -173,6 +173,7 @@ def test_image_resizer_uses_wide_two_column_workbench(
             text_width = label.fontMetrics().horizontalAdvance(label.text())
             assert text_width <= label.contentsRect().width()
         for button in (page.source_button, page.output_button, page.optimize_button):
+            assert 34 <= button.height() <= 40
             assert button.width() >= button.fontMetrics().horizontalAdvance(button.text())
         _assert_visible_children_within_parent(page)
 

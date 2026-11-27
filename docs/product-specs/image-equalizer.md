@@ -86,10 +86,10 @@ retains scalar measurements rather than all decoded images. `gui/image_equalizer
 uses the app-owned ProgressTask lifecycle, cancellation signals and a window-modal
 dialog. File enumeration, reads, transforms and writes stay off the GUI thread.
 
-The dialog is 960x640 minimum and 1120x720 by default. A plain shared dialog header,
-folder-action toolbar and full-width table share one set of margins, without nested
-page cards. Status sits directly below the table; Close and Equalize Images remain
-in the footer. Only the table scrolls for large batches. Folder paths deliberately
+The dialog is 960x640 minimum and 1120x720 by default. The shared Image Resizer page shell places
+Batch Setup and its folder-pair table on the left and Results and Open Output
+on the right. Equalize Images sits beneath the table. Close stays in the footer.
+Folder paths deliberately
 elide with full tooltips/accessibility values. Add,
 change, remove and close are disabled during a batch. Cancellation is available in
 the progress dialog. Closing cannot abandon an active worker; error/cancel states

@@ -27,6 +27,7 @@ from fpvs_studio.gui.components import (
     PathValueLabel,
     ResultFeedbackLabel,
     apply_image_resizer_theme,
+    mark_compact_action,
     mark_primary_action,
     mark_secondary_action,
 )
@@ -50,6 +51,7 @@ class ImageResizerPage(QWidget):
         super().__init__(parent)
         self.setObjectName("image_resizer_page")
         self.setProperty("launchSurfaceRoot", "true")
+        self.setProperty("imageTool", "true")
         self._on_return_home = on_return_home
         self._source_dir: Path | None = None
         self._output_dir: Path | None = None
@@ -206,6 +208,11 @@ class ImageResizerPage(QWidget):
         footer.addWidget(self.return_home_button)
         footer.addStretch(1)
         layout.addLayout(footer)
+        for button in (
+            self.source_button, self.output_button, self.optimize_button, self.return_home_button,
+            self.open_output_button, self.copy_output_button,
+        ):
+            mark_compact_action(button)
         apply_image_resizer_theme(self)
         self._refresh_paths()
         self._refresh_enabled_state()
