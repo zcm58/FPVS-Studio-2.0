@@ -2,8 +2,8 @@
 
 Status: Active
 
-The sender and reader have been verified in software. An approved bench recording
-and photodiode timing measurements are pending.
+The sender and reader have been verified in software. The lab has no access to
+the amplifier. Physical marker receipt and display timing remain unverified.
 
 ## Workflow and implementation
 
@@ -56,9 +56,38 @@ ran on Windows build 26300 with Python 3.10.11 for Studio and 3.13.9 for Toolbox
 [Pinned MFF](https://github.com/mne-tools/mne-testing-data/tree/20cc221d737a37a6ee3a9c007e91bd69541fefe9/EGI/test_egi.mff)
 · [MNE 1.9 EGI reader](https://mne.tools/1.9/generated/mne.io.read_raw_egi.html)
 
-## Bench record to complete
+### Independent Windows software checks
 
-Record the NA400 variant and serial number, firmware, Net Station Acquisition version/build, sample rate, workspace DIN mode and event names, Windows output device/driver/address, cable/adapter part numbers, connector bank and verified pin/bit mapping. Record polarity, idle state, voltage compatibility, minimum pulse and low interval, and the chosen settings. No local lab configuration has been supplied.
+EGI lists supported macOS and amplifier firmware combinations and supplies Net
+Station downloads through support. Even analysis on a personal Mac requires a
+Net Station license key. The Windows checks below used saved recordings and
+simulated output. [EGI system requirements](https://www.egi.com/knowledge-center/item/97-net-station-mac-os-and-net-amps-firmware-compatible-verisons)
+
+- EGI's Java MFF library 1.2.2, run directly with OpenJDK 21.0.8, agreed with
+  Toolbox on the original codes, labels, timestamps, durations and order of
+  all eight public NA400 events. It also preserved the three simulated playback
+  events and all four rows in a separate test with sub-microsecond timestamp
+  precision, including two identical rows and a different code at the same
+  instant. The EGI writer also created a fresh event track from the three mock
+  port writes in a synthetic MFF. Toolbox matched the saved Studio log at
+  samples 16, 683 and 1516. [Java library distribution](https://github.com/arnodelorme/mffmatlabio/tree/fa8dbf19c8c1cbbfc891fb2f1d28a1d793673c68)
+- An isolated installation of `mffpy` 0.11.0 independently read the public
+  recording and agreed on every event's code, label, time, duration and sample.
+  Its writer generated a fresh MFF from Studio's three mock port writes. Toolbox
+  matched that file against the original Studio run log and rejected an
+  intentionally incorrect oddball mapping. A second event track retained
+  `55, 55, 128, 255` in source order, all at sample 100. File hashes matched
+  before and after inspection. [mffpy 0.11.0](https://pypi.org/project/mffpy/0.11.0/)
+
+## Physical qualification if an equipped site becomes available
+
+An equipped site can provide a de-identified continuous MFF, the matching Studio
+run files, and a photodiode channel or event track captured on the recording clock.
+Record the NA400 variant and serial number, firmware, Net Station Acquisition
+version/build, sample rate, workspace DIN mode and event names, Windows output
+device/driver/address, cable/adapter part numbers, connector bank and verified
+pin/bit mapping. Record polarity, idle state, voltage compatibility, minimum
+pulse and low interval, and the chosen settings.
 
 EGI describes TTL-style DIN markers and up to 255 unique markers. Its Net Station 5.4 timing example uses the EGI AV Tester and a photocell on the participant display. Neither reference qualifies a particular PC output cable or establishes this installation's minimum pulse width. [DIN overview](https://www.egi.com/knowledge-center/item/75-synchronizing-different-types-of-stimulus-events-with-net-station) · [Timing setup](https://www.egi.com/knowledge-center/item/91-how-to-set-up-a-timing-test-in-net-station-5)
 
