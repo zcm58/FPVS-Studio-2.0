@@ -19,11 +19,12 @@ import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import asdict
-from importlib.metadata import version
+from importlib.metadata import metadata, version
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from packaging.specifiers import SpecifierSet
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "darwin" or os.environ.get("FPVS_MACOS_NATIVE_CHECKS") != "1",
@@ -38,7 +39,11 @@ def test_native_source_dependencies_import_without_opening_windows(record_proper
         record_property(distribution, version(distribution))
     record_property("macos", platform.mac_ver()[0])
     record_property("cpu", platform.machine())
-    assert sys.version_info[:2] == (3, 10)
+    python_version = platform.python_version()
+    record_property("python", python_version)
+    required_python = metadata("fpvs-studio")["Requires-Python"]
+    assert required_python
+    assert python_version in SpecifierSet(required_python)
 
 
 def test_native_display_api_links_and_reports_fixed_mode_or_explicit_unknown(
