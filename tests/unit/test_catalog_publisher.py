@@ -809,7 +809,7 @@ class PublishCatalogTests(unittest.TestCase):
         output, errors = io.StringIO(), io.StringIO()
         with (
             patch.object(sys, "argv", [str(SCRIPT), "--check-access"]),
-            patch.dict(publisher.os.environ, {"GH_TOKEN": ""}),
+            patch.object(publisher.os, "environ", {"GH_TOKEN": ""}),
             patch.object(publisher.subprocess, "run", return_value=result),
             contextlib.redirect_stdout(output),
             contextlib.redirect_stderr(errors),

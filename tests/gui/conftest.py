@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QObject, QSettings, Signal
+from PySide6.QtCore import QEvent, QObject, QSettings, Signal
 from PySide6.QtWidgets import QFileDialog, QMessageBox
 from tests.platform_adapters import set_module_platform
 
@@ -23,6 +23,18 @@ class _HeldSerialPortJob(QObject):
 
     def cancel(self) -> None:
         pass
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _close_studio_qt_session(qapp):
+    """Drain Studio's workers and pytest-qt's deferred widget deletes before native exit."""
+    yield
+    lifecycle = getattr(qapp, "_fpvs_update_lifecycle", None)
+    if lifecycle is not None and lifecycle.has_active_jobs:
+        lifecycle.request_shutdown()
+        if lifecycle.has_active_jobs:
+            lifecycle.run_event_loop()
+    qapp.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 @pytest.fixture(autouse=True)

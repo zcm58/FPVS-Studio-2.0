@@ -109,8 +109,10 @@ def test_home_recording_link_opens_recording_and_menu_still_opens_general(
         qtbot.mouseClick(link, Qt.MouseButton.LeftButton, pos=link.rect().center())
     else:
         link.setFocus(Qt.FocusReason.TabFocusReason)
-        key = Qt.Key.Key_Return if activation == "return" else Qt.Key.Key_Enter
-        qtbot.keyClick(link, key)
+        if activation == "return":
+            qtbot.keyClick(link, Qt.Key.Key_Return)
+        else:
+            qtbot.keyClick(link, Qt.Key.Key_Enter, Qt.KeyboardModifier.KeypadModifier)
     assert opened_categories == ["Recording"]
 
     window.settings_action.trigger()
@@ -455,6 +457,7 @@ def test_ready_home_launch_does_not_construct_setup_wizard(
 
     reopened.launch_action.trigger()
 
+    qtbot.waitUntil(lambda: "participant_number" in captures)
     assert captures["participant_number"] == "0007"
     assert reopened._setup_wizard_page is None
 
