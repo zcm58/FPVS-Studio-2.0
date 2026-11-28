@@ -174,7 +174,7 @@ def _assert_labels_fit(widget) -> None:
     (None, 1000), ("serial", 1000), ("unicorn_udp", 65535),
     ("biosemi_active_three", 1000), ("brainproducts_triggerbox", 1000),
     ("brainproducts_parallel", 1000), ("egi_din", 1000), ("ant_mylab_ttl", 1000),
-    ("unicorn_udp", "broken saved port"), ("unknown old selection", 1000),
+    ("unicorn_udp", "broken saved port"), ("unknown old selection", 1000), ("", 1000),
 ])
 def test_recording_setup_geometry_and_validation(
     qtbot, background, backend, port, recording_errors,
@@ -195,6 +195,18 @@ def test_recording_setup_geometry_and_validation(
     QApplication.processEvents()
     assert (dialog.width(), dialog.height()) == (700, 640)
     _assert_labels_fit(dialog)
+    support = dialog.editor.trigger_support_label
+    if backend in (None, "serial", "biosemi_active_three", "unicorn_udp",
+                   "brainproducts_triggerbox", "brainproducts_parallel"):
+        assert support.isVisible() and support.text() == "Verified Trigger Support"
+    elif backend in ("egi_din", "ant_mylab_ttl"):
+        assert support.isVisible()
+        assert support.text() == "Software Verified; Hardware Verification Pending"
+    else:
+        assert not support.isVisible() and not support.text()
+        assert "unrecognized saved choice" in dialog.guidance_label.text()
+    if support.isVisible():
+        assert support.text() in dialog.backend_combo.accessibleDescription()
     assert dialog.backend_combo.width() >= (
         dialog.backend_combo.fontMetrics().horizontalAdvance(dialog.backend_combo.currentText())
         + 32

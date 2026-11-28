@@ -242,6 +242,7 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
     visits: dict[str, dict[str, Any]] = {}
     setups: dict[str, dict[str, Any]] = {}
     tests_and_pilots: set[tuple[Any, ...]] = set()
+    excluded_executions: set[str] = set()
     directory = "logs/acquisition"
     with project_reporting_lock(root):
         configs = {
@@ -288,6 +289,7 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                 "0",
                 "00",
             }:
+                excluded_executions.add(key)
                 tests_and_pilots.add(
                     (
                         evidence.participant_number,
@@ -298,6 +300,8 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                 continue
             if evidence.session_id is None:
                 continue  # A single-condition diagnostic has no research visit.
+            if archived is None:
+                evidence.check_trigger_transport()
             visit = _visit_from_acquisition(evidence)
             setup = _setup(config) if config else None
             if config and completed:
@@ -345,6 +349,11 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                     or snapshot.get("study_id") not in (None, study.study_id)
                     or snapshot.get("recording") != declared_cap
                     or (setup is not None and setup != snapshot["setup"])
+                    or (completed is not None
+                        and "manual_removed_electrodes" in completed.model_fields_set
+                        and "manual_removed_electrodes" in snapshot
+                        and completed.manual_removed_electrodes
+                        != snapshot["manual_removed_electrodes"])
                 ):
                     raise ValueError(f"As-run settings conflict with the retained visit {key}.")
                 setup = snapshot["setup"]
@@ -354,6 +363,17 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                 ]:
                     raise ValueError(f"As-run condition order conflicts with execution {key}.")
                 for run, entry in zip(visit["runs"], compiled, strict=True):
+                    if completed and run["planned_markers"] != entry["planned_markers"]:
+                        raise ValueError(
+                            f"The marker schedules disagree for run {run['run_id']}."
+                        )
+                    if completed and (
+                        run["random_seed"] != entry["random_seed"]
+                        or (run["randomization"] is not None
+                            and run["randomization"] != entry["randomization"])
+                        or completed.refresh_hz != entry["display"]["refresh_hz"]
+                    ):
+                        raise ValueError(f"Prelaunch timing or randomization conflicts for {key}.")
                     run.update(
                         {
                             field: entry[field]
@@ -394,7 +414,9 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                 raise ValueError(f"Invalid participant results identity or version in {path.name}.")
             if record.get("test_mode") or record.get("pilot_mode"):
                 tests_and_pilots.add(_identity(record))
-            elif _identity(record) not in tests_and_pilots:
+                if record.get("execution_id"):
+                    excluded_executions.add(record["execution_id"])
+            else:
                 _add_history(visits, identities, record, path.name)
         for label, summary in _iter_session_history_summaries(root, strict=True):
             if summary.project_id and summary.project_id != project_id:
@@ -427,9 +449,17 @@ def build_study_handoff(project_root: Path) -> dict[str, Any]:
                 },
                 label + str(summary.started_at),
             )
-    roster = [
-        visits[key] for key in sorted(visits) if _identity(visits[key]) not in tests_and_pilots
-    ]
+    roster = []
+    for key, visit in sorted(visits.items()):
+        if key in excluded_executions:
+            if visit["recording"] is not None:
+                raise ValueError(f"Research recording and Test/Pilot flags conflict for {key}.")
+            continue
+        # Legacy history may only have the participant/session tuple. An identified
+        # research execution can legitimately reuse the tuple from a rehearsal.
+        if visit["recording"] is None and _identity(visit) in tests_and_pilots:
+            continue
+        roster.append(visit)
     used_setups = {visit["setup_id"] for visit in roster}
     setups = {key: value for key, value in setups.items() if key in used_setups}
     captured_scopes = [setups.get(visit["setup_id"], {}).get("toolbox") for visit in roster]

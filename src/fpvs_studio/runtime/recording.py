@@ -8,7 +8,9 @@ from typing import cast
 from fpvs_studio.core.brainproducts import AMPLIFIER_LABELS, minimum_pulse_width_ms
 from fpvs_studio.core.execution import RecordingSnapshot
 from fpvs_studio.core.recording_hardware import (
+    RecordingBackend,
     acquisition_profile_for_recording,
+    recording_trigger_transport,
     validate_ant_pulse_timing,
     validate_electrode_montage,
 )
@@ -16,8 +18,8 @@ from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.triggers.serial_backend import resolve_serial_port
 
 UNICORN_VALIDATION_NOTE = (
-    "Unicorn marker output is enabled for recording tests. "
-    "Full receiver and physical timing validation remain pending."
+    "Check received markers in the saved recording. Use a photodiode on the "
+    "participant display to measure physical timing for this setup."
 )
 
 _TTL_OUTPUTS = {"egi_din": ("egi", "EGI DIN"), "ant_mylab_ttl": ("ant", "ANT eego mylab TTL")}
@@ -45,11 +47,7 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
             raise RecordingConfigurationError(f"{key} must be a boolean.")
     if values.get("experiment_test_mode", False) or values.get("pilot_mode", False):
         return "null"
-    if selected in (
-        "unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel", *_TTL_OUTPUTS,
-    ):
-        return str(selected)
-    return "serial"
+    return recording_trigger_transport(cast(RecordingBackend, selected or "serial"))
 
 
 def validate_recording_configuration(options: Mapping[str, object] | None = None) -> str:

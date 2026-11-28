@@ -67,6 +67,7 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
     dialog = DefaultRecordingHardwareDialog()
     qtbot.addWidget(dialog)
     assert dialog.selected_backend is None
+    assert not dialog.trigger_support_label.text()
     assert not dialog.continue_button.isEnabled()
     assert [dialog.hardware_combo.itemData(i) for i in range(dialog.hardware_combo.count())] == [
         None, *_BACKENDS,
@@ -74,6 +75,12 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
     assert _PROMPT in [label.text() for label in dialog.findChildren(QLabel)]
     dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData(backend))
     assert dialog.selected_backend == backend
+    expected_support = (
+        "Software Verified; Hardware Verification Pending"
+        if backend in ("egi_din", "ant_mylab_ttl") else "Verified Trigger Support"
+    )
+    assert dialog.trigger_support_label.text() == expected_support
+    assert expected_support in dialog.hardware_combo.accessibleDescription()
     fixed = {"serial": "biosemi64", "unicorn_udp": "unicorn8"}
     assert dialog.selected_montage == fixed.get(backend)
     assert dialog.montage_combo.isEnabled() == (
@@ -86,7 +93,9 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
 
 @pytest.mark.parametrize("background", ["#f4f7fb", "#202124"])
 @pytest.mark.parametrize("error_message", ["", "The saved EEG hardware choice is invalid."])
-@pytest.mark.parametrize("backend", ["brainproducts_triggerbox", "brainproducts_parallel"])
+@pytest.mark.parametrize("backend", [
+    "brainproducts_triggerbox", "brainproducts_parallel", "egi_din", "ant_mylab_ttl",
+])
 def test_hardware_picker_fits_minimum_size(qtbot, background, error_message, backend):
     dialog = DefaultRecordingHardwareDialog(error_message=error_message)
     qtbot.addWidget(dialog)
@@ -94,9 +103,10 @@ def test_hardware_picker_fits_minimum_size(qtbot, background, error_message, bac
     palette.setColor(QPalette.ColorRole.Window, QColor(background))
     dialog.setPalette(palette)
     dialog.hardware_combo.setCurrentIndex(dialog.hardware_combo.findData(backend))
-    preset = "brainproducts_acticap_gacs_128"
-    dialog.montage_combo.setCurrentIndex(dialog.montage_combo.findData(preset))
-    assert dialog.selected_montage == preset
+    if backend.startswith("brainproducts"):
+        preset = "brainproducts_acticap_gacs_128"
+        dialog.montage_combo.setCurrentIndex(dialog.montage_combo.findData(preset))
+        assert dialog.selected_montage == preset
     dialog.resize(640, 300)
     dialog.show()
     QApplication.processEvents()
@@ -739,6 +749,13 @@ def test_recording_settings_fit_sidebar_sizes(
     ):
         editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
         QApplication.processEvents()
+        support = editor.trigger_support_label
+        assert support.isVisible()
+        assert support.text() == (
+            "Software Verified; Hardware Verification Pending"
+            if backend in ("egi_din", "ant_mylab_ttl") else "Verified Trigger Support"
+        )
+        assert support.height() >= support.heightForWidth(support.width())
         assert action.isVisible()
         assert action.width() == dialog.apply_recording_button.width()
         assert action.height() == expected_height

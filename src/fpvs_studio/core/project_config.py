@@ -401,7 +401,7 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
     ordering_policy: Literal[
         "pooled_no_adjacent", "saved_no_adjacent", "randomized_blocks", "saved_randomized_blocks",
     ] | None = None
-    refresh_hz: float = Field(gt=0)
+    refresh_hz: float = Field(gt=0, allow_inf_nan=False)
     block_orders: list[list[str]] = Field(default_factory=list)
     source_run_dir: str
     ordered_runs: list[ProjectConfigCompletedRun] = Field(default_factory=list)
@@ -597,12 +597,42 @@ class ProjectConfigFile(FPVSBaseModel):
         if (self.recording and montage is not None
                 and self.toolbox.acquisition_profile != self.recording.acquisition_profile):
             raise ValueError("The recording montage and Toolbox acquisition profile disagree.")
-        if evidence and (montage is not None or evidence.recording.electrode_montage is not None):
-            if (not self.matches_recording(evidence.recording)
-                    or evidence.acquisition_profile != self.toolbox.acquisition_profile):
-                raise ValueError(
-                    "The recording montage or recorder differs from the captured session."
-                )
+        if evidence and (not self.matches_recording(evidence.recording)
+                         or evidence.acquisition_profile != self.toolbox.acquisition_profile):
+            raise ValueError("The recording montage or recorder differs from the captured session. "
+                             "Check the recording identity.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_completed_recording(self) -> ProjectConfigFile:
+        completed = self.completed_session
+        if completed is None or completed.acquisition_evidence is None:
+            return self
+        evidence = completed.acquisition_evidence
+        evidence.check_trigger_transport()
+        if evidence.project_id != self.project.project_id:
+            raise ValueError("The acquisition evidence belongs to a different project.")
+        if (not all(value.strip() for value in (
+                    completed.session_id, evidence.execution_id, evidence.participant_number))
+                or evidence.session_id != completed.session_id
+                or evidence.execution_id != completed.execution_id
+                or evidence.participant_number != completed.participant_number
+                or evidence.participant_session_number != completed.participant_session_number):
+            raise ValueError("The acquisition evidence session association does not match.")
+        if (evidence.state != "completed" or evidence.export_error
+                or evidence.recording.effective_backend == "null"
+                or any(run.state != "completed" for run in evidence.runs)):
+            raise ValueError("The recording handoff was not successfully completed.")
+        conditions = {item.condition_id: item.name for item in self.conditions}
+        planned = completed.ordered_runs
+        if (not planned or len(planned) != len(evidence.runs)
+                or len({run.run_id for run in planned}) != len(planned)
+                or any((run.run_id, run.condition_id, run.condition_name)
+                       != (actual.run_id, actual.condition_id, actual.condition_name)
+                       or not run.run_id.strip()
+                       or conditions.get(run.condition_id) != run.condition_name
+                       for run, actual in zip(planned, evidence.runs, strict=True))):
+            raise ValueError("Recorded runs must match the project conditions and compiled order.")
         return self
 
     @model_validator(mode="after")
@@ -867,11 +897,14 @@ def completed_toolbox_config(
             list(manual_removed_electrodes) if manual_removed_electrodes is not None else None
         ),
     })
-    return ProjectConfigFile.model_validate({
-        **config.model_dump(mode="python"),
-        "kind": "completed_session",
-        "completed_session": completed.model_dump(mode="python"),
-    })
+    try:
+        return ProjectConfigFile.model_validate({
+            **config.model_dump(mode="python"),
+            "kind": "completed_session",
+            "completed_session": completed.model_dump(mode="python"),
+        })
+    except ValidationError as exc:
+        raise ProjectConfigError(f"Cannot create the completed recording handoff: {exc}") from exc
 
 
 def write_project_config(path: Path, config: ProjectConfigFile) -> None:
@@ -896,10 +929,10 @@ def read_project_config(path: Path) -> ProjectConfigFile:
     """Read a UTF-8 JSON `.fpvsconfig` file."""
 
     try:
-        raw_payload = json.loads(path.read_text(encoding="utf-8"))
+        raw_payload = json.loads(path.read_text(encoding="utf-8-sig"))
     except OSError as exc:
         raise ProjectConfigError(f"Unable to read project config: {path}") from exc
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
         raise ProjectConfigError(f"Project config is not valid JSON: {path}") from exc
     if not isinstance(raw_payload, dict):
         raise ProjectConfigError("Project config must contain a JSON object.")
@@ -1119,28 +1152,8 @@ def read_retained_session_config(path: Path, project_id: str) -> ProjectConfigFi
     evidence = completed.acquisition_evidence if completed is not None else None
     if completed is None or evidence is None:
         raise ProjectConfigError("Retained completed handoff is missing captured session evidence.")
-    if config.project.project_id != project_id or (
-        evidence.project_id != project_id
-    ):
+    if config.project.project_id != project_id:
         raise ProjectConfigError("Retained completed handoff belongs to a different project.")
-    if (
-        evidence.session_id != completed.session_id
-        or evidence.execution_id != completed.execution_id
-        or evidence.participant_number != completed.participant_number
-        or evidence.participant_session_number != completed.participant_session_number
-        or [run.run_id for run in evidence.runs] != [run.run_id for run in completed.ordered_runs]
-    ):
-        raise ProjectConfigError("Retained completed handoff session association does not match.")
-    if evidence.state != "completed" or evidence.export_error or any(
-        run.state != "completed" for run in evidence.runs
-    ):
-        raise ProjectConfigError("Retained recording handoff was not successfully completed.")
-    if (
-        evidence.recording.effective_backend == "null"
-        or not config.matches_recording(evidence.recording)
-        or evidence.acquisition_profile != config.toolbox.acquisition_profile
-    ):
-        raise ProjectConfigError("Retained completed handoff recording identity does not match.")
     return config
 
 

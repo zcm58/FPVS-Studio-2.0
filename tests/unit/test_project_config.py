@@ -265,6 +265,55 @@ def captured_completed_config(sample_project, sample_project_root):
     return completed_toolbox_config(config, sample_project_root, plan, evidence)
 
 
+@pytest.mark.parametrize("failure", [
+    "run condition", "wrong output", "pilot", "other recorder", "wrong logged backend",
+    "empty execution", "nonfinite rate",
+])
+def test_completed_file_checks_recording_and_run_identity_without_a_cap(
+    captured_completed_config, tmp_path, failure,
+):
+    payload = captured_completed_config.model_dump(mode="json", exclude_none=True)
+    completed = payload["completed_session"]
+    evidence = completed["acquisition_evidence"]
+    if failure == "run condition":
+        evidence["runs"][0]["condition_name"] = "Different condition"
+    elif failure == "wrong output":
+        evidence["recording"]["effective_backend"] = "serial"
+    elif failure == "pilot":
+        evidence["recording"]["effective_backend"] = "null"
+    elif failure == "empty execution":
+        evidence["execution_id"] = completed["execution_id"] = " "
+    elif failure == "nonfinite rate":
+        completed["refresh_hz"] = "Infinity"
+    elif failure == "wrong logged backend":
+        evidence["runs"][0]["attempted_events"] = [{
+            "trigger_index": 0, "frame_index": 0, "code": 1,
+            "label": "condition_start", "backend_name": "serial", "status": "sent",
+        }]
+    else:
+        payload["recording"]["recording_backend"] = "brainproducts_triggerbox"
+        payload["recording"].pop("acquisition_profile", None)
+    path = tmp_path / "copied.fpvsconfig"
+    before = json.dumps(payload).encode()
+    path.write_bytes(before)
+    with pytest.raises(ProjectConfigError):
+        read_project_config(path)
+    assert path.read_bytes() == before
+
+
+def test_windows_text_encoding_preserves_handoff_and_reports_invalid_bytes(
+    captured_completed_config, tmp_path,
+):
+    path = tmp_path / "shared.fpvsconfig"
+    original = captured_completed_config.model_dump_json(exclude_none=True).encode("utf-8-sig")
+    path.write_bytes(original)
+    assert read_project_config(path).project == captured_completed_config.project
+    assert path.read_bytes() == original
+    path.write_bytes(b"\xff\xfe")
+    with pytest.raises(ProjectConfigError, match="not valid JSON"):
+        read_project_config(path)
+
+
 def test_latest_completed_toolbox_config_keeps_captured_hardware_and_source_files(
     captured_completed_config, sample_project, sample_project_root,
 ):

@@ -553,8 +553,13 @@ contains the hardware editor with project and computer-default save actions on o
 Saved project and computer settings are grouped above the editable controls. Port
 and save actions share a width with Close. TriggerBox **Detect** is 32 logical pixels
 high. The save actions and **Close** are 36 pixels high on Recording.
+The first-run hardware picker and Recording settings show the selected device's
+trigger support. BioSemi, Unicorn and BrainVision show **Verified Trigger Support**.
+EGI and ANT show **Software Verified; Hardware Verification Pending**. Each
+recording still needs its own marker-receipt and timing checks.
 For a visible smoke check at both Settings sizes, open Recording with a project and
-without one, switch devices, and check that the saved summaries and port feedback wrap.
+without one, switch devices, and check that the trigger support changes and the
+saved summaries and port feedback wrap.
 Account is available from Welcome and an open project. In **OpenFPVS account**,
 **Manage Account** opens `https://openfpvs.com/account` in the default browser.
 If the browser fails to open, the page shows a selectable address. The separate

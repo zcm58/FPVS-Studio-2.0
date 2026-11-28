@@ -25,6 +25,47 @@ from fpvs_studio.runtime.study_handoff import (
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "studio_handoff"
 
 
+def test_pilot_with_same_visit_identity_cannot_hide_an_actual_recording(tmp_path):
+    config = read_project_config(FIXTURES / "v2-completed-biosemi.fpvsconfig")
+    scaffold = create_project_from_config(tmp_path, config)
+    root = scaffold.project_root
+    capture = config.completed_session.acquisition_evidence
+    folder = root / "logs/acquisition"
+    folder.mkdir()
+    write_json_file(folder / f"{capture.execution_id}.acquisition-v1.json", capture)
+    retain_session_snapshot(root, config)
+    pilot = capture.model_copy(deep=True)
+    pilot.execution_id = "rehearsal"
+    pilot.recording.effective_backend = "null"
+    write_json_file(folder / "rehearsal.acquisition-v1.json", pilot)
+    assert [v["execution_id"] for v in build_study_handoff(root)["visits"]] == [
+        capture.execution_id,
+    ]
+    # Conflicting mode flags on the same execution require review before export.
+    results = root / "logs/.participant-results"
+    results.mkdir()
+    historical = {
+        "schema_version": 1, "project_id": capture.project_id, "session_id": "old-session",
+        "participant_number": "038", "participant_session_number": 1,
+    }
+    (results / "old-result.json").write_text(json.dumps({
+        **historical, "execution_id": "unverified-historical-run",
+    }), encoding="utf-8")
+    (results / "pilot-history.json").write_text(json.dumps({
+        **historical, "pilot_mode": True,
+    }), encoding="utf-8")
+    assert [v["execution_id"] for v in build_study_handoff(root)["visits"]] == [
+        capture.execution_id,
+    ]
+    (results / "mode.json").write_text(json.dumps({
+        "schema_version": 1, "project_id": capture.project_id, "execution_id": capture.execution_id,
+        "session_id": capture.session_id, "participant_number": capture.participant_number,
+        "participant_session_number": capture.participant_session_number, "pilot_mode": True,
+    }), encoding="utf-8")
+    with pytest.raises(ValueError, match="Test/Pilot flags conflict"):
+        build_study_handoff(root)
+
+
 def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
     setup = read_project_config(FIXTURES / "v2-setup.fpvsconfig")
     scaffold = create_project_from_config(tmp_path, setup)
@@ -48,11 +89,15 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
         completed.participant_number = evidence.participant_number = pid
         completed.participant_session_number = evidence.participant_session_number = number
         key = evidence.execution_id
+        scaffold.project.conditions[0].oddball_cycle_repeats_per_sequence = (
+            config.conditions[0].oddball_cycle_repeats_per_sequence
+        )
         plan = compile_session_plan(
             scaffold.project,
             project_root=root,
             refresh_hz=completed.refresh_hz,
             session_id=completed.session_id,
+            random_seed=42,
         )
         specs = [item.run_spec for item in plan.ordered_entries()]
         for spec, run in zip(specs, evidence.runs, strict=True):
@@ -143,6 +188,26 @@ def test_cohort_retains_actual_versions_hardware_and_missing_evidence(tmp_path):
     assert build_study_handoff(root)["roster_revision"] != payload["roster_revision"]
     launch_path = folder / f"{updated['execution_id']}.study-run-v1.json"
     launch = json.loads(launch_path.read_text(encoding="utf-8"))
+    original = launch_path.read_bytes()
+    changed = json.loads(original)
+    changed["compiled_runs"][0]["planned_markers"][0][1] = 199
+    launch_path.write_text(json.dumps(changed), encoding="utf-8")
+    with pytest.raises(ValueError, match="marker schedules disagree"):
+        export_study_handoff(root, destination)
+    assert destination.read_bytes() == first
+    changed = json.loads(original)
+    changed["compiled_runs"][0]["display"]["refresh_hz"] = 75
+    launch_path.write_text(json.dumps(changed), encoding="utf-8")
+    with pytest.raises(ValueError, match="timing or randomization conflicts"):
+        export_study_handoff(root, destination)
+    assert destination.read_bytes() == first
+    changed = json.loads(original)
+    changed["manual_removed_electrodes"] = ["Cz"]
+    launch_path.write_text(json.dumps(changed), encoding="utf-8")
+    with pytest.raises(ValueError, match="settings conflict"):
+        export_study_handoff(root, destination)
+    assert destination.read_bytes() == first
+    launch_path.write_bytes(original)
     del launch["recording"]
     launch_path.write_text(json.dumps(launch), encoding="utf-8")
     with pytest.raises(ValueError, match="As-run settings conflict"):

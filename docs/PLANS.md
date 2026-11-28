@@ -74,6 +74,8 @@ These future changes came out of the November 22 optimization review.
 - [Plan review workflow](exec-plans/plan-review-workflow.md)
 - [Measured technical debt](exec-plans/tech-debt-tracker.md)
 - [Completed implementation/release records](exec-plans/completed/)
+- [Recorder support and handoff checks](exec-plans/completed/hardware-handoff-stress.md)
+  covers all seven recorder selections, cohort association and saved marker verification.
 - [Studio startup and worker stability](exec-plans/completed/studio-stability-pass.md)
   keeps optional diagnostics failures from blocking startup, releases failed graphics
   constructors on the presentation thread, and drains the standalone updater on exit.

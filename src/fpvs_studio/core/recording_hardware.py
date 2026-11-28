@@ -21,6 +21,11 @@ _TTL_FIELDS = {
 }
 
 
+def recording_trigger_transport(selected: RecordingBackend) -> str:
+    """Resolve the research marker output for a named recorder."""
+    return "serial" if selected == "biosemi_active_three" else selected
+
+
 def inactive_ttl_fields(selected: str | None) -> tuple[str, ...]:
     """Hardware preferences to exclude from a different recorder's exchange payload."""
     return tuple(

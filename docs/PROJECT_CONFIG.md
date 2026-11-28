@@ -131,6 +131,15 @@ session declarations. Historical completed exports with only a session plan
 leave the electrode montage unspecified. A named declaration requires a
 consumer that recognizes the montage field. Toolbox validates the selected
 cap against the EEG file.
+
+When a completed config contains acquisition evidence, Studio checks the
+selected recorder and effective output, even when the cap was left unspecified.
+The project, visit, execution, and ordered run and condition identities must
+agree. During whole-study export, the prelaunch marker schedule must also
+agree with the completed plan. A rehearsal can reuse the participant and
+session identifiers of a research visit. Separate execution IDs keep the real
+recording in the roster, while conflicting mode flags on the same recording
+require review before export.
 The [runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff) describes
 acquisition profiles and the evidence captured at launch.
 

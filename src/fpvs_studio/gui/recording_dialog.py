@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QFormLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QPushButton,
     QVBoxLayout,
@@ -72,6 +73,33 @@ RECORDING_HARDWARE_CHOICES = (
 )
 
 
+def _add_trigger_support(form: QFormLayout, device: QComboBox) -> QLabel:
+    status = QLabel(device.parentWidget())
+    status.setWordWrap(True)
+    mark_text_role(status, "supporting")
+    status.setToolTip("Check marker receipt and timing on your recording setup.")
+    form.addRow("Trigger support", status)
+
+    def update_status() -> None:
+        backend = device.currentData()
+        if backend in (
+            "serial", "biosemi_active_three", "brainproducts_triggerbox",
+            "brainproducts_parallel", "unicorn_udp",
+        ):
+            text = "Verified Trigger Support"
+        elif backend in ("egi_din", "ant_mylab_ttl"):
+            text = "Software Verified; Hardware Verification Pending"
+        else:
+            text = ""
+        status.setText(text)
+        device.setAccessibleDescription(f"Trigger support: {text}" if text else "")
+        form.setRowVisible(status, bool(text))
+
+    device.currentIndexChanged.connect(update_status)
+    update_status()
+    return status
+
+
 class _ElectrodeMontageCombo(QComboBox):
     """Offer the selected recorder's cap layouts without guessing variable wiring."""
 
@@ -122,6 +150,7 @@ class DefaultRecordingHardwareDialog(QDialog):
         self.montage_combo.setAccessibleName("Default electrode montage")
         self.montage_combo.set_recording(None)
         form = QFormLayout()
+        self.trigger_support_label = _add_trigger_support(form, self.hardware_combo)
         form.addRow("Electrode montage", self.montage_combo)
         layout.addLayout(form)
         self.error_label = QLabel(error_message, self)
@@ -306,7 +335,9 @@ class RecordingSetupEditor(QWidget):
         self.backend_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
         self.backend_combo.addItem("EGI Net Amps 400 (wired DIN)", "egi_din")
         self.backend_combo.addItem("ANT Neuro eego mylab (8-bit wired TTL)", "ant_mylab_ttl")
-        backend = configuration.get("recording_backend") or "serial"
+        backend = configuration.get("recording_backend")
+        if backend is None:
+            backend = "serial"
         index = self.backend_combo.findData(backend)
         if index < 0:
             self.backend_combo.addItem("Invalid saved choice — select a recording device", backend)
@@ -351,6 +382,7 @@ class RecordingSetupEditor(QWidget):
         )
         self.brainproducts_port_row = QWidget(self)
         port_layout = QHBoxLayout(self.brainproducts_port_row)
+        port_layout.setSizeConstraint(QLayout.SizeConstraint.SetMinimumSize)
         port_layout.setContentsMargins(0, 0, 0, 0)
         port_layout.addWidget(self.brainproducts_port_combo, 1)
         self.detect_ports_button = QPushButton("Detect", self.brainproducts_port_row)
@@ -406,6 +438,7 @@ class RecordingSetupEditor(QWidget):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setSpacing(10)
         form.addRow("Recording device", self.backend_combo)
+        self.trigger_support_label = _add_trigger_support(form, self.backend_combo)
         form.addRow("Electrode montage", self.montage_combo)
         self.unicorn_port_label = QLabel("Unicorn UDP port", self)
         form.addRow(self.unicorn_port_label, self.port_edit)
@@ -911,7 +944,7 @@ class RecordingSetupEditor(QWidget):
                 "TriggerBox Plus USB specification: delay/jitter <1 ms. Studio applies no fixed "
                 "timing correction; verify physical timing on your equipment."
             )
-        else:
+        elif biosemi:
             guidance = ""
             if self._computer_default:
                 guidance = (
@@ -934,6 +967,9 @@ class RecordingSetupEditor(QWidget):
                 "test tools releases their connections; stopping output may leave a port open. "
                 "Studio sends triggers; BioSemi software owns EEG recording."
             )
+        else:
+            guidance = "Select a recording device to replace the unrecognized saved choice."
+            detail = ""
         self.guidance_label.setText(guidance)
         self.guidance_label.setToolTip(detail)
         self.guidance_label.setAccessibleDescription(detail)

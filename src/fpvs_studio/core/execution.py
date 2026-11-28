@@ -41,6 +41,7 @@ from fpvs_studio.core.models import (
 from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
     RecordingBackend,
+    recording_trigger_transport,
     validate_electrode_montage,
 )
 from fpvs_studio.core.run_spec import RunRandomizationSpec
@@ -195,6 +196,9 @@ class RecordingSnapshot(FPVSBaseModel):
     @model_validator(mode="after")
     def validate_montage(self) -> RecordingSnapshot:
         validate_electrode_montage(self.selected_backend, self.electrode_montage)
+        expected = recording_trigger_transport(self.selected_backend)
+        if self.effective_backend not in ("null", expected):
+            raise ValueError("The effective trigger output conflicts with the selected recorder.")
         return self
 
     @model_serializer(mode="wrap")
@@ -381,7 +385,7 @@ class TriggerRecord(FPVSBaseModel):
 
     trigger_index: int = Field(ge=0)
     frame_index: int = Field(ge=-1)
-    time_s: float | None = Field(default=None, ge=0)
+    time_s: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     code: StrictInt = Field(ge=1, le=255)
     label: str
     backend_name: str
@@ -462,6 +466,14 @@ class AcquisitionEvidence(FPVSBaseModel):
     abort_reason: str | None = None
     export_error: str | None = None
     runs: list[AcquisitionRunEvidence] = Field(default_factory=list)
+
+    def check_trigger_transport(self) -> None:
+        """Check recorded transport attempts before exporting their research attribution."""
+        expected = self.recording.effective_backend
+        for run in self.runs:
+            if any(event.backend_name != expected for event in run.attempted_events
+                   if event.status in ("sent", "error")):
+                raise ValueError(f"Trigger log output conflicts with the recorder in {run.run_id}.")
 
 
 class AttentionalBlinkBurstRecord(FPVSBaseModel):
