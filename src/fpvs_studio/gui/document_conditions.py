@@ -167,7 +167,7 @@ class DocumentConditionMixin:
             raise DocumentError(RETIRED_IMAGE_PAIR_MESSAGE)
         ordered_conditions = self.ordered_conditions()
         defaults = self._project.settings.condition_defaults
-        display_name = name or f"Condition {len(ordered_conditions) + 1}"
+        display_name = name or self._next_condition_name()
         existing_condition_ids = {condition.condition_id for condition in self._project.conditions}
         existing_set_ids = {stimulus_set.set_id for stimulus_set in self._project.stimulus_sets}
         condition_id = self._unique_slug(display_name, existing_condition_ids)
@@ -185,7 +185,7 @@ class DocumentConditionMixin:
             stream_duration_seconds=defaults.stream_duration_seconds,
             presentation_count=defaults.presentation_count,
             duty_cycle_mode=defaults.duty_cycle_mode,
-            trigger_code=len(ordered_conditions) + 1,
+            trigger_code=self._next_condition_trigger(preferred=len(ordered_conditions) + 1),
             order_index=len(ordered_conditions),
         )
         new_sets = [
@@ -229,21 +229,35 @@ class DocumentConditionMixin:
                     task for task in seeded.task_modules if task.task_id not in existing_tasks
                 ]],
             )
-        display_name = name or f"Condition {len(ordered) + 1}"
+        display_name = name or self._next_condition_name()
         condition_id = self._unique_slug(display_name, {c.condition_id for c in ordered})
         defaults = project.settings.condition_defaults
         condition = validated_copy(
             prototype, condition_id=condition_id, name=display_name,
             sequence_count=defaults.sequence_count,
             oddball_cycle_repeats_per_sequence=defaults.oddball_cycle_repeats_per_sequence,
-            order_index=len(ordered), trigger_code=self._next_stream_condition_trigger(),
+            order_index=len(ordered), trigger_code=self._next_condition_trigger(),
         )
         self._replace_project(validated_copy(project, conditions=[*ordered, condition]))
         return condition_id
 
-    def _next_stream_condition_trigger(self) -> int:
+    def _next_condition_name(self) -> str:
+        used = {c.name.strip() for c in self._project.conditions}
+        number = len(self._project.conditions) + 1
+        while f"Condition {number}" in used:
+            number += 1
+        return f"Condition {number}"
+
+    def _next_condition_trigger(self, *, preferred: int = 1) -> int:
         used = {c.trigger_code for c in self._project.conditions}
         used.add(self._project.settings.triggers.oddball_trigger_code)
+        for modifier in self._project.condition_modifiers:
+            masking = modifier.masking
+            if masking is not None and masking.catch_trial is not None:
+                used.add(masking.catch_trial.trigger_code)
+            if masking is not None and masking.event_triggers is not None:
+                used.update((masking.event_triggers.mask_onset_code,
+                             masking.event_triggers.catch_slot_onset_code))
         used.update(
             c.attentional_blink.t2_trigger_code for c in self._project.conditions
             if c.attentional_blink is not None
@@ -253,6 +267,8 @@ class DocumentConditionMixin:
             if isinstance(c.attentional_blink, AttentionalBlinkStreamSettings)
             and c.attentional_blink.distractor_trigger_code is not None
         )
+        if preferred <= 255 and preferred not in used:
+            return preferred
         for code in range(1, 256):
             if code not in used:
                 return code
@@ -312,7 +328,7 @@ class DocumentConditionMixin:
         if condition_masking(self._project, source_condition) is not None:
             duplicate = validated_copy(
                 source_condition, condition_id=new_condition_id, name=copy_name,
-                order_index=len(ordered_conditions),
+                order_index=len(ordered_conditions), trigger_code=self._next_condition_trigger(),
             )
             self._replace_project(validated_copy(
                 self._project, conditions=[*ordered_conditions, duplicate],
@@ -321,7 +337,7 @@ class DocumentConditionMixin:
         if isinstance(source_condition.attentional_blink, AttentionalBlinkStreamSettings):
             duplicate = validated_copy(
                 source_condition, condition_id=new_condition_id, name=copy_name,
-                trigger_code=self._next_stream_condition_trigger(),
+                trigger_code=self._next_condition_trigger(),
                 order_index=len(ordered_conditions),
             )
             self._replace_project(validated_copy(
@@ -352,7 +368,7 @@ class DocumentConditionMixin:
                 "oddball_stimulus_set_id": oddball_set_id,
                 "t2_stimulus_set_id": t2_set_id,
                 "isi_stimulus_set_id": isi_set_id,
-                "trigger_code": len(ordered_conditions) + 1,
+                "trigger_code": self._next_condition_trigger(preferred=len(ordered_conditions) + 1),
                 "order_index": len(ordered_conditions),
             }
         )

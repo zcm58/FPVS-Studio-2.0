@@ -814,3 +814,39 @@ def test_recording_device_and_port_survive_config_interchange(
     loaded = read_project_config(path)
     result = create_project_from_config(tmp_path / "imported", loaded)
     assert result.project.settings.recording == setting
+
+
+@pytest.mark.parametrize("backend,field,changed", [
+    ("egi_din", "parallel_port_address", 0xD010),
+    ("egi_din", "trigger_pulse_width_ms", 9),
+    ("ant_mylab_ttl", "parallel_port_address", 0xD010),
+    ("ant_mylab_ttl", "trigger_pulse_width_ms", 9),
+    ("ant_mylab_ttl", "ant_sampling_rate_hz", 2048),
+])
+def test_completed_wired_handoff_compares_available_transport_fields(
+    tmp_path, captured_completed_config, backend, field, changed,
+):
+    from fpvs_studio.runtime.recording import recording_snapshot
+
+    prefix = "egi" if backend == "egi_din" else "ant"
+    options = {"recording_backend": backend, f"{prefix}_parallel_address": 0x378,
+               f"{prefix}_pulse_width_ms": 7}
+    if backend == "ant_mylab_ttl":
+        options["ant_sampling_rate_hz"] = 512
+    payload = captured_completed_config.model_dump(mode="json", exclude_none=True)
+    payload["recording"] = options
+    payload["toolbox"].pop("acquisition_profile")
+    evidence = payload["completed_session"]["acquisition_evidence"]
+    evidence.pop("acquisition_profile")
+    capture = recording_snapshot(options).model_dump(mode="json", exclude_none=True)
+    evidence["recording"] = capture
+    path = tmp_path / "visit.fpvsconfig"
+    capture[field] = changed
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ProjectConfigError, match="wired trigger settings"):
+        read_project_config(path)
+
+    del capture[field]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    loaded = read_project_config(path)
+    assert getattr(loaded.completed_session.acquisition_evidence.recording, field) is None

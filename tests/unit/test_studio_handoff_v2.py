@@ -24,6 +24,41 @@ from fpvs_studio.core.serialization import load_project_file
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "studio_handoff"
 
 
+@pytest.mark.parametrize("second_name", ["Faces", " Faces "])
+def test_setup_export_rejects_conditions_that_share_an_event_map_name(
+    multi_condition_project, second_name,
+):
+    project = multi_condition_project
+    project.conditions[0].name = "Faces"
+    project.conditions[1].name = second_name
+    project.conditions[1].trigger_code = 128
+    before = project.model_dump()
+    with pytest.raises(ProjectConfigError, match="Two conditions use the name 'Faces'"):
+        export_project_config(project, None)
+    assert project.model_dump() == before
+
+
+@pytest.mark.parametrize("field", ["global_order_index", "block_index", "index_within_block"])
+def test_completed_order_fields_must_match_the_recorded_block(field):
+    payload = json.loads((FIXTURES / "v2-completed-biosemi.fpvsconfig").read_text(encoding="utf-8"))
+    payload["completed_session"]["ordered_runs"][0][field] = 1
+    with pytest.raises(ValidationError, match="Completed block order"):
+        ProjectConfigFile.model_validate(payload)
+
+
+def test_reader_refuses_repeated_json_marker_field_before_either_value_can_win(tmp_path):
+    portable = (FIXTURES / "v2-setup.fpvsconfig").read_text(encoding="utf-8")
+    conflicting = portable.replace(
+        '"trigger_code": 1,', '"trigger_code": 128, "trigger_code": 1,', 1,
+    )
+    assert conflicting != portable
+    path = tmp_path / "conflicting.fpvsconfig"
+    path.write_text(conflicting, encoding="utf-8")
+    with pytest.raises(ProjectConfigError, match="Duplicate JSON field.*trigger_code"):
+        read_project_config(path)
+    assert path.read_text(encoding="utf-8") == conflicting
+
+
 def test_real_producer_matches_portable_consumer_fixtures(tmp_path):
     fixtures = build_handoff_fixtures(tmp_path)
     assert set(fixtures) == {path.name for path in FIXTURES.glob("*.fpvsconfig")}

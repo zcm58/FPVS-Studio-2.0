@@ -1614,14 +1614,14 @@ def test_conditions_manual_actions_work_without_control_workflow(
     name = f"Manually authored {modality.value} condition"
     step.condition_name_edit.setText(name)
     step.condition_name_edit.editingFinished.emit()
-    step.trigger_code_spin.setValue(42)
+    step.trigger_code_spin.setValue(2)
     step.modality_combo.setCurrentIndex(step.modality_combo.findData(modality.value))
     if modality == StimulusModality.WORD:
         step.base_words_edit.setPlainText("cat\ndog")
         step.oddball_words_edit.setPlainText("chair")
         step.flush_pending_edits()
     assert window.document.get_condition(source_id).name == name
-    assert window.document.get_condition(source_id).trigger_code == 42
+    assert window.document.get_condition(source_id).trigger_code == 2
     assert step.duplicate_condition_button.isEnabled()
     assert step.remove_condition_button.isEnabled()
     assert step.words_panel.isVisible() == (modality == StimulusModality.WORD)
@@ -1633,6 +1633,7 @@ def test_conditions_manual_actions_work_without_control_workflow(
     assert duplicate_id is not None and duplicate_id != source_id
     assert len(window.document.project.conditions) == 2
     assert window.document.get_condition(duplicate_id).name == f"{name} Copy"
+    assert window.document.get_condition(duplicate_id).trigger_code == 1
     step.condition_name_edit.setText("Edited duplicate")
     step.condition_name_edit.editingFinished.emit()
     assert window.document.get_condition(duplicate_id).name == "Edited duplicate"

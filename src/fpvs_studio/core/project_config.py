@@ -434,11 +434,18 @@ class ProjectConfigCompletedSession(FPVSBaseModel):
                  else self.randomization_mode) != "fixed" or self.randomization_seeds is None
         ):
             raise ValueError("Saved ordering policy requires fixed randomization.")
-        if self.ordering_policy is not None and (
-            [identity for block in self.block_orders for identity in block]
-            != [run.condition_id for run in self.ordered_runs]
-        ):
-            raise ValueError("Completed block order must match the ordered runs.")
+        if self.block_orders or self.ordering_policy is not None:
+            expected = [
+                (block_index, within_block, condition_id)
+                for block_index, block in enumerate(self.block_orders)
+                for within_block, condition_id in enumerate(block)
+            ]
+            if len(self.ordered_runs) != len(expected) or any(
+                run.global_order_index != index or
+                (run.block_index, run.index_within_block, run.condition_id) != expected[index]
+                for index, run in enumerate(self.ordered_runs)
+            ):
+                raise ValueError("Completed block order and positions must match the ordered runs.")
         if self.randomization_modes is not None and (
             self.randomization_mode != self.randomization_modes.aggregate
         ):
@@ -578,14 +585,28 @@ class ProjectConfigFile(FPVSBaseModel):
         return self
 
     def matches_recording(self, snapshot: RecordingSnapshot) -> bool:
-        """Compare the authored device, cap and profile with the launch declaration."""
+        """Compare the saved recorder declaration with the available launch evidence."""
         selected = self.recording.recording_backend if self.recording else "serial"
         montage = self.recording.electrode_montage if self.recording else None
+        wired_fields: tuple[tuple[int | None, int | None], ...] = ()
+        if self.recording and snapshot.effective_backend == "egi_din":
+            wired_fields = (
+                (self.recording.egi_parallel_address, snapshot.parallel_port_address),
+                (self.recording.egi_pulse_width_ms, snapshot.trigger_pulse_width_ms),
+            )
+        elif self.recording and snapshot.effective_backend == "ant_mylab_ttl":
+            wired_fields = (
+                (self.recording.ant_parallel_address, snapshot.parallel_port_address),
+                (self.recording.ant_pulse_width_ms, snapshot.trigger_pulse_width_ms),
+                (self.recording.ant_sampling_rate_hz, snapshot.ant_sampling_rate_hz),
+            )
         return (
             selected == snapshot.selected_backend
             and montage == snapshot.electrode_montage
             and self.toolbox.acquisition_profile == snapshot.acquisition_profile
             and snapshot.acquisition_profile == acquisition_profile_for_recording(selected)
+            and all(saved is None or captured is None or saved == captured
+                    for saved, captured in wired_fields)
         )
 
     @model_validator(mode="after")
@@ -600,7 +621,7 @@ class ProjectConfigFile(FPVSBaseModel):
         if evidence and (not self.matches_recording(evidence.recording)
                          or evidence.acquisition_profile != self.toolbox.acquisition_profile):
             raise ValueError("The recording montage or recorder differs from the captured session. "
-                             "Check the recording identity.")
+                             "Check the recording identity and wired trigger settings.")
         return self
 
     @model_validator(mode="after")
@@ -925,11 +946,22 @@ def write_project_config(path: Path, config: ProjectConfigFile) -> None:
     )
 
 
+def _unique_handoff_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for name, value in pairs:
+        if name in fields:
+            raise ProjectConfigError(f"Duplicate JSON field in the Studio handoff: {name!r}.")
+        fields[name] = value
+    return fields
+
+
 def read_project_config(path: Path) -> ProjectConfigFile:
     """Read a UTF-8 JSON `.fpvsconfig` file."""
 
     try:
-        raw_payload = json.loads(path.read_text(encoding="utf-8-sig"))
+        raw_payload = json.loads(
+            path.read_text(encoding="utf-8-sig"), object_pairs_hook=_unique_handoff_fields,
+        )
     except OSError as exc:
         raise ProjectConfigError(f"Unable to read project config: {path}") from exc
     except (json.JSONDecodeError, UnicodeDecodeError) as exc:
@@ -1186,7 +1218,7 @@ def retain_session_snapshot(root: Path, config: ProjectConfigFile) -> Path:
 def _read_session_snapshot(path: Path) -> ProjectConfigFile:
     root = path.parent.parent.parent
     try:
-        row = json.loads(path.read_text(encoding="utf-8"))
+        row = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_unique_handoff_fields)
         key = path.name.removesuffix(".study-session-v1.json")
         digest = row["setup_sha256"]
         if (row["format_version"] != 1 or not re.fullmatch(r"[0-9a-f]{64}", digest)
@@ -1196,14 +1228,16 @@ def _read_session_snapshot(path: Path) -> ProjectConfigFile:
         blob = setup.read_bytes()
         if hashlib.sha256(blob).hexdigest() != digest:
             raise ValueError("Stored as-run setup fingerprint does not match.")
-        data = json.loads(blob)
+        data = json.loads(blob, object_pairs_hook=_unique_handoff_fields)
         data["producer"]["exported_at"] = row["exported_at"]
         data["kind"] = "completed_session"
         data["completed_session"] = row["completed"]
         evidence_path = resolve_project_relative_path(
             root, f"logs/acquisition/{key}.acquisition-v1.json",
         )
-        evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+        evidence = json.loads(
+            evidence_path.read_text(encoding="utf-8"), object_pairs_hook=_unique_handoff_fields,
+        )
         data["completed_session"]["acquisition_evidence"] = evidence
         return ProjectConfigFile.model_validate(data)
     except (KeyError, TypeError, ValueError, OSError) as exc:
@@ -1328,14 +1362,24 @@ def _toolbox_config(
 
     validate_masking_catch_trials(project, project.conditions)
     oddball_trigger_code = _validated_project_oddball_trigger_code(project.settings.triggers)
-    event_map = {condition.name: condition.trigger_code for condition in project.conditions}
+    names: set[str] = set()
+    event_map: dict[str, int] = {}
+    for condition in project.conditions:
+        name = condition.name.strip()
+        if name in names:
+            raise ProjectConfigError(
+                f"Two conditions use the name {name!r}. Give each condition a distinct name "
+                "before exporting its trigger map."
+            )
+        names.add(name)
+        event_map[condition.name] = condition.trigger_code
     seen_variants: set[str] = set()
     for condition in project.conditions:
         masking = condition_masking(project, condition)
         if masking is None or masking.catch_trial is None or masking.variant in seen_variants:
             continue
         label = f"{masking.variant.capitalize()} catch"
-        if label in event_map:
+        if label in names:
             raise ProjectConfigError(
                 f"The catch marker label '{label}' is already a condition name."
             )

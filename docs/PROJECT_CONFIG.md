@@ -143,6 +143,18 @@ require review before export.
 The [runtime contract](RUNTIME_EXECUTION.md#completed-toolbox-handoff) describes
 acquisition profiles and the evidence captured at launch.
 
+The portable condition map uses display names as keys. Give each condition a
+distinct name, including after trimming surrounding spaces. New conditions and
+duplicates receive an unused event code and skip the project's oddball marker.
+Export preserves the saved codes. Repeated JSON fields in a handoff are ambiguous
+and Studio reports the repeated key.
+
+Where a block order is present, each completed run's global, block and
+within-block indices must identify that same occurrence. For EGI DIN and ANT
+TTL, any parallel address and pulse width declared in both the setup and the
+active recording snapshot must agree. The same check applies to the ANT eego
+Recorder sampling rate. Historical missing fields remain unknown.
+
 ### Display cadence in the handoff
 
 Project saves retain the refresh target in `settings.display.preferred_refresh_hz`.

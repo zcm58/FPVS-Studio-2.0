@@ -49,6 +49,34 @@ def test_application_exit_drains_active_workers_and_preserves_exit_status(cleanu
     assert events == ["exec", *(["shutdown", "exec"] * cleanup_cycles)]
 
 
+def test_automatic_condition_names_and_codes_survive_removal_and_custom_markers(
+    tmp_path, sample_project,
+):
+    from fpvs_studio.gui.document_conditions import DocumentConditionMixin
+
+    class Document(DocumentConditionMixin):
+        def _replace_project(self, project):
+            self._project = project
+
+    document = Document()
+    document._project_root = tmp_path
+    document._project = sample_project
+    original = sample_project.conditions[0]
+    original.trigger_code = 2
+    sample_project.settings.triggers.oddball_trigger_code = 1
+    sample_project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
+    first = document.create_condition()
+    second = document.create_condition()
+    assert [item.trigger_code for item in document.ordered_conditions()] == [2, 3, 4]
+    document.remove_condition(first)
+    added = document.get_condition(document.create_condition())
+    assert added.name == "Condition 4"
+    assert added.trigger_code == 3
+    copied = document.get_condition(document.duplicate_condition(second))
+    assert copied.trigger_code == 5
+    assert document.get_condition(original.condition_id).trigger_code == 2
+
+
 @pytest.fixture
 def wizard_steps():
     source = Path(__file__).resolve().parents[2] / "src/fpvs_studio/gui/setup_wizard_page.py"

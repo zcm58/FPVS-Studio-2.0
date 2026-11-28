@@ -1,21 +1,27 @@
 import csv
 import json
 from pathlib import Path
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
+from tests.unit.runtime_launcher_helpers import StubEngine
 
 from fpvs_studio.core.compiler import compile_session_plan
 from fpvs_studio.core.data_sharing import SharingProfile, SharingSettings, protocol_fingerprint
+from fpvs_studio.core.models import ProjectRecordingSettings
 from fpvs_studio.core.project_config import (
     create_project_from_config,
+    export_project_config,
+    find_latest_completed_toolbox_config,
     read_project_config,
     retain_session_snapshot,
     write_project_config,
 )
-from fpvs_studio.core.serialization import save_project_file, write_json_file
+from fpvs_studio.core.serialization import load_project_file, save_project_file, write_json_file
 from fpvs_studio.core.study_lifecycle import get_study, set_collection_complete
 from fpvs_studio.data_sharing.storage import save_settings
+from fpvs_studio.runtime.run_worker import RuntimeWorker
 from fpvs_studio.runtime.study_handoff import (
     build_study_handoff,
     capture_study_run,
@@ -23,6 +29,71 @@ from fpvs_studio.runtime.study_handoff import (
 )
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "studio_handoff"
+
+
+def test_multiblock_din_markers_match_saved_project_session_and_study(
+    multi_condition_project, multi_condition_project_root, tmp_path, monkeypatch,
+):
+    project, root = multi_condition_project, multi_condition_project_root
+    project.settings.recording = ProjectRecordingSettings(
+        recording_backend="egi_din", egi_parallel_address=0xD010, egi_pulse_width_ms=4,
+    )
+    project.settings.triggers.oddball_trigger_code = 201
+    project.settings.triggers.allow_nonstandard_oddball_trigger_code = True
+    project.settings.fixation_task.enabled = False
+    project.settings.session.condition_ordering = "randomized_blocks"
+    codes = [1, 55, 128, 255]
+    for condition, code in zip(project.conditions, codes, strict=True):
+        condition.name = f"Visages {code} – déjà vu"
+        condition.trigger_code = code
+        condition.oddball_cycle_repeats_per_sequence = 3
+    path = root / "project.json"
+    save_project_file(project, path)
+    project = load_project_file(path)
+    expected_map = {c.name: c.trigger_code for c in project.conditions}
+    setup = export_project_config(project, root)
+    setup_path = tmp_path / "setup.fpvsconfig"
+    write_project_config(setup_path, setup)
+    assert read_project_config(setup_path).toolbox.event_map == expected_map
+    plan = compile_session_plan(project, project_root=root, refresh_hz=60, random_seed=77)
+    monkeypatch.setattr(
+        "fpvs_studio.runtime.triggers.EgiDinParallelBackend",
+        Mock(return_value=Mock(backend_name="egi_din", emits_external_markers=True)),
+    )
+    summary = RuntimeWorker(StubEngine({})).execute_session(
+        root, plan, root / "runs/P007_session01", participant_number="007",
+        participant_session_number=1, relative_output_dir="runs/P007_session01",
+        runtime_options={
+            **project.settings.recording.model_dump(), "export_mode": "compact",
+            "toolbox_handoff_config": setup.model_dump(mode="json"),
+            "studio_protocol_version_id": str(uuid4()),
+        },
+    )
+    assert not summary.aborted
+    completed = find_latest_completed_toolbox_config(root)
+    path = tmp_path / "completed.fpvsconfig"
+    write_project_config(path, completed)
+    saved = read_project_config(path).completed_session
+    assert len(saved.block_orders) == 2
+    set_collection_complete(root, True)
+    study_path = export_study_handoff(root, tmp_path / "study.fpvsconfig")
+    study = json.loads(study_path.read_text(encoding="utf-8"))
+    visit, = study["visits"]
+    assert study["setups"][visit["setup_id"]]["toolbox"]["event_map"] == expected_map
+    assert len(saved.ordered_runs) == len(visit["runs"]) == 8
+    offset = 0
+    for entry, actual, run in zip(
+        saved.ordered_runs, saved.acquisition_evidence.runs, visit["runs"], strict=True,
+    ):
+        assert (run["run_id"], run["condition_id"]) == (entry.run_id, entry.condition_id)
+        markers = [[e.frame_index, e.code, e.label] for e in entry.trigger_events]
+        assert run["planned_markers"] == markers
+        assert [e[1:4] for e in run["attempted_markers"]] == markers
+        assert [e.trigger_index for e in actual.attempted_events] == list(
+            range(offset, offset + len(markers)),
+        )
+        assert [e[1] for e in markers] == [expected_map[entry.condition_name], 201, 201, 201]
+        offset += len(markers)
 
 
 def test_pilot_with_same_visit_identity_cannot_hide_an_actual_recording(tmp_path):
