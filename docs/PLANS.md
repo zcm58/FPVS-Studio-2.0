@@ -34,6 +34,7 @@ watchdog and matched every retained report payload, receipt and capture.
 
 | Plan | Current scope or remaining gate |
 | --- | --- |
+| [ANT eego mylab TTL](exec-plans/active/ant-mylab-ttl.md) | Eight-bit wired marker output and native CNT verification. The lab has no physical setup for receipt or optical timing checks. |
 | [Net Amps 400 DIN markers](exec-plans/active/egi-din-markers.md) | Sender and MFF verification tested in software. Physical receipt and optical timing are unqualified because the lab has no hardware access. |
 | [Slate & Signal Teal](exec-plans/active/slate-and-signal-teal-appearance.md) | Theme switching, contrast, experiment isolation and full-window 125% checks passed. Repeat the full-window matrix at 150% on a taller display. |
 | [Trigger Tester serial discovery](exec-plans/active/trigger-tester-serial-discovery.md) | Recorder 2 digit sends verified. Qualify physical automatic discovery and BioSemi reconnect in ActiView. |

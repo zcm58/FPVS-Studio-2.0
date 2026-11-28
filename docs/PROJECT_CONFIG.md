@@ -108,6 +108,10 @@ listed below.
 | Brain Products (`brainproducts_triggerbox` or `brainproducts_parallel`) | `brainproducts_acticap_gacs_64`, `brainproducts_acticap_gacs_128`, or `recorded` |
 | Unicorn Hybrid Black (`unicorn_udp`) | `unicorn8` for the factory layout |
 | EGI Net Amps 400 wired DIN (`egi_din`) | Marker output only. Leave the montage and acquisition profile unset. |
+| ANT Neuro eego mylab, 8-bit TTL (`ant_mylab_ttl`) | Marker output only. Leave the montage and acquisition profile unset. |
+
+ANT handoffs carry the configured parallel-port address, pulse width and eego
+Recorder sample rate. Other recorder handoffs omit these ANT fields.
 
 EGI handoffs include the configured parallel-port address and pulse width. When
 another device is selected, Studio retains those preferences in its project and

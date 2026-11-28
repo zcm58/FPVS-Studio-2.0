@@ -621,7 +621,7 @@ def test_computer_recording_default_updates_only_inheriting_projects(tmp_path):
 
 @pytest.mark.parametrize("selection", [
     "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-    "unicorn_udp", "egi_din",
+    "unicorn_udp", "egi_din", "ant_mylab_ttl",
 ])
 @pytest.mark.parametrize("test_mode", [False, True])
 def test_computer_recording_default_and_project_confirmation_reach_handoff(
@@ -645,6 +645,8 @@ def test_computer_recording_default_and_project_confirmation_reach_handoff(
         "recording_backend": selection, "unicorn_udp_port": 2345,
         **({"egi_parallel_address": 0xD020, "egi_pulse_width_ms": 7}
            if selection == "egi_din" else {}),
+        **({"ant_parallel_address": 0xD030, "ant_pulse_width_ms": 6, "ant_sampling_rate_hz": 500}
+           if selection == "ant_mylab_ttl" else {}),
         "brainproducts_serial_port": "COM123", "brainproducts_pulse_width_ms": 20,
         "brainproducts_parallel_address": 0x378,
         "brainproducts_amplifier": "actichamp", "brainproducts_sampling_rate_hz": 500,
@@ -682,6 +684,10 @@ def test_computer_recording_default_and_project_confirmation_reach_handoff(
     if selection == "egi_din":
         assert settings.egi_parallel_address == 0xD020
         assert settings.egi_pulse_width_ms == 7
+    if selection == "ant_mylab_ttl":
+        assert settings.ant_parallel_address == 0xD030
+        assert settings.ant_pulse_width_ms == 6
+        assert settings.ant_sampling_rate_hz == 500
     assert settings.recording_selection_source == (
         "project_settings" if requires_confirmation else "local_settings"
     )

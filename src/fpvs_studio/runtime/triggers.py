@@ -18,7 +18,11 @@ from fpvs_studio.triggers.base import (
 )
 from fpvs_studio.triggers.brainproducts_backend import BrainProductsTriggerBoxBackend
 from fpvs_studio.triggers.null_backend import NullBackend
-from fpvs_studio.triggers.parallel_backend import EgiDinParallelBackend, ParallelPortBackend
+from fpvs_studio.triggers.parallel_backend import (
+    AntMylabParallelBackend,
+    EgiDinParallelBackend,
+    ParallelPortBackend,
+)
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
@@ -252,6 +256,15 @@ def build_trigger_backend(
                 pulse_width_ms=_positive_int_option(options, "egi_pulse_width_ms"),
             ),
             backend_name="egi_din",
+        ), []
+    if backend_name == "ant_mylab_ttl":
+        return LoggedTriggerBackend(
+            AntMylabParallelBackend(
+                address=_positive_int_option(options, "ant_parallel_address"),
+                pulse_width_ms=_positive_int_option(options, "ant_pulse_width_ms"),
+                sampling_rate_hz=_positive_int_option(options, "ant_sampling_rate_hz"),
+            ),
+            backend_name="ant_mylab_ttl",
         ), []
     if backend_name == "brainproducts_parallel":
         return LoggedTriggerBackend(

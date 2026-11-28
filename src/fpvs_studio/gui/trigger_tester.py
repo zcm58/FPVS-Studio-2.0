@@ -24,6 +24,7 @@ from fpvs_studio.core.models import ProjectRecordingSettings, TriggerSettings
 from fpvs_studio.gui.components import apply_dialog_theme, mark_secondary_action
 from fpvs_studio.gui.window_helpers import _coerce_exception, _show_error_dialog
 from fpvs_studio.gui.workers import BackgroundTask
+from fpvs_studio.runtime.recording import validate_recording_configuration
 from fpvs_studio.triggers.base import TriggerBackend
 from fpvs_studio.triggers.biosemi_discovery import (
     biosemi_reconnected_port,
@@ -41,12 +42,18 @@ from fpvs_studio.triggers.brainproducts_errors import (
     triggerbox_port_error_message,
 )
 from fpvs_studio.triggers.manual import send_test_trigger
-from fpvs_studio.triggers.parallel_backend import EgiDinParallelBackend, ParallelPortBackend
+from fpvs_studio.triggers.parallel_backend import (
+    AntMylabParallelBackend,
+    EgiDinParallelBackend,
+    ParallelPortBackend,
+)
 from fpvs_studio.triggers.serial_backend import SerialBackend, resolve_serial_port
 from fpvs_studio.triggers.serial_port_access import SerialPortAccessError, check_serial_port_access
 from fpvs_studio.triggers.unicorn_udp_backend import UnicornUDPBackend
 
 LOGGER = logging.getLogger(__name__)
+
+_WIRED_MARKERS = {"egi_din": ("DIN", "Net Station"), "ant_mylab_ttl": ("TTL", "eego Recorder")}
 
 
 class _PortCheckError(RuntimeError):
@@ -76,8 +83,19 @@ class TriggerTesterDialog(QDialog):
         self._baudrate = triggers.baudrate
         self._pulse_width_ms = recording.brainproducts_pulse_width_ms
         self._parallel_address = recording.brainproducts_parallel_address
-        self._egi_address = recording.egi_parallel_address
-        self._egi_pulse_width_ms = recording.egi_pulse_width_ms
+        self._wired_ports = {
+            "egi_din": (recording.egi_parallel_address, recording.egi_pulse_width_ms),
+            "ant_mylab_ttl": (recording.ant_parallel_address, recording.ant_pulse_width_ms),
+        }
+        self._ant_sampling_rate_hz = recording.ant_sampling_rate_hz
+        self._wired_issues: dict[str, str] = {}
+        for backend in _WIRED_MARKERS:
+            options = recording.model_dump(exclude={"electrode_montage"})
+            options["recording_backend"] = backend
+            try:
+                validate_recording_configuration(options)
+            except ValueError as exc:
+                self._wired_issues[backend] = str(exc)
         self._unicorn_udp_port = recording.unicorn_udp_port
         self._output = ""
         self._task: BackgroundTask | None = None
@@ -97,6 +115,7 @@ class TriggerTesterDialog(QDialog):
         self.output_combo.addItem("BrainVision (actiCHamp parallel port)", "brainproducts_parallel")
         self.output_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
         self.output_combo.addItem("EGI Net Amps 400 (wired DIN)", "egi_din")
+        self.output_combo.addItem("ANT Neuro eego mylab (8-bit wired TTL)", "ant_mylab_ttl")
         self.output_combo.setAccessibleName("Recording output")
         form.addRow("Recording output", self.output_combo)
         self.port_edit = QLineEdit(self)
@@ -151,20 +170,18 @@ class TriggerTesterDialog(QDialog):
         mark_secondary_action(self.find_port_button)
         self.find_port_button.toggled.connect(self._find_port_toggled)
         actions.addWidget(self.find_port_button)
-        self.egi_code_label = QLabel("DIN code (1–255)", self)
-        self.egi_code_edit = QLineEdit(self)
-        self.egi_code_edit.setAccessibleName("DIN code from 1 to 255")
-        self.egi_code_label.setBuddy(self.egi_code_edit)
-        self.egi_code_edit.setMaximumWidth(85)
-        self.egi_code_button = QPushButton("Send code", self)
-        self.egi_code_button.setAutoDefault(False)
-        self.egi_code_button.setAccessibleName("Send DIN code")
-        self.egi_code_edit.textChanged.connect(self._refresh_controls)
-        self.egi_code_edit.returnPressed.connect(self._send_egi_code)
-        self.egi_code_button.clicked.connect(self._send_egi_code)
-        actions.addWidget(self.egi_code_label)
-        actions.addWidget(self.egi_code_edit)
-        actions.addWidget(self.egi_code_button)
+        self.word_code_label = QLabel(self)
+        self.word_code_edit = QLineEdit(self)
+        self.word_code_label.setBuddy(self.word_code_edit)
+        self.word_code_edit.setMaximumWidth(85)
+        self.word_code_button = QPushButton("Send code", self)
+        self.word_code_button.setAutoDefault(False)
+        self.word_code_edit.textChanged.connect(self._refresh_controls)
+        self.word_code_edit.returnPressed.connect(self._send_word_code)
+        self.word_code_button.clicked.connect(self._send_word_code)
+        actions.addWidget(self.word_code_label)
+        actions.addWidget(self.word_code_edit)
+        actions.addWidget(self.word_code_button)
         actions.addStretch()
         self.close_button = QPushButton("Close", self)
         self.close_button.setAutoDefault(False)
@@ -185,7 +202,7 @@ class TriggerTesterDialog(QDialog):
         for widget in (
             self, self.output_combo, self.port_edit, self.check_port_button,
             self.manual_port_button, *self.digit_buttons, self.find_port_button, self.close_button,
-            self.egi_code_edit, self.egi_code_button,
+            self.word_code_edit, self.word_code_button,
         ):
             widget.installEventFilter(self)
         initial_focus: QWidget = self.output_combo
@@ -206,7 +223,7 @@ class TriggerTesterDialog(QDialog):
 
     def eventFilter(self, watched: QObject, event: QEvent) -> bool:  # noqa: N802
         if isinstance(event, QKeyEvent) and event.type() == QEvent.Type.KeyPress:
-            if watched is self.egi_code_edit:
+            if watched is self.word_code_edit:
                 if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and event.isAutoRepeat():
                     return True
                 return super().eventFilter(watched, event)
@@ -236,12 +253,17 @@ class TriggerTesterDialog(QDialog):
         if self._output in self._ports:
             self._ports[self._output] = self.port_edit.text()
         self._output = self.output_combo.currentData() or ""
-        for widget in (self.egi_code_label, self.egi_code_edit, self.egi_code_button):
-            widget.setVisible(self._output == "egi_din")
+        if self._output in _WIRED_MARKERS:
+            name, _recorder = _WIRED_MARKERS[self._output]
+            self.word_code_label.setText(f"{name} code (1–255)")
+            self.word_code_edit.setAccessibleName(f"{name} code from 1 to 255")
+            self.word_code_button.setAccessibleName(f"Send {name} code")
+        for widget in (self.word_code_label, self.word_code_edit, self.word_code_button):
+            widget.setVisible(self._output in _WIRED_MARKERS)
         with QSignalBlocker(self.manual_port_button):
             self.manual_port_button.setChecked(False)
         self._stop_finding_port()
-        parallel = self._output in ("brainproducts_parallel", "egi_din")
+        parallel = self._output == "brainproducts_parallel" or self._output in _WIRED_MARKERS
         unicorn = self._output == "unicorn_udp"
         if unicorn:
             label = "UDP endpoint"
@@ -249,7 +271,7 @@ class TriggerTesterDialog(QDialog):
             tip = "Match Recorder’s Trigger UDP Input. Set the port in Settings > Recording."
         elif parallel:
             label = "Parallel address"
-            address = self._egi_address if self._output == "egi_din" else self._parallel_address
+            address = self._wired_ports.get(self._output, (self._parallel_address, None))[0]
             value = f"0x{address:X}" if address is not None else ""
             tip = ""
         else:
@@ -278,10 +300,8 @@ class TriggerTesterDialog(QDialog):
             return "Choose a recording output."
         if self._output == "brainproducts_parallel" and self._parallel_address is None:
             return "Set the parallel I/O address in Settings > Recording > Recording Setup."
-        if self._output == "egi_din" and (
-            self._egi_address is None or self._egi_pulse_width_ms is None
-        ):
-            return "Set the EGI parallel I/O address and DIN pulse width in Settings > Recording."
+        if self._output in self._wired_issues:
+            return self._wired_issues[self._output]
         if self.find_port_button.isChecked():
             return "Finish finding the BioSemi interface before sending a trigger."
         if self._automatic_connection:
@@ -301,8 +321,9 @@ class TriggerTesterDialog(QDialog):
             "Enable Trigger UDP Input in Unicorn Recorder and record to verify markers."
             if self._output == "unicorn_udp" else self._configuration_issue()
         )
-        if self._output == "egi_din" and not status:
-            status = "Start recording in Net Station to verify the DIN markers."
+        if self._output in _WIRED_MARKERS and not status:
+            name, recorder = _WIRED_MARKERS[self._output]
+            status = f"Start recording in {recorder} to verify the {name} markers."
         self.status_label.setText(status)
         self.status_label.setToolTip("")
         self._refresh_controls()
@@ -359,9 +380,9 @@ class TriggerTesterDialog(QDialog):
         )
         self.close_button.setEnabled(idle)
         can_send = idle and not self._configuration_issue()
-        self.egi_code_edit.setReadOnly(not idle)
-        self.egi_code_button.setEnabled(
-            self._output == "egi_din" and can_send and self._entered_egi_code() is not None,
+        self.word_code_edit.setReadOnly(not idle)
+        self.word_code_button.setEnabled(
+            self._output in _WIRED_MARKERS and can_send and self._entered_word_code() is not None,
         )
         for code, button in enumerate(self.digit_buttons):
             button.setEnabled(can_send and (code != 0 or self._output != "unicorn_udp"))
@@ -486,22 +507,22 @@ class TriggerTesterDialog(QDialog):
         )
         self.status_label.setToolTip(str(error))
 
-    def _entered_egi_code(self) -> int | None:
-        text = self.egi_code_edit.text().strip()
+    def _entered_word_code(self) -> int | None:
+        text = self.word_code_edit.text().strip()
         if len(text) > 3 or not text.isascii() or not text.isdecimal():
             return None
         code = int(text)
         return code if 1 <= code <= 255 else None
 
     @Slot()
-    def _send_egi_code(self) -> None:
-        code = self._entered_egi_code()
-        if code is not None and self.egi_code_button.isEnabled():
-            self.egi_code_edit.setFocus()
+    def _send_word_code(self) -> None:
+        code = self._entered_word_code()
+        if code is not None and self.word_code_button.isEnabled():
+            self.word_code_edit.setFocus()
             self._send(code)
 
     def _send(self, code: int) -> None:
-        button = self.digit_buttons[code] if 0 <= code <= 9 else self.egi_code_button
+        button = self.digit_buttons[code] if 0 <= code <= 9 else self.word_code_button
         if not button.isEnabled():
             return
         output = self._output
@@ -509,8 +530,8 @@ class TriggerTesterDialog(QDialog):
         address = self._parallel_address
         baudrate = self._baudrate
         pulse_width_ms = self._pulse_width_ms
-        egi_address = self._egi_address
-        egi_width = self._egi_pulse_width_ms
+        word_address, word_width = self._wired_ports.get(output, (None, None))
+        ant_rate = self._ant_sampling_rate_hz
         unicorn_port = self._unicorn_udp_port
 
         def send() -> int:
@@ -521,8 +542,13 @@ class TriggerTesterDialog(QDialog):
                 backend = BrainProductsTriggerBoxBackend(port=port, pulse_width_ms=pulse_width_ms)
             elif output == "brainproducts_parallel" and address is not None:
                 backend = ParallelPortBackend(address, pulse_width_ms=pulse_width_ms)
-            elif output == "egi_din" and egi_address is not None and egi_width is not None:
-                backend = EgiDinParallelBackend(egi_address, pulse_width_ms=egi_width)
+            elif output == "egi_din" and word_address is not None and word_width is not None:
+                backend = EgiDinParallelBackend(word_address, pulse_width_ms=word_width)
+            elif (output == "ant_mylab_ttl" and word_address is not None
+                  and word_width is not None and ant_rate is not None):
+                backend = AntMylabParallelBackend(
+                    word_address, pulse_width_ms=word_width, sampling_rate_hz=ant_rate,
+                )
             elif output == "unicorn_udp":
                 backend = UnicornUDPBackend(unicorn_port)
             else:
@@ -618,10 +644,11 @@ class TriggerTesterDialog(QDialog):
 
     @Slot(object)
     def _show_send_success(self, code: object) -> None:
-        if self._output == "egi_din":
+        if self._output in _WIRED_MARKERS:
+            name, recorder = _WIRED_MARKERS[self._output]
             self.status_label.setText(
                 "Studio wrote 0 (idle)." if code == 0
-                else f"Studio sent DIN code {code}. Check the event in Net Station."
+                else f"Studio sent {name} code {code}. Check the event in {recorder}."
             )
             return
         if self._output == "unicorn_udp":
@@ -637,11 +664,13 @@ class TriggerTesterDialog(QDialog):
     @Slot(object)
     def _remember_send_error(self, error: object) -> None:
         failure = _coerce_exception(error)
-        if self._output in ("unicorn_udp", "egi_din"):
-            output = "EGI DIN" if self._output == "egi_din" else "Unicorn UDP"
+        if self._output == "unicorn_udp" or self._output in _WIRED_MARKERS:
+            output = (
+                "Unicorn UDP" if self._output == "unicorn_udp" else self.output_combo.currentText()
+            )
             self.status_label.setText(f"{output} trigger test failed. See details, then retry.")
             self.status_label.setToolTip(str(failure))
-            if self._output == "egi_din":
+            if self._output in _WIRED_MARKERS:
                 self._pending_error = ("Send Test Trigger", failure, None)
             return
         self._checked_port = None
@@ -653,8 +682,8 @@ class TriggerTesterDialog(QDialog):
         self._task = None
         error, self._pending_error = self._pending_error, None
         self._refresh_controls()
-        if self.egi_code_edit.hasFocus():
-            self.egi_code_edit.selectAll()
+        if self.word_code_edit.hasFocus():
+            self.word_code_edit.selectAll()
         elif self.digit_buttons[1].isEnabled():
             self.digit_buttons[1].setFocus()
         elif self.check_port_button.isEnabled():

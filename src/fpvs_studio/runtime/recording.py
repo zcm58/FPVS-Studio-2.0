@@ -9,6 +9,7 @@ from fpvs_studio.core.brainproducts import AMPLIFIER_LABELS, minimum_pulse_width
 from fpvs_studio.core.execution import RecordingSnapshot
 from fpvs_studio.core.recording_hardware import (
     acquisition_profile_for_recording,
+    validate_ant_pulse_timing,
     validate_electrode_montage,
 )
 from fpvs_studio.core.run_spec import RunSpec
@@ -18,6 +19,8 @@ UNICORN_VALIDATION_NOTE = (
     "Unicorn marker output is enabled for recording tests. "
     "Full receiver and physical timing validation remain pending."
 )
+
+_TTL_OUTPUTS = {"egi_din": ("egi", "EGI DIN"), "ant_mylab_ttl": ("ant", "ANT eego mylab TTL")}
 
 
 class RecordingConfigurationError(ValueError):
@@ -31,7 +34,7 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
     selected = values.get("recording_backend")
     if selected not in (
         None, "serial", "unicorn_udp", "biosemi_active_three", "brainproducts_triggerbox",
-        "brainproducts_parallel", "egi_din",
+        "brainproducts_parallel", *_TTL_OUTPUTS,
     ):
         raise RecordingConfigurationError(
             "Unknown recording backend. Open Settings > Recording and choose a "
@@ -42,7 +45,9 @@ def resolve_recording_backend(options: Mapping[str, object] | None = None) -> st
             raise RecordingConfigurationError(f"{key} must be a boolean.")
     if values.get("experiment_test_mode", False) or values.get("pilot_mode", False):
         return "null"
-    if selected in ("unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel", "egi_din"):
+    if selected in (
+        "unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel", *_TTL_OUTPUTS,
+    ):
         return str(selected)
     return "serial"
 
@@ -73,18 +78,27 @@ def validate_recording_configuration(options: Mapping[str, object] | None = None
                 "Unicorn UDP port must be an integer from 1 to 65535."
             )
     selected = values.get("recording_backend")
-    if selected == "egi_din":
+    if isinstance(selected, str) and selected in _TTL_OUTPUTS:
+        prefix, family = _TTL_OUTPUTS[selected]
         for key, maximum, label in (
-            ("egi_parallel_address", 65535, "parallel-port I/O address"),
-            ("egi_pulse_width_ms", 1000, "DIN pulse width in milliseconds"),
+            (f"{prefix}_parallel_address", 65535, "parallel-port I/O address"),
+            (f"{prefix}_pulse_width_ms", 1000, "pulse width in milliseconds"),
         ):
             value = values.get(key)
             if value is None and effective == "null":
                 continue
             if type(value) is not int or not 1 <= value <= maximum:
                 raise RecordingConfigurationError(
-                    f"Set the EGI {label} in Settings > Recording (integer 1–{maximum})."
+                    f"Set the {family} {label} in Settings > Recording (integer 1–{maximum})."
                 )
+        if selected == "ant_mylab_ttl":
+            rate = values.get("ant_sampling_rate_hz")
+            width = values.get("ant_pulse_width_ms")
+            if rate is not None or effective != "null":
+                try:
+                    validate_ant_pulse_timing(cast(int | None, width), rate)
+                except ValueError as exc:
+                    raise RecordingConfigurationError(str(exc)) from exc
     if selected in ("brainproducts_triggerbox", "brainproducts_parallel"):
         parallel = selected == "brainproducts_parallel"
         if parallel:
@@ -180,11 +194,12 @@ def validate_recording_trigger_schedule(
     """Reject schedules that cannot contain both the configured high and low intervals."""
 
     effective = validate_recording_configuration(options)
-    if effective not in ("brainproducts_triggerbox", "brainproducts_parallel", "egi_din"):
+    if effective not in ("brainproducts_triggerbox", "brainproducts_parallel", *_TTL_OUTPUTS):
         return
-    if effective == "egi_din":
-        pulse_ms = cast(int, (options or {})["egi_pulse_width_ms"])
-        family, transport = "EGI DIN", "Parallel-port output"
+    if effective in _TTL_OUTPUTS:
+        prefix, family = _TTL_OUTPUTS[effective]
+        pulse_ms = cast(int, (options or {})[f"{prefix}_pulse_width_ms"])
+        transport = "Parallel-port output"
     else:
         pulse_ms = cast(int, (options or {}).get("brainproducts_pulse_width_ms", 10))
         family = "Brain Products"
@@ -219,13 +234,15 @@ def recording_backend_label(options: Mapping[str, object] | None = None) -> str:
             f"{values.get('brainproducts_serial_port', 'COM3')} "
             f"({values.get('brainproducts_pulse_width_ms', 10)} ms pulse)"
         )
-    if effective == "egi_din":
+    if effective in _TTL_OUTPUTS:
         values = options or {}
-        address = values.get("egi_parallel_address")
+        prefix, family = _TTL_OUTPUTS[effective]
+        address = values.get(f"{prefix}_parallel_address")
         endpoint = f"0x{address:X}" if type(address) is int else "address required"
-        pulse = values.get("egi_pulse_width_ms")
+        pulse = values.get(f"{prefix}_pulse_width_ms")
         timing = f"{pulse} ms pulse" if type(pulse) is int else "pulse width required"
-        return f"EGI Net Amps 400 DIN (parallel port) — {endpoint} ({timing})"
+        name = "EGI Net Amps 400 DIN" if effective == "egi_din" else family
+        return f"{name} (parallel port) — {endpoint} ({timing})"
     if effective == "brainproducts_parallel":
         values = options or {}
         address = values.get("brainproducts_parallel_address")
@@ -259,11 +276,11 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
     address = None
     if selected == "brainproducts_parallel":
         address = values.get("brainproducts_parallel_address")
-    elif selected == "egi_din":
-        address = values.get("egi_parallel_address")
+    elif selected in _TTL_OUTPUTS:
+        address = values.get(f"{_TTL_OUTPUTS[selected][0]}_parallel_address")
     pulse_width = values.get("brainproducts_pulse_width_ms", 10) if brainproducts else None
-    if effective == "egi_din":
-        pulse_width = values.get("egi_pulse_width_ms")
+    if effective in _TTL_OUTPUTS:
+        pulse_width = values.get(f"{_TTL_OUTPUTS[effective][0]}_pulse_width_ms")
     return RecordingSnapshot.model_validate(
         {
             "selected_backend": selected,
@@ -284,6 +301,8 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
             ),
             "parallel_port_address": address,
             "trigger_pulse_width_ms": pulse_width,
+            "ant_sampling_rate_hz": values.get("ant_sampling_rate_hz")
+            if selected == "ant_mylab_ttl" else None,
             "brainproducts_amplifier": (
                 "actichamp" if selected == "brainproducts_parallel" else (
                     values.get("brainproducts_amplifier")
@@ -304,7 +323,7 @@ def recording_snapshot(options: Mapping[str, object] | None = None) -> Recording
             "receiver_validation": (
                 "pending" if selected in ("unicorn_udp", "biosemi_active_three",
                                            "brainproducts_triggerbox", "brainproducts_parallel",
-                                           "egi_din")
+                                           *_TTL_OUTPUTS)
                 else "not_applicable"
             ),
         }

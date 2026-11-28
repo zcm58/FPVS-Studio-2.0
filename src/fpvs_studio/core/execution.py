@@ -38,7 +38,11 @@ from fpvs_studio.core.models import (
     normalize_manual_removed_electrodes,
     validate_project_relative_path,
 )
-from fpvs_studio.core.recording_hardware import AcquisitionProfile, validate_electrode_montage
+from fpvs_studio.core.recording_hardware import (
+    AcquisitionProfile,
+    RecordingBackend,
+    validate_electrode_montage,
+)
 from fpvs_studio.core.run_spec import RunRandomizationSpec
 from fpvs_studio.core.task_models import TaskResponseRecord
 
@@ -163,13 +167,10 @@ class RecordingSnapshot(FPVSBaseModel):
     """Versioned local configuration and human confirmation, never EEG telemetry."""
 
     schema_version: Literal[1] = 1
-    selected_backend: Literal[
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-        "unicorn_udp", "egi_din"
-    ]
+    selected_backend: RecordingBackend
     effective_backend: Literal[
         "serial", "brainproducts_triggerbox", "brainproducts_parallel", "unicorn_udp",
-        "egi_din", "null"
+        "egi_din", "ant_mylab_ttl", "null"
     ]
     selection_source: Literal["legacy_project", "local_settings", "project_settings"]
     udp_host: Literal["127.0.0.1"] | None = None
@@ -178,6 +179,7 @@ class RecordingSnapshot(FPVSBaseModel):
     serial_baudrate: StrictInt | None = Field(default=None, gt=0)
     parallel_port_address: StrictInt | None = Field(default=None, ge=1, le=65535)
     trigger_pulse_width_ms: StrictInt | None = Field(default=None, ge=1, le=1000)
+    ant_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1, le=16384)
     brainproducts_amplifier: BrainProductsAmplifier | None = None
     brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)
     operator_confirmed_raw_bdf_recording: bool = False
@@ -200,6 +202,8 @@ class RecordingSnapshot(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.electrode_montage is None:
             payload.pop("electrode_montage", None)
+        if self.selected_backend != "ant_mylab_ttl":
+            payload.pop("ant_sampling_rate_hz", None)
         return payload
 
 

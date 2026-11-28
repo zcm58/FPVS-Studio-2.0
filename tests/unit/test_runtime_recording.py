@@ -1357,6 +1357,68 @@ def test_parallel_schedule_reuses_actichamp_high_and_low_interval_validation(exe
     validate_recording_trigger_schedule(spec, {**options, "experiment_test_mode": True})
 
 
+_ANT = {
+    "recording_backend": "ant_mylab_ttl", "ant_parallel_address": 0xDC00,
+    "ant_sampling_rate_hz": 512, "ant_pulse_width_ms": 6,
+}
+
+
+@pytest.mark.parametrize("field,value", [
+    ("ant_parallel_address", None), ("ant_parallel_address", True), ("ant_parallel_address", 65536),
+    ("ant_sampling_rate_hz", None), ("ant_sampling_rate_hz", True), ("ant_sampling_rate_hz", 16385),
+    ("ant_pulse_width_ms", None), ("ant_pulse_width_ms", True), ("ant_pulse_width_ms", 1001),
+    ("ant_pulse_width_ms", 5),
+])
+def test_ant_rejects_invalid_settings_before_construction(monkeypatch, field, value):
+    adapter = Mock(side_effect=AssertionError("hardware must not be created"))
+    monkeypatch.setattr(triggers, "AntMylabParallelBackend", adapter)
+    with pytest.raises(RecordingConfigurationError):
+        triggers.build_trigger_backend({**_ANT, field: value})
+    adapter.assert_not_called()
+
+
+def test_ant_snapshot_and_schedule_use_the_configured_sampling_rate(execution):
+    options = LaunchSettings(**_ANT).as_runtime_options()
+    assert "egi_parallel_address" not in options
+    assert "ant_sampling_rate_hz" not in recording_snapshot({}).model_dump()
+    snap = recording_snapshot(options)
+    assert snap.effective_backend == snap.selected_backend == "ant_mylab_ttl"
+    assert (snap.parallel_port_address, snap.trigger_pulse_width_ms, snap.ant_sampling_rate_hz) == (
+        0xDC00, 6, 512,
+    )
+    assert snap.receiver_validation == "pending" and snap.physical_timing == "uncharacterized"
+    assert snap.acquisition_profile is None and snap.electrode_montage is None
+    _, plan = execution
+    spec = plan.ordered_entries()[0].run_spec.model_copy(deep=True)
+    spec.display.refresh_hz = 100
+    spec.trigger_events = [
+        TriggerEvent(frame_index=0, code=55, label="condition_start"),
+        TriggerEvent(frame_index=1, code=55, label="oddball_onset"),
+    ]
+    with pytest.raises(RecordingConfigurationError, match="ANT eego mylab TTL.*more than 12 ms"):
+        validate_recording_trigger_schedule(spec, options)
+    validate_recording_trigger_schedule(spec, {**options, "ant_sampling_rate_hz": 1000,
+                                              "ant_pulse_width_ms": 3})
+
+
+@pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
+def test_ant_log_only_modes_do_not_open_port(monkeypatch, mode):
+    adapter = Mock(side_effect=AssertionError("hardware must not be created"))
+    monkeypatch.setattr(triggers, "AntMylabParallelBackend", adapter)
+    backend, _ = triggers.build_trigger_backend({"recording_backend": "ant_mylab_ttl", mode: True})
+    assert backend.backend_name == "null"
+    adapter.assert_not_called()
+
+
+def test_ant_driver_failure_reports_its_selected_endpoint(monkeypatch):
+    adapter = Mock(backend_name="ant_mylab_ttl", emits_external_markers=True)
+    adapter.connect.side_effect = OSError("driver unavailable")
+    monkeypatch.setattr(triggers, "AntMylabParallelBackend", lambda **_kwargs: adapter)
+    with pytest.raises(PreflightError, match="ANT eego mylab.*0xDC00.*InpOut.*unavailable"):
+        _build_and_connect_trigger_backend(_ANT)
+    adapter.close.assert_called_once()
+
+
 @pytest.mark.parametrize("mode", ["experiment_test_mode", "pilot_mode"])
 def test_triggerbox_test_modes_never_construct_hardware(monkeypatch, mode):
     adapter = Mock(side_effect=AssertionError("hardware must not be created"))

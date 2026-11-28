@@ -8,6 +8,7 @@ import threading
 import time
 from typing import Protocol
 
+from fpvs_studio.core.recording_hardware import validate_ant_pulse_timing
 from fpvs_studio.core.trigger_codes import validate_event_trigger_code
 from fpvs_studio.triggers.base import TriggerBackend, TriggerCompletionError
 
@@ -260,6 +261,21 @@ class EgiDinParallelBackend(ParallelPortBackend):
     @property
     def backend_name(self) -> str:
         return "egi_din"
+
+
+class AntMylabParallelBackend(ParallelPortBackend):
+    """Latched data byte on an eego mylab 8-bit TTL input via its DB25 adapter."""
+
+    def __init__(
+        self, address: int, *, pulse_width_ms: int, sampling_rate_hz: int,
+        driver: ParallelDriver | None = None,
+    ) -> None:
+        validate_ant_pulse_timing(pulse_width_ms, sampling_rate_hz)
+        super().__init__(address, pulse_width_ms=pulse_width_ms, driver=driver)
+
+    @property
+    def backend_name(self) -> str:
+        return "ant_mylab_ttl"
 
 
 class _InpOutDriver:

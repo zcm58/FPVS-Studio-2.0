@@ -20,6 +20,7 @@ from fpvs_studio.core.execution import (
     SessionExecutionSummary,
 )
 from fpvs_studio.core.paths import runs_dir, to_project_relative_posix
+from fpvs_studio.core.recording_hardware import inactive_ttl_fields
 from fpvs_studio.core.run_spec import RunSpec
 from fpvs_studio.core.session_plan import SessionPlan
 from fpvs_studio.engines.registry import create_engine
@@ -84,14 +85,16 @@ class LaunchSettings:
     electrode_montage: str | None = None
     egi_parallel_address: int | None = None
     egi_pulse_width_ms: int | None = None
+    ant_parallel_address: int | None = None
+    ant_pulse_width_ms: int | None = None
+    ant_sampling_rate_hz: int | None = None
 
     def as_runtime_options(self) -> dict[str, object]:
         """Return a generic engine-facing runtime options mapping."""
 
         options = asdict(self)
-        if self.recording_backend != "egi_din":
-            options.pop("egi_parallel_address")
-            options.pop("egi_pulse_width_ms")
+        for field in inactive_ttl_fields(self.recording_backend):
+            options.pop(field)
         if self.electrode_montage is None:
             options.pop("electrode_montage")
         if self.display_device_name is None:
@@ -222,6 +225,7 @@ def _validate_launch_settings(settings: LaunchSettings) -> None:
         raise LaunchSettingsError(f"export_mode must be one of '{valid_values}'.")
     if settings.recording_backend in (
         "unicorn_udp", "brainproducts_triggerbox", "brainproducts_parallel", "egi_din",
+        "ant_mylab_ttl",
     ):
         return
     if effective_recording_backend == "serial":

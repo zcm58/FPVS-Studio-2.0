@@ -872,15 +872,19 @@ class AppSettingsDialog(QDialog):
 
     def _size_recording_actions(self) -> None:
         editor = self.recording_editor
-        unchanged_port_buttons = (
+        parallel_selectors = (
+            editor.parallel_port_selector,
+            *(fields.address for fields in editor.wired_fields.values()),
+        )
+        port_buttons = (
             editor.biosemi_port_selector.refresh_button,
             editor.biosemi_port_selector.check_button,
-            editor.detect_parallel_ports_button,
+            *(selector.detect_button for selector in parallel_selectors),
         )
         if not self._recording_action_size.isValid():
             # Capture the existing row height and shared width before compact styling.
             for button in (
-                *self._recording_save_buttons, *unchanged_port_buttons,
+                *self._recording_save_buttons, *port_buttons,
                 editor.detect_ports_button, self._close_button,
             ):
                 button.ensurePolished()
@@ -888,7 +892,7 @@ class AppSettingsDialog(QDialog):
                     button.sizeHint(),
                 )
         size = self._recording_action_size
-        for button in unchanged_port_buttons:
+        for button in port_buttons:
             button.setFixedSize(size)
         for button in self._recording_save_buttons:
             mark_compact_action(button)
@@ -898,7 +902,7 @@ class AppSettingsDialog(QDialog):
         for port_row in (
             editor.biosemi_port_selector,
             editor.brainproducts_port_row,
-            editor.parallel_port_selector,
+            *parallel_selectors,
         ):
             port_row.setMinimumHeight(size.height())
 

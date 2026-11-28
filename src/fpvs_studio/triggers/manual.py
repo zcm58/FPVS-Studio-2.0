@@ -9,7 +9,7 @@ from fpvs_studio.triggers.serial_backend import SerialBackend
 def send_test_trigger(backend: TriggerBackend, code: int) -> None:
     """Send a tester code and release the output on the calling worker."""
 
-    maximum = 255 if backend.backend_name == "egi_din" else 9
+    maximum = 255 if backend.backend_name in ("egi_din", "ant_mylab_ttl") else 9
     if type(code) is not int or not 0 <= code <= maximum:
         raise ValueError(f"Test trigger code must be an integer from 0 to {maximum}.")
     if not backend.emits_external_markers:

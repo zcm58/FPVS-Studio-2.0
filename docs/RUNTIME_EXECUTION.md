@@ -437,6 +437,29 @@ with the selected run's `runspec.json`, `trigger_log.csv`, DIN track and
 lab-verified code map. The [execution plan](exec-plans/active/egi-din-markers.md)
 records the software checks and the hardware and optical timing checks still due.
 
+### ANT Neuro eego mylab wired TTL output
+
+Use the mylab's documented eight-bit TTL input, an appropriate ANT DB25 trigger
+adapter for the specific amplifier, and a Windows stimulus PC with a native
+parallel data port. Select **ANT Neuro eego mylab (8-bit wired TTL)**. Enter the
+actual port address, eego Recorder sampling rate, and high pulse width. The
+output sends one byte (1–255) on the scheduled flip and writes zero for idle.
+On the documented EE-22x input, rising edges set the bits of the recorded code.
+The low interval equals the configured high width, including between identical
+markers. ANT recommends two to three sample periods in each state. Studio uses
+three as its minimum, rounded up to whole milliseconds. At 512 Hz the minimum
+is 6 ms high and 6 ms low. Schedule preflight requires more than the sum of the
+two intervals between successive markers. Driver and pulse errors abort emission
+and appear in the run log under `ant_mylab_ttl`.
+
+eego Recorder owns acquisition and saves the native CNT. Enable detailed Studio
+run folders for comparison with the saved CNT. Electrical compatibility, the
+correct DB25 adapter and bit ordering require confirmation on the actual setup.
+Physical receipt and latency against a photodiode remain unmeasured.
+[ANT mylab specifications](https://www.ant-neuro.com/products/eego-mylab)
+· [ANT trigger guidance](https://academy.ant-neuro.com/blog/application-notes-2/using-stimulus-presentation-packages-with-your-eegotm-system-25)
+· [EE-22x manual, section 2.3](https://academy.ant-neuro.com/web/content/43636?download=true&unique=e22eaaa36decad62beea35309bb41cb67effcdbe)
+
 ### actiCHamp parallel-port output
 
 Settings > Recording includes **Brain Products / BrainVision (Parallel port)** for
@@ -778,7 +801,7 @@ tracks the bench evidence and the remaining BDF+/Toolbox, loss handling and phys
 timing checks. Exported receiver-validation metadata stays `pending`.
 
 The project selection is `serial`, `biosemi_active_three`, `brainproducts_triggerbox`,
-`brainproducts_parallel`, `egi_din` or `unicorn_udp`. Native GUI projects without saved recording settings inherit the
+`brainproducts_parallel`, `egi_din`, `ant_mylab_ttl` or `unicorn_udp`. Native GUI projects without saved recording settings inherit the
 reviewed computer default. Callers without an injected preference keep the legacy
 BioSemi default. Invalid persisted values are rejected on load. The UDP port is a
 strict integer from 1 through 65535, initially 1000. The host is always `127.0.0.1`; there

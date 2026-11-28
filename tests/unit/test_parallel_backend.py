@@ -5,6 +5,7 @@ from __future__ import annotations
 import ctypes
 import threading
 import time
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -13,6 +14,7 @@ from fpvs_studio.runtime.triggers import LoggedTriggerBackend, TriggerEmissionEr
 from fpvs_studio.triggers import parallel_backend as backend_module
 from fpvs_studio.triggers.manual import send_test_trigger
 from fpvs_studio.triggers.parallel_backend import (
+    AntMylabParallelBackend,
     EgiDinParallelBackend,
     ParallelPortBackend,
     ParallelPortDriverUnavailableError,
@@ -128,9 +130,12 @@ def test_invalid_event_codes_never_reach_driver(code: object) -> None:
         backend.close()
 
 
-def test_manual_egi_sends_exact_bytes_on_separate_pulses() -> None:
+@pytest.mark.parametrize("adapter", [
+    EgiDinParallelBackend, partial(AntMylabParallelBackend, sampling_rate_hz=2048),
+])
+def test_manual_word_output_sends_exact_bytes_on_separate_pulses(adapter) -> None:
     driver = FakeDriver()
-    backend = EgiDinParallelBackend(0xD010, pulse_width_ms=2, driver=driver)
+    backend = adapter(0xD010, pulse_width_ms=2, driver=driver)
     for code in (55, 55, 128, 255):
         send_test_trigger(backend, code)
     events = [i for i, code in enumerate(driver.codes) if code]
@@ -141,9 +146,12 @@ def test_manual_egi_sends_exact_bytes_on_separate_pulses() -> None:
 
 
 @pytest.mark.parametrize("code", [256, -1, True, "55"])
-def test_manual_egi_rejects_invalid_bytes_before_connect(code: object) -> None:
+@pytest.mark.parametrize("adapter", [
+    EgiDinParallelBackend, partial(AntMylabParallelBackend, sampling_rate_hz=2048),
+])
+def test_manual_word_output_rejects_invalid_bytes_before_connect(code: object, adapter) -> None:
     driver = FakeDriver()
-    backend = EgiDinParallelBackend(0xD010, pulse_width_ms=2, driver=driver)
+    backend = adapter(0xD010, pulse_width_ms=2, driver=driver)
     with pytest.raises(ValueError, match="integer from 0 to 255"):
         send_test_trigger(backend, code)  # type: ignore[arg-type]
     assert driver.open_count == 0
@@ -179,7 +187,10 @@ def test_overlap_is_rejected_synchronously_without_queue_or_sleep() -> None:
         backend.close()
 
 
-@pytest.mark.parametrize("adapter", [ParallelPortBackend, EgiDinParallelBackend])
+@pytest.mark.parametrize("adapter", [
+    ParallelPortBackend, EgiDinParallelBackend,
+    partial(AntMylabParallelBackend, sampling_rate_hz=512, pulse_width_ms=10),
+])
 def test_repeated_codes_require_complete_low_interval(monkeypatch, adapter) -> None:
     driver = FakeDriver()
     backend = adapter(0x378, driver=driver)
@@ -223,10 +234,13 @@ def test_close_drains_pending_pulse_and_stops_worker() -> None:
 
 
 @pytest.mark.parametrize("failure_at", [2, 3])
-def test_sync_and_async_write_failures_remain_visible_through_cleanup(failure_at: int) -> None:
+@pytest.mark.parametrize("adapter", [
+    ParallelPortBackend, partial(AntMylabParallelBackend, sampling_rate_hz=1024),
+])
+def test_sync_and_async_write_failures_remain_visible_through_cleanup(failure_at, adapter) -> None:
     driver = FakeDriver()
     driver.fail_at.add(failure_at)
-    backend = ParallelPortBackend(0x378, pulse_width_ms=5, driver=driver)
+    backend = adapter(0x378, pulse_width_ms=5, driver=driver)
     backend.connect()
     worker = backend._worker
     if failure_at == 2:

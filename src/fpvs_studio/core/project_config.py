@@ -96,6 +96,7 @@ from fpvs_studio.core.project_service import ProjectScaffold
 from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
     acquisition_profile_for_recording,
+    inactive_ttl_fields,
 )
 from fpvs_studio.core.run_spec import RunRandomizationSpec
 from fpvs_studio.core.serialization import (
@@ -720,10 +721,10 @@ def export_project_config(
     recording = (
         project.settings.recording.model_copy(deep=True) if project.settings.recording else None
     )
-    if recording is not None and recording.recording_backend != "egi_din":
+    if recording is not None:
         # Earlier Toolbox readers reject unknown recording fields, even for an inactive output.
-        recording.egi_parallel_address = None
-        recording.egi_pulse_width_ms = None
+        for field in inactive_ttl_fields(recording.recording_backend):
+            setattr(recording, field, None)
     if recording is not None and session_plan is not None:
         # Historical plan-only exports have no launch snapshot for the operator's cap.
         recording.electrode_montage = None

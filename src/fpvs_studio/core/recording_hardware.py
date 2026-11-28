@@ -10,6 +10,40 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+RecordingBackend = Literal[
+    "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
+    "unicorn_udp", "egi_din", "ant_mylab_ttl",
+]
+
+_TTL_FIELDS = {
+    "egi_din": ("egi_parallel_address", "egi_pulse_width_ms"),
+    "ant_mylab_ttl": ("ant_parallel_address", "ant_pulse_width_ms", "ant_sampling_rate_hz"),
+}
+
+
+def inactive_ttl_fields(selected: str | None) -> tuple[str, ...]:
+    """Hardware preferences to exclude from a different recorder's exchange payload."""
+    return tuple(
+        key for backend, keys in _TTL_FIELDS.items() if backend != selected for key in keys
+    )
+
+
+def validate_ant_pulse_timing(pulse_width_ms: int | None, sampling_rate_hz: object) -> None:
+    """Use the conservative end of ANT's two-to-three sample-period timing guidance."""
+    if type(sampling_rate_hz) is not int or not 1 <= sampling_rate_hz <= 16384:
+        raise ValueError("Set the eego Recorder sampling rate in Hz (integer 1–16384).")
+    if pulse_width_ms is None:
+        # An incomplete saved selection is allowed in log-only modes.
+        return
+    if type(pulse_width_ms) is not int or not 1 <= pulse_width_ms <= 1000:
+        raise ValueError("Set the ANT TTL pulse width in milliseconds (integer 1–1000).")
+    if pulse_width_ms * sampling_rate_hz < 3000:
+        minimum_ms = (3000 + sampling_rate_hz - 1) // sampling_rate_hz
+        raise ValueError(
+            f"At {sampling_rate_hz} Hz, set the ANT TTL pulse width to at least "
+            f"{minimum_ms} ms so both high and low last three eego sample periods."
+        )
+
 
 class LabelMappingEvidence(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -40,10 +74,7 @@ class RecordingHardwareDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     label: str
-    recording_backend: Literal[
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-        "unicorn_udp", "egi_din"
-    ]
+    recording_backend: RecordingBackend
     acquisition_profile: AcquisitionProfile | None = None
 
 
@@ -69,6 +100,9 @@ _HARDWARE = (
     ),
     RecordingHardwareDefinition(
         label="EGI Net Amps 400 (wired DIN via parallel port)", recording_backend="egi_din",
+    ),
+    RecordingHardwareDefinition(
+        label="ANT Neuro eego mylab (8-bit wired TTL)", recording_backend="ant_mylab_ttl",
     ),
     RecordingHardwareDefinition(
         label="Unicorn Hybrid Black (factory 8 channels)", recording_backend="unicorn_udp",

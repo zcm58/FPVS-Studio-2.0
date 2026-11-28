@@ -775,6 +775,22 @@ decimal code from 1 to 255, type it in **DIN code** and choose **Send code** or
 press Enter. Typing in that field does not send markers. A successful local
 write still requires checking the event track in Net Station.
 
+For **ANT Neuro eego mylab (8-bit wired TTL)**, first confirm the amplifier has
+the eight-bit input and that the ANT trigger-to-DB25 adapter matches its
+connector. In **Settings > Recording**, enter the Windows parallel output's
+I/O address, the EEG sampling rate selected in eego Recorder, and the pulse
+width in milliseconds. Studio uses that width for both the high pulse and the
+minimum time at zero between markers. Allow at least three EEG sample periods
+for each phase, for example 6 ms high and 6 ms low at 500 Hz.
+
+In **Trigger Tester**, type a decimal value from 1 to 255 in **TTL code** and
+choose **Send code** or press Enter. The quick `0` button writes idle.
+Start recording in eego Recorder to check the received words. For a playback
+check, enable detailed run folders, leave Test and Pilot off, and save the native
+`.cnt` and its companion files in Recorder. Compare its events with the same
+Studio run's `runspec.json` and `trigger_log.csv` using Toolbox.
+[ANT setup and timing checks](RUNTIME_EXECUTION.md#ant-neuro-eego-mylab-wired-ttl-output)
+
 For **Unicorn Recorder UDP**, the tester displays the loopback endpoint using the
 port from **Settings > Recording**. Enable **Trigger UDP Input** in Unicorn Recorder
 on the same computer with the matching IP address and port, and start a recording
@@ -824,6 +840,14 @@ which may be omitted from the marker display.
    and `255`, waiting for each send to finish. Check the event track and saved
    MFF for four ordered events, including both copies of 55. Check that typing
    the digits alone sends nothing and that the quick `0` button restores idle.
+7. Select **ANT Neuro eego mylab (8-bit wired TTL)** in Recording settings.
+   At 500 Hz, check that 5 ms is rejected and 6 ms can be saved with a valid
+   parallel address. Reopen settings and check the three values. Open Trigger
+   Tester at `560x340` and confirm the ANT address appears and the COM controls
+   are hidden. With a simulated output, enter `55` twice, then `128` and `255`,
+   submitting each separately. Check that `0` writes idle and that a failed
+   send displays the error and allows a retry. On a bench, compare these words
+   with the event track in eego Recorder and the saved CNT.
 
 Registered GUI coverage lives in `tests/gui/test_trigger_tester.py`.
 
@@ -1442,11 +1466,14 @@ at collection time. Invalid newest snapshots or acquisition-era evidence without
 handoff surface an error. Only sessions without acquisition artifacts retain the
 legacy full-run plan-only export path. Authoring-only exports remain unchanged.
 The typed `recording_backend` values are `serial`, `biosemi_active_three`,
-`brainproducts_triggerbox`, `brainproducts_parallel`, `unicorn_udp`, and `egi_din`.
+`brainproducts_triggerbox`, `brainproducts_parallel`, `unicorn_udp`, `egi_din`,
+and `ant_mylab_ttl`.
 `core/models.py::ProjectRecordingSettings` owns defaults and ranges, including
 `brainproducts_parallel_address` and the transport-specific port fields. Select the
 amplifier and sampling rate before normal TriggerBox launch. Brain Products parallel
 output selects actiCHamp. EGI DIN uses its own parallel address and pulse width.
+ANT TTL stores its own `ant_parallel_address`, `ant_sampling_rate_hz` and
+`ant_pulse_width_ms` for the selected mylab setup.
 Malformed saved configurations are rejected on load. Choosing another recording device
 preserves BioSemi's serial settings. Editing its port preserves the project baudrate
 and all other trigger fields; no recording choice changes compiled experiment timing.

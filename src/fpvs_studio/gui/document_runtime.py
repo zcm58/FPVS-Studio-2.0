@@ -462,6 +462,15 @@ class DocumentRuntimeMixin:
                     egi_pulse_width_ms=cast(
                         int | None, recording_configuration.get("egi_pulse_width_ms"),
                     ),
+                    ant_parallel_address=cast(
+                        int | None, recording_configuration.get("ant_parallel_address"),
+                    ),
+                    ant_pulse_width_ms=cast(
+                        int | None, recording_configuration.get("ant_pulse_width_ms"),
+                    ),
+                    ant_sampling_rate_hz=cast(
+                        int | None, recording_configuration.get("ant_sampling_rate_hz"),
+                    ),
                     brainproducts_amplifier=cast(
                         str | None, recording_configuration.get("brainproducts_amplifier"),
                     ),

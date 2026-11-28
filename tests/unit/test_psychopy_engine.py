@@ -2346,10 +2346,29 @@ def test_psychopy_engine_emits_compiled_triggers_on_presentation_flip(
 def test_egi_din_exports_compiled_markers_from_the_presentation_flips(
     monkeypatch, sample_project, sample_project_root, tmp_path,
 ) -> None:
+    _assert_parallel_markers_on_flips(
+        monkeypatch, sample_project, sample_project_root, tmp_path / "egi-transfer", "egi-din",
+        {"recording_backend": "egi_din", "egi_parallel_address": 0xDC00, "egi_pulse_width_ms": 1},
+    )
+
+
+def test_ant_mylab_ttl_exports_compiled_markers_from_the_presentation_flips(
+    monkeypatch, sample_project, sample_project_root, tmp_path,
+) -> None:
+    _assert_parallel_markers_on_flips(
+        monkeypatch, sample_project, sample_project_root, tmp_path / "ant-transfer", "ant-mylab",
+        {"recording_backend": "ant_mylab_ttl", "ant_parallel_address": 0xDC00,
+         "ant_pulse_width_ms": 6, "ant_sampling_rate_hz": 512},
+    )
+
+
+def _assert_parallel_markers_on_flips(
+    monkeypatch, sample_project, sample_project_root, output, run_id, options,
+) -> None:
     sample_project.settings.fixation_task.enabled = False
     sample_project.conditions[0].oddball_cycle_repeats_per_sequence = 2
     run_spec = compile_run_spec(
-        sample_project, project_root=sample_project_root, refresh_hz=60.0, run_id="egi-din",
+        sample_project, project_root=sample_project_root, refresh_hz=60.0, run_id=run_id,
     )
     captures: dict[str, Any] = {}
     writes: list[int] = []
@@ -2376,13 +2395,9 @@ def test_egi_din_exports_compiled_markers_from_the_presentation_flips(
     _patch_fake_psychopy(monkeypatch, engine, _build_fake_psychopy(captures, flip_times=[]))
     monkeypatch.setattr(engine, "show_transition_screen", lambda **_kwargs: False)
     monkeypatch.setattr(engine, "show_completion_screen", lambda **_kwargs: None)
-    output = tmp_path / "egi-transfer"
     summary = RuntimeWorker(engine).execute(
         sample_project_root, run_spec, output, participant_number="001",
-        runtime_options={
-            "recording_backend": "egi_din", "egi_parallel_address": 0xDC00,
-            "egi_pulse_width_ms": 1, "timing_warmup_frames": 0,
-        },
+        runtime_options={**options, "timing_warmup_frames": 0},
     )
     assert not summary.aborted
     assert [event.label for event in run_spec.trigger_events] == [
@@ -2397,7 +2412,10 @@ def test_egi_din_exports_compiled_markers_from_the_presentation_flips(
     assert [(int(row["frame_index"]), int(row["code"]), row["label"]) for row in rows] == [
         (event.frame_index, event.code, event.label) for event in run_spec.trigger_events
     ]
-    assert all(row["backend_name"] == "egi_din" and row["status"] == "sent" for row in rows)
+    assert all(
+        row["backend_name"] == options["recording_backend"] and row["status"] == "sent"
+        for row in rows
+    )
     first_edge = rising_edges[0]["time_s"]
     first_frame = run_spec.trigger_events[0].frame_index
     assert [edge["time_s"] - first_edge for edge in rising_edges] == pytest.approx([

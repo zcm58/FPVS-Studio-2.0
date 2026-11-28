@@ -34,7 +34,7 @@ from fpvs_studio.gui.settings_dialog import AppSettingsDialog
 
 _BACKENDS = (
     "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-    "unicorn_udp", "egi_din",
+    "unicorn_udp", "egi_din", "ant_mylab_ttl",
 )
 _PROMPT = "Please select your default EEG hardware. You can change this choice later."
 
@@ -76,7 +76,9 @@ def test_hardware_picker_requires_an_explicit_choice(qtbot, backend):
     assert dialog.selected_backend == backend
     fixed = {"serial": "biosemi64", "unicorn_udp": "unicorn8"}
     assert dialog.selected_montage == fixed.get(backend)
-    assert dialog.montage_combo.isEnabled() == (backend not in fixed and backend != "egi_din")
+    assert dialog.montage_combo.isEnabled() == (
+        backend not in fixed and backend not in ("egi_din", "ant_mylab_ttl")
+    )
     assert dialog.continue_button.isEnabled()
     dialog.continue_button.click()
     assert dialog.result() == QDialog.DialogCode.Accepted
@@ -731,6 +733,9 @@ def test_recording_settings_fit_sidebar_sizes(
             "brainproducts_parallel", editor.detect_parallel_ports_button,
             editor.parallel_port_selector.minimumHeight(),
         ),
+        *((
+            backend, fields.address.detect_button, fields.address.minimumHeight(),
+        ) for backend, fields in editor.wired_fields.items()),
     ):
         editor.backend_combo.setCurrentIndex(editor.backend_combo.findData(backend))
         QApplication.processEvents()

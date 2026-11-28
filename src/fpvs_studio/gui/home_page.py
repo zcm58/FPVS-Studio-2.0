@@ -57,6 +57,7 @@ _HOME_RECORDING_DEVICE_NAMES = {
     "brainproducts_parallel": "Brain Products / BrainVision (Parallel port)",
     "unicorn_udp": "Unicorn Black Mobile Headset",
     "egi_din": "EGI Net Amps 400 (wired DIN)",
+    "ant_mylab_ttl": "ANT Neuro eego mylab (8-bit wired TTL)",
 }
 _SOPHIA_MODE_TICKER_TEXT = (
     "RECORDING REMINDER ENABLED    RECORDING REMINDER ENABLED    RECORDING REMINDER ENABLED"

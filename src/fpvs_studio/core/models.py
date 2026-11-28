@@ -47,7 +47,9 @@ from fpvs_studio.core.enums import (
 from fpvs_studio.core.paths import validate_project_relative_path
 from fpvs_studio.core.recording_hardware import (
     AcquisitionProfile,
+    RecordingBackend,
     acquisition_profile_for_recording,
+    inactive_ttl_fields,
     validate_electrode_montage,
 )
 from fpvs_studio.core.task_models import (
@@ -743,15 +745,15 @@ class SessionSettings(FPVSBaseModel):
 class ProjectRecordingSettings(FPVSBaseModel):
     """Saved recording-device choice, separate from compiled timing contracts."""
 
-    recording_backend: Literal[
-        "serial", "biosemi_active_three", "brainproducts_triggerbox", "brainproducts_parallel",
-        "unicorn_udp", "egi_din"
-    ] = "serial"
+    recording_backend: RecordingBackend = "serial"
     unicorn_udp_port: StrictInt = Field(default=1000, ge=1, le=65535)
     brainproducts_serial_port: StrictStr = "COM3"
     brainproducts_parallel_address: StrictInt | None = Field(default=None, ge=1, le=65535)
     egi_parallel_address: StrictInt | None = Field(default=None, ge=1, le=65535)
     egi_pulse_width_ms: StrictInt | None = Field(default=None, ge=1, le=1000)
+    ant_parallel_address: StrictInt | None = Field(default=None, ge=1, le=65535)
+    ant_pulse_width_ms: StrictInt | None = Field(default=None, ge=1, le=1000)
+    ant_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1, le=16384)
     brainproducts_pulse_width_ms: StrictInt = Field(default=10, ge=1, le=1000)
     brainproducts_amplifier: BrainProductsAmplifier | None = None
     brainproducts_sampling_rate_hz: StrictInt | None = Field(default=None, ge=1)
@@ -763,10 +765,9 @@ class ProjectRecordingSettings(FPVSBaseModel):
         payload: dict[str, Any] = handler(self)
         if self.electrode_montage is None:
             payload.pop("electrode_montage", None)
-        if self.recording_backend != "egi_din":
-            for key in ("egi_parallel_address", "egi_pulse_width_ms"):
-                if payload.get(key) is None:
-                    payload.pop(key, None)
+        for key in inactive_ttl_fields(self.recording_backend):
+            if payload.get(key) is None:
+                payload.pop(key, None)
         return payload
 
     @field_validator("brainproducts_serial_port")

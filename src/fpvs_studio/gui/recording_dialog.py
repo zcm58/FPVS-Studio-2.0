@@ -68,6 +68,7 @@ RECORDING_HARDWARE_CHOICES = (
     ("Brain Products / BrainVision (Parallel port)", "brainproducts_parallel"),
     ("Unicorn Hybrid Black", "unicorn_udp"),
     ("EGI Net Amps 400 (wired DIN)", "egi_din"),
+    ("ANT Neuro eego mylab (8-bit wired TTL)", "ant_mylab_ttl"),
 )
 
 
@@ -180,6 +181,67 @@ def recording_preference_summary(configuration: dict[str, object]) -> str:
     return label
 
 
+class _WiredMarkerFields:
+    """Keep separate port and pulse drafts for each parallel marker interface."""
+
+    def __init__(
+        self, form: QFormLayout, parent: QWidget, configuration: dict[str, object],
+        *, prefix: str, pulse_name: str,
+    ) -> None:
+        self.form = form
+        self.prefix = prefix
+        self.address = ParallelPortSelector(
+            configuration.get(f"{prefix}_parallel_address"), parent, name_prefix=prefix,
+        )
+        form.addRow("Parallel I/O address (hex)", self.address)
+        self.rate: QLineEdit | None = None
+        if prefix == "ant":
+            self.rate = self._number_field(parent, configuration, "sampling_rate_hz", 16384)
+            self.rate.setAccessibleName("eego Recorder sampling rate in Hz")
+            self.rate.setToolTip("Enter the EEG sampling rate selected in eego Recorder.")
+            form.addRow("Recorder sampling rate (Hz)", self.rate)
+        self.pulse = self._number_field(parent, configuration, "pulse_width_ms", 1000)
+        if prefix == "egi":
+            self.pulse.setObjectName("egi_din_pulse_width_edit")
+        self.pulse.setAccessibleName(f"{pulse_name} pulse width in milliseconds")
+        self.pulse.setToolTip("Set the high pulse and minimum idle interval for this setup.")
+        form.addRow(f"{pulse_name} pulse width (ms)", self.pulse)
+        self.saved: dict[str, object] = {
+            key: configuration[key] for key in self.draft() if configuration.get(key) is not None
+        }
+
+    def _number_field(
+        self, parent: QWidget, configuration: dict[str, object], suffix: str, maximum: int,
+    ) -> QLineEdit:
+        key = f"{self.prefix}_{suffix}"
+        value = configuration.get(key)
+        field = QLineEdit(str(value) if value is not None else "", parent)
+        field.setObjectName(f"{key}_edit")
+        field.setValidator(QIntValidator(1, maximum, field))
+        return field
+
+    def set_visible(self, visible: bool) -> None:
+        self.form.setRowVisible(self.address, visible)
+        self.form.setRowVisible(self.pulse, visible)
+        if self.rate is not None:
+            self.form.setRowVisible(self.rate, visible)
+
+    def draft(self) -> dict[str, object]:
+        def number(field: QLineEdit) -> int | str:
+            value = field.text()
+            if len(value) <= 5 and value.isascii() and value.isdecimal():
+                return int(value)
+            return value
+
+        values: dict[str, object] = {
+            f"{self.prefix}_parallel_address": self.address.address,
+            f"{self.prefix}_pulse_width_ms": number(self.pulse),
+        }
+        if self.rate is not None:
+            values[f"{self.prefix}_sampling_rate_hz"] = number(self.rate)
+        return values
+
+
 class RecordingSetupEditor(QWidget):
     """Edit a recording draft without choosing where or when it is saved."""
 
@@ -243,6 +305,7 @@ class RecordingSetupEditor(QWidget):
         )
         self.backend_combo.addItem("Unicorn Recorder UDP", "unicorn_udp")
         self.backend_combo.addItem("EGI Net Amps 400 (wired DIN)", "egi_din")
+        self.backend_combo.addItem("ANT Neuro eego mylab (8-bit wired TTL)", "ant_mylab_ttl")
         backend = configuration.get("recording_backend") or "serial"
         index = self.backend_combo.findData(backend)
         if index < 0:
@@ -264,20 +327,6 @@ class RecordingSetupEditor(QWidget):
             biosemi_serial_port, biosemi_serial_baudrate, self,
         )
         self.parallel_port_selector = ParallelPortSelector(parallel_address, self)
-        self._saved_egi = {
-            key: configuration[key] for key in ("egi_parallel_address", "egi_pulse_width_ms")
-            if configuration.get(key) is not None
-        }
-        self.egi_port_selector = ParallelPortSelector(
-            self._saved_egi.get("egi_parallel_address"), self, name_prefix="egi",
-        )
-        self.egi_pulse_edit = QLineEdit(str(self._saved_egi.get("egi_pulse_width_ms", "")), self)
-        self.egi_pulse_edit.setObjectName("egi_din_pulse_width_edit")
-        self.egi_pulse_edit.setValidator(QIntValidator(1, 1000, self.egi_pulse_edit))
-        self.egi_pulse_edit.setAccessibleName("DIN pulse width in milliseconds")
-        self.egi_pulse_edit.setToolTip(
-            "Set the high pulse and minimum idle interval to the width verified for this setup."
-        )
         self.brainproducts_parallel_combo = self.parallel_port_selector.combo
         self.brainproducts_parallel_edit = self.parallel_port_selector.edit
         self.detect_parallel_ports_button = self.parallel_port_selector.detect_button
@@ -371,12 +420,14 @@ class RecordingSetupEditor(QWidget):
         self.brainproducts_sampling_rate_label = QLabel("EEG sampling rate (Hz)", self)
         form.addRow(self.brainproducts_port_label, self.brainproducts_port_row)
         form.addRow(self.brainproducts_parallel_label, self.parallel_port_selector)
-        self.egi_port_label = QLabel("Parallel I/O address (hex)", self)
-        self.egi_port_label.setBuddy(self.egi_port_selector.edit)
-        form.addRow(self.egi_port_label, self.egi_port_selector)
-        self.egi_pulse_label = QLabel("DIN pulse width (ms)", self)
-        self.egi_pulse_label.setBuddy(self.egi_pulse_edit)
-        form.addRow(self.egi_pulse_label, self.egi_pulse_edit)
+        self.wired_fields = {
+            "egi_din": _WiredMarkerFields(
+                form, self, configuration, prefix="egi", pulse_name="DIN",
+            ),
+            "ant_mylab_ttl": _WiredMarkerFields(
+                form, self, configuration, prefix="ant", pulse_name="TTL",
+            ),
+        }
         form.addRow(self.brainproducts_amplifier_label, self.brainproducts_amplifier_combo)
         form.addRow(self.brainproducts_sampling_rate_label, self.brainproducts_sampling_rate_combo)
         form.addRow(self.brainproducts_pulse_label, self.brainproducts_pulse_edit)
@@ -402,8 +453,11 @@ class RecordingSetupEditor(QWidget):
         self.port_edit.textChanged.connect(self._refresh)
         self.biosemi_port_selector.port_changed.connect(self._refresh)
         self.parallel_port_selector.address_changed.connect(self._refresh)
-        self.egi_port_selector.address_changed.connect(self._refresh)
-        self.egi_pulse_edit.textChanged.connect(self._refresh)
+        for fields in self.wired_fields.values():
+            fields.address.address_changed.connect(self._refresh)
+            fields.pulse.textChanged.connect(self._refresh)
+            if fields.rate is not None:
+                fields.rate.textChanged.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh)
         self.brainproducts_port_edit.textChanged.connect(self._refresh_port_detection_status)
         self.brainproducts_pulse_edit.textChanged.connect(self._refresh)
@@ -687,7 +741,8 @@ class RecordingSetupEditor(QWidget):
             self.detect_ports_button.setEnabled(True)
         self.biosemi_port_selector.cancel()
         self.parallel_port_selector.cancel()
-        self.egi_port_selector.cancel()
+        for fields in self.wired_fields.values():
+            fields.address.cancel()
 
     @property
     def biosemi_serial_port(self) -> str:
@@ -708,18 +763,11 @@ class RecordingSetupEditor(QWidget):
             if len(pulse_text) <= 4 and pulse_text.isascii() and pulse_text.isdecimal()
             else pulse_text
         )
-        egi = self._saved_egi
-        if selected == "egi_din":
-            width = self.egi_pulse_edit.text()
-            egi = {
-                "egi_parallel_address": self.egi_port_selector.address,
-                "egi_pulse_width_ms": (
-                    int(width) if len(width) <= 4 and width.isascii() and width.isdecimal()
-                    else None
-                ),
-            }
+        wired: dict[str, object] = {}
+        for backend, fields in self.wired_fields.items():
+            wired.update(fields.draft() if selected == backend else fields.saved)
         return {
-            **egi,
+            **wired,
             "recording_backend": selected,
             **({"electrode_montage": montage} if montage is not None else {}),
             "unicorn_udp_port": port if selected == "unicorn_udp" else self._valid_udp_port,
@@ -766,10 +814,8 @@ class RecordingSetupEditor(QWidget):
         )
         self.brainproducts_parallel_label.setVisible(parallel)
         self.parallel_port_selector.setVisible(parallel)
-        for widget in (
-            self.egi_port_label, self.egi_port_selector, self.egi_pulse_label, self.egi_pulse_edit,
-        ):
-            widget.setVisible(selected == "egi_din")
+        for backend, fields in self.wired_fields.items():
+            fields.set_visible(selected == backend)
         for widget in (
             self.brainproducts_sampling_rate_label, self.brainproducts_sampling_rate_combo,
             self.brainproducts_pulse_label, self.brainproducts_pulse_edit,
@@ -796,6 +842,16 @@ class RecordingSetupEditor(QWidget):
                 "The Windows LPT output sends an eight-bit value and returns to zero. "
                 "Confirm the cable pinout, DIN input mode, polarity and timing for this amplifier. "
                 "Test and Pilot playback do not send markers."
+            )
+        elif selected == "ant_mylab_ttl":
+            guidance = (
+                "Use the eego trigger-to-DB25 adapter with the 8-bit mylab input. "
+                "Start recording in eego Recorder and check the received codes."
+            )
+            detail = (
+                "Studio uses a Windows parallel port. Set each pulse and idle interval "
+                "to at least three samples at the rate selected in eego Recorder. "
+                "Confirm timing on your equipment before collecting study data."
             )
         elif brainproducts:
             amplifier = self._selected_amplifier()
@@ -896,11 +952,9 @@ class RecordingSetupEditor(QWidget):
         except ValueError:
             pass  # Report validation only when the operator clicks Apply.
         else:
-            if selected == "egi_din":
-                self._saved_egi = {
-                    "egi_parallel_address": validated.egi_parallel_address,
-                    "egi_pulse_width_ms": validated.egi_pulse_width_ms,
-                }
+            if selected in self.wired_fields:
+                fields = self.wired_fields[selected]
+                fields.saved = fields.draft()
             self._valid_udp_port = validated.unicorn_udp_port
             self._valid_triggerbox_port = validated.brainproducts_serial_port
             self._valid_parallel_address = validated.brainproducts_parallel_address

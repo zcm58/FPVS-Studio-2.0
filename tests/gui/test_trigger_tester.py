@@ -59,6 +59,7 @@ def hardware(monkeypatch):
     triggerbox = Mock(return_value=object())
     parallel = Mock(return_value=object())
     egi = Mock(return_value=object())
+    ant = Mock(return_value=object())
     unicorn = Mock(return_value=object())
     check = Mock(side_effect=lambda port, **_: SerialPortAccessResult(port, True))
     discover = Mock(return_value=(
@@ -73,6 +74,7 @@ def hardware(monkeypatch):
     monkeypatch.setattr(tester_module, "BrainProductsTriggerBoxBackend", triggerbox)
     monkeypatch.setattr(tester_module, "ParallelPortBackend", parallel)
     monkeypatch.setattr(tester_module, "EgiDinParallelBackend", egi)
+    monkeypatch.setattr(tester_module, "AntMylabParallelBackend", ant)
     monkeypatch.setattr(tester_module, "UnicornUDPBackend", unicorn)
     monkeypatch.setattr(tester_module, "check_serial_port_access", check)
     monkeypatch.setattr(tester_module, "discover_triggerbox_ports", discover)
@@ -81,7 +83,7 @@ def hardware(monkeypatch):
     monkeypatch.setattr(tester_module, "_show_error_dialog", popup)
     return SimpleNamespace(
         tasks=tasks, send=send, serial=serial, triggerbox=triggerbox, parallel=parallel,
-        unicorn=unicorn, egi=egi,
+        unicorn=unicorn, egi=egi, ant=ant,
         check=check, discover=discover, discover_biosemi=discover_biosemi,
         enumerate_ports=enumerate_ports, popup=popup,
     )
@@ -602,10 +604,11 @@ def test_egi_requires_its_own_address_and_pulse_width(qtbot, hardware, address, 
     assert dialog.port_edit.isReadOnly()
     assert not dialog.check_port_button.isVisible()
     assert not any(button.isEnabled() for button in dialog.digit_buttons)
-    assert "DIN pulse width" in dialog.status_label.text()
-    dialog.egi_code_edit.setText("55")
-    assert not dialog.egi_code_button.isEnabled()
-    qtbot.keyClick(dialog.egi_code_edit, Qt.Key.Key_Return)
+    required = "address" if address is None else "pulse width"
+    assert required in dialog.status_label.text()
+    dialog.word_code_edit.setText("55")
+    assert not dialog.word_code_button.isEnabled()
+    qtbot.keyClick(dialog.word_code_edit, Qt.Key.Key_Return)
     qtbot.keyClick(dialog, Qt.Key.Key_5)
     assert not hardware.tasks
     hardware.send.assert_not_called()
@@ -646,40 +649,79 @@ def test_egi_uses_saved_transport_for_repeated_codes_idle_and_retry(qtbot, hardw
     _assert_dialog_geometry(qtbot, dialog)
 
 
-def test_egi_sends_exact_byte_only_after_explicit_submit(qtbot, hardware):
+@pytest.mark.parametrize("backend", ["egi_din", "ant_mylab_ttl"])
+def test_wired_tester_sends_exact_byte_only_after_explicit_submit(qtbot, hardware, backend):
     dialog = _open_tester(
-        qtbot, output="egi_din", egi_parallel_address=0xD010, egi_pulse_width_ms=7,
+        qtbot, output=backend, egi_parallel_address=0xD010, egi_pulse_width_ms=7,
+        ant_parallel_address=0xD030, ant_pulse_width_ms=6, ant_sampling_rate_hz=500,
     )
-    field = dialog.egi_code_edit
+    transport = hardware.ant if backend == "ant_mylab_ttl" else hardware.egi
+    field = dialog.word_code_edit
     field.setFocus()
     qtbot.waitUntil(field.hasFocus)
     for invalid in ("", "0", "256", "1280", "-1", "x55"):
         field.setText(invalid)
         qtbot.keyClick(field, Qt.Key.Key_Return)
-        assert not dialog.egi_code_button.isEnabled()
+        assert not dialog.word_code_button.isEnabled()
         assert not hardware.tasks
     field.clear()
     for index, code in enumerate((55, 55, 128, 255)):
         qtbot.keyClicks(field, str(code))
         assert field.text() == str(code)
         assert len(hardware.tasks) == index
-        assert dialog.egi_code_button.isEnabled()
+        assert dialog.word_code_button.isEnabled()
         if index % 2:
-            qtbot.mouseClick(dialog.egi_code_button, Qt.MouseButton.LeftButton)
+            qtbot.mouseClick(dialog.word_code_button, Qt.MouseButton.LeftButton)
         else:
             qtbot.keyClick(field, Qt.Key.Key_Return)
-        assert not dialog.egi_code_button.isEnabled()
+        assert not dialog.word_code_button.isEnabled()
         qtbot.keyClick(field, Qt.Key.Key_Return)
         assert len(hardware.tasks) == index + 1
         hardware.tasks[-1].complete()
-        hardware.send.assert_called_with(hardware.egi.return_value, code)
+        hardware.send.assert_called_with(transport.return_value, code)
+        if backend == "ant_mylab_ttl":
+            transport.assert_called_with(0xD030, pulse_width_ms=6, sampling_rate_hz=500)
+            assert "eego Recorder" in dialog.status_label.text()
         assert field.selectedText() == str(code)
         assert hardware.send.call_count == index + 1
     _assert_dialog_geometry(qtbot, dialog)
     _select_output(dialog, "unicorn_udp")
     assert not field.isVisible()
-    assert not dialog.egi_code_button.isVisible()
-    assert not dialog.egi_code_button.isEnabled()
+    assert not dialog.word_code_button.isVisible()
+    assert not dialog.word_code_button.isEnabled()
+
+
+@pytest.mark.parametrize("width,rate,required", [(6, None, "sampling rate"), (5, 500, "6 ms")])
+def test_ant_tester_requires_matching_recorder_timing(qtbot, hardware, width, rate, required):
+    dialog = _open_tester(
+        qtbot, output="ant_mylab_ttl", ant_parallel_address=0xD030, ant_pulse_width_ms=width,
+        ant_sampling_rate_hz=rate, egi_parallel_address=0xD010, egi_pulse_width_ms=7,
+    )
+    assert required in dialog.status_label.text()
+    assert not dialog.digit_buttons[1].isEnabled()
+    dialog.word_code_edit.setText("55")
+    qtbot.keyClick(dialog.word_code_edit, Qt.Key.Key_Return)
+    assert not dialog.word_code_button.isEnabled() and not hardware.tasks
+    _assert_dialog_geometry(qtbot, dialog)
+
+
+def test_ant_tester_reports_send_failure_and_allows_idle_reset(qtbot, hardware):
+    dialog = _open_tester(
+        qtbot, output="ant_mylab_ttl", ant_parallel_address=0xD030, ant_pulse_width_ms=6,
+        ant_sampling_rate_hz=500,
+    )
+    error = OSError("Parallel driver unavailable")
+    hardware.send.side_effect = error
+    qtbot.keyClick(dialog, Qt.Key.Key_1)
+    hardware.tasks[-1].complete()
+    assert str(error) in dialog.status_label.toolTip()
+    assert "failed" in dialog.status_label.text()
+    hardware.popup.assert_called_once_with(dialog, "Send Test Trigger", error, message=None)
+    hardware.send.side_effect = None
+    qtbot.mouseClick(dialog.digit_buttons[0], Qt.MouseButton.LeftButton)
+    hardware.tasks[-1].complete()
+    hardware.send.assert_called_with(hardware.ant.return_value, 0)
+    assert "idle" in dialog.status_label.text()
 
 
 def test_tools_action_opens_tester_without_sending(qtbot, controller, tmp_path, hardware):

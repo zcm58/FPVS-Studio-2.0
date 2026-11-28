@@ -136,6 +136,7 @@ def test_new_hardware_declares_selection_without_inventing_toolbox_profile(backe
 
 @pytest.mark.parametrize("backend,montage", [
     ("egi_din", None),
+    ("ant_mylab_ttl", None),
     ("biosemi_active_three", None),
     ("brainproducts_triggerbox", None),
     ("brainproducts_parallel", None),
@@ -150,18 +151,23 @@ def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
         recording_backend=backend, electrode_montage=montage,
         egi_parallel_address=0xD010 if backend == "egi_din" else None,
         egi_pulse_width_ms=7 if backend == "egi_din" else None,
+        ant_parallel_address=0xD010 if backend == "ant_mylab_ttl" else None,
+        ant_pulse_width_ms=7 if backend == "ant_mylab_ttl" else None,
+        ant_sampling_rate_hz=512 if backend == "ant_mylab_ttl" else None,
     )
     config = export_project_config(sample_project, sample_project_root)
     plan = compile_session_plan(
         sample_project, project_root=sample_project_root, refresh_hz=60.0, random_seed=12,
     )
+    wired = backend in ("egi_din", "ant_mylab_ttl")
     snapshot = RecordingSnapshot(
         selected_backend=backend, electrode_montage=montage,
         effective_backend="serial" if backend == "biosemi_active_three" else backend,
         selection_source="project_settings",
-        receiver_validation="pending" if backend == "egi_din" else "not_applicable",
-        parallel_port_address=0xD010 if backend == "egi_din" else None,
-        trigger_pulse_width_ms=7 if backend == "egi_din" else None,
+        receiver_validation="pending" if wired else "not_applicable",
+        parallel_port_address=0xD010 if wired else None,
+        trigger_pulse_width_ms=7 if wired else None,
+        ant_sampling_rate_hz=512 if backend == "ant_mylab_ttl" else None,
     )
     evidence = AcquisitionEvidence(
         studio_version="test", execution_id="synthetic-execution",
@@ -183,7 +189,7 @@ def test_unprofiled_completed_handoff_requires_exact_selected_hardware(
     assert loaded.toolbox.acquisition_profile is None
     assert loaded.completed_session.acquisition_evidence.recording.selected_backend == backend
     assert loaded.completed_session.acquisition_evidence.recording.electrode_montage == montage
-    if backend == "egi_din":
+    if wired:
         assert loaded.completed_session.acquisition_evidence.recording == snapshot
     assert loaded.recording.electrode_montage == montage
     imported = create_project_from_config(tmp_path / "imported", loaded)
@@ -230,6 +236,7 @@ def captured_completed_config(sample_project, sample_project_root):
     recording_project.settings.recording = ProjectRecordingSettings(
         recording_backend="unicorn_udp", unicorn_udp_port=4567,
         egi_parallel_address=0xD010, egi_pulse_width_ms=7,
+        ant_parallel_address=0xD020, ant_pulse_width_ms=9, ant_sampling_rate_hz=512,
     )
     config = export_project_config(recording_project, sample_project_root)
     plan = compile_session_plan(
@@ -264,7 +271,8 @@ def test_latest_completed_toolbox_config_keeps_captured_hardware_and_source_file
     path = sample_project_root / "logs/acquisition/captured-execution-completed.fpvsconfig"
     write_project_config(path, captured_completed_config)
     before = path.read_bytes()
-    assert not {"egi_parallel_address", "egi_pulse_width_ms"}.intersection(
+    assert not {"egi_parallel_address", "egi_pulse_width_ms", "ant_parallel_address",
+                "ant_pulse_width_ms", "ant_sampling_rate_hz"}.intersection(
         json.loads(before)["recording"],
     )
     project_before = (sample_project_root / "project.json").read_bytes()
@@ -707,10 +715,11 @@ def test_project_config_without_protocol_loads_current_defaults(tmp_path, sample
     assert loaded.protocol.oddball_every_n == 5
 
 
-def test_inactive_egi_preferences_stay_in_studio_project_only(tmp_path, sample_project):
+def test_inactive_wired_preferences_stay_in_studio_project_only(tmp_path, sample_project):
     selected = ProjectRecordingSettings(recording_backend="serial")
     remembered = selected.model_copy(update={
         "egi_parallel_address": 0xD010, "egi_pulse_width_ms": 7,
+        "ant_parallel_address": 0xD020, "ant_pulse_width_ms": 8, "ant_sampling_rate_hz": 512,
     })
     sample_project.settings.recording = remembered
     config = export_project_config(sample_project, project_root=None)
@@ -724,10 +733,13 @@ def test_inactive_egi_preferences_stay_in_studio_project_only(tmp_path, sample_p
     assert load_project_file(native).settings.recording == remembered
     assert remembered.egi_parallel_address == 0xD010
     assert remembered.egi_pulse_width_ms == 7
+    assert remembered.ant_sampling_rate_hz == 512
 
 
 @pytest.mark.parametrize("configuration", [
     {"recording_backend": "egi_din", "egi_parallel_address": 0xD010, "egi_pulse_width_ms": 7},
+    {"recording_backend": "ant_mylab_ttl", "ant_parallel_address": 0xD020,
+     "ant_pulse_width_ms": 8, "ant_sampling_rate_hz": 512},
     {"recording_backend": "unicorn_udp", "unicorn_udp_port": 2345},
     {"recording_backend": "biosemi_active_three"},
     {

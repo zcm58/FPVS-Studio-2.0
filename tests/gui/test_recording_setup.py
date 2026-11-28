@@ -173,7 +173,7 @@ def _assert_labels_fit(widget) -> None:
 @pytest.mark.parametrize("backend, port", [
     (None, 1000), ("serial", 1000), ("unicorn_udp", 65535),
     ("biosemi_active_three", 1000), ("brainproducts_triggerbox", 1000),
-    ("brainproducts_parallel", 1000), ("egi_din", 1000),
+    ("brainproducts_parallel", 1000), ("egi_din", 1000), ("ant_mylab_ttl", 1000),
     ("unicorn_udp", "broken saved port"), ("unknown old selection", 1000),
 ])
 def test_recording_setup_geometry_and_validation(
@@ -238,10 +238,15 @@ def test_recording_setup_geometry_and_validation(
         assert not dialog.brainproducts_port_edit.isVisible()
         assert not dialog.brainproducts_amplifier_combo.isVisible()
         assert dialog.apply_button.isEnabled()
-    elif backend == "egi_din":
-        assert dialog.editor.egi_port_selector.isVisible()
-        assert dialog.editor.egi_pulse_edit.isVisible()
-        assert "Net Station" in dialog.guidance_label.text()
+    elif backend in ("egi_din", "ant_mylab_ttl"):
+        fields = dialog.editor.wired_fields[backend]
+        assert fields.address.isVisible()
+        assert fields.pulse.isVisible()
+        if backend == "ant_mylab_ttl":
+            assert fields.rate.isVisible()
+            assert "eego Recorder" in dialog.guidance_label.text()
+        else:
+            assert "Net Station" in dialog.guidance_label.text()
         assert not dialog.editor.montage_combo.isEnabled()
         assert not dialog.brainproducts_parallel_edit.isVisible()
         assert not dialog.brainproducts_pulse_edit.isVisible()
@@ -379,13 +384,13 @@ def test_egi_validates_and_round_trips_separate_parallel_settings(qtbot, recordi
     dialog.show()
     editor = dialog.editor
     editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("egi_din"))
-    assert editor.egi_port_selector.edit.text() == ""
-    assert editor.egi_pulse_edit.text() == ""
-    editor.egi_port_selector.edit.setText("0xD010")
+    assert editor.wired_fields["egi_din"].address.edit.text() == ""
+    assert editor.wired_fields["egi_din"].pulse.text() == ""
+    editor.wired_fields["egi_din"].address.edit.setText("0xD010")
     _assert_invalid_apply(dialog, recording_errors)
-    editor.egi_pulse_edit.setText("1001")
+    editor.wired_fields["egi_din"].pulse.setText("1001")
     _assert_invalid_apply(dialog, recording_errors)
-    editor.egi_pulse_edit.setText("7")
+    editor.wired_fields["egi_din"].pulse.setText("7")
     editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("brainproducts_parallel"))
     assert editor.parallel_port_selector.address == 0x378
     editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("egi_din"))
@@ -399,8 +404,46 @@ def test_egi_validates_and_round_trips_separate_parallel_settings(qtbot, recordi
     reopened = RecordingSetupDialog(saved.model_dump(mode="json"))
     qtbot.addWidget(reopened)
     assert reopened.backend_combo.currentData() == "egi_din"
-    assert reopened.editor.egi_port_selector.edit.text() == "0xD010"
-    assert reopened.editor.egi_pulse_edit.text() == "7"
+    assert reopened.editor.wired_fields["egi_din"].address.edit.text() == "0xD010"
+    assert reopened.editor.wired_fields["egi_din"].pulse.text() == "7"
+
+
+def test_ant_and_egi_use_separate_timing_and_port_settings(qtbot, recording_errors):
+    dialog = RecordingSetupDialog({
+        "recording_backend": "egi_din", "egi_parallel_address": 0xD010, "egi_pulse_width_ms": 7,
+    })
+    qtbot.addWidget(dialog)
+    dialog.show()
+    editor = dialog.editor
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("ant_mylab_ttl"))
+    fields = editor.wired_fields["ant_mylab_ttl"]
+    assert (fields.address.edit.text(), fields.pulse.text(), fields.rate.text()) == ("", "", "")
+    fields.address.edit.setText("0xD030")
+    fields.pulse.setText("5")
+    _assert_invalid_apply(dialog, recording_errors)
+    fields.rate.setText("500")
+    _assert_invalid_apply(dialog, recording_errors)
+    assert "6 ms" in str(recording_errors.call_args.args[2])
+    fields.pulse.setText("6")
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("egi_din"))
+    assert editor.wired_fields["egi_din"].address.address == 0xD010
+    assert not fields.rate.isVisible()
+    editor.backend_combo.setCurrentIndex(editor.backend_combo.findData("ant_mylab_ttl"))
+    dialog.apply_button.click()
+    assert dialog.result() == QDialog.DialogCode.Accepted
+    saved = ProjectRecordingSettings.model_validate(dialog.configuration)
+    assert saved.egi_parallel_address == 0xD010 and saved.egi_pulse_width_ms == 7
+    assert (saved.ant_parallel_address, saved.ant_pulse_width_ms, saved.ant_sampling_rate_hz) == (
+        0xD030, 6, 500,
+    )
+    assert saved.electrode_montage is None
+    reopened = RecordingSetupDialog(saved.model_dump(mode="json"))
+    qtbot.addWidget(reopened)
+    fields = reopened.editor.wired_fields["ant_mylab_ttl"]
+    assert reopened.backend_combo.currentData() == "ant_mylab_ttl"
+    assert (fields.address.edit.text(), fields.pulse.text(), fields.rate.text()) == (
+        "0xD030", "6", "500",
+    )
 
 
 def test_parallel_discovery_uses_only_metadata_and_retains_manual_address(
